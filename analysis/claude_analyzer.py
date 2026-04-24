@@ -263,27 +263,11 @@ def extract_address_consensus(crop_path: str, city: str, district: str) -> Optio
     except Exception:
         road_list = []
 
-    # 切 2×2 固定尺寸 1200×800，取右上 / 左下 / 右下 三塊
-    # 地址 crop 本就是窄區，固定小 tile 確保字體密度高
-    try:
-        all_tiles = _split_image_into_tiles(
-            crop_path, cols=2, rows=2,
-            fixed_tile_w=1200, fixed_tile_h=800,
-        )
-        target_tiles = all_tiles[1:] if len(all_tiles) >= 4 else all_tiles
-    except Exception as e:
-        logger.warning(f"地址 OCR tile 切片失敗 fallback 單張: {e}")
-        target_tiles = [crop_path]
-
-    # 三片平行跑 OCR（ThreadPoolExecutor），總耗時 ≈ max(單片)
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=len(target_tiles)) as executor:
-        raw_results = list(executor.map(
-            lambda t: _ocr_address_once(t, city, district, road_list),
-            target_tiles,
-        ))
-    candidates = [r.strip() for r in raw_results if r]
-    logger.info(f"地址 3-tile OCR (parallel) 候選: {candidates}")
+    # 地址 crop 本來就是 scraper 裁切好的窄區（通常 1200×500 左右），
+    # 切片會把窄條再切碎反而丟失文字上下文。直接整張餵 Vision 最穩。
+    res = _ocr_address_once(crop_path, city, district, road_list)
+    candidates = [res.strip()] if res else []
+    logger.info(f"地址 OCR (整張) 候選: {candidates}")
     if not candidates:
         return None
 
