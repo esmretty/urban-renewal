@@ -388,13 +388,22 @@ window.schedRemoveCmd = function (idx) {
 
 window.applySchedulerConfig = async function () {
   try {
+    // 以 DOM 當下值為準（避免 _schedDraft 被 poll 覆蓋的隱性 race）
+    const selEl = document.getElementById("sched-interval");
+    const domInterval = selEl ? parseInt(selEl.value) : NaN;
+    const intervalToSend = Number.isFinite(domInterval) && domInterval > 0
+      ? domInterval
+      : (parseInt(_schedDraft.interval_hr) || 1);
+    _schedDraft.interval_hr = intervalToSend;
+    const payload = {
+      interval_hr: intervalToSend,
+      commands: _schedDraft.commands,
+    };
+    console.log("[scheduler] 套用 payload", payload);
     const r = await authedFetch("/admin/scheduler/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        interval_hr: _schedDraft.interval_hr,
-        commands: _schedDraft.commands,
-      }),
+      body: JSON.stringify(payload),
     });
     if (!r.ok) {
       let msg = `HTTP ${r.status}`;

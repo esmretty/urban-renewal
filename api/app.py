@@ -450,7 +450,10 @@ async def login_page():
 
 @app.get("/admin.html")
 async def admin_page():
-    return FileResponse(str(SERVER_DIR / "admin.html"))
+    return FileResponse(
+        str(SERVER_DIR / "admin.html"),
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 
 # ── Admin API（只有 admin email 能打）───────────────────────────────────────

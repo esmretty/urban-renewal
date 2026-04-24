@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <title>都更神探R — 管理後台</title>
   <link rel="stylesheet" href="/server/static/admin.css">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
 </head>
 <body>
 
@@ -156,6 +159,9 @@
   </div>
 </div>
 
-<script type="module" src="/server/static/admin.js"></script>
+<script type="module">
+  // Cache-bust admin.js：每次載入 admin.html 都用當下 timestamp 強制抓新 JS
+  import(`/server/static/admin.js?v=${Date.now()}`);
+</script>
 </body>
 </html>
