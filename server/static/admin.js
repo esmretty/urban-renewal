@@ -50,7 +50,9 @@ async function boot() {
   document.getElementById("btn-google").disabled = false;
   document.getElementById("btn-google").addEventListener("click", async () => {
     try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      await signInWithPopup(auth, provider);
     } catch (e) {
       document.getElementById("login-err").textContent = "登入失敗：" + (e.message || e.code);
     }

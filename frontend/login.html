@@ -97,6 +97,8 @@
         btn.disabled = true;
         try {
           const provider = new GoogleAuthProvider();
+          // 強制每次都顯示 Google 帳號選擇器（避免靜默自動登入前一個帳號）
+          provider.setCustomParameters({ prompt: "select_account" });
           await signInWithPopup(auth, provider);
           // onAuthStateChanged 會接手跳轉
         } catch (e) {
