@@ -412,14 +412,19 @@ async def lifespan(app: FastAPI):
     import asyncio as _aio
     await _aio.to_thread(lambda: list(get_col().limit(1).get()))
     logger.info("Firebase 連線完成")
-    sched_task = asyncio.create_task(_scheduled_scrape_loop())
-    logger.info("[scheduler] 定時 batch loop 已啟動（設定全在 Firestore settings/scheduler）")
+    if os.getenv("DISABLE_SCHEDULER", "").lower() in ("1", "true", "yes"):
+        logger.info("[scheduler] DISABLE_SCHEDULER=true，本次啟動不執行定時 batch（本機 debug 模式）")
+        sched_task = None
+    else:
+        sched_task = asyncio.create_task(_scheduled_scrape_loop())
+        logger.info("[scheduler] 定時 batch loop 已啟動（設定全在 Firestore settings/scheduler）")
     try:
         yield
     finally:
-        sched_task.cancel()
-        try: await sched_task
-        except asyncio.CancelledError: pass
+        if sched_task:
+            sched_task.cancel()
+            try: await sched_task
+            except asyncio.CancelledError: pass
 
 
 app = FastAPI(title="都更神探R", version="2.0.0", lifespan=lifespan)

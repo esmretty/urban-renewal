@@ -117,7 +117,7 @@ def verify_and_fix_road(addr_with_region: str, city: str, district: str) -> dict
         return {"status": "ok", "address": addr_with_region}
 
     # 路在目標區內不存在 → 嘗試 Claude fuzzy 修正
-    claude_road = _claude_fix_road(addr_with_region, city, district, cands)
+    claude_road = _claude_fix_road(addr_with_region, city, district, cands, original_road)
     if claude_road and claude_road != original_road:
         fixed_addr = addr_with_region.replace(original_road, claude_road, 1)
         new_cands = geocode_with_district(fixed_addr)
@@ -131,7 +131,7 @@ def verify_and_fix_road(addr_with_region: str, city: str, district: str) -> dict
     return {"status": "invalid", "reason": f"路名「{original_road}」在 {city}{district} 內不存在且無法修正"}
 
 
-def _claude_fix_road(addr_with_region: str, city: str, district: str, cands: list) -> Optional[str]:
+def _claude_fix_road(addr_with_region: str, city: str, district: str, cands: list, original_road: Optional[str] = None) -> Optional[str]:
     """問 Claude：給了原地址 + 該行政區 LVR 真實路名清單 + Google 近似結果，挑最接近的路名。
     回傳路名字串 或 None。
 
@@ -146,9 +146,11 @@ def _claude_fix_road(addr_with_region: str, city: str, district: str, cands: lis
     # LVR 路名清單：從該行政區實價登錄抽出真實路名，給 Claude 當選項
     try:
         from analysis.lvr_index import list_roads_in_district
-        lvr_roads = list_roads_in_district(city or "", district or "")
+        lvr_roads_raw = list_roads_in_district(city or "", district or "")
     except Exception:
-        lvr_roads = []
+        lvr_roads_raw = []
+    # 排除原路名：LVR 可能含歷史誤植（如「紹安街」），若留著 Claude 會選回原名不改
+    lvr_roads = [r for r in lvr_roads_raw if r != original_road] if original_road else lvr_roads_raw
     lvr_roads_str = "（LVR 無樣本，請從 Google 結果推測）" if not lvr_roads \
         else "、".join(lvr_roads[:150])   # 上限 150 條控 token
     suggestions = "\n".join(f"  - {c.get('formatted_address')}" for c in cands[:5]) or "  (無)"
@@ -156,7 +158,7 @@ def _claude_fix_road(addr_with_region: str, city: str, district: str, cands: lis
         f"以下地址的「路/街」名可能是 OCR 誤讀（591 詳情頁常用 CSS 位移把字拆錯）：\n\n"
         f"原地址：{addr_with_region}\n"
         f"Google 只回 partial match（都是附近同門牌的其他路，不可靠）：\n{suggestions}\n\n"
-        f"{city}{district} 的**真實**路名清單（從實價登錄抽出）：\n{lvr_roads_str}\n\n"
+        f"{city}{district} 的**真實**路名清單（從實價登錄抽出，原路名「{original_road or ''}」已排除）：\n{lvr_roads_str}\n\n"
         f"請從上述真實路名清單中挑選**字形最相近**原路名的那一條。\n"
         f"常見誤讀：\n"
         f"  - 「臨」被讀成「簡」（兩字右半相近）\n"
