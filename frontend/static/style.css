@@ -1544,15 +1544,19 @@ body[data-tab="explore"] .wl-only { display: none !important; }
 .c-mrt .mrt-name { font-size: 14px; color: #1f2937; font-weight: 500; }
 .c-mrt .mrt-dist { font-size: 12px; margin-top: 2px; }
 .fc-badge {
-  display: inline-block;
-  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
   font-weight: 700;
   color: #fff;
   background: #2980b9;
-  padding: 0 4px;
-  border-radius: 3px;
-  margin-left: 4px;
+  border: 1.5px solid #2471a3;
+  border-radius: 10px;
+  padding: 1px 6px;
+  margin-left: 5px;
   vertical-align: middle;
+  line-height: 1.3;
 }
 .conf-high { color: #2e7d32; }
 .conf-mid  { color: #b0790a; }

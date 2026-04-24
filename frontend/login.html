@@ -72,6 +72,10 @@
     const errEl = document.getElementById("err");
     const btn = document.getElementById("btn-google");
 
+    // 若被白名單擋掉會被導回此頁並帶 ?err=訊息
+    const urlErr = new URLSearchParams(location.search).get("err");
+    if (urlErr) errEl.textContent = urlErr;
+
     async function boot() {
       const res = await fetch("/api/firebase_config");
       const cfg = await res.json();

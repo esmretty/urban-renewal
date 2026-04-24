@@ -67,9 +67,17 @@ async function boot() {
     if (emailEl) emailEl.textContent = user.email || "";
   }
 
-  // 從 /api/me 拿階級名稱顯示在 email 後面
+  // 從 /api/me 拿階級名稱顯示在 email 後面；
+  // 403 = 新帳號不在白名單 → 登出並導回 login 頁顯示訊息
   try {
     const meResp = await window.authedFetch("/api/me");
+    if (meResp.status === 403) {
+      const body = await meResp.json().catch(() => ({}));
+      const msg = body.detail || "此帳號尚未獲邀，請聯絡管理者將您加入白名單。";
+      await signOut(auth);
+      window.location.replace("/login.html?err=" + encodeURIComponent(msg));
+      return;
+    }
     if (meResp.ok) {
       const me = await meResp.json();
       window.currentUserTier = me;

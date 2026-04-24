@@ -112,6 +112,84 @@ window.loadAll = async function () {
   renderUsers(users.items || []);
   loadSchedulerStatus();
   loadSchedulerHistory();
+  loadWhitelist();
+};
+
+
+// ── Email 白名單 ──────────────────────────────────────────────────────────────
+async function loadWhitelist() {
+  const box = document.getElementById("whitelist-box");
+  if (!box) return;
+  try {
+    const r = await authedFetch("/admin/email_whitelist");
+    if (!r.ok) { box.innerHTML = `<div style="color:#c0392b;">載入失敗 (${r.status})</div>`; return; }
+    const data = await r.json();
+    renderWhitelist(data.emails || []);
+  } catch (e) {
+    box.innerHTML = `<div style="color:#c0392b;">載入失敗：${e.message}</div>`;
+  }
+}
+
+function renderWhitelist(emails) {
+  const box = document.getElementById("whitelist-box");
+  if (!box) return;
+  if (!emails.length) {
+    box.innerHTML = `<div style="color:#7f8c8d;">白名單目前為空。沒有新用戶可以註冊。</div>`;
+    return;
+  }
+  const rows = emails.map(e => `
+    <tr>
+      <td style="padding:4px 8px;">${e}</td>
+      <td style="padding:4px 8px; text-align:right;">
+        <button onclick="removeWhitelistEmail('${e.replace(/'/g, "\\'")}')"
+                style="padding:2px 10px; color:#c0392b;">移除</button>
+      </td>
+    </tr>`).join("");
+  box.innerHTML = `
+    <table style="width:100%; max-width:480px; border-collapse:collapse;">
+      <thead><tr style="border-bottom:1px solid #ddd;">
+        <th style="padding:4px 8px; text-align:left;">Email（共 ${emails.length} 筆）</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+window.addWhitelistEmail = async function () {
+  const input = document.getElementById("whitelist-email-input");
+  const email = (input.value || "").trim().toLowerCase();
+  if (!email || !email.includes("@")) { alert("請輸入有效 email"); return; }
+  try {
+    const r = await authedFetch("/admin/email_whitelist/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      alert("新增失敗：" + (e.detail || r.status));
+      return;
+    }
+    input.value = "";
+    loadWhitelist();
+  } catch (e) { alert("新增失敗：" + e.message); }
+};
+
+window.removeWhitelistEmail = async function (email) {
+  if (!confirm(`確定移除「${email}」？（不影響既有帳號，但該 email 之後無法再首次登入）`)) return;
+  try {
+    const r = await authedFetch("/admin/email_whitelist/remove", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      alert("移除失敗：" + (e.detail || r.status));
+      return;
+    }
+    loadWhitelist();
+  } catch (e) { alert("移除失敗：" + e.message); }
 };
 
 // ── 排程執行紀錄（近 7 天）─────────────────────────────────────────────────

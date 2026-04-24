@@ -117,6 +117,21 @@
     <div id="users-box">載入中…</div>
   </section>
 
+  <!-- Email 白名單 -->
+  <section class="panel">
+    <h2>Email 白名單（新用戶才要）</h2>
+    <p style="font-size:13px; color:#555; margin:0 0 10px;">
+      只有白名單內的 email 可以首次登入並建立帳號。既有用戶不受影響。
+      新加入的會員一律以 <b>Level 1 會員</b> 建檔。
+    </p>
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <input id="whitelist-email-input" type="email" placeholder="user@example.com"
+             style="flex:1; max-width:320px; padding:6px 10px;">
+      <button onclick="addWhitelistEmail()" style="padding:6px 14px;">新增</button>
+    </div>
+    <div id="whitelist-box" style="font-size:13px;">載入中…</div>
+  </section>
+
   <!-- OCR 誤讀掃描 -->
   <section class="panel">
     <h2>地址路名一致性掃描</h2>

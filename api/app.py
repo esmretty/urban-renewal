@@ -28,7 +28,7 @@ from database.time_utils import now_tw, now_tw_iso, TW_TZ
 from google.cloud.firestore_v1 import FieldFilter
 from database.models import sanitize_for_firestore, merge_watchlist_with_central
 from config import BASE_DIR
-from api.auth import get_current_user, require_admin
+from api.auth import get_current_user, require_admin, ADMIN_PORTAL_TIERS, TIER_L1
 
 logger = logging.getLogger(__name__)
 
@@ -105,25 +105,55 @@ def _user_override_ref(user: dict, property_id: str):
     return ref
 
 
+def _get_email_whitelist() -> set:
+    """讀 Firestore settings/email_whitelist.emails（全小寫 set）。"""
+    try:
+        snap = get_firestore().collection("settings").document("email_whitelist").get()
+        if not snap.exists:
+            return set()
+        emails = (snap.to_dict() or {}).get("emails") or []
+        return {str(e).strip().lower() for e in emails if e}
+    except Exception as e:
+        logger.warning("_get_email_whitelist failed: %s", e)
+        return set()
+
+
 def _ensure_user_profile(user: dict):
-    """第一次看到該 uid 就建 profile doc；已存在但缺 tier 欄位則補上。"""
+    """第一次看到該 uid 就建 profile doc；已存在但缺 tier 欄位則補上。
+    新用戶必須在 email 白名單（或是 owner / system admin 的 env 指定）才准建立 profile，
+    否則丟 403。新用戶一律以 Level 1 會員建檔；owner / sys_admin 的環境變數會在後續
+    resolve_tier 被提升（透過下方 update 分支）。"""
     try:
         ref = get_user_doc(user["uid"])
         snap = ref.get()
-        tier = user.get("tier")
+        resolved_tier = user.get("tier")
+        email = (user.get("email") or "").lower()
         if not snap.exists:
+            # 白名單把關（owner / sys_admin 免檢）
+            if resolved_tier not in ADMIN_PORTAL_TIERS:
+                if email not in _get_email_whitelist():
+                    logger.warning("[whitelist] 拒絕新用戶 %s（不在白名單）", email)
+                    raise HTTPException(
+                        status_code=403,
+                        detail="此帳號尚未獲邀，請聯絡管理者將您加入白名單。",
+                    )
+            initial_tier = resolved_tier if resolved_tier in ADMIN_PORTAL_TIERS else TIER_L1
             ref.set({
-                "email": user.get("email"),
+                "email": email,
                 "display_name": user.get("display_name"),
                 "photo_url": user.get("picture"),
-                "tier": tier,
+                "tier": initial_tier,
                 "created_at": now_tw_iso(),
             })
+            # 確保回傳給 handler 的 user dict 反映實際 DB tier（避免誤把未被 env 提升的人當 admin）
+            user["tier"] = initial_tier
         else:
             # 若舊 doc 沒 tier 或與 email 推算值不同（e.g. 新增 EMAIL_TO_TIER 映射），更新
             d = snap.to_dict() or {}
-            if d.get("tier") != tier:
-                ref.update({"tier": tier})
+            if d.get("tier") != resolved_tier:
+                ref.update({"tier": resolved_tier})
+    except HTTPException:
+        raise
     except Exception as e:
         logger.warning("_ensure_user_profile failed for %s: %s", user.get("uid"), e)
 
@@ -439,7 +469,9 @@ def api_firebase_config():
 
 @app.get("/api/me")
 async def api_me(user: dict = Depends(get_current_user)):
-    """回傳登入用戶資訊；未登入會被 middleware 擋在 401。"""
+    """回傳登入用戶資訊；未登入會被 middleware 擋在 401。
+    第一次登入時會檢查白名單，不在白名單丟 403。"""
+    _ensure_user_profile(user)
     return user
 
 
@@ -1088,6 +1120,48 @@ async def admin_users(admin: dict = Depends(require_admin)):
     except Exception as e:
         logger.warning("admin_users failed: %s", e)
     return {"items": out}
+
+
+# ── Email 白名單（admin 管理） ──────────────────────────────────────────────
+class WhitelistReq(BaseModel):
+    email: str
+
+
+@app.get("/admin/email_whitelist")
+async def get_email_whitelist(admin: dict = Depends(require_admin)):
+    """列出 email 白名單（新用戶首次登入時會被檢查）。"""
+    emails = sorted(_get_email_whitelist())
+    return {"emails": emails}
+
+
+@app.post("/admin/email_whitelist/add")
+async def add_email_whitelist(body: WhitelistReq, admin: dict = Depends(require_admin)):
+    email = (body.email or "").strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(400, "請提供有效 email")
+    current = _get_email_whitelist()
+    current.add(email)
+    get_firestore().collection("settings").document("email_whitelist").set(
+        {"emails": sorted(current), "updated_at": now_tw_iso(),
+         "updated_by_email": admin.get("email") or ""},
+        merge=True,
+    )
+    logger.warning("[whitelist] %s 新增 %s", admin.get("email"), email)
+    return {"status": "ok", "emails": sorted(current)}
+
+
+@app.post("/admin/email_whitelist/remove")
+async def remove_email_whitelist(body: WhitelistReq, admin: dict = Depends(require_admin)):
+    email = (body.email or "").strip().lower()
+    current = _get_email_whitelist()
+    current.discard(email)
+    get_firestore().collection("settings").document("email_whitelist").set(
+        {"emails": sorted(current), "updated_at": now_tw_iso(),
+         "updated_by_email": admin.get("email") or ""},
+        merge=True,
+    )
+    logger.warning("[whitelist] %s 移除 %s", admin.get("email"), email)
+    return {"status": "ok", "emails": sorted(current)}
 
 
 # ── 物件列表 ──────────────────────────────────────────────────────────────────
