@@ -399,9 +399,18 @@ def validate_manual_input(
         # 過濾出 city+district 都對得上的候選
         matched = [g for g in geo_candidates if g.get("city") == city and g.get("district") == district]
         if not matched:
+            # 若所有候選都「非台北市」→ 目前不支援，直接拒絕（不列選單）
+            all_cities = {g.get("city") for g in geo_candidates if g.get("city")}
+            if all_cities and "台北市" not in all_cities:
+                _city_txt = "、".join(sorted(all_cities))
+                return {
+                    "status": "error",
+                    "error": f"「{addr}」位於 {_city_txt}，目前僅支援台北市分析。",
+                }
             # district 對不上 → 提供修正建議（含正確的 city/district/address）
             # 用原始輸入地址（含樓層）給前端，用戶選修正後重送時樓層才不會被丟掉
             addr_with_floor = addr + (f"{floor_num}樓" if floor_num else "")
+            # 只保留台北市候選（新北市候選濾掉，不給用戶選）
             structured = [
                 {
                     "city": g.get("city") or "",
@@ -410,12 +419,12 @@ def validate_manual_input(
                     "formatted": f"{g.get('city') or ''}{g.get('district') or ''}{addr_with_floor}",
                 }
                 for g in geo_candidates
-                if g.get("city") and g.get("district")
+                if g.get("city") == "台北市" and g.get("district")
             ]
             if not structured:
                 return {
                     "status": "error",
-                    "error": f"「{addr}」地址可定位，但 Google 無法解析到明確的縣市/區，請檢查地址或重新輸入。",
+                    "error": f"「{addr}」地址可定位，但不在台北市範圍內（目前僅支援台北市），請檢查地址或重新輸入。",
                 }
             return {
                 "status": "district_mismatch",
