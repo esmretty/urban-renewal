@@ -271,12 +271,15 @@ def extract_address_consensus(crop_path: str, city: str, district: str) -> Optio
         logger.warning(f"地址 OCR tile 切片失敗 fallback 單張: {e}")
         target_tiles = [crop_path]
 
-    candidates = []
-    for t in target_tiles:
-        res = _ocr_address_once(t, city, district, road_list)
-        if res:
-            candidates.append(res.strip())
-    logger.info(f"地址 3-tile OCR 候選: {candidates}")
+    # 三片平行跑 OCR（ThreadPoolExecutor），總耗時 ≈ max(單片)
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=len(target_tiles)) as executor:
+        raw_results = list(executor.map(
+            lambda t: _ocr_address_once(t, city, district, road_list),
+            target_tiles,
+        ))
+    candidates = [r.strip() for r in raw_results if r]
+    logger.info(f"地址 3-tile OCR (parallel) 候選: {candidates}")
     if not candidates:
         return None
 
@@ -370,7 +373,8 @@ def _ocr_one_tile(tile_path: str) -> dict:
 def extract_full_detail_from_screenshot(screenshot_path: str) -> dict:
     """切 2×2 共 4 片，取 r0c1（右上）/ r1c0（左下）/ r1c1（右下）三片跑 OCR 合併。
     跳過 r0c0（左上通常是標題/首圖，沒欄位資料）。
-    每片是原圖 1/4 大小 → Vision 看到的文字像素密度翻倍，大幅降低字太小誤判。"""
+    每片是原圖 1/4 大小 → Vision 看到的文字像素密度翻倍，大幅降低字太小誤判。
+    三片用 ThreadPoolExecutor 平行呼叫 Claude API → 總耗時 ≈ max(單片)，不是 sum。"""
     try:
         all_tiles = _split_image_into_tiles(screenshot_path, cols=2, rows=2)
     except Exception as e:
@@ -379,16 +383,18 @@ def extract_full_detail_from_screenshot(screenshot_path: str) -> dict:
 
     # _split_image_into_tiles 回傳順序：r0c0, r0c1, r1c0, r1c1 → 跳過 [0]，取 [1:]
     target_tiles = all_tiles[1:] if len(all_tiles) >= 4 else all_tiles
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=len(target_tiles)) as executor:
+        per_tile_results = list(executor.map(_ocr_one_tile, target_tiles))
+
     merged = {}
-    per_tile_results = []
-    for tile_path in target_tiles:
-        result = _ocr_one_tile(tile_path)
-        per_tile_results.append(result)
+    for result in per_tile_results:
         for k, v in result.items():
             if v not in (None, "") and merged.get(k) in (None, ""):
                 merged[k] = v
     logger.info(
-        f"Vision 3-tile OCR (r0c1/r1c0/r1c1) merged={merged} "
+        f"Vision 3-tile OCR (parallel, r0c1/r1c0/r1c1) merged={merged} "
         f"per_tile_keys={[list(r.keys()) for r in per_tile_results]}"
     )
     return merged

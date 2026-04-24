@@ -142,6 +142,10 @@ def _read_user_property(user: dict, property_id: str) -> Optional[dict]:
             return None
         d = doc.to_dict() or {}
         d["id"] = doc.id
+        # manual 物件永遠視為已在「觀察清單」內（它本來就是用戶私人收藏，
+        # 跟 central+watchlist 結構不同但語意等效）。
+        # 讓前端的「欲出價 / bonus / 新成屋價」等 override 儲存判斷能正確進行。
+        d["_in_watchlist"] = True
         return d
     central = get_col().document(property_id).get()
     if not central.exists:
@@ -1713,16 +1717,19 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     )
                     item["address"] = community_addr
                 vision_data = {}
-                # 全頁截圖 + 房屋欄位窄裁切兩張都跑 OCR，合併結果：
+                # 全頁截圖 + 房屋欄位窄裁切兩張都跑 OCR，合併結果（兩張平行跑）：
                 # 觀察：全頁 OCR 偶會漏 land_area_ping / zoning（文字過小），house_crop 反而抓得到；
                 # 反之也可能 house_crop 沒切到某欄位而 full 有 → 互補填。
-                if shot_path:
-                    vision_data = extract_full_detail_from_screenshot(shot_path)
-                if _house_crop:
-                    _house_vd = extract_full_detail_from_screenshot(_house_crop)
-                    for k, v in (_house_vd or {}).items():
-                        if v not in (None, "", 0) and vision_data.get(k) in (None, "", 0):
-                            vision_data[k] = v
+                from concurrent.futures import ThreadPoolExecutor
+                _paths = [p for p in (shot_path, _house_crop) if p]
+                if _paths:
+                    with ThreadPoolExecutor(max_workers=len(_paths)) as _ex:
+                        _results = list(_ex.map(extract_full_detail_from_screenshot, _paths))
+                    vision_data = _results[0] if _results else {}
+                    for _r in _results[1:]:
+                        for k, v in (_r or {}).items():
+                            if v not in (None, "", 0) and vision_data.get(k) in (None, "", 0):
+                                vision_data[k] = v
                 # 不從 Vision 抓 building_type（591 filter 已保證是公寓；OCR 易把 5F 誤判華廈）
                 for k in ("land_area_ping", "zoning", "building_age", "total_floors", "floor"):
                     if vision_data.get(k) and not item.get(k):
@@ -2781,13 +2788,18 @@ def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False):
         published_text = getattr(detail_ret, "published_text", None)
         updated_text = getattr(detail_ret, "updated_text", None)
         _house_crop_single = getattr(detail_ret, "house_path", None)
-        vision = extract_full_detail_from_screenshot(shot) if shot else {}
-        # 同 batch 路徑：house_crop 補漏。全頁 OCR 偶會漏 land_area_ping（字太小）
-        if _house_crop_single:
-            _house_vd = extract_full_detail_from_screenshot(_house_crop_single)
-            for k, v in (_house_vd or {}).items():
-                if v not in (None, "", 0) and vision.get(k) in (None, "", 0):
-                    vision[k] = v
+        # shot + house_crop 平行 OCR 然後合併，house_crop 補漏（全頁 OCR 偶會漏 land_area_ping）
+        from concurrent.futures import ThreadPoolExecutor as _TPE_URL
+        _paths_u = [p for p in (shot, _house_crop_single) if p]
+        vision = {}
+        if _paths_u:
+            with _TPE_URL(max_workers=len(_paths_u)) as _ex:
+                _results_u = list(_ex.map(extract_full_detail_from_screenshot, _paths_u))
+            vision = _results_u[0] if _results_u else {}
+            for _r in _results_u[1:]:
+                for k, v in (_r or {}).items():
+                    if v not in (None, "", 0) and vision.get(k) in (None, "", 0):
+                        vision[k] = v
 
         # 若 screenshot_detail_page 的進階 DOM selector 抓到更完整地址，覆蓋簡陋的 inline 結果
         if _community_addr_from_screenshot and "號" in _community_addr_from_screenshot:

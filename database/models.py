@@ -215,12 +215,14 @@ DEFAULT_SKIP_THRESHOLDS = {
 def detect_foreclosure(item: dict, detail_text: str = "") -> tuple[bool, list]:
     """
     偵測法拍屋。
-    規則：標題含 "#" 且 刊登者含 "代理人" → 法拍。
+    規則：標題含 "#" 或全形 "＃" 且 刊登者含 "代理人" → 法拍。
+    591 代理人標記常用全形 ＃（U+FF03），也有半形 # — 兩種都要抓。
     """
     title = item.get("title") or ""
     raw = item.get("_raw_text") or detail_text or ""
-    if "#" in title and "代理人" in raw:
-        return True, ["標題含# + 代理人"]
+    has_hash = "#" in title or "＃" in title
+    if has_hash and "代理人" in raw:
+        return True, ["標題含 # 或 ＃ + 代理人"]
     return False, []
 
 
