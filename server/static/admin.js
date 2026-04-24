@@ -392,14 +392,24 @@ window.applySchedulerConfig = async function () {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        interval_min: _schedDraft.interval_min,
+        interval_hr: _schedDraft.interval_hr,
         commands: _schedDraft.commands,
       }),
     });
     if (!r.ok) {
-      let detail = "";
-      try { detail = (await r.json()).detail || ""; } catch {}
-      alert("套用失敗" + (detail ? "：" + detail : ""));
+      let msg = `HTTP ${r.status}`;
+      try {
+        const body = await r.json();
+        // FastAPI 422 的 detail 是 list of validation errors；HTTPException 則是 string
+        if (typeof body.detail === "string") {
+          msg = body.detail;
+        } else if (Array.isArray(body.detail)) {
+          msg = body.detail.map(e => `${(e.loc || []).join(".")}: ${e.msg}`).join("; ");
+        } else if (body.detail) {
+          msg = JSON.stringify(body.detail);
+        }
+      } catch {}
+      alert("套用失敗：" + msg);
       return;
     }
     loadSchedulerStatus();
