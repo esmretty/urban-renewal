@@ -482,6 +482,20 @@ def analyze_single_property(
     # ── 6. 精準座標覆蓋 ──
     if inferred_coord:
         lat, lng = inferred_coord
+    else:
+        # re-geocode 失敗：留 591 原始座標 → zoning 會用那個座標查，可能偏到鄰近 polygon
+        # 標記讓 admin 能用 regeocode_failed=true 找出所有受害 doc 批次重跑
+        _addr_for_log = (
+            item.get("address_inferred")
+            or (t.get("address") if 't' in dir() and t and t.get("address") else None)
+        )
+        if _addr_for_log:
+            logger.warning(
+                f"[{src_id}] re-geocode 失敗 for {_addr_for_log!r} → "
+                f"保留 591 原始座標 (lat={lat}, lng={lng})，zoning 可能偏"
+            )
+            item["regeocode_failed"] = True
+            item["regeocode_failed_addr"] = _addr_for_log
 
     # 如果還沒有座標，嘗試 geocode 地址（即使只到巷級也給個大概位置）
     if not (lat and lng) and addr_for_geo:
@@ -553,6 +567,9 @@ def analyze_single_property(
     if item.get("address_suspicious"):
         doc_data["address_suspicious"] = True
         doc_data["address_suspicious_reason"] = item.get("address_suspicious_reason")
+    if item.get("regeocode_failed"):
+        doc_data["regeocode_failed"] = True
+        doc_data["regeocode_failed_addr"] = item.get("regeocode_failed_addr")
 
     # ── 10. 路寬（GeoServer + zonemap 截圖 + Vision）──
     # 規則：lat 有值且在台北市就一律截 zonemap（供肉眼驗證）；

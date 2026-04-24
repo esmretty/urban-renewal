@@ -323,6 +323,7 @@ def merge_property_doc(old: dict, new: dict) -> tuple[dict, list]:
         "land_area_inconsistent",   # LVR 地坪分散警告；重抓若改判一致就要清掉
         "zoning_original",   # 只在特定專用區才有值；歷史錯誤查詢會殘留
         "road_width_unknown",   # 路寬不明標記；重抓若能對上 GeoServer 就要清掉
+        "regeocode_failed", "regeocode_failed_addr",   # re-geocode 失敗標記；重抓成功就要清掉
     }
 
     for k, v_new in new.items():
