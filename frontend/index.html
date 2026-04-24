@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>都更神探R</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<!-- ── 頂部導覽 ── -->
+<nav class="topbar app-container">
+  <div class="topbar__brand">
+    <img src="/static/logo.png" alt="都更神探R" class="topbar__logo-img">
+    <span class="topbar__title">都更神探R</span>
+  </div>
+  <div class="topbar__actions">
+    <div class="useful-links-menu">
+      <button class="tb-btn tb-btn--ghost useful-links-trigger" type="button">
+        常用連結 ▾
+      </button>
+      <div id="useful-links-dropdown" class="useful-links-dropdown">
+        <a href="https://zonemap.udd.gov.taipei/ZoneMapOP/(S(uahzbkkhwfvg0n2anyhisyfo))/indexZoneMap_op.aspx" target="_blank" rel="noopener">台北市 地籍套繪&amp;使用分區圖</a>
+        <a href="https://bim.udd.gov.taipei/UDDPlanMap/" target="_blank" rel="noopener">台北市 開發審議地圖</a>
+        <a href="https://urban.planning.ntpc.gov.tw/NtpcURInfo/" target="_blank" rel="noopener">新北市 城鄉資訊查詢平台</a>
+        <a href="https://sites.google.com/view/predesign/%E9%87%8D%E5%BB%BA%E5%9D%AA%E6%95%B8%E8%A8%88%E7%AE%97%E6%A9%9F" target="_blank" rel="noopener">重建坪數計算機</a>
+        <a href="https://luz.nlma.gov.tw/web/" target="_blank" rel="noopener">全國土地使用分區查詢</a>
+        <a href="https://easymap.land.moi.gov.tw/R02/Index" target="_blank" rel="noopener">全國地籍圖資</a>
+        <a href="http://www.leju.com.tw/" target="_blank" rel="noopener">樂居</a>
+        <a href="https://price.houseprice.tw/list/%E5%8F%B0%E5%8C%97%E5%B8%82_city/" target="_blank" rel="noopener">5168 實價登錄查詢</a>
+      </div>
+    </div>
+    <div id="user-menu" class="user-menu" style="display:none">
+      <img id="user-avatar" class="user-avatar" alt="">
+      <span id="user-email" class="user-email"></span>
+      <button class="tb-btn tb-btn--ghost" onclick="logoutUser()">登出</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Tab 切換 ── -->
+<div class="tab-bar app-container">
+  <button class="tab-btn" data-tab="watchlist" onclick="switchTab('watchlist')">觀察清單 <span id="watchlist-count" class="tab-count"></span></button>
+  <button class="tab-btn" data-tab="explore" onclick="switchTab('explore')">搜尋網上物件</button>
+</div>
+
+<!-- ── 觀察清單專屬：新增物件（三欄固定高度） ── -->
+<section id="sec-capture" class="sec-capture app-container wl-only">
+  <div class="capture-grid">
+    <!-- 左：導引到搜尋 tab -->
+    <div class="capture-col capture-col--explore">
+      <div class="capture-col__title">想瀏覽網上物件？</div>
+      <div class="capture-col__body">
+        <button class="tb-btn tb-btn--primary capture-explore-btn"
+                onclick="switchTab('explore')">前往「搜尋網上物件」 →</button>
+        <div class="capture-col__hint">瀏覽各大房仲網近期物件，可加入觀察清單。</div>
+      </div>
+    </div>
+
+    <!-- 中：貼網址 -->
+    <div class="capture-col capture-col--url">
+      <div class="capture-col__title">貼物件網址</div>
+      <div class="capture-col__body">
+        <div class="capture-row">
+          <input id="scrape-url" type="url" class="tb-input capture-input"
+                 placeholder="貼 591 物件詳情頁 URL">
+          <button id="btn-scrape-url" class="tb-btn tb-btn--primary"
+                  onclick="triggerScrapeUrl()">送出</button>
+        </div>
+        <div class="capture-col__hint">目前僅可貼591物件，分析完會加入觀察清單。</div>
+      </div>
+    </div>
+
+    <!-- 右：貼地址 -->
+    <div class="capture-col capture-col--manual">
+      <div class="capture-col__title">未上架地址評估</div>
+      <div class="capture-col__body">
+        <div class="capture-row">
+          <select id="manual-city" class="tb-input capture-input--sm" onchange="populateManualDistricts()">
+            <option value="台北市">台北市</option>
+            <option value="新北市">新北市</option>
+          </select>
+          <select id="manual-district" class="tb-input capture-input--sm"></select>
+          <input id="manual-address" type="text" class="tb-input capture-input"
+                 placeholder="例如：景興路102巷14號">
+        </div>
+        <div class="capture-row">
+          <span class="capture-label">建坪</span>
+          <input id="manual-bld" type="number" min="0" step="0.01" class="tb-input tb-input--num"
+                 placeholder="(選填)">
+          <span class="capture-label">地坪</span>
+          <input id="manual-land" type="number" min="0" step="0.01" class="tb-input tb-input--num"
+                 placeholder="(選填)">
+          <span class="capture-label">開價</span>
+          <input id="manual-price" type="number" min="0" step="10" class="tb-input tb-input--num"
+                 placeholder="(選填)">
+          <button id="btn-manual-submit" class="tb-btn tb-btn--primary"
+                  onclick="triggerManualAnalyze()">送出分析</button>
+        </div>
+        <div class="capture-col__hint">適合分析未上架的物件（如自家、朋友介紹），僅你自己看得到。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 進度列（永遠顯示在頂部，跨 tab 都能看分析中狀態） -->
+<div id="progress-bar-wrap" class="d-none app-container">
+  <div class="progress-mini">
+    <div class="progress-mini__text">
+      <span id="progress-msg"></span>
+      <span id="progress-pct">0%</span>
+    </div>
+    <div class="progress-mini__track">
+      <div id="progress-bar-fill" class="progress-mini__fill" role="progressbar"></div>
+    </div>
+    <div id="progress-log" class="progress-log"></div>
+  </div>
+</div>
+
+<!-- 探索 tab 的搜尋區（4 欄式） -->
+<div id="explore-search" class="app-container px-3 py-2 d-none">
+  <div class="filter-cols filter-cols--4">
+
+    <!-- 左：地區 + 路名 -->
+    <div class="filter-col filter-col--left">
+      <div class="filter-col__title">地點過濾</div>
+      <div class="filter-dist-block">
+        <div class="filter-dist-row">
+          <span class="filter-dist-label">台北：</span>
+          <span class="filter-dist-chips">
+            <label class="dist-chip dist-chip--all"><input type="checkbox" class="filter-dist-all" data-city="台北市" onchange="toggleAllDists('台北市', this)" checked> 全部</label>
+            <label class="dist-chip"><input type="checkbox" class="filter-dist" data-city="台北市" value="大安區" onchange="applyFilters()" checked> 大安</label>
+            <label class="dist-chip"><input type="checkbox" class="filter-dist" data-city="台北市" value="信義區" onchange="applyFilters()" checked> 信義</label>
+            <label class="dist-chip"><input type="checkbox" class="filter-dist" data-city="台北市" value="中山區" onchange="applyFilters()" checked> 中山</label>
+            <label class="dist-chip"><input type="checkbox" class="filter-dist" data-city="台北市" value="中正區" onchange="applyFilters()" checked> 中正</label>
+            <label class="dist-chip"><input type="checkbox" class="filter-dist" data-city="台北市" value="文山區" onchange="applyFilters()" checked> 文山</label>
+            <label class="dist-chip dist-chip--disabled"><input type="checkbox" class="filter-dist" data-city="台北市" value="萬華區" disabled> 萬華</label>
+            <label class="dist-chip dist-chip--disabled"><input type="checkbox" class="filter-dist" data-city="台北市" value="松山區" disabled> 松山</label>
+            <label class="dist-chip dist-chip--disabled"><input type="checkbox" class="filter-dist" data-city="台北市" value="大同區" disabled> 大同</label>
+            <label class="dist-chip dist-chip--disabled"><input type="checkbox" class="filter-dist" data-city="台北市" value="南港區" disabled> 南港</label>
+          </span>
+        </div>
+        <div class="filter-dist-row">
+          <span class="filter-dist-label">新北：</span>
+          <span class="filter-dist-chips">
+            <label class="dist-chip dist-chip--disabled"><input type="checkbox" class="filter-dist-all" data-city="新北市" disabled> 全部</label>
+            <label class="dist-chip dist-chip--disabled"><input type="checkbox" class="filter-dist" data-city="新北市" value="新店區" disabled> 新店</label>
+            <label class="dist-chip dist-chip--disabled"><input type="checkbox" class="filter-dist" data-city="新北市" value="永和區" disabled> 永和</label>
+            <label class="dist-chip dist-chip--disabled"><input type="checkbox" class="filter-dist" data-city="新北市" value="中和區" disabled> 中和</label>
+            <label class="dist-chip dist-chip--disabled"><input type="checkbox" class="filter-dist" data-city="新北市" value="板橋區" disabled> 板橋</label>
+            <span class="filter-dist-note">（未開放）</span>
+          </span>
+        </div>
+      </div>
+      <div class="filter-col__subrow">
+        <span class="filter-dist-label">路名：</span>
+        <input id="filter-road" type="text" placeholder="路名搜尋"
+               class="form-control form-control-sm" style="flex:1;"
+               oninput="applyFilters()">
+      </div>
+    </div>
+
+    <!-- 中1：類型 + 樓層 -->
+    <div class="filter-col filter-col--mid">
+      <div class="filter-col__title">物件性質過濾</div>
+      <div class="filter-dist-row">
+        <span class="filter-dist-label">類型：</span>
+        <label class="dist-chip"><input type="checkbox" class="filter-btype" value="公寓" onchange="applyFilters()" checked> 公寓</label>
+        <label class="dist-chip dist-chip--disabled"><input type="checkbox" class="filter-btype" value="透天厝" disabled> 透天厝（未開放）</label>
+        <label class="dist-chip dist-chip--disabled"><input type="checkbox" class="filter-btype" value="店面" disabled> 店面（未開放）</label>
+      </div>
+      <div class="filter-dist-row">
+        <span class="filter-dist-label">樓層：</span>
+        <label class="dist-chip dist-chip--all"><input type="checkbox" id="floor-all" onchange="toggleAllFloors(this)" checked> 全部</label>
+        <span id="floor-chips" class="d-inline-flex gap-1">
+          <label class="dist-chip"><input type="checkbox" value="1" onchange="applyFilters()" checked> 1F</label>
+          <label class="dist-chip"><input type="checkbox" value="2" onchange="applyFilters()" checked> 2F</label>
+          <label class="dist-chip"><input type="checkbox" value="3" onchange="applyFilters()" checked> 3F</label>
+          <label class="dist-chip"><input type="checkbox" value="4" onchange="applyFilters()" checked> 4F</label>
+          <label class="dist-chip"><input type="checkbox" value="5" onchange="applyFilters()" checked> 5F</label>
+        </span>
+      </div>
+    </div>
+
+    <!-- 中2：價格與坪數 -->
+    <div class="filter-col filter-col--mid">
+      <div class="filter-col__title">數字條件設定</div>
+      <div class="filter-col__subrow">
+        <span class="filter-dist-label">總價：</span>
+        <input id="filter-price-min" type="number" min="0" step="100" placeholder="最低" value="0"
+               class="form-control form-control-sm" style="width:78px;"
+               oninput="applyFilters()">
+        <span class="small text-muted">–</span>
+        <input id="filter-price-max" type="number" min="0" step="100" placeholder="最高" value="5000"
+               class="form-control form-control-sm" style="width:78px;"
+               oninput="applyFilters()">
+        <span class="small text-muted">萬</span>
+      </div>
+      <div class="filter-col__subrow filter-col__subrow--pair">
+        <span class="filter-dist-label filter-dist-label--nowrap">建單價：</span>
+        <input id="filter-max-bld-price" type="number" min="0" step="5" value="300"
+               class="form-control form-control-sm" style="width:62px;"
+               oninput="applyFilters()">
+        <span class="small text-muted">▼</span>
+        <span class="filter-col__divider"></span>
+        <span class="filter-dist-label filter-dist-label--nowrap">地單價：</span>
+        <input id="filter-max-land-price" type="number" min="0" step="10" value="600"
+               class="form-control form-control-sm" style="width:62px;"
+               oninput="applyFilters()">
+        <span class="small text-muted">▼</span>
+      </div>
+      <div class="filter-col__subrow">
+        <span class="filter-dist-label">地坪：</span>
+        <input id="filter-min-land-ping" type="number" min="0" step="1" value="0"
+               class="form-control form-control-sm" style="width:78px;"
+               oninput="applyFilters()">
+        <span class="small text-muted">坪以上</span>
+      </div>
+    </div>
+
+    <!-- 右：搜尋按鈕 -->
+    <div class="filter-col filter-col--action">
+      <button class="btn btn-primary" onclick="runExploreSearch()" style="font-size:16px;font-weight:600;">
+        🔍 開始搜尋
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── 排序 / 結果筆數（兩 tab 共用） ── -->
+<div id="filter-bar" class="app-container px-3 py-2">
+  <div class="filter-top-row">
+    <div class="d-flex align-items-center gap-2 ms-auto">
+      <label class="explore-hide-bad" id="explore-hide-bad-wrap" style="display:none">
+        <input type="checkbox" id="explore-hide-bad" onchange="applyClientOrder()">
+        <span>隱藏5層以上物件</span>
+      </label>
+      <label class="explore-hide-bad" id="explore-min-profit-wrap" style="display:none;">
+        <input type="checkbox" id="explore-min-profit-on" onchange="applyClientOrder()">
+        <span>僅顯示獲利倍數</span>
+        <input type="number" id="explore-min-profit" step="0.1" min="0" value="3.0"
+               oninput="applyClientOrder()"
+               style="width:48px; padding:0 4px; height:20px; line-height:18px; font-size:13px; border:1px solid #ffe69c; border-radius:3px; background:#fff;">
+        <span>倍以上</span>
+      </label>
+      <label class="small text-muted">排序：</label>
+      <select id="sort-by" class="form-select form-select-sm w-auto" onchange="applyClientOrder()">
+        <option value="list_rank" selected>新進優先</option>
+        <option value="published_at">原網刊登時間</option>
+        <option value="profit_multiple">獲利倍數</option>
+        <option value="price_per_building_ping">建坪單價</option>
+        <option value="price_per_land_ping">地坪單價</option>
+        <option value="price_ntd">總價</option>
+        <option value="building_age">屋齡</option>
+      </select>
+      <button id="sort-dir" class="btn btn-sm btn-outline-secondary" onclick="toggleSortDir()" title="切換升冪/降冪">↓</button>
+    </div>
+    <span id="result-count" class="small text-muted ms-2"></span>
+  </div>
+</div>
+
+<!-- ── 主體：列表 + 地圖 ── -->
+<div id="main-layout" class="d-flex">
+
+  <!-- 左側：物件列表（限制最大寬度，置中） -->
+  <div id="list-panel" class="border-end" style="width:100%; min-width:380px;">
+    <div class="app-container">
+      <div id="property-list">
+        <div class="text-center text-muted py-5">
+          <div class="fs-2 mb-2">⏳</div>
+          <div>載入中…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右側：地圖 -->
+  <div id="map-panel" class="flex-grow-1 position-relative">
+    <div id="map" style="width:100%;height:100%;"></div>
+  </div>
+
+</div>
+
+<!-- ── 物件詳情 Modal ── -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-title">物件詳情</h5>
+        <div class="modal-header-actions">
+          <span id="modal-591-wrap"></span>
+          <button id="modal-manual-reanalyze" type="button" class="tb-btn tb-btn--ghost" style="display:none" onclick="reanalyzeManualFull()">🔄 重新分析</button>
+          <button type="button" class="tb-btn tb-btn--ghost" data-bs-dismiss="modal">關閉</button>
+        </div>
+      </div>
+      <div class="modal-body" id="modal-body">
+        <!-- 由 JS 填入 -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Auth gate 必須在 app.js 之前執行；取得 ID token 後才讓 app.js 跑 -->
+<script type="module" src="/static/auth_gate.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

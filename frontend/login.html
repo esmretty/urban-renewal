@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>都更神探R — 登入</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background: linear-gradient(135deg, #fdf6e0 0%, #f4e5b5 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #c0a063;
+      border-radius: 10px;
+      padding: 48px 40px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+      text-align: center;
+      max-width: 380px;
+      width: 90%;
+    }
+    h1 { margin: 0 0 8px; font-size: 28px; color: #5c4a0a; }
+    p { margin: 0 0 24px; color: #7a6a2a; font-size: 14px; line-height: 1.6; }
+    .btn-google {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 12px 20px;
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      background: #fff;
+      color: #3c4043;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-google:hover { background: #f8f9fa; }
+    .btn-google:disabled { opacity: 0.5; cursor: default; }
+    .err {
+      margin-top: 16px;
+      color: #c0392b;
+      font-size: 13px;
+      min-height: 16px;
+    }
+    .logo-dot { display: inline-block; width: 10px; height: 10px; background: #c78a00; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1><span class="logo-dot"></span>都更神探R</h1>
+    <p>請用 Google 帳號登入以繼續</p>
+    <button id="btn-google" class="btn-google" disabled>
+      <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17.64 9.2c0-.64-.06-1.25-.17-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62z" fill="#4285F4"/>
+        <path d="M9 18c2.43 0 4.47-.81 5.96-2.18l-2.91-2.26c-.81.54-1.84.86-3.05.86-2.35 0-4.33-1.58-5.04-3.71H.96v2.33A9 9 0 0 0 9 18z" fill="#34A853"/>
+        <path d="M3.96 10.71a5.4 5.4 0 0 1 0-3.42V4.96H.96a9 9 0 0 0 0 8.08l3-2.33z" fill="#FBBC05"/>
+        <path d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58A8.9 8.9 0 0 0 9 0 9 9 0 0 0 .96 4.96l3 2.33C4.67 5.16 6.65 3.58 9 3.58z" fill="#EA4335"/>
+      </svg>
+      使用 Google 登入
+    </button>
+    <div id="err" class="err"></div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged }
+      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+    const errEl = document.getElementById("err");
+    const btn = document.getElementById("btn-google");
+
+    async function boot() {
+      const res = await fetch("/api/firebase_config");
+      const cfg = await res.json();
+      if (!cfg.apiKey) {
+        errEl.textContent = "後端尚未設定 Firebase Web API Key（FIREBASE_WEB_API_KEY env）";
+        return;
+      }
+      const app = initializeApp(cfg);
+      const auth = getAuth(app);
+
+      // 若已登入直接跳首頁
+      onAuthStateChanged(auth, (user) => {
+        if (user) window.location.href = "/";
+      });
+
+      btn.disabled = false;
+      btn.addEventListener("click", async () => {
+        errEl.textContent = "";
+        btn.disabled = true;
+        try {
+          const provider = new GoogleAuthProvider();
+          await signInWithPopup(auth, provider);
+          // onAuthStateChanged 會接手跳轉
+        } catch (e) {
+          console.error(e);
+          errEl.textContent = "登入失敗：" + (e.message || e.code);
+          btn.disabled = false;
+        }
+      });
+    }
+    boot().catch(e => { errEl.textContent = "初始化失敗：" + e.message; });
+  </script>
+</body>
+</html>

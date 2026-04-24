@@ -1,0 +1,27 @@
+# 敏感資訊 - 絕對不能上傳
+.env
+.env.local
+.env.*.local
+firebase-credentials.json
+
+# 資料庫與截圖（本地資料）
+data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# IDE / AI assistant 工作區
+.vscode/
+.idea/
+.claude/
+
+# 個人待辦 / debug 產物
+TODO.txt
+block_result.json
+debug_*.py
+debug_*.png
