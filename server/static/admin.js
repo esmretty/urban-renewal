@@ -4,6 +4,17 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
+// HTML escape helper：任何「會進 innerHTML 的後端/用戶文字」都要先 esc()。
+function esc(s) {
+  if (s === null || s === undefined) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 let _user = null;
 let _allDocs = [];
 
@@ -128,7 +139,7 @@ async function loadWhitelist() {
     const data = await r.json();
     renderWhitelist(data.emails || []);
   } catch (e) {
-    box.innerHTML = `<div style="color:#c0392b;">載入失敗：${e.message}</div>`;
+    box.innerHTML = `<div style="color:#c0392b;">載入失敗：${esc(e.message)}</div>`;
   }
 }
 
@@ -141,9 +152,9 @@ function renderWhitelist(emails) {
   }
   const rows = emails.map(e => `
     <tr>
-      <td style="padding:4px 8px;">${e}</td>
+      <td style="padding:4px 8px;">${esc(e)}</td>
       <td style="padding:4px 8px; text-align:right;">
-        <button onclick="removeWhitelistEmail('${e.replace(/'/g, "\\'")}')"
+        <button onclick="removeWhitelistEmail('${esc(e.replace(/'/g, "\\'"))}')"
                 style="padding:2px 10px; color:#c0392b;">移除</button>
       </td>
     </tr>`).join("");
@@ -243,25 +254,25 @@ function renderSchedulerHistory(items) {
     const ok = it.status === "ok";
     const detailId = `sched-hist-detail-${idx}`;
     html += `<tr style="border-bottom:1px solid #eee;">
-      <td style="padding:6px 8px;">${fmt(it.started_at)}</td>
-      <td style="padding:6px 8px;">${fmtDur(it.started_at, it.finished_at)}</td>
-      <td style="padding:6px 8px; text-align:right;"><b>${it.total_new ?? 0}</b></td>
-      <td style="padding:6px 8px; text-align:right;">${it.total_enrich ?? 0}</td>
-      <td style="padding:6px 8px; text-align:right;">${it.total_skip_dup ?? 0}</td>
+      <td style="padding:6px 8px;">${esc(fmt(it.started_at))}</td>
+      <td style="padding:6px 8px;">${esc(fmtDur(it.started_at, it.finished_at))}</td>
+      <td style="padding:6px 8px; text-align:right;"><b>${Number(it.total_new ?? 0)}</b></td>
+      <td style="padding:6px 8px; text-align:right;">${Number(it.total_enrich ?? 0)}</td>
+      <td style="padding:6px 8px; text-align:right;">${Number(it.total_skip_dup ?? 0)}</td>
       <td style="padding:6px 8px; text-align:right;">${(it.commands || []).length}</td>
       <td style="padding:6px 8px; color:${ok ? '#27ae60' : '#c0392b'};">
         ${ok ? '✓ 完成' : '✗ 失敗'}
       </td>
       <td style="padding:6px 8px;">
-        <a href="javascript:void(0)" onclick="document.getElementById('${detailId}').classList.toggle('hidden')">展開/收合</a>
+        <a href="javascript:void(0)" onclick="document.getElementById('${esc(detailId)}').classList.toggle('hidden')">展開/收合</a>
       </td>
     </tr>
-    <tr id="${detailId}" class="hidden"><td colspan="8" style="padding:8px 16px; background:#fafafa;">
+    <tr id="${esc(detailId)}" class="hidden"><td colspan="8" style="padding:8px 16px; background:#fafafa;">
       ${(it.commands || []).map((c, i) => `
         <div style="margin:4px 0;">
-          <b>命令 ${i + 1}</b>：${(c.districts || []).join("、")} × ${c.limit} 筆
-          → 新增 ${c.new_count}，補資料 ${c.enrich_count}，重複 ${c.skip_dup_count}，價格變動 ${c.price_update_count}
-          ${c.status === "fail" ? `<span style="color:#c0392b;"> 失敗：${c.error}</span>` : ""}
+          <b>命令 ${i + 1}</b>：${esc((c.districts || []).join("、"))} × ${Number(c.limit)} 筆
+          → 新增 ${Number(c.new_count)}，補資料 ${Number(c.enrich_count)}，重複 ${Number(c.skip_dup_count)}，價格變動 ${Number(c.price_update_count)}
+          ${c.status === "fail" ? `<span style="color:#c0392b;"> 失敗：${esc(c.error || '')}</span>` : ""}
         </div>`).join("")}
     </td></tr>`;
   });
@@ -356,7 +367,7 @@ function renderScheduler(s) {
       ${toggleBtn}
       <b style="color:${stateColor}">${stateText}</b>
       ${tickDiv}
-      <div style="color:#555;">最近執行：${_fmtDate(s.last_run_at)} ${s.last_status ? `（${s.last_status}）` : ""}</div>
+      <div style="color:#555;">最近執行：${_fmtDate(s.last_run_at)} ${s.last_status ? `（${esc(s.last_status)}）` : ""}</div>
     </div>`;
 
   // interval row
@@ -394,7 +405,7 @@ function _renderCmdRow(cmd, i) {
   const applied = _isCmdApplied(i);
   const server = _schedServer.commands[i];
   const appliedText = applied
-    ? `<span style="color:#27ae60; font-size:12px;">✓ 已套用：${(server.districts || []).join("、")} / ${server.limit} 筆</span>`
+    ? `<span style="color:#27ae60; font-size:12px;">✓ 已套用：${esc((server.districts || []).join("、"))} / ${Number(server.limit)} 筆</span>`
     : `<span style="color:#c0392b; font-size:12px;">⚠ 未套用（按下套用才生效）</span>`;
   const chips = _schedMeta.allowed.map(d => {
     const checked = cmd.districts.includes(d) ? "checked" : "";
@@ -512,17 +523,17 @@ window.runOcrScan = async function () {
     const r = await authedFetch("/admin/ocr_misread_scan");
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
-      box.innerHTML = `<div style="color:#c0392b;">掃描失敗：${e.detail || r.status}</div>`;
+      box.innerHTML = `<div style="color:#c0392b;">掃描失敗：${esc(e.detail || r.status)}</div>`;
       return;
     }
     const data = await r.json();
     const suspects = data.suspects || [];
     let html = `
       <div style="color:#555; font-size:13px; margin-bottom:8px;">
-        檢查 ${data.checked} 筆 / 缺原生座標跳過 ${data.skipped_no_source_coords} 筆 /
+        檢查 ${Number(data.checked) || 0} 筆 / 缺原生座標跳過 ${Number(data.skipped_no_source_coords) || 0} 筆 /
         <b style="color:${suspects.length ? '#c0392b' : '#27ae60'}">疑似 ${suspects.length} 筆</b>
       </div>
-      <div style="color:#7f8c8d; font-size:12px; margin-bottom:8px;">${data.note || ""}</div>
+      <div style="color:#7f8c8d; font-size:12px; margin-bottom:8px;">${esc(data.note || "")}</div>
     `;
     if (!suspects.length) {
       html += `<div style="color:#27ae60;">✓ 沒發現疑似誤讀物件</div>`;
@@ -535,14 +546,14 @@ window.runOcrScan = async function () {
         <th style="padding:4px 8px;">動作</th>
       </tr></thead><tbody>`;
       for (const s of suspects) {
-        const title = (s.title || "").replace(/</g, "&lt;").slice(0, 30);
+        const title = (s.title || "").slice(0, 30);
         html += `<tr>
-          <td style="padding:4px 8px;">${s.id}</td>
-          <td style="padding:4px 8px;">${title}</td>
-          <td style="padding:4px 8px; color:#c0392b;">${s.db_road}</td>
-          <td style="padding:4px 8px; color:#27ae60;">${s.source_reverse_road}</td>
+          <td style="padding:4px 8px;">${esc(s.id)}</td>
+          <td style="padding:4px 8px;">${esc(title)}</td>
+          <td style="padding:4px 8px; color:#c0392b;">${esc(s.db_road || "")}</td>
+          <td style="padding:4px 8px; color:#27ae60;">${esc(s.source_reverse_road || "")}</td>
           <td style="padding:4px 8px;">
-            <button onclick="quickReanalyze('${s.id}')" style="padding:3px 8px;">重新分析</button>
+            <button onclick="quickReanalyze('${esc(s.id)}')" style="padding:3px 8px;">重新分析</button>
           </td>
         </tr>`;
       }
@@ -550,7 +561,7 @@ window.runOcrScan = async function () {
     }
     box.innerHTML = html;
   } catch (e) {
-    box.innerHTML = `<div style="color:#c0392b;">掃描失敗：${e.message}</div>`;
+    box.innerHTML = `<div style="color:#c0392b;">掃描失敗：${esc(e.message)}</div>`;
   }
 };
 
@@ -634,34 +645,34 @@ window.renderList = function () {
       const pct = Math.min(95, Math.round((elapsed / EST) * 95));
       statusCell = `<div class="mini-loading"><div class="mini-loading-bar" style="width:${pct}%"></div><span style="font-size:11px;color:#666">分析中… ${pct}% (${elapsed}s)</span></div>`;
     } else {
-      statusCell = `<span class="${stCls}">${d.analysis_status || "—"}</span>`;
+      statusCell = `<span class="${stCls}">${esc(d.analysis_status || "—")}</span>`;
     }
     // 591 連結：每一個 url 都給編號連結，格式「591: 1 2 3 ...」
     const allUrls = [d.url, ...(d.url_alt || [])].filter(Boolean);
     const linkBadge = allUrls.length === 0
       ? '<span style="color:#999">—</span>'
       : '591: ' + allUrls.map((u, i) =>
-          `<a href="${u}" target="_blank" style="color:#2980b9;margin-right:6px">${i+1}</a>`
+          `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" style="color:#2980b9;margin-right:6px">${i+1}</a>`
         ).join("");
     const submitterCell = showSubmitter
-      ? `<td style="font-size:12px">${d.submitted_by_email || d.submitted_by_uid || '—'}</td>`
+      ? `<td style="font-size:12px">${esc(d.submitted_by_email || d.submitted_by_uid || '—')}</td>`
       : '';
     return `<tr>
-      <td><code>${d.id}</code></td>
+      <td><code>${esc(d.id)}</code></td>
       <td style="white-space:nowrap">${linkBadge}</td>
-      <td>${d.city || "—"}</td>
-      <td>${d.district || "—"}</td>
-      <td>${_cleanAddrDisplay(d)}</td>
-      <td>${d.building_type || "—"}</td>
+      <td>${esc(d.city || "—")}</td>
+      <td>${esc(d.district || "—")}</td>
+      <td>${_cleanAddrDisplayHTML(d)}</td>
+      <td>${esc(d.building_type || "—")}</td>
       <td>${floors}</td>
       <td>${price}</td>
       <td>${statusCell}</td>
-      <td style="white-space:nowrap;font-size:12px;color:#666">${scrapedAt}</td>
+      <td style="white-space:nowrap;font-size:12px;color:#666">${esc(scrapedAt)}</td>
       ${submitterCell}
       <td class="row-actions">
-        <button onclick="openDoc('${d.id}')">檢視</button>
-        <button onclick="quickReanalyze('${d.id}')" ${isReanalyzing ? "disabled" : ""}>重新分析</button>
-        <button class="btn-del" onclick="quickDelete('${d.id}')">刪除</button>
+        <button onclick="openDoc('${esc(d.id)}')">檢視</button>
+        <button onclick="quickReanalyze('${esc(d.id)}')" ${isReanalyzing ? "disabled" : ""}>重新分析</button>
+        <button class="btn-del" onclick="quickDelete('${esc(d.id)}')">刪除</button>
       </td>
     </tr>`;
   }).join("");
@@ -688,8 +699,14 @@ function _cleanAddrDisplay(d) {
   } else {
     addr = addr.replace(/^([\u4e00-\u9fa5]{1,3}區)+/, "");
   }
-  const inferredTag = d.address_inferred ? ' <span style="font-size:11px;color:#1a8754">(推測)</span>' : '';
-  return (addr || "—") + inferredTag;
+  return addr || "—";
+}
+
+// XSS-safe 版本：回傳已 escape 的 HTML 字串，含推測 badge
+function _cleanAddrDisplayHTML(d) {
+  const plain = _cleanAddrDisplay(d);
+  const badge = d.address_inferred ? ' <span style="font-size:11px;color:#1a8754">(推測)</span>' : '';
+  return esc(plain) + badge;
 }
 
 let _debounceTimer;
@@ -706,16 +723,16 @@ function renderUsers(users) {
   document.getElementById("users-box").innerHTML = `<table>
     <thead><tr><th>UID</th><th>Email</th><th>名稱</th><th>階級</th><th>建立時間</th><th>動作</th></tr></thead>
     <tbody>${users.map(u => {
-      const tierTxt = u.tier_name_zh ? `${u.tier_name_zh}${u.tier_name_en ? ` / ${u.tier_name_en}` : ""}` : "—";
+      const tierTxt = u.tier_name_zh ? `${esc(u.tier_name_zh)}${u.tier_name_en ? ` / ${esc(u.tier_name_en)}` : ""}` : "—";
       return `
       <tr>
-        <td><code style="font-size:11px">${u.uid}</code></td>
-        <td>${u.email || "—"}</td>
-        <td>${u.display_name || "—"}</td>
+        <td><code style="font-size:11px">${esc(u.uid)}</code></td>
+        <td>${esc(u.email || "—")}</td>
+        <td>${esc(u.display_name || "—")}</td>
         <td>${tierTxt}</td>
-        <td>${u.created_at ? new Date(u.created_at).toLocaleString() : "—"}</td>
+        <td>${u.created_at ? esc(new Date(u.created_at).toLocaleString()) : "—"}</td>
         <td class="row-actions">
-          <button class="btn-del" onclick="deleteUserData('${u.uid}','${(u.email || '').replace(/'/g, '&apos;')}')">刪除此用戶資料</button>
+          <button class="btn-del" onclick="deleteUserData('${esc(u.uid)}','${esc((u.email || '').replace(/'/g, '&apos;'))}')">刪除此用戶資料</button>
         </td>
       </tr>`;
     }).join("")}

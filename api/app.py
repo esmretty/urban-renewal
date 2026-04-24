@@ -424,11 +424,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="都更神探R", version="2.0.0", lifespan=lifespan)
 
+# CORS 白名單：只允許正式網域、localhost 開發、以及 env 指定的額外 origin
+# env 變數 CORS_EXTRA_ORIGINS 逗號分隔（e.g. "https://staging.example.com,https://preview.foo")
+_cors_origins = [
+    "https://taipei.retty-ai.com",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+for _extra in os.getenv("CORS_EXTRA_ORIGINS", "").split(","):
+    _extra = _extra.strip()
+    if _extra:
+        _cors_origins.append(_extra)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 # 登入驗證 middleware（排在 CORS 之後才能正確處理 OPTIONS preflight）
 app.middleware("http")(_auth_middleware)

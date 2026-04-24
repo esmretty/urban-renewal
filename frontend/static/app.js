@@ -2,6 +2,19 @@
  * 都更神探R 前端 JavaScript
  */
 
+// ── XSS 防護：HTML escape helper ────────────────────────────────────────────
+// 任何「會進 innerHTML 的後端/爬蟲/用戶文字」都要先過 esc()。
+// 純常數字串、已經 encodeURIComponent 過的 URL、已知格式的數字不需要（但包了也不會壞）。
+function esc(s) {
+  if (s === null || s === undefined) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // ── 狀態 ─────────────────────────────────────────────────────────────────────
 let allProperties = [];
 let filteredProperties = [];
@@ -455,7 +468,7 @@ function rowHTML(p) {
   const typeLabel = p.building_type || "";
   const titleText = p.address || p.title || "地址未知";
   const mrtHTML = p.nearest_mrt
-    ? `<div class="mrt-name">${p.nearest_mrt}</div><div class="mrt-dist">${Math.round(p.nearest_mrt_dist_m || 0)}m</div>`
+    ? `<div class="mrt-name">${esc(p.nearest_mrt)}</div><div class="mrt-dist">${Math.round(p.nearest_mrt_dist_m || 0)}m</div>`
     : "—";
   const priceChangedBadge = p.is_price_changed ? `<span class="price-changed-tag">降價</span>` : "";
 
@@ -489,7 +502,7 @@ function rowHTML(p) {
     : `<span class="analysis-done">完成</span>`;
   // 說明 cell：列出違反 threshold 的原因（不論 analysis_status，server 端不再過濾）
   const skipReasons = computeSkipReasons(p, th);
-  const skipReasonsHTML = skipReasons.map(r => `<div class="note-skip">${r}</div>`).join("");
+  const skipReasonsHTML = skipReasons.map(r => `<div class="note-skip">${esc(r)}</div>`).join("");
   const noteCell = skipReasonsHTML || (isPending ? `<span class="text-muted">—</span>` : ``);
   const deprioritized = (_activeTab === "explore" && skipReasons.length > 0) ? "is-deprioritized" : "";
   // 獲利倍數 > 3.2 → 高亮整列（紅框 + 字體放大）
@@ -506,24 +519,24 @@ function rowHTML(p) {
        style="${(isPending || analyzing) ? "cursor:default" : ""}"
   >
     ${analyzing ? '<div class="row-loading"><div class="row-loading-bar"></div><div class="row-loading-text">分析中…請稍候</div></div>' : ''}
-    <div class="c c-src">${srcLinksHTML(p)}</div>
-    <div class="c c-type">${typeIcon} ${typeLabel}</div>
-    <div class="c c-city">${p.city || "—"}</div>
-    <div class="c c-district">${p.district || "—"}</div>
-    <div class="c c-addr" title="${roadOnly}">${roadOnly}${p.address_inferred ? '<span class="inferred-tag">推測</span>' : ''}${p.is_foreclosure ? '<span class="fc-badge" title="法拍屋">法拍屋</span>' : ''}${priceChangedBadge}<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" class="map-link" onclick="event.stopPropagation()" title="Google Maps">📍</a>${newBadge}</div>
-    <div class="c c-val c-total ${hotCls('price')}">${priceStr}${(p.lvr_records && p.lvr_records.length) ? `<span class="lvr-icon" onclick="event.stopPropagation()" onmouseenter="showLvrPopup(event, '${p.id}')" onmouseleave="hideLvrPopup()">實</span>` : ""}</div>
-    <div class="c c-val c-bld-combo">
+    <div class="c c-src" data-label="來源">${srcLinksHTML(p)}</div>
+    <div class="c c-type" data-label="類型">${typeIcon} ${esc(typeLabel)}</div>
+    <div class="c c-city" data-label="縣市">${esc(p.city || "—")}</div>
+    <div class="c c-district" data-label="區">${esc(p.district || "—")}</div>
+    <div class="c c-addr" title="${esc(roadOnly)}" data-label="地址">${esc(roadOnly)}${p.address_inferred ? '<span class="inferred-tag">推測</span>' : ''}${p.is_foreclosure ? '<span class="fc-badge" title="法拍屋">法拍屋</span>' : ''}${priceChangedBadge}<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener noreferrer" class="map-link" onclick="event.stopPropagation()" title="Google Maps">📍</a>${newBadge}</div>
+    <div class="c c-val c-total ${hotCls('price')}" data-label="總價">${priceStr}${(p.lvr_records && p.lvr_records.length) ? `<span class="lvr-icon" onclick="event.stopPropagation()" onmouseenter="showLvrPopup(event, '${p.id}')" onmouseleave="hideLvrPopup()">實</span>` : ""}</div>
+    <div class="c c-val c-bld-combo" data-label="建坪/單價">
       <div class="${hotCls('bldA')}">${p.building_area_ping ?? "—"} 坪</div>
       <div class="sub ${hotCls('bld')}">${perBuilding} 萬</div>
     </div>
-    <div class="c c-val c-bld-combo">
+    <div class="c c-val c-bld-combo" data-label="地坪/單價">
       <div class="${hotCls('landA')}">${p.land_area_ping ?? "—"} 坪${p.land_area_source === "lvr" ? " <span class='lvr-tag'>*實登</span>" : ""}${p.land_area_lvr && p.land_area_lvr !== p.land_area_ping ? ` <span class='lvr-tag' title='實價登錄: ${p.land_area_lvr}坪'>*</span>` : ""}</div>
       <div class="sub ${hotCls('land_p')}">${perLand} 萬</div>
     </div>
-    <div class="c c-val">${floorStr}</div>
-    <div class="c c-val">${p.building_age ?? "—"}</div>
-    <div class="c c-note">${noteCell}</div>
-    <div class="c c-val c-multi">${multiCell}</div>
+    <div class="c c-val c-floor" data-label="樓層">${floorStr}</div>
+    <div class="c c-val c-age" data-label="屋齡">${p.building_age ?? "—"}</div>
+    <div class="c c-note" data-label="說明">${noteCell}</div>
+    <div class="c c-val c-multi" data-label="獲利倍數">${multiCell}</div>
     <div class="c c-del">${_rowActionHTML(p)}</div>
   </div>
   `;
@@ -578,12 +591,12 @@ function lvrBlock(p) {
           <tr><th>地址</th><th>建坪</th><th>地坪</th><th>成交價</th><th>交易日</th><th></th></tr>
           ${recs.map(r => `
           <tr${r.is_special ? ' class="lvr-special"' : ''}>
-            <td>${r.address || "—"}</td>
+            <td>${esc(r.address || "—")}</td>
             <td>${r.area_ping ?? "—"}</td>
             <td>${r.land_ping ?? "—"}</td>
             <td>${r.price_total ? (r.price_total / 10000).toLocaleString("zh-TW", {maximumFractionDigits:0}) + " 萬" : "—"}</td>
-            <td>${r.txn_date || "—"}</td>
-            <td>${r.is_special ? `<span class="lvr-warn" title="${r.note}">⚠</span>` : ""}</td>
+            <td>${esc(r.txn_date || "—")}</td>
+            <td>${r.is_special ? `<span class="lvr-warn" title="${esc(r.note || '')}">⚠</span>` : ""}</td>
           </tr>`).join("")}
         </table>
       </div>
@@ -618,7 +631,7 @@ function cardHTML(p) {
     ? `${fmt1(p.price_ntd / 10000 / landArea)} 萬/地坪` : null;
   const ageYears = p.building_age;
   const mrtStr = p.nearest_mrt
-    ? `🚇 ${p.nearest_mrt} ${Math.round(p.nearest_mrt_dist_m || 0)}m`
+    ? `🚇 ${esc(p.nearest_mrt)} ${Math.round(p.nearest_mrt_dist_m || 0)}m`
     : "";
 
   // 樓層：2/5F 這樣寫
@@ -642,7 +655,7 @@ function cardHTML(p) {
     : "";
 
   const imgStr = p.image_url
-    ? `<img class="property-thumb" src="${p.image_url}" alt="" loading="lazy" onerror="this.style.display='none'">`
+    ? `<img class="property-thumb" src="${esc(p.image_url)}" alt="${esc(p.address || p.title || '')}" loading="lazy" onerror="this.style.display='none'">`
     : "";
 
   // 類型 icon（公寓 / 透天）
@@ -667,8 +680,8 @@ function cardHTML(p) {
       </div>
       <div class="card-head-main">
         <div class="card-type-row">
-          <span class="type-chip">${typeIcon} ${typeLabel}</span>
-          <span class="card-title" title="${titleText}">${titleText}</span>
+          <span class="type-chip">${typeIcon} ${esc(typeLabel)}</span>
+          <span class="card-title" title="${esc(titleText)}">${esc(titleText)}</span>
           ${priceChangedBadge}
           <span class="card-price">${priceStr}</span>
         </div>
@@ -787,12 +800,12 @@ function showDetailModal(p) {
       wrap.innerHTML = "";
     } else if (shown.length === 1) {
       const d = _fmtPubDate(shown[0].date);
-      wrap.innerHTML = `<a href="${clean591Url(shown[0].url)}" target="_blank" class="tb-btn tb-btn--ghost">591 頁面 ↗${d ? ` <span class="src-pubdate">${d}</span>` : ""}</a>`;
+      wrap.innerHTML = `<a href="${esc(clean591Url(shown[0].url))}" target="_blank" rel="noopener noreferrer" class="tb-btn tb-btn--ghost">591 頁面 ↗${d ? ` <span class="src-pubdate">${esc(d)}</span>` : ""}</a>`;
     } else {
       const links = shown.map((pair, i) => {
         const d = _fmtPubDate(pair.date);
-        return `<a href="${clean591Url(pair.url)}" target="_blank" class="src-num" onclick="event.stopPropagation()" title="#${i+1}">
-          <span>#${i+1}</span>${d ? `<span class="src-num-date">${d}</span>` : ""}
+        return `<a href="${esc(clean591Url(pair.url))}" target="_blank" rel="noopener noreferrer" class="src-num" onclick="event.stopPropagation()" title="#${i+1}">
+          <span>#${i+1}</span>${d ? `<span class="src-num-date">${esc(d)}</span>` : ""}
         </a>`;
       }).join("");
       wrap.innerHTML = `<span class="src-hover-wrap" onclick="event.stopPropagation()">
@@ -848,9 +861,9 @@ function buildDetailHTML(p) {
         <div class="basic-info-col">
           <table class="table table-sm renewal-table mb-0">
             <tbody>
-              <tr><td>原始地址</td><td>${stripCityDist(p.address || p.title)}${p.address_road_fixed ? `<div class="addr-fixed-note">已自動修正：${p.address_road_fixed.from} → ${p.address_road_fixed.to}</div>` : ""}${p.address_suspicious ? `<div class="addr-suspicious">⚠ 路名可能不存在於此行政區，請自行確認</div>` : ""}</td></tr>
+              <tr><td>原始地址</td><td>${esc(stripCityDist(p.address || p.title))}${p.address_road_fixed ? `<div class="addr-fixed-note">已自動修正：${esc(p.address_road_fixed.from)} → ${esc(p.address_road_fixed.to)}</div>` : ""}${p.address_suspicious ? `<div class="addr-suspicious">⚠ 路名可能不存在於此行政區，請自行確認</div>` : ""}</td></tr>
               <tr><td>推測地址 ${p.address_inferred ? `<span class="inferred-tag">${p.address_inferred_confidence === "unique" ? "★實登" : p.address_inferred_confidence === "multi" ? "推測" : "≈推測"}</span>` : ""}</td><td>${inferredAddressCellHTML(p)}</td></tr>
-              <tr><td>類型 / 樓層</td><td>${(p.building_type || "—")} ・ ${floorStr}</td></tr>
+              <tr><td>類型 / 樓層</td><td>${esc(p.building_type || "—")} ・ ${floorStr}</td></tr>
               <tr><td>屋齡</td><td>${p.building_age ? p.building_age + " 年" : "未知"}</td></tr>
               <tr><td>售價</td><td class="fw-bold text-warning">${priceStr}${(p.lvr_records && p.lvr_records.length) ? ` <span class="lvr-icon" onclick="event.stopPropagation()" onmouseenter="showLvrPopup(event, '${p.id}')" onmouseleave="hideLvrPopup()">實</span>` : ""}</td></tr>
               <tr><td>欲出價</td>
@@ -869,7 +882,7 @@ function buildDetailHTML(p) {
             <tbody>
               <tr><td>附近捷運站</td><td>${
                 Array.isArray(p.nearby_mrts) && p.nearby_mrts.length
-                  ? p.nearby_mrts.map(m => `${m.name}（${Math.round(m.dist_m)}m）`).join("<br>")
+                  ? p.nearby_mrts.map(m => `${esc(m.name)}（${Math.round(m.dist_m)}m）`).join("<br>")
                   : "—"
               }</td></tr>
               <tr><td>使用分區</td><td>${zoningCellHTML(p)}</td></tr>
@@ -879,12 +892,12 @@ function buildDetailHTML(p) {
           ${p.city === "台北市" ? `
           <div class="modal-tools">
             <span class="modal-tools__city">台北市</span>
-            <a href="https://bim.udd.gov.taipei/UDDPlanMap/" target="_blank">都市計畫圖 ↗</a>
-            <a href="https://zonemap.udd.gov.taipei/ZoneMapOP/" target="_blank">地籍套繪圖 ↗</a>
+            <a href="https://bim.udd.gov.taipei/UDDPlanMap/" target="_blank" rel="noopener noreferrer">都市計畫圖 ↗</a>
+            <a href="https://zonemap.udd.gov.taipei/ZoneMapOP/" target="_blank" rel="noopener noreferrer">地籍套繪圖 ↗</a>
           </div>` : p.city === "新北市" ? `
           <div class="modal-tools">
             <span class="modal-tools__city">新北市</span>
-            <a href="https://urban.planning.ntpc.gov.tw/NtpcURInfo/" target="_blank">城鄉資訊 ↗</a>
+            <a href="https://urban.planning.ntpc.gov.tw/NtpcURInfo/" target="_blank" rel="noopener noreferrer">城鄉資訊 ↗</a>
           </div>` : ""}
         </div>
       </div>
@@ -902,7 +915,7 @@ function buildDetailHTML(p) {
     </div>
     <div class="col-md-5">
       <h6 class="modal-h">分析建議</h6>
-      ${p.ai_reason ? `<div class="ai-sections" id="ai-sections-content">${formatAiReason(p.ai_reason)}</div>` : (p.ai_analysis ? `<p class="text-info mb-2">${p.ai_analysis}</p>` : "")}
+      ${p.ai_reason ? `<div class="ai-sections" id="ai-sections-content">${formatAiReason(p.ai_reason)}</div>` : (p.ai_analysis ? `<p class="text-info mb-2">${esc(p.ai_analysis)}</p>` : "")}
     </div>
   </div>`;
 }
@@ -961,10 +974,10 @@ function zoningCellHTML(p) {
     "lookup_failed": "查詢失敗",
   }[src] || src || "";
   const srcLink = p.zoning_source_url
-    ? `<a href="${p.zoning_source_url}" target="_blank" class="ms-1 small">↗</a>`
+    ? `<a href="${encodeURI(p.zoning_source_url)}" target="_blank" rel="noopener noreferrer" class="ms-1 small">↗</a>`
     : "";
   const errorLine = p.zoning_error
-    ? `<div class="small text-danger mt-1">${p.zoning_error}</div>`
+    ? `<div class="small text-danger mt-1">${esc(p.zoning_error)}</div>`
     : "";
 
   const orig = p.zoning_original;
@@ -982,7 +995,7 @@ function zoningCellHTML(p) {
       const far = TAIPEI_FAR_PCT[eff] || "?";
       const v = toPing(ratios[i]).toFixed(2);
       const disabled = locked ? "disabled" : "";
-      return `<span class="zone-badge">${eff} (${far}%)</span>
+      return `<span class="zone-badge">${esc(eff)} (${far}%)</span>
         <input type="number" class="zone-ping-input" min="0" max="${totalLand}" step="0.01" value="${v}" ${disabled}
           onchange="setZonePing('${p.id}', ${i}, this.value)">坪`;
     }).join(" / ");
@@ -991,9 +1004,9 @@ function zoningCellHTML(p) {
       ? `<div class="zone-ratio-note">依謄本登錄坪數鎖定（總 ${totalLand} 坪）</div>`
       : `<div class="zone-ratio-note">總土地 ${totalLand} 坪。因無法取得謄本，請依實際坪數輸入（任一改動，另一個會自動同步）</div>`;
   } else if (z && orig) {
-    badge = `<span class="zone-badge">${z}</span> <span class="zone-orig">原：${orig}</span>`;
+    badge = `<span class="zone-badge">${esc(z)}</span> <span class="zone-orig">原：${esc(orig)}</span>`;
   } else if (z) {
-    badge = `<span class="zone-badge">${z}</span>`;
+    badge = `<span class="zone-badge">${esc(z)}</span>`;
   } else {
     badge = `<span class="text-muted">—</span>`;
   }
@@ -1002,7 +1015,7 @@ function zoningCellHTML(p) {
     const eff = effectiveZoning(p);
     const effFar = TAIPEI_FAR_PCT[eff];
     if (effFar != null && eff !== z) {
-      badge += `<div class="zone-special-note">實際容積採「${eff}」${effFar}% 計算。此地塊有(特)/(遷)加註，真實容積請查都發局都市計畫書。</div>`;
+      badge += `<div class="zone-special-note">實際容積採「${esc(eff)}」${effFar}% 計算。此地塊有(特)/(遷)加註，真實容積請查都發局都市計畫書。</div>`;
     } else {
       badge += `<div class="zone-special-note">此地塊有(特)/(遷)加註，容積率逐案而定，請查都發局都市計畫書。</div>`;
     }
@@ -1015,8 +1028,8 @@ function zoningCellHTML(p) {
           <tbody>
             ${cands.map(c => `
               <tr class="${c.is_most_likely ? 'fw-bold text-warning' : ''}">
-                <td>${c.is_most_likely ? "★ " : ""}${c.address || ""}</td>
-                <td>${c.zoning || "—"}</td>
+                <td>${c.is_most_likely ? "★ " : ""}${esc(c.address || "")}</td>
+                <td>${esc(c.zoning || "—")}</td>
                 <td class="text-muted">${c.distance_m != null ? c.distance_m + " m" : "—"}</td>
               </tr>`).join("")}
           </tbody>
@@ -1230,9 +1243,9 @@ function srcLinksHTML(p) {
   // 用戶貼 URL 送出（user_url）→ badge 寫「自行調查」，下拉的連結仍顯示「591」+ 日期
   if (p.source_origin === "user_url") {
     const t = _fmtPubDate(p.analysis_completed_at || p.scraped_at || p._added_at || null);
-    const link = p.url ? `<a href="${clean591Url(p.url)}" target="_blank" class="src-num" onclick="event.stopPropagation()" title="591 頁面">
-      <span>591</span>${t ? `<span class="src-num-date">${t}</span>` : ""}
-    </a>` : `<span>591${t ? ` <span class="src-num-date">${t}</span>` : ""}</span>`;
+    const link = p.url ? `<a href="${esc(clean591Url(p.url))}" target="_blank" rel="noopener noreferrer" class="src-num" onclick="event.stopPropagation()" title="591 頁面">
+      <span>591</span>${t ? `<span class="src-num-date">${esc(t)}</span>` : ""}
+    </a>` : `<span>591${t ? ` <span class="src-num-date">${esc(t)}</span>` : ""}</span>`;
     return `<span class="src-hover-wrap" onclick="event.stopPropagation()">
       <span class="src-badge591">自行調查</span>
       <span class="src-hover-popup src-hover-popup--dated">${link}</span>
@@ -1257,8 +1270,8 @@ function srcLinksHTML(p) {
   const links = shown.map((pair, i) => {
     const d = _fmtPubDate(pair.date);
     const label = shown.length === 1 ? "591 頁面" : `#${i+1}`;
-    return `<a href="${clean591Url(pair.url)}" target="_blank" class="src-num" onclick="event.stopPropagation()" title="${label}">
-      <span>${label}</span>${d ? `<span class="src-num-date">${d}</span>` : ""}
+    return `<a href="${esc(clean591Url(pair.url))}" target="_blank" rel="noopener noreferrer" class="src-num" onclick="event.stopPropagation()" title="${esc(label)}">
+      <span>${esc(label)}</span>${d ? `<span class="src-num-date">${esc(d)}</span>` : ""}
     </a>`;
   }).join("");
   return `<span class="src-hover-wrap" onclick="event.stopPropagation()">
@@ -1659,7 +1672,14 @@ async function scanRoadWidth(propertyId, btn) {
           if (existing) { existing.remove(); return; }
           const el = document.createElement("div");
           el.className = "road-preview-img road-preview-inline";
-          el.innerHTML = `<img src="${data.screenshot}" onclick="openRoadOverlay('${data.screenshot}', '${(data.reason||'').replace(/'/g,"\\'")}')"><div class="road-reason">${data.reason || ""}</div>`;
+          const imgEl = document.createElement("img");
+          imgEl.src = data.screenshot;
+          imgEl.addEventListener("click", () => openRoadOverlay(data.screenshot, data.reason || ""));
+          const reasonEl = document.createElement("div");
+          reasonEl.className = "road-reason";
+          reasonEl.textContent = data.reason || "";
+          el.appendChild(imgEl);
+          el.appendChild(reasonEl);
           btn.closest("td").appendChild(el);
         });
       } else {
@@ -1754,22 +1774,24 @@ function formatAiReason(text) {
       const title = m[1];
       // 分回價值：動態渲染，從 _detailP.renewal_v2 即時計算
       if (title === "分回價值") {
-        return `<div class="ai-section"><div class="ai-section-title">${title}</div><div class="ai-section-body" id="ai-bid-section">${renderBidSection()}</div></div>`;
+        return `<div class="ai-section"><div class="ai-section-title">${esc(title)}</div><div class="ai-section-body" id="ai-bid-section">${renderBidSection()}</div></div>`;
       }
-      let body = m[2].trim();
+      // 先對原始文字做 HTML escape，再把預期的 marker tag (&lt;chk-y&gt; 之類) 還原成真正的 HTML。
+      // 這樣即使 AI 輸出被污染也只會顯示成純文字，不會執行腳本。
+      let body = esc(m[2].trim());
       body = body.replace(/(\d+\.\d+)×/g, '$1倍');
       body = body.replace(/(\d+)×/g, '$1倍');
-      body = body.replace(/<chk-y>(.*?)<\/chk-y>/g, '<span class="chk-yes">☑</span><span class="chk-yes-text">$1</span>');
-      body = body.replace(/<chk-n>(.*?)<\/chk-n>/g, '<span class="chk-no">☐</span><span class="chk-no-text">$1</span>');
-      body = body.replace(/<red>(.*?)<\/red>/g, '<span class="ai-red">$1</span>');
+      body = body.replace(/&lt;chk-y&gt;([\s\S]*?)&lt;\/chk-y&gt;/g, '<span class="chk-yes">☑</span><span class="chk-yes-text">$1</span>');
+      body = body.replace(/&lt;chk-n&gt;([\s\S]*?)&lt;\/chk-n&gt;/g, '<span class="chk-no">☐</span><span class="chk-no-text">$1</span>');
+      body = body.replace(/&lt;red&gt;([\s\S]*?)&lt;\/red&gt;/g, '<span class="ai-red">$1</span>');
       // 移除舊的 bid_selector 標記（已改為動態）
-      body = body.replace(/<bid_selector[^>]*>/g, '');
+      body = body.replace(/&lt;bid_selector[^&]*&gt;/g, '');
       body = body.replace(/\n•/g, '<br>•');
       body = body.replace(/^•/, '•');
       body = body.replace(/\n/g, '<br>');
-      return `<div class="ai-section"><div class="ai-section-title">${title}</div><div class="ai-section-body">${body}</div></div>`;
+      return `<div class="ai-section"><div class="ai-section-title">${esc(title)}</div><div class="ai-section-body">${body}</div></div>`;
     }
-    return `<div class="ai-section"><div class="ai-section-body">${section.replace(/\n/g, "<br>")}</div></div>`;
+    return `<div class="ai-section"><div class="ai-section-body">${esc(section).replace(/\n/g, "<br>")}</div></div>`;
   }).join("");
 }
 
@@ -1830,16 +1852,16 @@ function renderBidSection() {
 function inferredAddressCellHTML(p) {
   const cands = Array.isArray(p.address_inferred_candidates_detail) ? p.address_inferred_candidates_detail : [];
   const current = p.address_inferred || p.address || p.title || "";
-  const mapLink = `<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" class="map-link" title="Google Maps">📍</a>`;
+  const mapLink = `<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener noreferrer" class="map-link" title="Google Maps">📍</a>`;
   // 單筆候選或無候選 → 純文字顯示
   if (cands.length <= 1) {
-    return `${stripCityDist(current)} ${mapLink}`;
+    return `${esc(stripCityDist(current))} ${mapLink}`;
   }
   // 多筆 → 下拉選單（只放地址，不帶地坪；地坪切換會在下方欄位即時更新）
   const opts = cands.map(c => {
     const sel = c.address === current ? "selected" : "";
     const label = stripCityDist(c.address) + (c.is_reverse_geo ? "（座標反查）" : "");
-    return `<option value="${c.address.replace(/"/g, '&quot;')}" ${sel}>${label}</option>`;
+    return `<option value="${esc(c.address)}" ${sel}>${esc(label)}</option>`;
   }).join("");
   return `<select class="inferred-choice-select" onchange="saveInferredChoice('${p.id}', this.value)">${opts}</select> ${mapLink}`;
 }
@@ -1873,6 +1895,28 @@ async function saveInferredChoice(id, address) {
   }
 }
 
+// 切換 roadWidth 地籍圖預覽。從 allProperties 查 p 以避免把 url/reason 嵌入 onclick 字串造成 XSS。
+window.toggleRoadPreview = function (btn, propertyId) {
+  const td = btn.closest("td");
+  if (!td) return;
+  const existing = td.querySelector(".road-preview-inline");
+  if (existing) { existing.remove(); return; }
+  const p = (allProperties || []).find(x => x.id === propertyId)
+         || (_detailP && _detailP.id === propertyId ? _detailP : null);
+  if (!p || !p.screenshot_roadwidth) return;
+  const container = document.createElement("div");
+  container.className = "road-preview-img road-preview-inline";
+  const img = document.createElement("img");
+  img.src = p.screenshot_roadwidth;
+  img.addEventListener("click", () => openRoadOverlay(p.screenshot_roadwidth, p.road_width_vision_reason || ""));
+  const reasonEl = document.createElement("div");
+  reasonEl.className = "road-reason";
+  reasonEl.textContent = p.road_width_vision_reason || "";
+  container.appendChild(img);
+  container.appendChild(reasonEl);
+  td.appendChild(container);
+};
+
 function roadWidthCellHTML(p) {
   // 只要 DB 有路寬值（含 road_width_unknown 狀態），或者有路名從巷名查到 → 就顯示
   // 後端 CQL 補查可以從「X路X段X巷」拿到路寬，不需要完整門牌
@@ -1895,13 +1939,13 @@ function roadWidthCellHTML(p) {
   }
 
   if (p.screenshot_roadwidth) {
-    html += ` <button class="btn-scan-road btn-show-map" onclick="event.stopPropagation(); const el=this.closest('td').querySelector('.road-preview-inline'); if(el){el.remove();return;} const d=document.createElement('div'); d.className='road-preview-img road-preview-inline'; d.innerHTML='<img src=\\'${p.screenshot_roadwidth}\\' onclick=\\'openRoadOverlay(&quot;${p.screenshot_roadwidth}&quot;, &quot;${(p.road_width_vision_reason||'').replace(/"/g,'')}&quot;)\\'><div class=\\'road-reason\\'>${(p.road_width_vision_reason||'').replace(/'/g,'')}</div>'; this.closest('td').appendChild(d);">地籍圖</button>`;
+    html += ` <button class="btn-scan-road btn-show-map" onclick="event.stopPropagation(); toggleRoadPreview(this, '${esc(p.id)}')">地籍圖</button>`;
   } else if (p.city === "台北市") {
     // 沒截圖（zonemap 當時 timeout 或其他原因 fail）→ 提供手動重掃按鈕
     html += ` <button class="btn-scan-road" onclick="event.stopPropagation(); scanRoadWidth('${p.id}', this)">重新掃描路寬</button>`;
   }
   const hint = roadNameHint(p);
-  if (hint) html += `<div class="road-name-hint-line">${hint}</div>`;
+  if (hint) html += `<div class="road-name-hint-line">${esc(hint)}</div>`;
   return html;
 }
 
@@ -2009,7 +2053,15 @@ function openRoadOverlay(src, reason) {
   if (existing) { existing.remove(); return; }
   const overlay = document.createElement("div");
   overlay.className = "road-preview-overlay";
-  overlay.innerHTML = `<img src="${src}">` + (reason ? `<div class="road-reason">${reason}</div>` : "");
+  const img = document.createElement("img");
+  img.src = src;
+  overlay.appendChild(img);
+  if (reason) {
+    const r = document.createElement("div");
+    r.className = "road-reason";
+    r.textContent = reason;
+    overlay.appendChild(r);
+  }
   overlay.addEventListener("click", () => overlay.remove());
   document.body.appendChild(overlay);
 }
@@ -2376,7 +2428,7 @@ function showProgress(msg, percent) {
     const elapsed = ((Date.now() - _progressStart) / 1000).toFixed(1);
     const line = document.createElement("div");
     line.className = "log-line";
-    line.innerHTML = `<span class="log-time">${elapsed}s</span>${msg}`;
+    line.innerHTML = `<span class="log-time">${elapsed}s</span>${esc(msg)}`;
     log.appendChild(line);
     log.classList.add("has-lines");
     log.scrollTop = log.scrollHeight;
@@ -2452,12 +2504,12 @@ function showLvrPopup(event, id) {
       <tr><th>地址</th><th>建坪</th><th>地坪</th><th>成交價</th><th>日期</th><th></th></tr>
       ${p.lvr_records.map(r => `
       <tr${r.is_special ? ' class="lvr-special"' : ''}>
-        <td>${stripCityDist(r.address)}</td>
+        <td>${esc(stripCityDist(r.address))}</td>
         <td>${r.area_ping ?? "—"}</td>
         <td>${r.land_ping ?? "—"}</td>
         <td>${r.price_total ? (r.price_total / 10000).toLocaleString("zh-TW",{maximumFractionDigits:0}) + "萬" : "—"}</td>
-        <td>${r.txn_date || "—"}</td>
-        <td>${r.is_special ? `<span class="lvr-warn" data-note="${(r.note || '').replace(/"/g, '&quot;')}">⚠<span class="lvr-tip">${r.note || ''}</span></span>` : ""}</td>
+        <td>${esc(r.txn_date || "—")}</td>
+        <td>${r.is_special ? `<span class="lvr-warn" data-note="${esc(r.note || '')}">⚠<span class="lvr-tip">${esc(r.note || '')}</span></span>` : ""}</td>
       </tr>`).join("")}
     </table>`;
   popup.addEventListener("mouseenter", () => { clearTimeout(_lvrHideTimer); _lvrHideTimer = null; });

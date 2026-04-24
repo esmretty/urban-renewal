@@ -2032,3 +2032,177 @@ select.rv2-edit { text-align: left; padding-right: 18px; }
 /* 小工具 */
 .text-muted-sm { font-size: 14px; color: #6b7280; }
 .small { font-size: 14px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   響應式斷點：tablet (≤1200px) 横向捲軸、phone (≤767px) 完全堆疊成卡片
+   原則：桌機樣式完全不動，只在這裡 override。
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Tablet：螢幕不夠寬時，表格區塊橫向可捲，桌機桌面就不會爆欄 */
+@media (max-width: 1200px) and (min-width: 768px) {
+  .property-rows {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .property-rows > .property-row,
+  .property-rows > .property-row--head {
+    min-width: 1040px;
+  }
+  /* capture 區塊：兩欄疊放 */
+  .capture-grid {
+    grid-template-columns: 1fr 1fr;
+    height: auto;
+  }
+  .capture-grid .capture-col:nth-child(3) { grid-column: 1 / -1; }
+}
+
+/* Phone：≤767px，完全重排為堆疊卡片 */
+@media (max-width: 767.98px) {
+  body { font-size: 13px; }
+
+  /* Topbar：允許換行、縮字 */
+  .topbar {
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    gap: 6px 10px;
+  }
+  .topbar__title { font-size: 17px; }
+  .topbar__stats { font-size: 12px; width: 100%; order: 3; margin-left: 0; }
+  .topbar__actions { margin-left: auto; gap: 6px; }
+  .user-menu { margin-left: 0; padding-left: 6px; }
+  .user-email { font-size: 11px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+  .tb-btn { padding: 4px 8px; font-size: 13px; }
+  .useful-links-dropdown { right: auto; left: 0; min-width: 220px; }
+
+  /* 容器：全寬、縮 padding */
+  .app-container { max-width: 100%; padding: 0; }
+  .sec { padding: 8px 10px; }
+
+  /* Capture 三欄 → 單欄 */
+  .capture-grid { grid-template-columns: 1fr; height: auto; gap: 8px; }
+  .capture-col { padding: 8px 10px; }
+
+  /* Filter 區塊：所有欄式改為堆疊 */
+  .filter-cols, .filter-cols--4 { grid-template-columns: 1fr !important; gap: 8px; }
+  .filter-top-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  .filter-dist-row { flex-wrap: wrap; }
+  .filter-dist-chips { flex-wrap: wrap; }
+
+  /* 物件列表：格線改成堆疊卡片 */
+  .property-rows { padding: 8px 6px; }
+  .property-row--head, .property-row--head-top { display: none !important; }
+
+  .property-row {
+    display: block;
+    grid-template-columns: unset;
+    padding: 10px 12px 8px;
+    font-size: 14px;
+    position: relative;
+    line-height: 1.5;
+  }
+  /* 每一格：水平 label + value，label 給灰色小字 */
+  .property-row > .c {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 2px 0;
+    white-space: normal;
+    text-align: left !important;
+    border-left: none !important;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .property-row > .c[data-label]:not(.c-addr):not(.c-src)::before {
+    content: attr(data-label) "：";
+    flex: 0 0 72px;
+    color: #8b7c4a;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+  /* 地址：整塊放大、佔整行、內部元素可換行 */
+  .property-row > .c-addr {
+    display: block;
+    font-size: 15px;
+    font-weight: 700;
+    padding-right: 44px;   /* 讓位給右上角動作按鈕 */
+    padding-bottom: 4px;
+    margin-bottom: 4px;
+    border-bottom: 1px dashed #e3dfd2;
+  }
+  /* 來源 badge：不要加 label 前綴（它自己有 591 字樣） */
+  .property-row > .c-src {
+    justify-content: flex-start;
+    padding-top: 4px;
+  }
+  /* 說明欄：若內容空就收起來 */
+  .property-row > .c-note:empty { display: none; }
+  .property-row > .c-note:not(:empty) {
+    background: #fdf6e0;
+    padding: 4px 8px;
+    border-radius: 4px;
+    margin-top: 4px;
+  }
+  /* 建/地坪兩格：值和單價並列 */
+  .property-row > .c-bld-combo {
+    align-items: center;
+  }
+  .property-row > .c-bld-combo > div {
+    display: inline-block;
+    margin-right: 8px;
+  }
+  .property-row > .c-bld-combo .sub {
+    color: #c0392b;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  /* 總價 / 獲利倍數：顯眼一點 */
+  .property-row > .c-total { font-weight: 700; font-size: 16px; }
+  .property-row > .c-multi { font-weight: 700; }
+  .property-row > .c-multi .multi-stack {
+    flex-direction: row;
+    gap: 10px;
+  }
+  /* 動作按鈕：右上角 */
+  .property-row > .c-del {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 0;
+  }
+  .property-row > .c-del::before { content: none !important; }
+  .property-row .btn-bookmark,
+  .property-row .btn-del-row {
+    padding: 4px 10px;
+    font-size: 16px;
+  }
+  /* 高價值紅框在手機上變薄一點 */
+  .property-row.is-high-value { font-size: 15px; }
+
+  /* Modal：全螢幕、可捲、安全距離 */
+  .modal-dialog { margin: 4px !important; max-width: calc(100vw - 8px) !important; }
+  .modal-content { max-height: calc(100vh - 16px); overflow-y: auto; }
+  .modal-body { padding: 10px 12px; }
+  .modal-header, .modal-footer { padding: 8px 12px; }
+  .modal-title { font-size: 16px; }
+  /* 物件詳情內 basic-info 兩欄改堆疊 */
+  .basic-info-grid { grid-template-columns: 1fr !important; }
+  /* renewal-table / 分區編輯：字體縮 */
+  .renewal-table { font-size: 12px; }
+  .zone-ping-input { width: 60px !important; }
+
+  /* Admin 後台：stats cards 單欄 */
+  .stats-grid { grid-template-columns: 1fr 1fr !important; }
+
+  /* LVR popup 位置校正 */
+  .lvr-popup { max-width: calc(100vw - 20px); left: 10px !important; }
+}
+
+/* Small phone：≤420px 時再壓縮一些 */
+@media (max-width: 420px) {
+  .topbar__title { font-size: 15px; }
+  .topbar__logo-img { height: 24px; }
+  .property-row > .c[data-label]:not(.c-addr):not(.c-src)::before {
+    flex: 0 0 60px;
+  }
+}
