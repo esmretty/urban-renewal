@@ -479,6 +479,20 @@ def analyze_single_property(
     except Exception as te:
         logger.warning(f"LVR 失敗 {src_id}: {te}")
 
+    # ── 5.5 LVR 無 match 但 address 有具體巷名 → 用地址 geocode 取代偏的 591 座標 ──
+    # 591 座標常偏 50-150m，若落在隔壁 polygon → zoning 查錯。
+    # 只要 address 有「X 路/街 + N 巷」層級，Google geocode 能給巷口座標（比 591 偏更準）。
+    if not inferred_coord and addr_for_geo:
+        import re as _re_lane
+        if _re_lane.search(r"[一-龥]{1,5}(?:路|街|大道)(?:[一二三四五六七八九十]段)?\d+巷", addr_for_geo):
+            try:
+                _c = geocode_address(addr_for_geo)
+                if _c:
+                    inferred_coord = _c
+                    logger.info(f"[{src_id}] LVR 無 match，用地址 geocode 校正座標: {_c}")
+            except Exception as _ge:
+                logger.warning(f"[{src_id}] 地址 geocode 失敗: {_ge}")
+
     # ── 6. 精準座標覆蓋 ──
     if inferred_coord:
         lat, lng = inferred_coord
