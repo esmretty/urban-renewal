@@ -507,10 +507,10 @@ function rowHTML(p) {
   >
     ${analyzing ? '<div class="row-loading"><div class="row-loading-bar"></div><div class="row-loading-text">分析中…請稍候</div></div>' : ''}
     <div class="c c-src">${srcLinksHTML(p)}</div>
-    <div class="c c-type">${typeIcon} ${typeLabel}${p.is_foreclosure ? '<span class="fc-badge">法拍</span>' : ''}</div>
+    <div class="c c-type">${typeIcon} ${typeLabel}</div>
     <div class="c c-city">${p.city || "—"}</div>
     <div class="c c-district">${p.district || "—"}</div>
-    <div class="c c-addr" title="${roadOnly}">${roadOnly}${p.address_inferred ? '<span class="inferred-tag">推測</span>' : ''}${priceChangedBadge}<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" class="map-link" onclick="event.stopPropagation()" title="Google Maps">📍</a>${newBadge}</div>
+    <div class="c c-addr" title="${roadOnly}">${roadOnly}${p.address_inferred ? '<span class="inferred-tag">推測</span>' : ''}${p.is_foreclosure ? '<span class="fc-badge" title="法拍屋">法拍屋</span>' : ''}${priceChangedBadge}<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" class="map-link" onclick="event.stopPropagation()" title="Google Maps">📍</a>${newBadge}</div>
     <div class="c c-val c-total ${hotCls('price')}">${priceStr}${(p.lvr_records && p.lvr_records.length) ? `<span class="lvr-icon" onclick="event.stopPropagation()" onmouseenter="showLvrPopup(event, '${p.id}')" onmouseleave="hideLvrPopup()">實</span>` : ""}</div>
     <div class="c c-val c-bld-combo">
       <div class="${hotCls('bldA')}">${p.building_area_ping ?? "—"} 坪</div>
@@ -761,7 +761,18 @@ async function selectProperty(id) {
 // ── 詳情 Modal ────────────────────────────────────────────────────────────────
 function showDetailModal(p) {
   _detailP = { ...p };
-  document.getElementById("modal-title").textContent = stripCityDist(p.address_inferred || p.address || p.title);
+  const titleText = stripCityDist(p.address_inferred || p.address || p.title);
+  const titleEl = document.getElementById("modal-title");
+  // 清掉舊 HTML，用 textContent 安全設標題，再補法拍屋 badge（若有）
+  titleEl.innerHTML = "";
+  titleEl.appendChild(document.createTextNode(titleText));
+  if (p.is_foreclosure) {
+    const fc = document.createElement("span");
+    fc.className = "fc-badge";
+    fc.style.marginLeft = "8px";
+    fc.textContent = "法拍屋";
+    titleEl.appendChild(fc);
+  }
   // 591 連結區：單一→直接按鈕；多個→hover 下拉含日期（跟 Home 列表相同行為）
   const wrap = document.getElementById("modal-591-wrap");
   if (wrap) {
@@ -1885,6 +1896,9 @@ function roadWidthCellHTML(p) {
 
   if (p.screenshot_roadwidth) {
     html += ` <button class="btn-scan-road btn-show-map" onclick="event.stopPropagation(); const el=this.closest('td').querySelector('.road-preview-inline'); if(el){el.remove();return;} const d=document.createElement('div'); d.className='road-preview-img road-preview-inline'; d.innerHTML='<img src=\\'${p.screenshot_roadwidth}\\' onclick=\\'openRoadOverlay(&quot;${p.screenshot_roadwidth}&quot;, &quot;${(p.road_width_vision_reason||'').replace(/"/g,'')}&quot;)\\'><div class=\\'road-reason\\'>${(p.road_width_vision_reason||'').replace(/'/g,'')}</div>'; this.closest('td').appendChild(d);">地籍圖</button>`;
+  } else if (p.city === "台北市") {
+    // 沒截圖（zonemap 當時 timeout 或其他原因 fail）→ 提供手動重掃按鈕
+    html += ` <button class="btn-scan-road" onclick="event.stopPropagation(); scanRoadWidth('${p.id}', this)">重新掃描路寬</button>`;
   }
   const hint = roadNameHint(p);
   if (hint) html += `<div class="road-name-hint-line">${hint}</div>`;
