@@ -263,9 +263,13 @@ def extract_address_consensus(crop_path: str, city: str, district: str) -> Optio
     except Exception:
         road_list = []
 
-    # 切 2×2，取右上 / 左下 / 右下 三塊
+    # 切 2×2 固定尺寸 1200×800，取右上 / 左下 / 右下 三塊
+    # 地址 crop 本就是窄區，固定小 tile 確保字體密度高
     try:
-        all_tiles = _split_image_into_tiles(crop_path, cols=2, rows=2)
+        all_tiles = _split_image_into_tiles(
+            crop_path, cols=2, rows=2,
+            fixed_tile_w=1200, fixed_tile_h=800,
+        )
         target_tiles = all_tiles[1:] if len(all_tiles) >= 4 else all_tiles
     except Exception as e:
         logger.warning(f"地址 OCR tile 切片失敗 fallback 單張: {e}")
@@ -310,23 +314,35 @@ def extract_address_consensus(crop_path: str, city: str, district: str) -> Optio
     return final
 
 
-def _split_image_into_tiles(screenshot_path: str, cols: int = 2, rows: int = 4) -> list:
-    """把全頁截圖切成 cols×rows 張 tile（預設左右2 × 上下4 = 8 張），每張尺寸較小字較清晰。
-    回傳 tile path list。"""
+def _split_image_into_tiles(screenshot_path: str, cols: int = 2, rows: int = 4,
+                             fixed_tile_w: int = None, fixed_tile_h: int = None) -> list:
+    """把原圖切成 cols×rows 張 tile。
+    - 預設模式：按原圖尺寸等分（舊行為，tile 大小隨原圖浮動）
+    - fixed_tile_w/h 給值時：**固定 tile 尺寸**，從原圖左上角開始切 cols×rows 塊各 w×h
+      （超出原圖邊界的 tile 以原圖邊界截斷，可能較小；關鍵區域在左上/上方時不受影響）
+    回傳 tile path list（r0c0, r0c1, r1c0, r1c1, ...）。
+    Vision 需要文字大小穩定，fixed 模式避免超長頁面稀釋字體密度。"""
     from PIL import Image
     from pathlib import Path
+    # PIL 安全限制放寬（591 長頁 93M pixels 會超過預設 89M）
+    Image.MAX_IMAGE_PIXELS = 200_000_000
     im = Image.open(screenshot_path)
     w, h = im.size
-    tile_w = w // cols
-    tile_h = h // rows
-    stem = Path(screenshot_path).with_suffix("")   # 不含副檔名
+    if fixed_tile_w and fixed_tile_h:
+        tile_w, tile_h = fixed_tile_w, fixed_tile_h
+    else:
+        tile_w = w // cols
+        tile_h = h // rows
+    stem = Path(screenshot_path).with_suffix("")
     tiles = []
     for r in range(rows):
         for c in range(cols):
             left = c * tile_w
             top = r * tile_h
-            right = w if c == cols - 1 else (c + 1) * tile_w
-            bottom = h if r == rows - 1 else (r + 1) * tile_h
+            right = min(left + tile_w, w)
+            bottom = min(top + tile_h, h)
+            if right <= left or bottom <= top:
+                continue   # tile 完全落在原圖外 → 略過
             tile_path = f"{stem}_tile_r{r}c{c}.png"
             im.crop((left, top, right, bottom)).save(tile_path)
             tiles.append(tile_path)
@@ -375,8 +391,13 @@ def extract_full_detail_from_screenshot(screenshot_path: str) -> dict:
     跳過 r0c0（左上通常是標題/首圖，沒欄位資料）。
     每片是原圖 1/4 大小 → Vision 看到的文字像素密度翻倍，大幅降低字太小誤判。
     三片用 ThreadPoolExecutor 平行呼叫 Claude API → 總耗時 ≈ max(單片)，不是 sum。"""
+    # 固定 tile 尺寸 1200×1500，不隨原圖長度浮動 → Vision 每次看到的字體密度一致
+    # 591 詳情頁基本資料區塊通常在前 3000px 內，2×2 固定切可覆蓋
     try:
-        all_tiles = _split_image_into_tiles(screenshot_path, cols=2, rows=2)
+        all_tiles = _split_image_into_tiles(
+            screenshot_path, cols=2, rows=2,
+            fixed_tile_w=1200, fixed_tile_h=1500,
+        )
     except Exception as e:
         logger.warning(f"tile 切片失敗 fallback 單張: {e}")
         return _ocr_one_tile(screenshot_path)
