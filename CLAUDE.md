@@ -29,7 +29,14 @@
    - 提修法給用戶之前，心裡要能清楚回答「這個 bug 的根因是什麼？」不是「我認為可能是...」
    - 例：用戶說「A 物件對、B 物件錯」→ 先 simulate B 物件在當前 code 下會得到什麼，對照「既有 DB 結果 vs simulate 結果」判斷是 code bug 還是 transient／歷史資料；**不要先提推測性修法方案**
 
-5. **建坪比對的 ±0.01 原則不可放寬**
+5. **改動會影響 Vision OCR 的參數前，要先想清楚對所有輸入類型的影響**
+   - Vision OCR 吃的圖可能尺寸差很大：addr crop 約 1200×500 窄條 vs detail shot 約 2320×3700+ 長頁
+   - 一個「固定 tile 尺寸」或「切 2×2」的參數對一種圖 work 不代表對另一種圖也 work
+   - 改 tile / crop 參數前：想至少 2 種代表性輸入尺寸，手動算會切出什麼（`right/bottom 會不會超出邊界`、`rows 會不會被 skip`）
+   - 改完後實際驗證一筆 smallest case + 一筆 biggest case
+   - 別只在一種 case 上測過就 push → 會像 20084920 那樣地址整個消失
+
+6. **建坪比對的 ±0.01 原則不可放寬**
    - 同一戶房子的建坪永遠是唯一的數字（權狀登記），差 0.01 以上就代表是**不同戶**，即便同棟隔壁戶
    - LVR triangulate 的 `area_tolerance_ping=0.01` 是正確的，**絕對不可以為了「多撈一些候選」去放寬**
    - 若 LVR 在同建坪 ±0.01 找不到 match → 代表 LVR 沒這戶的記錄（這戶可能從未交易過）→ 正確行為是 `address_inferred=None` 或跑 reverse_geo fallback
