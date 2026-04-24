@@ -53,7 +53,7 @@ def _scan_road_width_vision(*, lat, lng, addr, district, src_id, all_roads, brow
     import time
     time.sleep(6)
     # 開側欄 → 開圖層
-    page.click(".fa-bars", timeout=5000)
+    page.click(".fa-bars", timeout=15000)
     time.sleep(1)
     page.evaluate(r"""() => {
         const cbs = document.querySelectorAll('.sliderbut input[type=checkbox]');
@@ -67,7 +67,7 @@ def _scan_road_width_vision(*, lat, lng, addr, district, src_id, all_roads, brow
     time.sleep(1)
     # 門牌搜尋定位
     if addr_parsed.get("road") and addr_parsed.get("number"):
-        page.click('a[href="#sidebarSearch"]', timeout=5000)
+        page.click('a[href="#sidebarSearch"]', timeout=15000)
         time.sleep(1)
         page.select_option("#OtherQMemu", value="tqM6")
         time.sleep(1)
@@ -110,7 +110,7 @@ def _scan_road_width_vision(*, lat, lng, addr, district, src_id, all_roads, brow
         }}""")
         time.sleep(5)
     # 關側欄
-    page.click(".fa-bars", timeout=5000)
+    page.click(".fa-bars", timeout=15000)
     time.sleep(2)
     # fallback 座標定位
     if not (addr_parsed.get("road") and addr_parsed.get("number")):

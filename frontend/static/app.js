@@ -849,7 +849,7 @@ function buildDetailHTML(p) {
                 </td>
               </tr>
               <tr><td>建坪</td><td>${p.building_area_ping ? p.building_area_ping + " 坪" : "—"}${perBuilding ? ` <span class="text-muted-sm">(${perBuilding})</span>` : ""}</td></tr>
-              <tr><td>地坪</td><td><span class="land-ping-val">${p.land_area_ping ? p.land_area_ping + " 坪" : "—"}</span>${perLand ? ` <span class="text-muted-sm land-per">(${perLand})</span>` : ""}${p.land_area_mismatch_warning ? `<div class="land-warn">⚠ 此為實登地坪，原網頁與實登地坪有極少差距，務必再次確認！</div>` : ""}${p.land_area_inconsistent ? `<div class="land-warn">⚠ 此物件的實登候選地坪差異大，可能不是同一棟建築；選擇後請務必驗證。</div>` : ""}</td></tr>
+              <tr><td>地坪</td><td><span class="land-ping-val">${p.land_area_ping ? p.land_area_ping + " 坪" : "—"}</span>${perLand ? ` <span class="text-muted-sm land-per">(${perLand})</span>` : ""}${p.land_area_source === "lvr" ? ` <span class="text-muted-sm" style="color:#888;">(實登)</span>` : ""}${p.land_area_inconsistent ? `<div class="land-warn">⚠ 此物件的實登候選地坪差異大，可能不是同一棟建築；選擇後請務必驗證。</div>` : ""}</td></tr>
             </tbody>
           </table>
         </div>
@@ -1402,6 +1402,7 @@ function renewalV2HTML(p) {
       <span class="rv2-op">×</span>
       <span class="rv2-lbl">新成屋房價<span class="rv2-lbl-unit">(萬/坪)</span></span>
       <span class="rv2-val">
+        <span class="road-unknown-note">(此為區域平均單價，您可自行調整)</span>
         <input type="number" class="rv2-edit" step="5" value="${price}"
                onchange="setNewHousePrice('${id}', this.value)">
       </span>
@@ -2508,6 +2509,13 @@ async function triggerManualAnalyze(useSource = "auto", overrideAddress = null) 
   const price = parseFloat(document.getElementById("manual-price").value);
 
   if (!address) { alert("請輸入地址"); return; }
+
+  // 新北市目前不支援（GeoServer / LVR / 路寬資料源不齊）
+  // 用戶可能在 address 欄位自己打「新北市...」繞過 city 下拉 → 阻擋
+  if (city === "新北市" || /^(新北市|臺?新北|板橋|新莊|新店|中和|永和|三重|蘆洲|土城|樹林|汐止|淡水|林口|三峽|鶯歌|五股|泰山)/.test(address)) {
+    alert("此為新北市地址，目前暫無提供分析。");
+    return;
+  }
 
   _lockBothButtons("btn-manual-submit");
   _startFakeProgress(`地址分析送出中：${address}`);

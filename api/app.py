@@ -417,9 +417,12 @@ async def root():
 
 @app.get("/api/target_regions")
 def api_target_regions():
-    """回傳目標分析範圍（前端下拉選單用）。"""
+    """回傳目標分析範圍（前端下拉選單用）。
+    目前 manual 分析只支援台北市（新北市的 GeoServer / LVR / 路寬資料源不齊），
+    過濾掉新北市不讓用戶選。"""
     from config import target_regions_for_frontend
-    return target_regions_for_frontend()
+    all_regions = target_regions_for_frontend()
+    return {k: v for k, v in all_regions.items() if k == "台北市"}
 
 
 @app.get("/api/firebase_config")
