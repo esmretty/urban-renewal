@@ -5,7 +5,9 @@
 firebase-credentials.json
 
 # 資料庫與截圖（本地資料）
-data/
+data/*
+# 但保留這些靜態資料檔（部署到新機器需要）
+!data/mrt_exits.json
 
 # Python
 __pycache__/
