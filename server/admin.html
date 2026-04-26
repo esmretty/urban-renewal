@@ -43,9 +43,17 @@
     <div id="stats-box" class="stats-grid">載入中…</div>
   </section>
 
-  <!-- 批次抓取 591 -->
+  <!-- 批次抓取 -->
   <section class="panel">
-    <h2>批次抓取 591（admin）</h2>
+    <h2>批次抓取（admin）</h2>
+    <div class="scrape-row">
+      <label>來源：
+        <select id="scrape-source" style="padding:4px 8px;">
+          <option value="591">591 房屋</option>
+          <option value="yongqing">永慶房屋（無電梯公寓）</option>
+        </select>
+      </label>
+    </div>
     <div class="scrape-row">
       <label>台北：</label>
       <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="大安區" checked> 大安</label>
@@ -182,11 +190,12 @@
     <p class="danger-note">以下操作會永久刪除資料，請謹慎使用。</p>
     <div style="display:flex; gap:10px; flex-wrap:wrap;">
       <button class="btn-danger-lg" onclick="purgeNonApartments()">一鍵清除非公寓</button>
-      <button class="btn-danger-lg" onclick="clearCentralDb()">清空中央 DB（properties）</button>
+      <button class="btn-danger-lg" onclick="clearCentralDb()">封存中央 DB（properties）</button>
     </div>
     <p class="danger-hint">
       「一鍵清除非公寓」會刪除所有 building_type 含「大樓/透天/店面/華廈/辦公」或 total_floors ≥11 的中央 doc。<br>
-      「清空中央 DB」會刪除中央所有分析結果（不影響用戶的 watchlist/manual/bookmarks）。
+      「封存中央 DB」會把中央所有物件標為 archived（軟刪除），探索 tab 會看不到，
+      但用戶 watchlist 仍能看到（顯示「已封存」標籤），不會變孤兒。日後重抓到的物件會自動 unarchive。
     </p>
   </section>
 </div>

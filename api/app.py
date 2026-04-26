@@ -351,10 +351,12 @@ async def _scheduled_scrape_loop():
                     await asyncio.sleep(SCHEDULER_INTER_COMMAND_SLEEP_SEC)
                 dists = list(cmd.get("districts") or [])[:SCHEDULER_MAX_DISTRICTS_PER_CMD]
                 lim = int(cmd.get("limit") or 30)
-                logger.info("[scheduler] 命令 %d/%d: %s × %d 筆", i + 1, len(cmds), dists, lim)
+                cmd_source = (cmd.get("source") or "591").lower()
+                logger.info("[scheduler] 命令 %d/%d: %s 抓 %s × %d 筆", i + 1, len(cmds), cmd_source, dists, lim)
                 stats = await _run_scrape_task(
                     headless=True, districts=dists, limit=lim,
                     thresholds={}, triggered_by_uid=None,
+                    source=cmd_source,
                 )
                 cmd_err = stats.get("error")
                 cmd_record = {
@@ -760,11 +762,14 @@ async def admin_reanalyze(property_id: str, admin: dict = Depends(require_admin)
     url = p.get("url")
     if not url:
         raise HTTPException(status_code=400, detail="此物件沒有 URL，無法重爬")
+    # _scrape_single_url 期待 src_id 是 source_id（如 "591_12345678"），不是 doc_id (UUID)
+    # 因為截圖檔名、find_doc_by_source_id 都用 source_id 為基準
+    real_src_id = p.get("source_id") or property_id
     col.document(property_id).update({"analysis_in_progress": True})
 
     async def _do():
         try:
-            await asyncio.to_thread(_scrape_single_url, url, property_id, True)
+            await asyncio.to_thread(_scrape_single_url, url, real_src_id, True)
             logger.warning("[admin] %s 完成重新分析 %s", admin.get("email"), property_id)
         except Exception as e:
             logger.exception(f"[admin] 重新分析失敗 {property_id}: {e}")
@@ -1377,6 +1382,9 @@ def central_search(
         data = d.to_dict() or {}
         if data.get("analysis_error") or data.get("analysis_in_progress"):
             continue
+        # 已封存的物件不出現在探索 tab（搜尋結果裡）
+        if data.get("archived") is True:
+            continue
         # 過濾「用戶貼 URL 送出」的物件：搜尋 tab 只顯示 admin batch 抓進來的公開資料
         # 舊資料沒 source_origin 欄位 → 當作 batch 不過濾
         if data.get("source_origin") == "user_url":
@@ -1490,6 +1498,7 @@ class ScrapeRequest(BaseModel):
     headless: bool = True
     districts: list[str] = []
     limit: int = 0
+    source: str = "591"        # "591" 或 "yongqing"
     # 分析門檻（超過則存 pending，不跑分析）
     max_floors: _Opt[int] = None
     max_total_price_wan: _Opt[int] = None
@@ -1517,13 +1526,18 @@ async def trigger_scrape(req: ScrapeRequest, user: dict = Depends(require_admin)
     }
 
     _ensure_user_profile(user)
+    source = (req.source or "591").lower()
+    if source not in ("591", "yongqing"):
+        raise HTTPException(400, f"未知 source: {req.source}")
     asyncio.create_task(_run_scrape_task(
         headless=req.headless, districts=req.districts,
         limit=limit, thresholds=thresholds,
         triggered_by_uid=user["uid"],
+        source=source,
     ))
     label = "、".join(req.districts) if len(req.districts) <= 3 else f"{len(req.districts)} 區"
-    return {"status": "started", "message": f"開始爬取 {label}（最多 {limit} 筆）", "limit": limit}
+    src_label = "永慶" if source == "yongqing" else "591"
+    return {"status": "started", "message": f"開始爬取 {src_label} {label}（最多 {limit} 筆）", "limit": limit}
 
 
 @app.get("/api/scrape/status")
@@ -1548,7 +1562,7 @@ async def _sse_generator() -> AsyncGenerator[str, None]:
             yield "data: {\"msg\": \"heartbeat\"}\n\n"
 
 
-async def _run_scrape_task(headless: bool = True, districts: list = None, limit: int = 30, thresholds: dict = None, triggered_by_uid: Optional[str] = None):
+async def _run_scrape_task(headless: bool = True, districts: list = None, limit: int = 30, thresholds: dict = None, triggered_by_uid: Optional[str] = None, source: str = "591"):
     global _scrape_running, _cancel_requested
     _scrape_running = True
     _cancel_requested = False
@@ -1569,7 +1583,7 @@ async def _run_scrape_task(headless: bool = True, districts: list = None, limit:
 
     stats = None
     try:
-        stats = await asyncio.to_thread(_scrape_and_analyze, headless, progress, districts or [], limit, thresholds, triggered_by_uid)
+        stats = await asyncio.to_thread(_scrape_and_analyze, headless, progress, districts or [], limit, thresholds, triggered_by_uid, source)
         _safe_put_progress(
             json.dumps({"msg": "爬取完成！", "done": True, "percent": 100}, ensure_ascii=False)
         )
@@ -1584,8 +1598,9 @@ async def _run_scrape_task(headless: bool = True, districts: list = None, limit:
     return stats or {}
 
 
-def _scrape_and_analyze(headless: bool, progress_callback, districts: list = None, limit: int = 30, thresholds: dict = None, triggered_by_uid: Optional[str] = None):
-    """同步執行爬取 + 分析（在 asyncio.to_thread 中跑）。"""
+def _scrape_and_analyze(headless: bool, progress_callback, districts: list = None, limit: int = 30, thresholds: dict = None, triggered_by_uid: Optional[str] = None, source: str = "591"):
+    """同步執行爬取 + 分析（在 asyncio.to_thread 中跑）。
+    source: "591" 或 "yongqing"。決定要爬哪個來源。"""
     districts = districts or []
     from scraper.scraper_591 import scrape_591
     from analysis.geocoder import geocode_address, get_nearest_mrt
@@ -1600,9 +1615,15 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
     _is_first = len(sample) == 0
 
     def check_exists(source_id: str):
-        """回傳已存在的 doc dict，或 None。"""
-        doc = col.document(source_id).get()
-        return doc.to_dict() if doc.exists else None
+        """回傳已存在的 doc dict（含 id 欄位），或 None。
+        Migration 後 doc_id 是 UUID 不是 source_id，用 source_id 欄位 query 找。"""
+        from database.db import find_doc_by_source_id
+        doc_id, data = find_doc_by_source_id(source_id)
+        if data is None:
+            return None
+        # 確保 id 欄位存在（舊 docs 可能沒有 id 欄位 → 補上 doc_id）
+        data.setdefault("id", doc_id)
+        return data
 
     # 載入 DB 現有物件的 key 資料，用於重複物件偵測
     import re as _re_road
@@ -1610,6 +1631,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
     for _doc in col.get():
         _d = _doc.to_dict()
         _existing_items.append({
+            "id": _d.get("id") or _doc.id,           # 物件唯一 ID（UUID 格式）
             "source_id": _d.get("source_id"),
             "price_ntd": _d.get("price_ntd"),
             "building_area_ping": _d.get("building_area_ping"),
@@ -1626,7 +1648,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
         return m.group(1) if m else ""
 
     def find_duplicate(item):
-        """價格一樣 + 建物坪數±0.01 + 地址到路一樣 → 回傳重複物件的 source_id，沒有回 None"""
+        """價格一樣 + 建物坪數±0.01 + 地址到路一樣 → 回傳重複物件的 doc id (UUID)，沒有回 None"""
         price = item.get("price_ntd")
         area = item.get("building_area_ping")
         road = _extract_road_name(item.get("address") or item.get("title") or "")
@@ -1638,7 +1660,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
             if ex["price_ntd"] and abs(ex["price_ntd"] - price) < 1:
                 if ex["building_area_ping"] and abs(ex["building_area_ping"] - area) <= 0.01:
                     if _extract_road_name(ex["address"]) == road:
-                        return ex["source_id"]
+                        return ex["id"]   # 回傳 UUID 給呼叫端用 col.document(id)
         return None
 
     label = "、".join(districts) if districts else "全部地區"
@@ -1654,23 +1676,38 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 percent = min((count / max(limit, 1)) * 50, 50)
         progress_callback(msg, percent, **kw)
 
-    result = scrape_591(
-        headless=headless,
-        progress_callback=scrape_progress,
-        districts_filter=districts,
-        check_exists=check_exists,
-        limit=limit,
-    )
+    if source == "yongqing":
+        from scraper.scraper_yongqing import scrape_yongqing
+        result = scrape_yongqing(
+            headless=headless,
+            progress_callback=scrape_progress,
+            districts_filter=districts,
+            check_exists=check_exists,
+            limit=limit,
+        )
+        source_label = "永慶"
+    else:
+        result = scrape_591(
+            headless=headless,
+            progress_callback=scrape_progress,
+            districts_filter=districts,
+            check_exists=check_exists,
+            limit=limit,
+        )
+        source_label = "591"
 
     new_items = result["new"]
     price_updates = result["price_updates"]
     if not new_items and not price_updates:
         try:
-            from scraper import scraper_591 as _s591
-            _reason = _s591.LAST_FETCH_ERROR
+            if source == "yongqing":
+                from scraper import scraper_yongqing as _s
+            else:
+                from scraper import scraper_591 as _s
+            _reason = _s.LAST_FETCH_ERROR
         except Exception:
             _reason = None
-        msg = "⚠ 591 爬取 0 筆"
+        msg = f"⚠ {source_label} 爬取 0 筆"
         if _reason:
             msg += f"（{_reason}）"
         else:
@@ -1828,7 +1865,36 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     pct,
                 )
 
-                # 詳情頁截圖 + Vision OCR
+                # 永慶：scraper 已抓齊所有欄位 + 座標準確，跳過 591 專屬 OCR 流程
+                if item.get("source") == "永慶":
+                    page_coords = (item.get("latitude"), item.get("longitude")) if item.get("latitude") else None
+                    progress_callback(f"  ✓ 永慶物件，座標 {page_coords}，跳過 591 OCR 流程", pct)
+                    import time as _time_yc
+                    _t0_yc = _time_yc.time()
+                    def _step_yc(msg):
+                        elapsed = _time_yc.time() - _t0_yc
+                        progress_callback(f"  [{elapsed:.1f}s] {msg}", pct)
+                    from api.analysis_pipeline import analyze_single_property as _analyze_yc
+                    yc_result = _analyze_yc(
+                        item=item,
+                        ocr_ctx=ocr_ctx,
+                        step_fn=_step_yc,
+                        initial_coords=page_coords,
+                        detail_text="",
+                        thresholds=None,
+                    )
+                    yc_doc = yc_result["doc_data"]
+                    yc_doc_id = yc_doc.get("id")
+                    if not yc_doc_id:
+                        from database.db import gen_dated_id as _gen_id
+                        yc_doc_id = _gen_id()
+                        yc_doc["id"] = yc_doc_id
+                    col.document(yc_doc_id).set(_safe_doc(yc_doc))
+                    new_count += 1
+                    progress_callback(f"  ✓ 永慶物件已寫入 DB ({yc_doc_id})", pct)
+                    continue   # 不走下面 591 OCR 流程
+
+                # 591：詳情頁截圖 + Vision OCR
                 progress_callback(f"  📷 截圖詳情頁...", pct)
                 _detail_ret = screenshot_detail_page(ocr_ctx, item["url"], src_id)
                 # 下架偵測：listing 列表還在快取顯示卡片，但詳情頁已是 404 → 刪 DB 並跳過
@@ -2059,11 +2125,22 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
 
                     from database.models import merge_property_doc
                     merged, conflicts = merge_property_doc(existing, incoming)
+                    # 重抓到 = 物件還活著，清除 archived 旗標
+                    if merged.get("archived") is True:
+                        merged["archived"] = False
                     if merged != existing:
-                        col.document(src_id).set(_safe_doc(merged))
-                        enrich_count += 1
-                        if conflicts:
-                            progress_callback(f"  ⚠ {src_id} 欄位衝突保留舊值：{','.join(conflicts)}", pct)
+                        # enrich path：existing 有 id 欄位（migration 後一定有，新 doc 也會有）
+                        existing_doc_id = existing.get("id")
+                        if not existing_doc_id:
+                            from database.db import find_doc_by_source_id
+                            existing_doc_id, _ = find_doc_by_source_id(src_id)
+                        if existing_doc_id:
+                            col.document(existing_doc_id).set(_safe_doc(merged))
+                            enrich_count += 1
+                            if conflicts:
+                                progress_callback(f"  ⚠ {src_id} 欄位衝突保留舊值：{','.join(conflicts)}", pct)
+                        else:
+                            logger.error(f"enrich 找不到 doc id for source_id={src_id}，跳過")
                     continue
 
                 # ─ 全新物件：呼叫共用 pipeline ─
@@ -2084,12 +2161,30 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     thresholds=None,
                 )
                 doc_data = result["doc_data"]
+                # 決定要寫入的 doc_id：
+                # - force_reanalyze 重用既有 doc 的 id
+                # - 全新物件用 doc_data 自己生成的 id（make_property_doc 已產生）
+                if is_force_reanalyze and item.get("_existing_doc"):
+                    target_doc_id = item["_existing_doc"].get("id")
+                    if not target_doc_id:
+                        from database.db import find_doc_by_source_id
+                        target_doc_id, _ = find_doc_by_source_id(src_id)
+                else:
+                    target_doc_id = doc_data.get("id")
+
+                if not target_doc_id:
+                    logger.error(f"無法決定 doc_id for source_id={src_id}，跳過寫入")
+                    continue
+
+                # 確保 doc_data 的 id 欄位跟實際寫入的 doc_id 一致
+                doc_data["id"] = target_doc_id
+
                 # force_reanalyze：用 merge 保留 price_history / url_alt / user overrides / scrape_session_at 等
-                # 其他情境（全新物件）直接 set
                 if is_force_reanalyze and item.get("_existing_doc"):
                     from database.models import merge_property_doc
                     merged, conflicts = merge_property_doc(item["_existing_doc"], doc_data)
-                    col.document(item["source_id"]).set(_safe_doc(merged))
+                    merged["id"] = target_doc_id   # merge 後 id 仍以新值為準
+                    col.document(target_doc_id).set(_safe_doc(merged))
                     if conflicts:
                         progress_callback(
                             f"  ⚠ 重抓後欄位衝突保留舊值：{','.join(conflicts)}",
@@ -2097,13 +2192,13 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                         )
                     doc_data = merged   # 下方 log 用
                 else:
-                    col.document(item["source_id"]).set(_safe_doc(doc_data))
+                    col.document(target_doc_id).set(_safe_doc(doc_data))
                 # 批次爬取由 admin 觸發，不自動加入 admin 的觀察清單；
                 # 用戶想追蹤得自己在前端按 ★（單筆 URL 送出的流程另在 scrape_url 處理）
                 # 將剛寫入的 doc 加進 _dup_index，讓同 session 內後續 item 能比對到（防 591 列表回同物件多筆）
                 try:
                     _new_d = dict(doc_data)
-                    _new_d["_id"] = item["source_id"]
+                    _new_d["_id"] = target_doc_id
                     _dup_index.setdefault(_dup_key(_new_d), []).append(_new_d)
                 except Exception as _die:
                     logger.debug(f"dup_index 更新失敗 {src_id}: {_die}")
@@ -2242,7 +2337,9 @@ async def analyze_manual(req: ManualAnalyzeReq, user: dict = Depends(get_current
     # 建立 placeholder doc（讓前端馬上有 row + loading bar）
     now = now_tw_iso()
     placeholder = _safe_doc({
+        "id": src_id,                # manual 物件的 id 等於 src_id（manual_<timestamp>）
         "source_id": src_id,
+        "sources": [{"name": "manual", "source_id": src_id, "url": None, "added_at": now}],
         "city": item["city"],
         "district": item["district"],
         "address": item["address"],
@@ -2299,6 +2396,9 @@ async def _run_manual_analysis(uid: str, src_id: str, item: dict):
             doc_data.setdefault("scrape_session_at", now_iso)
             doc_data.setdefault("scraped_at", now_iso)
             doc_data.setdefault("list_rank", 0)
+            # manual 物件的 id 強制等於 src_id（manual_<timestamp>），不要被 make_property_doc 自動生成的 UUID 蓋掉
+            doc_data["id"] = src_id
+            doc_data["sources"] = [{"name": "manual", "source_id": src_id, "url": None, "added_at": now_iso}]
             # 重分析時保留「物件在清單的位置」相關欄位（scrape_session_at / _added_at 等），
             # 避免用戶按重分析後物件跳到列表最上/最下。
             _old_snap = manual_col.document(src_id).get()
@@ -2760,22 +2860,33 @@ async def scrape_url(req: ScrapeUrlRequest, user: dict = Depends(get_current_use
     global _url_running, _cancel_requested
     _cancel_requested = False
     import re as _re
-    m = _re.search(r"/(\d{6,})", req.url)
-    if not m:
-        return {"status": "error", "message": "URL 中找不到物件 ID"}
-    src_id = f"591_{m.group(1)}"
+    url_lower = req.url.lower()
+    if "buy.yungching.com.tw" in url_lower:
+        m = _re.search(r"/house/(\d{6,8})", req.url)
+        if not m:
+            return {"status": "error", "message": "永慶 URL 找不到 /house/{ID} 格式"}
+        src_id = f"yongqing_{m.group(1)}"
+        url_source = "yongqing"
+    elif "sale.591.com.tw" in url_lower or "591.com.tw" in url_lower:
+        m = _re.search(r"/(\d{6,})", req.url)
+        if not m:
+            return {"status": "error", "message": "591 URL 中找不到物件 ID"}
+        src_id = f"591_{m.group(1)}"
+        url_source = "591"
+    else:
+        return {"status": "error", "message": "目前僅支援 591 (sale.591.com.tw) 與永慶 (buy.yungching.com.tw) 網址"}
 
     _ensure_user_profile(user)
     uid = user["uid"]
 
-    # 先查中央快取
-    central = get_col().document(src_id).get()
-    if central.exists:
-        cdata = central.to_dict() or {}
+    # 先查中央快取（用 source_id 欄位 query，因為 doc_id 已是 UUID 不再是 source_id）
+    from database.db import find_doc_by_source_id
+    existing_doc_id, cdata = find_doc_by_source_id(src_id)
+    if existing_doc_id and cdata:
         if cdata.get("analysis_status") == "done" and not cdata.get("analysis_error"):
-            # 直接引用，不重跑
+            # 直接引用，不重跑（用 doc 的 UUID 當 watchlist key）
             try:
-                get_user_watchlist(uid).document(src_id).set({
+                get_user_watchlist(uid).document(existing_doc_id).set({
                     "added_at": now_tw_iso(),
                 }, merge=True)
             except Exception as e:
@@ -2783,6 +2894,7 @@ async def scrape_url(req: ScrapeUrlRequest, user: dict = Depends(get_current_use
             return {
                 "status": "ok",
                 "source_id": src_id,
+                "id": existing_doc_id,
                 "from_cache": True,
                 "message": "中央已有分析結果，直接加入您的清單",
             }
@@ -2800,23 +2912,26 @@ async def scrape_url(req: ScrapeUrlRequest, user: dict = Depends(get_current_use
             _url_inflight += 1
             try:
                 result = await asyncio.to_thread(_scrape_single_url, req.url, src_id)
-                try:
-                    get_user_watchlist(uid).document(src_id).set({
-                        "added_at": now_tw_iso(),
-                    }, merge=True)
-                except Exception as e:
-                    logger.warning("watchlist add failed: %s", e)
-                # 標記送件人（admin tab 顯示用）：只在 doc 還沒標過時設（preserve 第一個送的人）
-                try:
-                    _ref = get_col().document(src_id)
-                    _snap = _ref.get()
-                    if _snap.exists and not (_snap.to_dict() or {}).get("submitted_by_uid"):
-                        _ref.update({
-                            "submitted_by_uid": uid,
-                            "submitted_by_email": user.get("email") or "",
-                        })
-                except Exception as e:
-                    logger.warning("submitted_by update failed: %s", e)
+                # 抓完再用 source_id 查 UUID（_scrape_single_url 內部已寫到 UUID doc）
+                new_doc_id, _ = find_doc_by_source_id(src_id)
+                if new_doc_id:
+                    try:
+                        get_user_watchlist(uid).document(new_doc_id).set({
+                            "added_at": now_tw_iso(),
+                        }, merge=True)
+                    except Exception as e:
+                        logger.warning("watchlist add failed: %s", e)
+                    # 標記送件人（admin tab 顯示用）：只在 doc 還沒標過時設（preserve 第一個送的人）
+                    try:
+                        _ref = get_col().document(new_doc_id)
+                        _snap = _ref.get()
+                        if _snap.exists and not (_snap.to_dict() or {}).get("submitted_by_uid"):
+                            _ref.update({
+                                "submitted_by_uid": uid,
+                                "submitted_by_email": user.get("email") or "",
+                            })
+                    except Exception as e:
+                        logger.warning("submitted_by update failed: %s", e)
                 if isinstance(result, dict):
                     result["from_cache"] = False
                 return result
@@ -2849,10 +2964,71 @@ async def cancel_task():
     return {"status": "ok"}
 
 
+def _scrape_single_url_yongqing(url: str, src_id: str, is_reanalyze: bool = False):
+    """單筆永慶 URL 分析。比 591 簡單很多：純 HTTP + Playwright（拿座標）+ pipeline。"""
+    from scraper.scraper_yongqing import scrape_yongqing_single
+    from scraper.browser_manager import get_browser_context
+    from api.analysis_pipeline import analyze_single_property
+    from database.models import merge_property_doc
+    from database.db import find_doc_by_source_id, gen_dated_id
+
+    item = scrape_yongqing_single(url)
+    if not item:
+        return {"status": "error", "message": "永慶詳情頁解析失敗（可能下架或頁面結構變了）"}
+
+    item["scrape_session_at"] = now_tw_iso()
+    item["list_rank"] = 0
+
+    # 跑 analysis pipeline（共用 591 的）
+    with get_browser_context(headless=True) as ctx:
+        initial_coords = (item.get("latitude"), item.get("longitude")) if item.get("latitude") else None
+        result = analyze_single_property(
+            item=item,
+            ocr_ctx=ctx,
+            initial_coords=initial_coords,
+            detail_text="",
+        )
+    doc = result["doc_data"]
+
+    # 找既有 doc（用 source_id 欄位）
+    existing_doc_id, old = find_doc_by_source_id(src_id)
+    col = get_col()
+
+    if existing_doc_id:
+        if is_reanalyze:
+            for _keep in ("scrape_session_at", "list_rank", "scraped_at"):
+                doc[_keep] = old.get(_keep)
+            doc["id"] = existing_doc_id
+            col.document(existing_doc_id).set(_safe_doc(doc))
+            return {"status": "ok", "source_id": src_id, "id": existing_doc_id, "message": "永慶物件重新分析完成（完整替換）"}
+        merged, conflicts = merge_property_doc(old, doc)
+        merged["id"] = existing_doc_id
+        if merged.get("archived") is True:
+            merged["archived"] = False
+        col.document(existing_doc_id).set(_safe_doc(merged))
+        msg = "永慶物件已存在中央 DB，已合併"
+        if conflicts:
+            msg += f"（衝突保留舊值：{', '.join(conflicts)}）"
+        return {"status": "ok", "source_id": src_id, "id": existing_doc_id, "message": msg}
+
+    # 新物件
+    new_doc_id = doc.get("id") or gen_dated_id()
+    doc["id"] = new_doc_id
+    if not is_reanalyze:
+        doc["source_origin"] = "user_url"
+    col.document(new_doc_id).set(_safe_doc(doc))
+    return {"status": "ok", "source_id": src_id, "id": new_doc_id, "message": "永慶物件分析完成（新增）"}
+
+
 def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False):
     """同步：開瀏覽器 + 抓單一 URL + 跑分析。
     is_reanalyze=True：admin 重新分析路徑，跳過「公寓 only」「目標區域」等過濾，
-                      強制更新既有 doc（admin 特權，用於修正舊資料）。"""
+                      強制更新既有 doc（admin 特權，用於修正舊資料）。
+    支援 591 / 永慶 兩種 URL（依 src_id prefix 分流）。"""
+    # 永慶 URL → 走永慶單筆分析路徑（純 HTTP + Playwright，不需 Vision OCR）
+    if src_id.startswith("yongqing_"):
+        return _scrape_single_url_yongqing(url, src_id, is_reanalyze)
+
     from scraper.browser_manager import get_browser_context
     from scraper.scraper_591 import _parse_card  # 既有 card 解析（不適用詳情頁）
     from scraper.scraper_591 import screenshot_detail_page
@@ -3149,19 +3325,22 @@ def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False):
 
         # ─ 合併（依欄位類型分級） ─
         from database.models import merge_property_doc
-        existing_snap = col.document(src_id).get()
-        if existing_snap.exists:
-            old = existing_snap.to_dict() or {}
+        from database.db import find_doc_by_source_id
+        # 用 source_id 欄位 query 找既有 doc（migration 後 doc_id 是 UUID 不是 src_id）
+        existing_doc_id, old = find_doc_by_source_id(src_id)
+        if existing_doc_id:
             if is_reanalyze:
                 # admin 重新分析：完全以新抓結果替換，不保留舊值（避免舊錯資料污染）
                 # 例外：scrape_session_at / list_rank / scraped_at 一律保留舊值（即使舊值是 None），
                 # 物件在列表排序中的位置絕對不因 reanalyze 而變動。
                 for _keep in ("scrape_session_at", "list_rank", "scraped_at"):
                     doc[_keep] = old.get(_keep)
-                col.document(src_id).set(_safe_doc(doc))
+                doc["id"] = existing_doc_id   # 保留既有 UUID
+                col.document(existing_doc_id).set(_safe_doc(doc))
                 return {"status": "ok", "source_id": src_id, "message": "重新分析完成（完整替換）"}
             merged, conflicts = merge_property_doc(old, doc)
-            col.document(src_id).set(_safe_doc(merged))
+            merged["id"] = existing_doc_id
+            col.document(existing_doc_id).set(_safe_doc(merged))
             parts = ["已存在物件，已合併"]
             if conflicts:
                 parts.append(f"欄位衝突：{', '.join(conflicts)}（保留舊值）")
@@ -3171,7 +3350,12 @@ def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False):
             # 讓搜尋 tab 過濾掉（搜尋 tab 只顯示 admin batch 抓進來的）
             if not is_reanalyze:
                 doc["source_origin"] = "user_url"
-            col.document(src_id).set(_safe_doc(doc))
+            new_doc_id = doc.get("id")    # make_property_doc 已生成
+            if not new_doc_id:
+                from database.db import gen_dated_id
+                new_doc_id = gen_dated_id()
+                doc["id"] = new_doc_id
+            col.document(new_doc_id).set(_safe_doc(doc))
             return {"status": "ok", "source_id": src_id, "message": "完整分析完成（新增）"}
 
 
@@ -3228,17 +3412,39 @@ async def override_new_house_price(property_id: str, body: NewHousePriceOverride
 
 @app.post("/api/clear_db")
 async def clear_db(admin: dict = Depends(require_admin)):
-    """清空中央 properties collection（admin only）。"""
+    """軟刪除中央 properties：標記 archived=true，不真刪。
+    這樣用戶 watchlist 不會變成孤兒。日後重抓到的物件會自動 unarchive（透過 force_reanalyze 或同 source_id 寫入時覆蓋）。"""
+    from google.cloud.firestore_v1.base_query import FieldFilter
     col = get_col()
+    now = now_tw_iso()
     count = 0
-    while True:
-        batch = list(col.limit(200).get())
-        if not batch:
-            break
-        for doc in batch:
-            doc.reference.delete()
-            count += 1
-    return {"status": "ok", "deleted": count}
+    # 只處理 archived != True 的（已 archive 的不再重複設）
+    docs = list(col.where(filter=FieldFilter("archived", "in", [False, None])).stream())
+    if not docs:
+        # 退回掃全部（剛遷移完可能 archived 欄位完全不存在）
+        docs = list(col.stream())
+    BATCH = 400
+    batch = get_firestore().batch()
+    bn = 0
+    for d in docs:
+        data = d.to_dict() or {}
+        if data.get("archived") is True:
+            continue
+        batch.update(d.reference, {
+            "archived": True,
+            "archived_at": now,
+            "archived_by_email": admin.get("email") or "",
+        })
+        bn += 1
+        count += 1
+        if bn >= BATCH:
+            batch.commit()
+            batch = get_firestore().batch()
+            bn = 0
+    if bn > 0:
+        batch.commit()
+    logger.warning("[clear_db] %s 軟刪除 (archived=true) %d 筆", admin.get("email"), count)
+    return {"status": "ok", "archived": count}
 
 
 @app.post("/api/deep_analyze/{property_id:path}")

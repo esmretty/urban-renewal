@@ -4,6 +4,7 @@ Firestore 物件資料輔助函式。
 """
 import re
 from datetime import datetime, timedelta
+from typing import Optional
 from database.time_utils import now_tw, now_tw_iso
 
 
@@ -119,12 +120,31 @@ def make_property_doc(
     mrt_dist=None,
     mrt_exit=None,
     land_sqm=None,
+    doc_id: Optional[str] = None,
 ) -> dict:
-    """組裝要存入 Firestore 的物件 document。"""
+    """組裝要存入 Firestore 的物件 document。
+    doc_id：物件唯一 ID（YYYYMMDD-XXXXXX 格式），caller 必須傳。
+            若 None 表示不知道，會先生成一個（但 caller 用 col.document() 寫時請用回傳的 id 欄位）。"""
+    if doc_id is None:
+        from database.db import gen_dated_id
+        doc_id = gen_dated_id(item.get("scrape_session_at"))
+
+    source_name = item.get("source", "591")
+    source_id_val = item.get("source_id")
+    primary_url = item.get("url")
+    sources_arr = [{
+        "name": source_name,
+        "source_id": source_id_val,
+        "url": primary_url,
+        "added_at": now_tw_iso(),
+    }]
     return {
-        "source": item.get("source", "591"),
-        "source_id": item.get("source_id"),
-        "url": item.get("url"),
+        "id": doc_id,
+        "source": source_name,
+        "source_id": source_id_val,
+        "sources": sources_arr,
+        "archived": False,        # 新建/重抓物件一律不是 archived
+        "url": primary_url,
         "image_url": item.get("image_url"),
         "scraped_at": now_tw_iso(),
         "published_at": _parse_published_at(item.get("_published_text"))
@@ -384,15 +404,31 @@ def make_minimal_doc(
     mrt_exit=None,
     land_sqm=None,
     skip_reason: str = "",
+    doc_id: Optional[str] = None,
 ) -> dict:
     """
     跳過 AI 分析的物件：只存基本資料（5168 + TCD + Claude 都不跑）。
     使用者在前端按「分析」按鈕後會升級為 full doc。
     """
+    if doc_id is None:
+        from database.db import gen_dated_id
+        doc_id = gen_dated_id(item.get("scrape_session_at"))
+    source_name = item.get("source", "591")
+    source_id_val = item.get("source_id")
+    primary_url = item.get("url")
+    sources_arr = [{
+        "name": source_name,
+        "source_id": source_id_val,
+        "url": primary_url,
+        "added_at": now_tw_iso(),
+    }]
     return {
-        "source": item.get("source", "591"),
-        "source_id": item.get("source_id"),
-        "url": item.get("url"),
+        "id": doc_id,
+        "source": source_name,
+        "source_id": source_id_val,
+        "sources": sources_arr,
+        "archived": False,        # 新建/重抓物件一律不是 archived
+        "url": primary_url,
         "image_url": item.get("image_url"),
         "scraped_at": now_tw_iso(),
         "published_at": _parse_published_at(item.get("_published_text"))

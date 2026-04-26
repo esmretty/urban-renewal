@@ -1026,9 +1026,12 @@ window.adminTriggerScrape = async function () {
   const districts = [...document.querySelectorAll(".scrape-dist:checked")].map(c => c.value);
   if (!districts.length) { alert("請至少勾一個行政區"); return; }
   const limit = parseInt(document.getElementById("scrape-limit").value) || 30;
+  const sourceEl = document.getElementById("scrape-source");
+  const source = sourceEl ? sourceEl.value : "591";
   const body = {
     districts,
     limit,
+    source,
     max_floors: parseInt(document.getElementById("thresh-floors").value) || null,
   };
   document.getElementById("scrape-log").textContent = "";
@@ -1049,24 +1052,27 @@ window.adminTriggerScrape = async function () {
 
 window.clearCentralDb = async function () {
   const typed = prompt(
-    "⚠ 這會永久刪除中央 DB 所有 properties（分析快取），不影響任何用戶的 watchlist / manual。\n\n" +
-    "確定要清空？請輸入 DELETE 確認："
+    "⚠ 這會把中央 DB 所有物件標為「已封存」(軟刪除)。\n" +
+    "- 探索 tab 會看不到這些物件\n" +
+    "- 用戶 watchlist 仍能看到（會顯示「已封存」標籤）\n" +
+    "- 日後重抓到的物件會自動回復\n\n" +
+    "確定執行？請輸入 ARCHIVE 確認："
   );
-  if (typed !== "DELETE") {
-    if (typed !== null) alert("未輸入 DELETE，已取消。");
+  if (typed !== "ARCHIVE") {
+    if (typed !== null) alert("未輸入 ARCHIVE，已取消。");
     return;
   }
   try {
     const r = await authedFetch("/api/clear_db", { method: "POST" });
     const data = await r.json();
     if (r.ok) {
-      alert(`已清空中央 DB（刪除 ${data.deleted ?? 0} 筆）`);
+      alert(`已封存中央 DB（archived ${data.archived ?? 0} 筆）`);
       loadAll();
     } else {
-      alert("清空失敗：" + (data.detail || r.status));
+      alert("封存失敗：" + (data.detail || r.status));
     }
   } catch (e) {
-    alert("清空失敗：" + e.message);
+    alert("封存失敗：" + e.message);
   }
 };
 

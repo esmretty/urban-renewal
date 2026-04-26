@@ -471,6 +471,7 @@ function rowHTML(p) {
     ? `<div class="mrt-name">${esc(p.nearest_mrt)}</div><div class="mrt-dist">${Math.round(p.nearest_mrt_dist_m || 0)}m</div>`
     : "—";
   const priceChangedBadge = p.is_price_changed ? `<span class="price-changed-tag">降價</span>` : "";
+  const archivedBadge = p.archived ? `<span class="archived-tag" title="此物件已從中央資料庫封存（admin 清理過）">已封存</span>` : "";
 
   // 地址：優先顯示推測地址，fallback 到 591 原始地址
   const rawAddr = p.address_inferred || p.address || p.title || "";
@@ -523,7 +524,7 @@ function rowHTML(p) {
     <div class="c c-type" data-label="類型">${typeIcon} ${esc(typeLabel)}</div>
     <div class="c c-city" data-label="縣市">${esc(p.city || "—")}</div>
     <div class="c c-district" data-label="區">${esc(p.district || "—")}</div>
-    <div class="c c-addr" title="${esc(roadOnly)}" data-label="地址">${esc(roadOnly)}${p.address_inferred ? '<span class="inferred-tag">推測</span>' : ''}${p.is_foreclosure ? '<span class="fc-badge" title="法拍屋">法拍屋</span>' : ''}${priceChangedBadge}<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener noreferrer" class="map-link" onclick="event.stopPropagation()" title="Google Maps">📍</a>${newBadge}</div>
+    <div class="c c-addr" title="${esc(roadOnly)}" data-label="地址">${esc(roadOnly)}${p.address_inferred ? '<span class="inferred-tag">推測</span>' : ''}${p.is_foreclosure ? '<span class="fc-badge" title="法拍屋">法拍屋</span>' : ''}${priceChangedBadge}${archivedBadge}<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener noreferrer" class="map-link" onclick="event.stopPropagation()" title="Google Maps">📍</a>${newBadge}</div>
     <div class="c c-val c-total ${hotCls('price')}" data-label="總價">${priceStr}${(p.lvr_records && p.lvr_records.length) ? `<span class="lvr-icon" onclick="event.stopPropagation()" onmouseenter="showLvrPopup(event, '${p.id}')" onmouseleave="hideLvrPopup()">實</span>` : ""}</div>
     <div class="c c-val c-bld-combo" data-label="建坪/單價">
       <div class="${hotCls('bldA')}">${p.building_area_ping ?? "—"} 坪</div>
@@ -818,7 +819,7 @@ function showDetailModal(p) {
   // manual 物件顯示「重新分析」按鈕（591 物件不顯示，因為它們有 admin 後台管理）
   const manualReanalyzeBtn = document.getElementById("modal-manual-reanalyze");
   if (manualReanalyzeBtn) {
-    const isManual = String(p.id || "").startsWith("manual_") || String(p.source_id || "").startsWith("manual_");
+    const isManual = String(p.id || "").startsWith("manual_");
     manualReanalyzeBtn.style.display = isManual ? "" : "none";
     manualReanalyzeBtn.disabled = !!p.analysis_in_progress;
     manualReanalyzeBtn.textContent = p.analysis_in_progress ? "⏳ 分析中…" : "🔄 重新分析";
@@ -1233,7 +1234,7 @@ function _fmtPubDate(iso) {
 
 function srcLinksHTML(p) {
   // 用戶輸入地址生成（manual，無 591 連結）→ 顯示「自行調查」+ 加入清單/分析時間（日期放第二行）
-  if (String(p.id || "").startsWith("manual_") || String(p.source_id || "").startsWith("manual_")) {
+  if (String(p.id || "").startsWith("manual_")) {
     const t = _fmtPubDate(p._added_at || p.analysis_completed_at || p.scraped_at || null);
     return `<span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px">
       <span class="src-badge591">自行調查</span>
@@ -1705,7 +1706,7 @@ async function scanRoadWidth(propertyId, btn) {
 
 async function reanalyzeManualFull() {
   if (!_detailP) return;
-  const id = _detailP.id || _detailP.source_id;
+  const id = _detailP.id;
   if (!String(id).startsWith("manual_")) {
     alert("只能重分析 manual 物件");
     return;
@@ -2301,8 +2302,13 @@ async function triggerScrapeUrl() {
   const inp = document.getElementById("scrape-url");
   const url = inp.value.trim();
   if (!url) { alert("請輸入網址"); return; }
-  if (!/sale\.591\.com\.tw\/.*\d{6,}/.test(url)) {
-    alert("看起來不是物件詳情頁網址，請確認");
+  // 接受 591 (sale.591.com.tw/...數字 ID) 與 永慶 (buy.yungching.com.tw/house/數字)
+  const okPatterns = [
+    /sale\.591\.com\.tw\/.*\d{6,}/,
+    /buy\.yungching\.com\.tw\/house\/\d{6,8}/,
+  ];
+  if (!okPatterns.some(re => re.test(url))) {
+    alert("看起來不是 591 或永慶物件詳情頁網址，請確認");
     return;
   }
 

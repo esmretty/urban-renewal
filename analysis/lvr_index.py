@@ -329,6 +329,58 @@ def _pick_closest_by_address(candidates: list[str], ref_addr: str) -> str:
     return ranked[0]
 
 
+def _reverse_geocode_loose(lat: float, lng: float, road_hint: str) -> Optional[str]:
+    """寬鬆版 reverse geocode：只要 Google 回的結果含同路名 + 號就接受最近的一筆。
+    用於「來源座標可信」(永慶 / 信義) + 「無巷弄資訊」的情況，
+    比 _reverse_geocode_lane 寬（不排除 RANGE_INTERPOLATED）。"""
+    from config import GOOGLE_MAPS_API_KEY
+    if not GOOGLE_MAPS_API_KEY:
+        return None
+    try:
+        import httpx
+        r = httpx.get(
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            params={"latlng": f"{lat},{lng}", "key": GOOGLE_MAPS_API_KEY, "language": "zh-TW"},
+            timeout=10,
+        )
+        data = r.json()
+        if data.get("status") != "OK":
+            return None
+        road_short = re.sub(r"[一二三四五六七八九十]段$", "", road_hint)
+        candidates = []
+        for res in data.get("results", []):
+            addr = res.get("formatted_address", "")
+            if road_short not in addr or not re.search(r"\d+號", addr):
+                continue
+            loc = res.get("geometry", {}).get("location", {})
+            dist = _haversine(lat, lng, loc["lat"], loc["lng"]) if loc else 9999
+            loc_type = res.get("geometry", {}).get("location_type", "")
+            # 抽出「到號」標準地址，切掉 subpremise / 樓層等垃圾
+            canon_m = re.search(
+                r"((?:[一-龥]+(?:市|縣))?(?:[一-龥]{1,3}區)?"
+                r"[一-龥]+(?:路|街|大道)"
+                r"(?:[一二三四五六七八九十]段)?"
+                r"(?:\d+巷)?(?:\d+弄)?"
+                r"\d+(?:[-之]\d+)?號)",
+                addr,
+            )
+            if not canon_m:
+                continue
+            canon = canon_m.group(1)
+            canon = re.sub(r"^(台灣|臺灣)", "", canon).strip()
+            if road_short not in canon:
+                continue
+            # rooftop 優先；其次距離
+            priority = 0 if loc_type == "ROOFTOP" else (1 if loc_type != "RANGE_INTERPOLATED" else 2)
+            candidates.append((priority, dist, canon))
+        if candidates:
+            candidates.sort()
+            return candidates[0][2]
+    except Exception as e:
+        logger.debug(f"_reverse_geocode_loose error: {e}")
+    return None
+
+
 def _reverse_geocode_lane(lat: float, lng: float, road_hint: str, lane_hint: str = "") -> Optional[str]:
     """
     Google reverse geocode fallback：

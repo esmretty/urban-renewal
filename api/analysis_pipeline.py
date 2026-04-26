@@ -493,6 +493,35 @@ def analyze_single_property(
             except Exception as _ge:
                 logger.warning(f"[{src_id}] 地址 geocode 失敗: {_ge}")
 
+    # ── 5.6 永慶 / 信義（地址只到路段、但有準確座標）→ Google reverse geocode 拿具體門牌 ──
+    # 條件：address 沒有「號」(代表只到路段) + 有 source_latitude/longitude (來源網站給的準確座標)
+    # 結果填 address_inferred，不蓋 address（保留原來源資料）
+    if not item.get("address_inferred") and not addr_has_number:
+        src_lat = item.get("source_latitude") or item.get("latitude")
+        src_lng = item.get("source_longitude") or item.get("longitude")
+        if src_lat and src_lng and road_seg:
+            rev_addr = None
+            try:
+                from analysis.lvr_index import _reverse_geocode_lane, _reverse_geocode_loose
+                # 第一次嘗試：嚴格模式（同路名 + 同巷 + 排除 RANGE_INTERPOLATED）
+                rev_addr = _reverse_geocode_lane(src_lat, src_lng, road_seg, lane_hint or "")
+                if not rev_addr:
+                    # Fallback：寬鬆模式 — 直接打 Google reverse，只要結果含同路名+號就接受
+                    # 適用永慶（有準確座標 + 該段沒巷弄）
+                    rev_addr = _reverse_geocode_loose(src_lat, src_lng, road_seg)
+            except Exception as _re:
+                logger.warning(f"[{src_id}] reverse geocode 失敗: {_re}")
+
+            if rev_addr:
+                from analysis.claude_analyzer import _clean_address_garbage
+                from database.models import strip_region_prefix
+                _cleaned = _clean_address_garbage(rev_addr)
+                item["address_inferred"] = strip_region_prefix(_cleaned, city or "", district or "")
+                item["address_inferred_confidence"] = "geocode_reverse"
+                logger.info(f"[{src_id}] reverse geocode 拿到具體地址: {rev_addr}")
+            else:
+                logger.info(f"[{src_id}] reverse geocode 無結果 (lat={src_lat}, lng={src_lng}, road={road_seg})")
+
     # ── 6. 精準座標覆蓋 ──
     if inferred_coord:
         lat, lng = inferred_coord

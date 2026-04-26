@@ -1027,6 +1027,24 @@ body[data-tab="explore"] .wl-only { display: none !important; }
   letter-spacing: 0.5px;
 }
 
+.archived-tag {
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 600;
+  color: #888;
+  background: #ececec;
+  border: 1px solid #c8c8c8;
+  padding: 0 6px;
+  border-radius: 3px;
+  margin-left: 6px;
+  letter-spacing: 0.5px;
+}
+/* archived 物件整列灰化 */
+.property-row.archived,
+tr.archived {
+  opacity: 0.55;
+}
+
 /* 推薦類別文字（與表格同字級） */
 .rec-強烈推薦 { color: #2e7d32; font-weight: 600; }
 .rec-值得考慮 { color: #b0790a; font-weight: 600; }
