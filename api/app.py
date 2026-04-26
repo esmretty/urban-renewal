@@ -38,9 +38,11 @@ logger = logging.getLogger(__name__)
 _PUBLIC_PATHS = {
     "/",
     "/login.html",
+    "/maintenance.html",
     "/favicon.ico",
     "/api/firebase_config",
     "/api/target_regions",
+    "/api/maintenance_status",   # 維護頁 polling 用，公開不需 auth
     "/admin.html",            # admin 也走自己的登入頁
 }
 _PUBLIC_PREFIXES = (
@@ -488,14 +490,30 @@ def api_firebase_config():
 @app.get("/api/me")
 async def api_me(user: dict = Depends(get_current_user)):
     """回傳登入用戶資訊；未登入會被 middleware 擋在 401。
-    第一次登入時會檢查白名單，不在白名單丟 403。"""
+    第一次登入時會檢查白名單，不在白名單丟 403。
+    若維護模式啟用，一律回傳 maintenance 欄位讓前端 redirect（包括 admin，admin 仍可進後台）。"""
     _ensure_user_profile(user)
+    maint = _get_maintenance_state()
+    if maint.get("enabled"):
+        user["maintenance"] = {"enabled": True, "message": maint.get("message") or ""}
     return user
+
+
+@app.get("/api/maintenance_status")
+async def maintenance_status_public():
+    """公開查詢維護狀態（不需登入）— 維護頁用來 poll 是否已恢復。"""
+    maint = _get_maintenance_state()
+    return {"enabled": bool(maint.get("enabled")), "message": maint.get("message") or ""}
 
 
 @app.get("/login.html")
 async def login_page():
     return FileResponse(str(FRONTEND_DIR / "login.html"))
+
+
+@app.get("/maintenance.html")
+async def maintenance_page():
+    return FileResponse(str(FRONTEND_DIR / "maintenance.html"))
 
 
 @app.get("/admin.html")
@@ -1180,6 +1198,57 @@ async def remove_email_whitelist(body: WhitelistReq, admin: dict = Depends(requi
     )
     logger.warning("[whitelist] %s 移除 %s", admin.get("email"), email)
     return {"status": "ok", "emails": sorted(current)}
+
+
+# ── 網站維護模式（admin 切換） ──────────────────────────────────────────────
+class MaintenanceReq(BaseModel):
+    enabled: bool
+    message: Optional[str] = None
+
+
+def _maintenance_file_path():
+    from config import DATA_DIR
+    return DATA_DIR / "maintenance.json"
+
+
+def _get_maintenance_state() -> dict:
+    """讀本地檔案 data/maintenance.json（per-server，不共用）。
+    刻意不放 Firestore：本機 debug 時切換不該影響 production VM。"""
+    import json as _json
+    path = _maintenance_file_path()
+    if not path.exists():
+        return {"enabled": False, "message": ""}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return _json.load(f) or {"enabled": False, "message": ""}
+    except Exception as e:
+        logger.warning("[maintenance] load state failed: %s", e)
+        return {"enabled": False, "message": ""}
+
+
+@app.get("/admin/maintenance")
+async def get_maintenance(admin: dict = Depends(require_admin)):
+    """回傳目前維護模式狀態 + 訊息（本 server 的）。"""
+    return _get_maintenance_state()
+
+
+@app.post("/admin/maintenance")
+async def set_maintenance(body: MaintenanceReq, admin: dict = Depends(require_admin)):
+    """切換維護模式 + 自訂訊息。寫入本地檔案，不影響其他 server。"""
+    import json as _json
+    state = {
+        "enabled": bool(body.enabled),
+        "message": (body.message or "").strip(),
+        "updated_at": now_tw_iso(),
+        "updated_by_email": admin.get("email") or "",
+    }
+    path = _maintenance_file_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        _json.dump(state, f, ensure_ascii=False, indent=2)
+    logger.warning("[maintenance] %s 設定 enabled=%s message=%r (本機檔案)",
+                   admin.get("email"), state["enabled"], state["message"])
+    return {"status": "ok", **state}
 
 
 # ── 物件列表 ──────────────────────────────────────────────────────────────────

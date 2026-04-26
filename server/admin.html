@@ -144,6 +144,38 @@
     <div id="ocr-scan-result" style="margin-top:12px;"></div>
   </section>
 
+  <!-- 網站維護模式 -->
+  <section class="panel">
+    <h2>網站維護模式</h2>
+    <p style="font-size:13px; color:#555; margin:0 0 10px;">
+      啟用後，<b>所有用戶（含 admin）</b>訪問首頁都會被導向「系統維護中」頁面。
+      Admin 仍可正常進入<b>本後台</b>關閉維護模式（後台不受維護模式影響）。
+      可以選填一段訊息給用戶看（例：「預計 2 小時後恢復」）。
+    </p>
+    <p style="font-size:12px; color:#c78a00; margin:0 0 10px; padding:6px 10px; background:#fdf6e0; border-left:3px solid #c78a00; border-radius:3px;">
+      ⚠️ 此設定為 <b>per-server</b>（存於本機 <code>data/maintenance.json</code>）。
+      在 localhost 切換只影響 localhost；在 production 切換只影響 production。
+    </p>
+    <div id="maint-status-row" style="margin-bottom:12px; font-size:14px;">
+      狀態：<span id="maint-status-badge" style="font-weight:600;">載入中…</span>
+      <span id="maint-status-meta" style="color:#888; margin-left:8px;"></span>
+    </div>
+    <div style="display:flex; gap:8px; margin-bottom:10px; align-items:flex-start;">
+      <textarea id="maint-message-input" placeholder="自訂訊息（可選）— 給用戶看的說明"
+        style="flex:1; min-height:60px; padding:8px 10px; font-family:inherit; resize:vertical;"></textarea>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button id="maint-toggle-btn" onclick="toggleMaintenance()"
+        style="padding:8px 18px; background:#c78a00; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:600;">
+        切換維護模式
+      </button>
+      <button onclick="saveMaintenanceMessage()"
+        style="padding:8px 14px; background:#777; color:#fff; border:none; border-radius:4px; cursor:pointer;">
+        只更新訊息
+      </button>
+    </div>
+  </section>
+
   <!-- 危險區域 -->
   <section class="panel panel-danger">
     <h2>危險區域</h2>

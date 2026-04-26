@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>系統維護中 — 都更神探R</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background: linear-gradient(135deg, #fdf6e0 0%, #f4e5b5 50%, #e8d18a 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      overflow: hidden;
+    }
+
+    /* 背景裝飾圓點，柔和漂浮感 */
+    body::before, body::after {
+      content: "";
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      filter: blur(60px);
+      opacity: 0.5;
+    }
+    body::before {
+      width: 400px; height: 400px;
+      background: #c78a00;
+      top: -100px; left: -100px;
+      animation: float-a 18s ease-in-out infinite;
+    }
+    body::after {
+      width: 500px; height: 500px;
+      background: #e8d18a;
+      bottom: -150px; right: -150px;
+      animation: float-b 22s ease-in-out infinite;
+    }
+    @keyframes float-a {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(60px, 80px); }
+    }
+    @keyframes float-b {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(-50px, -60px); }
+    }
+
+    .card {
+      position: relative;
+      background: #fff;
+      border: 1px solid #c0a063;
+      border-radius: 16px;
+      padding: 56px 48px;
+      box-shadow: 0 20px 60px rgba(92, 74, 10, 0.18), 0 4px 12px rgba(92, 74, 10, 0.08);
+      text-align: center;
+      max-width: 520px;
+      width: 100%;
+      z-index: 1;
+    }
+
+    /* 旋轉齒輪 logo */
+    .gears {
+      position: relative;
+      width: 96px;
+      height: 96px;
+      margin: 0 auto 24px;
+    }
+    .gear {
+      position: absolute;
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #f4c850, #c78a00);
+      box-shadow: 0 4px 12px rgba(199, 138, 0, 0.3);
+    }
+    .gear::before {
+      content: "";
+      position: absolute;
+      inset: 8px;
+      border-radius: 50%;
+      background: #fff;
+    }
+    .gear::after {
+      content: "";
+      position: absolute;
+      inset: 18px;
+      border-radius: 50%;
+      background: #c78a00;
+    }
+    /* 8 個齒 */
+    .gear .tooth {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      background: #c78a00;
+      top: -4px; left: 26px;
+    }
+    .gear .tooth:nth-child(2) { transform: rotate(45deg) translate(0, 0); transform-origin: 6px 36px; }
+    .gear .tooth:nth-child(3) { transform: rotate(90deg) translate(0, 0); transform-origin: 6px 36px; }
+    .gear .tooth:nth-child(4) { transform: rotate(135deg) translate(0, 0); transform-origin: 6px 36px; }
+    .gear .tooth:nth-child(5) { transform: rotate(180deg) translate(0, 0); transform-origin: 6px 36px; }
+    .gear .tooth:nth-child(6) { transform: rotate(225deg) translate(0, 0); transform-origin: 6px 36px; }
+    .gear .tooth:nth-child(7) { transform: rotate(270deg) translate(0, 0); transform-origin: 6px 36px; }
+    .gear .tooth:nth-child(8) { transform: rotate(315deg) translate(0, 0); transform-origin: 6px 36px; }
+
+    .gear-1 {
+      top: 0; left: 0;
+      animation: spin 6s linear infinite;
+    }
+    .gear-2 {
+      bottom: 0; right: 0;
+      width: 48px; height: 48px;
+      animation: spin-rev 5s linear infinite;
+    }
+    .gear-2::before { inset: 6px; }
+    .gear-2::after { inset: 14px; }
+    .gear-2 .tooth {
+      width: 10px; height: 10px;
+      top: -3px; left: 19px;
+    }
+    .gear-2 .tooth:nth-child(2) { transform: rotate(45deg); transform-origin: 5px 27px; }
+    .gear-2 .tooth:nth-child(3) { transform: rotate(90deg); transform-origin: 5px 27px; }
+    .gear-2 .tooth:nth-child(4) { transform: rotate(135deg); transform-origin: 5px 27px; }
+    .gear-2 .tooth:nth-child(5) { transform: rotate(180deg); transform-origin: 5px 27px; }
+    .gear-2 .tooth:nth-child(6) { transform: rotate(225deg); transform-origin: 5px 27px; }
+    .gear-2 .tooth:nth-child(7) { transform: rotate(270deg); transform-origin: 5px 27px; }
+    .gear-2 .tooth:nth-child(8) { transform: rotate(315deg); transform-origin: 5px 27px; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes spin-rev { to { transform: rotate(-360deg); } }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 28px;
+      color: #5c4a0a;
+      letter-spacing: 1px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #8b7c4a;
+      margin-bottom: 20px;
+    }
+    .brand-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: #c78a00;
+      border-radius: 50%;
+    }
+    p.lead {
+      margin: 0 0 16px;
+      color: #6a5c36;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+    .custom-message {
+      margin-top: 20px;
+      padding: 16px 20px;
+      background: #fdf6e0;
+      border-left: 3px solid #c78a00;
+      border-radius: 4px;
+      color: #5c4a0a;
+      font-size: 14px;
+      line-height: 1.7;
+      text-align: left;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .custom-message:empty { display: none; }
+
+    .status {
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid #e8d18a;
+      font-size: 13px;
+      color: #8b7c4a;
+    }
+    .pulse {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #c78a00;
+      margin-right: 6px;
+      vertical-align: middle;
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.4); }
+    }
+
+    .footer {
+      margin-top: 24px;
+      font-size: 12px;
+      color: #a08560;
+    }
+
+    @media (max-width: 480px) {
+      .card { padding: 36px 28px; }
+      h1 { font-size: 24px; }
+      p.lead { font-size: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="gears">
+      <div class="gear gear-1">
+        <span class="tooth"></span><span class="tooth"></span><span class="tooth"></span><span class="tooth"></span>
+        <span class="tooth"></span><span class="tooth"></span><span class="tooth"></span><span class="tooth"></span>
+      </div>
+      <div class="gear gear-2">
+        <span class="tooth"></span><span class="tooth"></span><span class="tooth"></span><span class="tooth"></span>
+        <span class="tooth"></span><span class="tooth"></span><span class="tooth"></span><span class="tooth"></span>
+      </div>
+    </div>
+
+    <div class="brand"><span class="brand-dot"></span>都更神探R</div>
+    <h1>系統維護中</h1>
+    <p class="lead">
+      我們正在進行系統升級，<br>
+      預計很快就會回來。請稍後再訪。
+    </p>
+    <div id="custom-message" class="custom-message"></div>
+
+    <div class="status">
+      <span class="pulse"></span>持續偵測恢復中…<br>
+      <span style="color:#a89665; font-size:12px;">頁面會在系統恢復時自動重新載入</span>
+    </div>
+
+    <div class="footer">© 都更神探R</div>
+  </div>
+
+  <script>
+    // 載入時取自訂訊息 + 啟動 polling
+    const msgEl = document.getElementById("custom-message");
+
+    async function checkStatus() {
+      try {
+        const res = await fetch("/api/maintenance_status", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // 更新自訂訊息
+        if (data.message && msgEl.textContent !== data.message) {
+          msgEl.textContent = data.message;
+        } else if (!data.message) {
+          msgEl.textContent = "";
+        }
+
+        // 已恢復 → 跳回首頁
+        if (!data.enabled) {
+          window.location.replace("/");
+        }
+      } catch (e) {
+        // 網路或其他錯誤 → 不動，下次再試
+      }
+    }
+
+    checkStatus();
+    setInterval(checkStatus, 15000);   // 每 15 秒 poll 一次
+  </script>
+</body>
+</html>

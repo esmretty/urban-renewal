@@ -84,6 +84,12 @@ async function boot() {
       if (emailEl && me.tier_name_zh) {
         emailEl.textContent = `${me.email || ""}（${me.tier_name_zh}）`;
       }
+      // 維護模式：所有人（含 admin）首頁都導去維護頁
+      // admin 若需要管理，請走 /admin.html（admin 後台不受影響）
+      if (me.maintenance && me.maintenance.enabled) {
+        window.location.replace("/maintenance.html");
+        return;
+      }
     }
   } catch (e) {
     console.warn("fetch /api/me failed:", e);

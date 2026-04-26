@@ -126,6 +126,81 @@ window.loadAll = async function () {
   loadSchedulerStatus();
   loadSchedulerHistory();
   loadWhitelist();
+  loadMaintenance();
+};
+
+
+// ── 網站維護模式 ─────────────────────────────────────────────────────────────
+async function loadMaintenance() {
+  const badge = document.getElementById("maint-status-badge");
+  const meta = document.getElementById("maint-status-meta");
+  const msgInput = document.getElementById("maint-message-input");
+  const btn = document.getElementById("maint-toggle-btn");
+  if (!badge) return;
+  try {
+    const r = await authedFetch("/admin/maintenance");
+    if (!r.ok) { badge.textContent = `載入失敗 (${r.status})`; badge.style.color = "#c0392b"; return; }
+    const data = await r.json();
+    const enabled = !!data.enabled;
+    badge.textContent = enabled ? "🔧 維護中" : "✓ 正常運作";
+    badge.style.color = enabled ? "#c78a00" : "#27ae60";
+    if (meta) {
+      const parts = [];
+      if (data.updated_at) parts.push(`更新於 ${esc(data.updated_at).slice(0, 16).replace("T", " ")}`);
+      if (data.updated_by_email) parts.push(`by ${esc(data.updated_by_email)}`);
+      meta.textContent = parts.join(" · ");
+    }
+    if (msgInput && document.activeElement !== msgInput) {
+      msgInput.value = data.message || "";
+    }
+    if (btn) {
+      btn.textContent = enabled ? "關閉維護模式" : "啟用維護模式";
+      btn.style.background = enabled ? "#27ae60" : "#c78a00";
+    }
+  } catch (e) {
+    badge.textContent = `載入失敗：${e.message}`;
+    badge.style.color = "#c0392b";
+  }
+}
+
+window.toggleMaintenance = async function () {
+  const msgInput = document.getElementById("maint-message-input");
+  const badge = document.getElementById("maint-status-badge");
+  const currentlyEnabled = badge && badge.textContent.includes("維護中");
+  const willEnable = !currentlyEnabled;
+  const message = msgInput ? msgInput.value.trim() : "";
+  const verb = willEnable ? "啟用" : "關閉";
+  if (!confirm(`確定要${verb}維護模式嗎？\n\n${willEnable ? "非 admin 用戶將被導向「系統維護中」頁面。" : "用戶將恢復正常存取首頁。"}`)) return;
+  try {
+    const r = await authedFetch("/admin/maintenance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: willEnable, message }),
+    });
+    if (!r.ok) { alert(`${verb}失敗 (${r.status})`); return; }
+    await loadMaintenance();
+  } catch (e) {
+    alert(`${verb}失敗：${e.message}`);
+  }
+};
+
+window.saveMaintenanceMessage = async function () {
+  const msgInput = document.getElementById("maint-message-input");
+  const badge = document.getElementById("maint-status-badge");
+  const currentlyEnabled = badge && badge.textContent.includes("維護中");
+  const message = msgInput ? msgInput.value.trim() : "";
+  try {
+    const r = await authedFetch("/admin/maintenance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: currentlyEnabled, message }),
+    });
+    if (!r.ok) { alert(`更新失敗 (${r.status})`); return; }
+    await loadMaintenance();
+    alert("訊息已更新");
+  } catch (e) {
+    alert(`更新失敗：${e.message}`);
+  }
 };
 
 
