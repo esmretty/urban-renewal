@@ -233,6 +233,17 @@ window.retryQueueRemove = async function (queueId) {
   } catch (e) { alert("失敗：" + e.message); }
 };
 
+window.retryQueueClearAll = async function () {
+  if (!confirm("⚠ 確定全部移除？\n會清空整個重試佇列，待重試 + 已放棄全部刪掉，無法復原。")) return;
+  try {
+    const r = await authedFetch("/admin/retry_queue", { method: "DELETE" });
+    if (!r.ok) { alert("清空失敗 (" + r.status + ")"); return; }
+    const data = await r.json();
+    alert(`已清空 ${data.deleted ?? 0} 筆`);
+    loadRetryQueue();
+  } catch (e) { alert("失敗：" + e.message); }
+};
+
 
 // ── 網站維護模式 ─────────────────────────────────────────────────────────────
 async function loadMaintenance() {

@@ -1526,6 +1526,29 @@ async def delete_retry_queue_entry(queue_id: str, admin: dict = Depends(require_
     return {"status": "ok"}
 
 
+@app.delete("/admin/retry_queue")
+async def clear_retry_queue(admin: dict = Depends(require_admin)):
+    """admin 清空整個重試佇列（一鍵全刪）。"""
+    db = get_firestore()
+    col = db.collection("retry_queue")
+    count = 0
+    BATCH = 400
+    batch = db.batch()
+    bn = 0
+    for d in col.stream():
+        batch.delete(d.reference)
+        bn += 1
+        count += 1
+        if bn >= BATCH:
+            batch.commit()
+            batch = db.batch()
+            bn = 0
+    if bn > 0:
+        batch.commit()
+    logger.warning(f"[retry-queue] admin {admin.get('email')} 全部移除 {count} 筆")
+    return {"status": "ok", "deleted": count}
+
+
 # ── 物件列表 ──────────────────────────────────────────────────────────────────
 
 @app.get("/api/properties")

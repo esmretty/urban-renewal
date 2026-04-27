@@ -97,6 +97,11 @@
           591 / 永慶 / 信義 物件抓取失敗（enrich timeout 或 detail page 抓不到資料但物件存在）
           → 自動加入此佇列，<b>每 10 分鐘自動重抓</b>，最多 4 次後放棄。
         </p>
+        <div style="margin-bottom:10px;">
+          <button onclick="retryQueueClearAll()" style="padding:4px 12px; background:#c0392b; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:13px;">
+            🗑 全部移除
+          </button>
+        </div>
         <div id="retry-queue-box" style="font-size:13px;">載入中…</div>
       </section>
 
