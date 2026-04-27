@@ -1,6 +1,68 @@
 * { box-sizing: border-box; }
 
-/* ── Admin 雙欄 layout ─────────────────────────────────── */
+/* ── Admin shell：左 sidebar + 右 main（Firebase console 風）── */
+.admin-shell {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 0;
+  align-items: stretch;
+  min-height: calc(100vh - 60px);
+}
+.admin-sidebar {
+  background: #f7f3ea;
+  border-right: 1px solid #e0d9c2;
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.admin-nav {
+  background: transparent;
+  border: none;
+  padding: 12px 18px;
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #5c4a0a;
+  border-left: 3px solid transparent;
+  transition: background 0.12s;
+}
+.admin-nav:hover { background: #ede5d0; }
+.admin-nav.active {
+  background: #fff;
+  border-left-color: #c78a00;
+  color: #2a2a3e;
+  font-weight: 700;
+}
+.admin-main {
+  padding: 12px 16px;
+  overflow-x: hidden;
+}
+.admin-page { display: block; }
+.admin-page.hidden { display: none !important; }
+
+/* 小螢幕：sidebar 收成水平上排（≤900px）*/
+@media (max-width: 900px) {
+  .admin-shell { grid-template-columns: 1fr; min-height: auto; }
+  .admin-sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 8px 4px;
+    border-right: none;
+    border-bottom: 1px solid #e0d9c2;
+    gap: 0;
+  }
+  .admin-nav {
+    border-left: none;
+    border-bottom: 3px solid transparent;
+    padding: 8px 14px;
+    flex-shrink: 0;
+  }
+  .admin-nav.active { border-bottom-color: #c78a00; }
+}
+
+/* 舊 admin-grid（保留 backward compat 但已無用）*/
 .admin-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);

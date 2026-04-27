@@ -37,9 +37,19 @@
     </div>
   </nav>
 
-  <div class="admin-grid">
-    <!-- ── 左欄：管理操作 ─────────────────────────────────── -->
-    <div class="admin-col admin-col--left">
+  <div class="admin-shell">
+    <!-- ── 左側 sidebar 導覽（三頁切換）─────────────────────── -->
+    <aside class="admin-sidebar">
+      <button class="admin-nav active" data-page="dashboard" onclick="switchAdminPage('dashboard')">📊 控制台</button>
+      <button class="admin-nav" data-page="properties" onclick="switchAdminPage('properties')">🏠 物件資料</button>
+      <button class="admin-nav" data-page="members" onclick="switchAdminPage('members')">👥 會員資料</button>
+    </aside>
+
+    <!-- ── 右側內容區 ─────────────────────────────────────── -->
+    <main class="admin-main">
+
+    <!-- ════════════ 控制台 page ════════════ -->
+    <div class="admin-page" data-page="dashboard">
 
       <section class="panel">
         <h2>資料總覽</h2>
@@ -200,10 +210,38 @@
           「封存中央 DB」會把中央所有物件標為 archived（軟刪除），探索 tab 看不到，但用戶 watchlist 仍能看到。
         </p>
       </section>
-    </div>
 
-    <!-- ── 右欄：資料瀏覽 ─────────────────────────────────── -->
-    <div class="admin-col admin-col--right">
+      <section class="panel">
+        <h2>操作紀錄（手動 + scheduler）</h2>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; font-size:13px;">
+          <label>過濾：
+            <select id="runlog-filter" onchange="loadRunLogs()">
+              <option value="">全部</option>
+              <option value="manual">手動</option>
+              <option value="scheduler">scheduler</option>
+              <option value="verify_alive">偵測下架</option>
+              <option value="retry_queue">重試佇列</option>
+            </select>
+          </label>
+          <label>顯示筆數：
+            <select id="runlog-limit" onchange="loadRunLogs()">
+              <option value="100">100</option>
+              <option value="200" selected>200</option>
+              <option value="500">500</option>
+            </select>
+          </label>
+          <button onclick="loadRunLogs()">重新整理</button>
+          <span id="runlog-count" style="color:#666;"></span>
+        </div>
+        <div id="runlog-box" style="max-height:400px; overflow-y:auto; font-size:12px;">載入中…</div>
+      </section>
+
+    </div>
+    <!-- ════════════ /控制台 page ════════════ -->
+
+
+    <!-- ════════════ 物件資料 page ════════════ -->
+    <div class="admin-page hidden" data-page="properties">
 
       <section class="panel">
         <h2>物件列表</h2>
@@ -241,30 +279,12 @@
         </div>
       </section>
 
-      <section class="panel">
-        <h2>操作紀錄（手動 + scheduler）</h2>
-        <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; font-size:13px;">
-          <label>過濾：
-            <select id="runlog-filter" onchange="loadRunLogs()">
-              <option value="">全部</option>
-              <option value="manual">手動</option>
-              <option value="scheduler">scheduler</option>
-              <option value="verify_alive">偵測下架</option>
-              <option value="retry_queue">重試佇列</option>
-            </select>
-          </label>
-          <label>顯示筆數：
-            <select id="runlog-limit" onchange="loadRunLogs()">
-              <option value="100">100</option>
-              <option value="200" selected>200</option>
-              <option value="500">500</option>
-            </select>
-          </label>
-          <button onclick="loadRunLogs()">重新整理</button>
-          <span id="runlog-count" style="color:#666;"></span>
-        </div>
-        <div id="runlog-box" style="max-height:400px; overflow-y:auto; font-size:12px;">載入中…</div>
-      </section>
+    </div>
+    <!-- ════════════ /物件資料 page ════════════ -->
+
+
+    <!-- ════════════ 會員資料 page ════════════ -->
+    <div class="admin-page hidden" data-page="members">
 
       <section class="panel">
         <h2>用戶列表</h2>
@@ -284,7 +304,11 @@
         </div>
         <div id="whitelist-box" style="font-size:13px;">載入中…</div>
       </section>
+
     </div>
+    <!-- ════════════ /會員資料 page ════════════ -->
+
+    </main>
   </div>
 </div>
 

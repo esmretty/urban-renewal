@@ -81,6 +81,10 @@ function showApp() {
   document.getElementById("login-screen").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
   document.getElementById("user-email").textContent = _user.email;
+  // 還原上次選的 admin 頁面
+  let lastPage = "dashboard";
+  try { lastPage = localStorage.getItem("admin_page") || "dashboard"; } catch {}
+  if (typeof switchAdminPage === "function") switchAdminPage(lastPage);
   loadAll();
 }
 
@@ -112,6 +116,18 @@ async function loadPropList() {
   const data = await r.json();
   _allDocs = data.items || [];
 }
+
+// ── Admin sidebar 三頁切換（控制台 / 物件資料 / 會員資料）──────
+window.switchAdminPage = function (page) {
+  document.querySelectorAll(".admin-nav").forEach(b => {
+    b.classList.toggle("active", b.dataset.page === page);
+  });
+  document.querySelectorAll(".admin-page").forEach(p => {
+    p.classList.toggle("hidden", p.dataset.page !== page);
+  });
+  // 記住上次選的頁面
+  try { localStorage.setItem("admin_page", page); } catch {}
+};
 
 window.loadAll = async function () {
   const [statsR, usersR] = await Promise.all([
