@@ -1202,6 +1202,57 @@ async def admin_run_logs(limit: int = 200, trigger_prefix: Optional[str] = None,
     return {"count": len(items), "items": items}
 
 
+@app.get("/admin/line/status")
+async def admin_line_status(admin: dict = Depends(require_admin)):
+    """LINE 通知設定狀態：token / user_id 是否設定 + 最近通知統計。"""
+    import os as _os
+    token = _os.getenv("LINE_CHANNEL_TOKEN", "").strip()
+    user_id = _os.getenv("LINE_USER_ID", "").strip()
+    # 統計最近通知過的物件數（DB 內 line_notified_at 不為 None）
+    notified_count = 0
+    last_notified = None
+    try:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        docs = list(get_col().where(filter=FieldFilter("line_notified_at", ">", "")).limit(500).stream())
+        notified_count = len(docs)
+        if docs:
+            last_notified = max(d.to_dict().get("line_notified_at", "") for d in docs)
+    except Exception as e:
+        logger.warning(f"line status query: {e}")
+    return {
+        "configured": bool(token and user_id),
+        "token_set": bool(token),
+        "token_preview": (token[:6] + "..." + token[-4:]) if len(token) > 10 else "(empty)",
+        "user_id_set": bool(user_id),
+        "user_id_preview": (user_id[:6] + "...") if len(user_id) > 7 else "(empty)",
+        "notified_property_count": notified_count,
+        "last_notified_at": last_notified,
+        "trigger_threshold": "都更/危老/防災都更 任一情境 ≥ 3.0 倍",
+    }
+
+
+@app.post("/admin/line/test")
+async def admin_line_test(admin: dict = Depends(require_admin)):
+    """送一則 LINE 測試訊息給 LINE_USER_ID。確認 token / user_id 設定 OK。"""
+    from analysis.line_notify import push_line
+    from datetime import datetime as _dt
+    msg = (
+        f"🔔 都更神探R 測試訊息\n"
+        f"\n"
+        f"觸發者：{admin.get('email', 'admin')}\n"
+        f"時間：{_dt.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"\n"
+        f"如果你看到這則訊息，表示 LINE 通知設定 OK ✓"
+    )
+    ok = push_line(msg)
+    if ok:
+        return {"status": "ok", "message": "測試訊息已送出，請查看 LINE"}
+    import os as _os
+    if not _os.getenv("LINE_CHANNEL_TOKEN") or not _os.getenv("LINE_USER_ID"):
+        return {"status": "error", "message": "未設定 LINE_CHANNEL_TOKEN 或 LINE_USER_ID 環境變數"}
+    return {"status": "error", "message": "送出失敗（檢查 token 是否有效、bot 是否已加好友）"}
+
+
 @app.get("/admin/run-sessions")
 async def admin_run_sessions(limit: int = 50, admin: dict = Depends(require_admin)):
     """回傳最近的「執行紀錄」session（依 batch_start/end 或 verify_alive_start/end 分組）。

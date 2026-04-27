@@ -146,6 +146,7 @@ window.loadAll = async function () {
   loadMaintenance();
   loadRetryQueue();
   loadRunSessions();
+  loadLineStatus();
   // 頁面載入時若 verify-alive 還在跑 → 自動恢復 polling 顯示進度
   _resumeVerifyAlivePollIfRunning();
 };
@@ -162,6 +163,61 @@ async function _resumeVerifyAlivePollIfRunning() {
     }
   } catch {}
 }
+
+// ── LINE 通知設定 panel ────────────────────────────────────────
+window.loadLineStatus = async function () {
+  const box = document.getElementById("line-status-box");
+  if (!box) return;
+  try {
+    const r = await authedFetch("/admin/line/status");
+    if (!r.ok) {
+      box.innerHTML = `<span style="color:#c0392b;">載入失敗 HTTP ${r.status}</span>`;
+      return;
+    }
+    const s = await r.json();
+    const stateIcon = s.configured ? "✓" : "✗";
+    const stateColor = s.configured ? "#27ae60" : "#c0392b";
+    const stateText = s.configured ? "已設定" : "未設定";
+    const lastTxt = s.last_notified_at
+      ? new Date(s.last_notified_at).toLocaleString("zh-TW", {hour12: false})
+      : "—";
+    box.innerHTML = `
+      <div style="font-weight:700; color:${stateColor};">${stateIcon} 狀態：${stateText}</div>
+      <div style="margin-top:4px;">
+        Channel Token：<code>${esc(s.token_preview)}</code>
+        ${s.token_set ? '<span style="color:#27ae60">✓</span>' : '<span style="color:#c0392b">未設</span>'}
+      </div>
+      <div>
+        User ID：<code>${esc(s.user_id_preview)}</code>
+        ${s.user_id_set ? '<span style="color:#27ae60">✓</span>' : '<span style="color:#c0392b">未設</span>'}
+      </div>
+      <div style="margin-top:6px; color:#666; font-size:12px;">
+        觸發條件：${esc(s.trigger_threshold)}
+      </div>
+      <div style="margin-top:4px; color:#666; font-size:12px;">
+        已通知物件數：${s.notified_property_count} 筆 ｜ 最近通知：${esc(lastTxt)}
+      </div>
+    `;
+  } catch (e) {
+    box.innerHTML = `<span style="color:#c0392b;">載入失敗：${esc(e.message)}</span>`;
+  }
+};
+
+window.testLineNotify = async function () {
+  const resultEl = document.getElementById("line-test-result");
+  if (resultEl) resultEl.textContent = "送出中…";
+  try {
+    const r = await authedFetch("/admin/line/test", { method: "POST" });
+    const data = await r.json();
+    if (data.status === "ok") {
+      if (resultEl) resultEl.innerHTML = `<span style="color:#27ae60;">✓ ${esc(data.message)}</span>`;
+    } else {
+      if (resultEl) resultEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(data.message)}</span>`;
+    }
+  } catch (e) {
+    if (resultEl) resultEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(e.message)}</span>`;
+  }
+};
 
 // ── 執行紀錄 session view（依 batch_start/end 或 verify_alive_start/end 分組）──
 const _ACTION_LABEL = {

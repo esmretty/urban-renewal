@@ -212,6 +212,18 @@
       </section>
 
       <section class="panel">
+        <h2>LINE 通知設定（高獲利物件警示）</h2>
+        <p style="font-size:12px; color:#666; margin: 0 0 8px;">
+          物件分析後，若 都更/危老/防災都更 任一試算情境的獲利倍數 ≥ 3.0 → 自動 push LINE。
+          設定方式：在 VM 的 <code>~/urban-renewal/.env</code> 加
+          <code>LINE_CHANNEL_TOKEN=xxx</code> 和 <code>LINE_USER_ID=Uxxx</code>，restart service。
+        </p>
+        <div id="line-status-box" style="font-size:13px; padding: 8px 10px; background:#f7f3ea; border-radius:4px; margin-bottom: 8px;">載入中…</div>
+        <button onclick="testLineNotify()" style="padding:6px 14px;">📨 發送測試訊息</button>
+        <span id="line-test-result" style="margin-left:10px; font-size:13px;"></span>
+      </section>
+
+      <section class="panel">
         <h2>執行紀錄（手動 + scheduler + 偵測下架）</h2>
         <p style="font-size:12px; color:#666; margin: 0 0 8px;">
           每個 row = 一次執行（batch 或 verify-alive）。點 row 看每筆物件被怎麼處理。

@@ -12,6 +12,13 @@ import logging
 import argparse
 import uvicorn
 
+# 載入 .env（LINE_CHANNEL_TOKEN / LINE_USER_ID / Anthropic 等）
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass   # 沒裝 python-dotenv 也不擋啟動
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
