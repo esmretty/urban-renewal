@@ -16,11 +16,26 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 10px 20px;
+  padding: 10px 24px;
   background: #ffffff;
   border-bottom: 1px solid #e3dfd2;
   font-size: 14px;
 }
+/* dark variant — 與 admin 同色系 */
+.topbar.topbar--dark {
+  background: #2c3e50;
+  border-bottom: none;
+  color: #fff;
+}
+.topbar.topbar--dark .topbar__title { color: #fff; }
+.topbar.topbar--dark .user-email { color: #d4d8dd; }
+.topbar.topbar--dark .tb-btn--ghost {
+  background: transparent;
+  border: 1px solid #7f8c8d;
+  color: #fff;
+}
+.topbar.topbar--dark .tb-btn--ghost:hover { background: #34495e; }
+
 .topbar__brand {
   display: flex;
   align-items: center;
@@ -39,6 +54,80 @@ body {
   color: #1f1f2e;
   font-size: 21px;
   letter-spacing: 0.5px;
+}
+
+/* ── App shell：左 sidebar + 右 main（與 admin 同風格）── */
+.app-shell {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 0;
+  min-height: calc(100vh - 56px);
+  align-items: stretch;
+}
+.app-sidebar {
+  background: #f7f3ea;
+  border-right: 1px solid #e0d9c2;
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.app-nav {
+  background: transparent;
+  border: none;
+  padding: 12px 18px;
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #5c4a0a;
+  border-left: 3px solid transparent;
+  transition: background 0.12s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.app-nav:hover { background: #ede5d0; }
+.app-nav.active {
+  background: #fff;
+  border-left-color: #c78a00;
+  color: #2a2a3e;
+  font-weight: 700;
+}
+.app-main {
+  min-width: 0;          /* grid item，避免內容撐爆 */
+  background: #faf8f3;
+}
+.nav-count {
+  display: inline-block;
+  background: #c78a00;
+  color: #fff;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 700;
+  margin-left: auto;
+}
+
+/* 小螢幕：sidebar 收成水平上排 tabs */
+@media (max-width: 900px) {
+  .app-shell { grid-template-columns: 1fr; min-height: auto; }
+  .app-sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 6px 4px;
+    border-right: none;
+    border-bottom: 1px solid #e0d9c2;
+    gap: 0;
+  }
+  .app-nav {
+    border-left: none;
+    border-bottom: 3px solid transparent;
+    padding: 8px 14px;
+    flex-shrink: 0;
+  }
+  .app-nav.active { border-bottom-color: #c78a00; }
+  .nav-count { margin-left: 4px; }
 }
 .topbar__stats {
   color: #6b7280;

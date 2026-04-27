@@ -91,6 +91,28 @@ def dequeue(doc_id: str):
     get_firestore().collection(QUEUE_COLLECTION).document(doc_id).delete()
 
 
+def dequeue_by_source_id(source_id: str) -> int:
+    """用 source_id 從 queue 移除 entry（給 scraper 主動清「合法 skip」用，
+    例：永慶 listing 樓高 > 5 確認非公寓 → 不再重試）。
+    回傳：刪了幾筆。"""
+    from database.db import get_firestore
+    from google.cloud.firestore_v1.base_query import FieldFilter
+    if not source_id:
+        return 0
+    docs = list(get_firestore().collection(QUEUE_COLLECTION)
+                .where(filter=FieldFilter("source_id", "==", source_id)).stream())
+    n = 0
+    for d in docs:
+        try:
+            d.reference.delete()
+            n += 1
+        except Exception:
+            pass
+    if n:
+        logger.info(f"[retry-queue] dequeue_by_source_id {source_id} 刪了 {n} 筆")
+    return n
+
+
 def list_pending(limit: int = 200) -> list:
     """列出所有 pending 的 entry（給 admin UI / 排程 loop 用）。"""
     from database.db import get_firestore

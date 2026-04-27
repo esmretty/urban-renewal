@@ -42,8 +42,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // 預設打開「搜尋網上物件」tab，並依當前 filter 立刻跑一次搜尋
   _activeTab = "explore";
   document.body.dataset.tab = "explore";
-  document.querySelectorAll(".tab-btn").forEach(btn => {
+  document.querySelectorAll(".tab-btn, .app-nav").forEach(btn => {
     btn.classList.toggle("tab-btn--active", btn.dataset.tab === "explore");
+    btn.classList.toggle("active", btn.dataset.tab === "explore");
   });
   const exploreSearch = document.getElementById("explore-search");
   if (exploreSearch) exploreSearch.classList.remove("d-none");
@@ -151,8 +152,9 @@ let _exploreResults = [];       // 探索 tab 暫存結果（不持久）
 window.switchTab = function (tab) {
   _activeTab = tab;
   _currentPage = 1;
-  document.querySelectorAll(".tab-btn").forEach(btn => {
+  document.querySelectorAll(".tab-btn, .app-nav").forEach(btn => {
     btn.classList.toggle("tab-btn--active", btn.dataset.tab === tab);
+    btn.classList.toggle("active", btn.dataset.tab === tab);
   });
   // 觀察清單：只顯示 client-side filter bar
   // 搜尋網上物件：顯示 server-side 搜尋表單

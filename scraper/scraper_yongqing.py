@@ -639,6 +639,13 @@ def scrape_yongqing(
                 progress_callback(
                     f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：總樓層 {tf} 樓 > 5（型態={item.get('_yongqing_type_raw','-')}）"
                 )
+                # 確認是非公寓 → 把這 src_id 從 retry queue 清掉，不再重試
+                # （之前若曾失敗入 queue，retry worker 永遠不會建 doc 卻一直 re-enqueue）
+                try:
+                    from database.retry_queue import dequeue_by_source_id
+                    dequeue_by_source_id(item.get("source_id"))
+                except Exception as _de:
+                    logger.warning(f"dequeue_by_source_id 失敗 {item.get('source_id')}: {_de}")
                 continue
 
             # Stage 2：通過樓高 filter 的才開 Playwright 拿座標（~7-10 秒/筆）

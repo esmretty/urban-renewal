@@ -452,7 +452,13 @@ async def _retry_queue_loop():
                     continue
                 try:
                     # 用既有 _scrape_single_url 重抓（會自動分流 591/永慶）
-                    await asyncio.to_thread(_scrape_single_url, url, src_id, False)
+                    res = await asyncio.to_thread(_scrape_single_url, url, src_id, False)
+                    # 「合法 skip」(非公寓樓層 > 5)：scraper 已知這 src_id 永遠不該建 doc
+                    # → dequeue 且不再重試，避免無限循環
+                    if isinstance(res, dict) and res.get("status") == "skipped_non_apartment":
+                        dequeue(doc_id_in_queue)
+                        logger.info(f"[retry-queue] ⏭ {src_id} 合法 skip（非公寓），從佇列移除")
+                        continue
                     # 重抓完成 → 驗證是否真的有 doc + 有核心欄位
                     from database.db import find_doc_by_source_id as _fd
                     new_doc_id, doc_data = _fd(src_id)
@@ -460,7 +466,7 @@ async def _retry_queue_loop():
                         dequeue(doc_id_in_queue)
                         logger.info(f"[retry-queue] ✓ 重抓成功 {src_id}，從佇列移除")
                     else:
-                        # 重抓還是抓不全 → 重新 enqueue（attempts +1）
+                        # 重抓還是抓不全 → 重新 enqueue（attempts +1，到 MAX_ATTEMPTS 自動 abandon）
                         enqueue(src_id, entry.get("source") or "591", url,
                                 error="retry: still missing core fields")
                         logger.warning(f"[retry-queue] ⚠ 重抓 {src_id} 仍失敗，已 re-enqueue")
@@ -3915,6 +3921,16 @@ def _scrape_single_url_yongqing(url: str, src_id: str, is_reanalyze: bool = Fals
     item = scrape_yongqing_single(url)
     if not item:
         return {"status": "error", "message": "永慶詳情頁解析失敗（可能下架或頁面結構變了）"}
+
+    # 樓高 > 5 → 非公寓，不分析。順手清掉 retry queue 避免無限重試
+    _tf = item.get("total_floors")
+    if _tf and int(_tf) > 5:
+        try:
+            from database.retry_queue import dequeue_by_source_id
+            dequeue_by_source_id(src_id)
+        except Exception: pass
+        return {"status": "skipped_non_apartment", "source_id": src_id,
+                "message": f"樓高 {_tf} 樓 > 5，非公寓，跳過分析"}
 
     item["scrape_session_at"] = now_tw_iso()
     item["list_rank"] = 0

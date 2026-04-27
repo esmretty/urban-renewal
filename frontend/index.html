@@ -10,8 +10,8 @@
 </head>
 <body>
 
-<!-- ── 頂部導覽 ── -->
-<nav class="topbar app-container">
+<!-- ── 頂部導覽（dark navy，與 admin 同風格）── -->
+<nav class="topbar topbar--dark">
   <div class="topbar__brand">
     <img src="/static/logo.png" alt="都更神探R" class="topbar__logo-img">
     <span class="topbar__title">都更神探R</span>
@@ -40,11 +40,13 @@
   </div>
 </nav>
 
-<!-- ── Tab 切換 ── -->
-<div class="tab-bar app-container">
-  <button class="tab-btn" data-tab="explore" onclick="switchTab('explore')">搜尋網上物件</button>
-  <button class="tab-btn" data-tab="watchlist" onclick="switchTab('watchlist')">觀察清單 <span id="watchlist-count" class="tab-count"></span></button>
-</div>
+<!-- ── 主 shell：左 sidebar + 右 main（與 admin 同風格）── -->
+<div class="app-shell">
+  <aside class="app-sidebar">
+    <button class="app-nav" data-tab="explore" onclick="switchTab('explore')">🔍 搜尋網上物件</button>
+    <button class="app-nav" data-tab="watchlist" onclick="switchTab('watchlist')">⭐ 觀察清單 <span id="watchlist-count" class="nav-count"></span></button>
+  </aside>
+  <main class="app-main">
 
 <!-- ── 觀察清單專屬：新增物件（三欄固定高度） ── -->
 <section id="sec-capture" class="sec-capture app-container wl-only">
@@ -283,6 +285,10 @@
   </div>
 
 </div>
+
+  </main>
+</div>
+<!-- /app-shell -->
 
 <!-- ── 物件詳情 Modal ── -->
 <div class="modal fade" id="detailModal" tabindex="-1">
