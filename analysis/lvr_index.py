@@ -451,8 +451,11 @@ def _reverse_geocode_lane(lat: float, lng: float, road_hint: str, lane_hint: str
 
 
 def _normalize_addr_for_dedup(addr: str) -> str:
-    """字元標準化：臺↔台、之↔-、全形/半形數字等，用於 dedup 比對。
-    不改動顯示用的原字串，只作為 dedup key。"""
+    """字元標準化：臺↔台、之↔-、全形/半形數字、剝 city/district 前綴等，用於 dedup 比對。
+    不改動顯示用的原字串，只作為 dedup key。
+
+    Bug 修：之前同址兩種寫法（含 vs 不含「台北市信義區」前綴）會被當不同候選顯示給用戶兩次。
+    """
     if not addr:
         return ""
     s = addr
@@ -461,6 +464,11 @@ def _normalize_addr_for_dedup(addr: str) -> str:
     # 全形數字 → 半形
     s = s.translate(str.maketrans("0123456789", "0123456789"))
     s = s.replace(" ", "")
+    # 剝 city 前綴
+    import re as _re
+    s = _re.sub(r"^(台北市|新北市|桃園市|台中市|台南市|高雄市)", "", s)
+    # 剝 district 前綴（單一個 X區）
+    s = _re.sub(r"^([一-龥]{2,3}區)", "", s)
     return s
 
 

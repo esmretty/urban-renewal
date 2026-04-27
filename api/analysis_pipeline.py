@@ -743,8 +743,58 @@ def analyze_single_property(
                 # 地址在巷弄但 all_roads + CQL 都查不到 → 寬度不明（不 fallback 到主道）
                 if lane_missing_unknown:
                     doc_data["road_width_name"] = addr_lane_full
+                    # 查同段（同路+同段）其他巷弄的寬度當參考值給用戶眼測
+                    nearby_hint = ""
+                    try:
+                        import re as _re_seg
+                        # 從 addr_lane_full 抽出「X路Y段」prefix（例：仁愛路四段496巷 → 仁愛路四段）
+                        seg_m = _re_seg.match(
+                            r"([一-龥]+(?:路|街|大道)(?:[一二三四五六七八九十]段)?)",
+                            addr_lane_full,
+                        )
+                        if seg_m:
+                            seg_prefix = seg_m.group(1)
+                            from analysis.gov_gis import TAIPEI_WFS_URL, TAIPEI_ROADSIZE_TYPENAME
+                            import httpx as _httpx
+                            r2 = _httpx.get(
+                                TAIPEI_WFS_URL,
+                                params={
+                                    "service": "WFS", "request": "GetFeature", "version": "1.0.0",
+                                    "outputFormat": "json", "typename": TAIPEI_ROADSIZE_TYPENAME,
+                                    "CQL_FILTER": f"road_name1 LIKE '{seg_prefix}%巷'",
+                                    "maxFeatures": 200,
+                                },
+                                timeout=10, verify=False,
+                            )
+                            seen_w = {}
+                            for f3 in (r2.json() or {}).get("features", []):
+                                p3 = f3.get("properties", {})
+                                rn = p3.get("road_name1") or ""
+                                # 只要「X路Y段Z巷」純路+段+巷（不要弄）
+                                if not _re_seg.fullmatch(rf"{_re_seg.escape(seg_prefix)}\d+巷", rn):
+                                    continue
+                                w = (p3.get("road_width") or "").replace("M", "").replace("m", "").strip()
+                                try: w_f = float(w)
+                                except Exception: continue
+                                seen_w.setdefault(rn, w_f)
+                            if seen_w:
+                                widths = sorted(set(seen_w.values()))
+                                if len(widths) == 1:
+                                    nearby_hint = f"（{seg_prefix}所有收錄巷弄都是 {widths[0]:.0f}m，可能寬度相近）"
+                                else:
+                                    # 多個值：算眾數 + 範圍
+                                    from collections import Counter
+                                    cnt = Counter(seen_w.values())
+                                    common_w, common_n = cnt.most_common(1)[0]
+                                    total = len(seen_w)
+                                    nearby_hint = (
+                                        f"（{seg_prefix}附近巷弄寬度多為 {common_w:.0f}m"
+                                        f"（{common_n}/{total} 條），範圍 {min(widths):.0f}~{max(widths):.0f}m）"
+                                    )
+                    except Exception as _ne:
+                        logger.debug(f"nearby hint 失敗: {_ne}")
                     doc_data["road_width_vision_reason"] = (
-                        f"地址在「{addr_lane_full}」內，該巷弄未登記於政府路寬圖資，寬度不明。"
+                        f"地址在「{addr_lane_full}」內，該巷弄未登記於政府路寬圖資，寬度不明。{nearby_hint}"
                     )
                     doc_data["road_width_unknown"] = True
                     doc_data.pop("road_width_m", None)
