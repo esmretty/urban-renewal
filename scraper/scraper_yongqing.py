@@ -595,11 +595,11 @@ def scrape_yongqing(
                 _human_sleep()
                 continue
 
-            # 過濾非公寓：詳情頁抓到實際型態，不是公寓就跳過
-            actual_type = item.get("building_type")
-            if actual_type and actual_type != "公寓":
+            # 過濾：只看樓高 — 5 樓含以下分析（不論網頁標哪種型態，4-5F 老建築都當公寓看）
+            tf = item.get("total_floors")
+            if tf and int(tf) > 5:
                 progress_callback(
-                    f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：型態 {item.get('_yongqing_type_raw') or actual_type} 不是公寓"
+                    f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：總樓層 {tf} 樓 > 5（型態={item.get('_yongqing_type_raw','-')}）"
                 )
                 _human_sleep()
                 continue
