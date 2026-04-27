@@ -855,16 +855,18 @@ window.applySchedulerConfig = async function () {
       interval_hr: parseInt(_schedDraft.interval_hr) || 3,
       commands: _schedDraft.commands,
     };
-    console.log("[scheduler] 套用 payload", payload);
+    console.log("[scheduler] POST payload:", JSON.stringify(payload, null, 2));
     const r = await authedFetch("/admin/scheduler/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    console.log("[scheduler] response status:", r.status);
     if (!r.ok) {
       let msg = `HTTP ${r.status}`;
       try {
         const body = await r.json();
+        console.error("[scheduler] error body:", body);
         // FastAPI 422 的 detail 是 list of validation errors；HTTPException 則是 string
         if (typeof body.detail === "string") {
           msg = body.detail;
@@ -877,8 +879,14 @@ window.applySchedulerConfig = async function () {
       alert("套用失敗：" + msg);
       return;
     }
-    loadSchedulerStatus();
-  } catch (e) { alert("套用失敗：" + e.message); }
+    // 成功：強制清空 draft → 下次 loadSchedulerStatus 會從 server 重新 hydrate，
+    // 確保 UI 顯示與 server 一致（不會殘留 stale draft 假裝已套用）
+    _schedDraft = { interval_hr: 1, commands: [] };
+    await loadSchedulerStatus();
+  } catch (e) {
+    console.error("[scheduler] apply failed:", e);
+    alert("套用失敗：" + e.message);
+  }
 };
 
 window.runOcrScan = async function () {
