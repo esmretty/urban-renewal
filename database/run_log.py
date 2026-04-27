@@ -102,6 +102,88 @@ def list_recent(limit: int = 200, trigger_prefix: Optional[str] = None) -> list[
         return []
 
 
+# 標示 session 開始/結束的 action types（用於分組）
+_START_ACTIONS = {"batch_start", "verify_alive_start"}
+_END_ACTIONS = {"batch_end", "verify_alive_end"}
+
+
+def list_sessions(limit: int = 50) -> list[dict]:
+    """把 action logs 依 trigger + start/end 分組成 session。
+    每個 session = 從 *_start 到 *_end 之間（同 trigger）的所有 action。
+    回傳：依 started_at desc 排序，最多 limit 個 session。"""
+    try:
+        from database.db import get_firestore
+        # 拉一段時間內所有 logs（避免漏掉 session 起點）
+        all_docs = list(
+            get_firestore().collection(_FS_COLLECTION)
+            .order_by("at", direction="DESCENDING").limit(2000).stream()
+        )
+        # 依 trigger 分群、找成對 start/end
+        # 簡化：按時間順序掃，遇 start 開新 session、遇 end 關掉 session
+        all_logs = []
+        for d in all_docs:
+            x = d.to_dict() or {}
+            x["_id"] = d.id
+            all_logs.append(x)
+        all_logs.sort(key=lambda x: x.get("at") or "")   # asc
+
+        # open_sessions: trigger → session dict（最近一個未關的）
+        open_sessions: dict = {}
+        sessions: list = []
+        for log in all_logs:
+            t = log.get("trigger") or ""
+            a = log.get("action") or ""
+            if a in _START_ACTIONS:
+                # 若同 trigger 有未關的 session → 強制關掉（孤兒）
+                prev = open_sessions.pop(t, None)
+                if prev:
+                    prev["status"] = "interrupted"
+                    sessions.append(prev)
+                # 開新 session
+                open_sessions[t] = {
+                    "trigger": t,
+                    "started_at": log.get("at"),
+                    "ended_at": None,
+                    "status": "running",
+                    "start_log": log,
+                    "end_log": None,
+                    "actions": [],
+                    "counts": {},   # action_type → count
+                }
+            elif a in _END_ACTIONS:
+                sess = open_sessions.pop(t, None)
+                if sess:
+                    sess["ended_at"] = log.get("at")
+                    sess["status"] = "done"
+                    sess["end_log"] = log
+                    sess["counts"][a] = sess["counts"].get(a, 0) + 1
+                    sessions.append(sess)
+                else:
+                    # 孤兒 end（找不到對應 start）
+                    sessions.append({
+                        "trigger": t, "started_at": None, "ended_at": log.get("at"),
+                        "status": "orphan_end", "start_log": None, "end_log": log,
+                        "actions": [log], "counts": {a: 1},
+                    })
+            else:
+                # 內部 action：歸入 open session（若有同 trigger）
+                sess = open_sessions.get(t)
+                if sess:
+                    sess["actions"].append(log)
+                    sess["counts"][a] = sess["counts"].get(a, 0) + 1
+
+        # 還沒關的 session 也加進結果（標 running）
+        for sess in open_sessions.values():
+            sessions.append(sess)
+
+        # 依 started_at desc 排序
+        sessions.sort(key=lambda s: s.get("started_at") or "", reverse=True)
+        return sessions[:limit]
+    except Exception as e:
+        logger.warning("[run_log] list_sessions failed: %s", e)
+        return []
+
+
 def prune_old(keep_max: int = _FS_MAX_KEEP) -> int:
     """超過 keep_max 筆就刪最舊的（best-effort）。回傳刪了幾筆。"""
     try:

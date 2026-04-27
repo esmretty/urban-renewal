@@ -1196,6 +1196,16 @@ async def admin_run_logs(limit: int = 200, trigger_prefix: Optional[str] = None,
     return {"count": len(items), "items": items}
 
 
+@app.get("/admin/run-sessions")
+async def admin_run_sessions(limit: int = 50, admin: dict = Depends(require_admin)):
+    """回傳最近的「執行紀錄」session（依 batch_start/end 或 verify_alive_start/end 分組）。
+    每個 session 含 trigger / started_at / ended_at / status / counts / actions。
+    actions 是該 session 內所有 per-object log 條目（new/enrich/dup_merge/archive/prune 等）。"""
+    from database.run_log import list_sessions
+    sessions = list_sessions(limit=min(int(limit), 200))
+    return {"count": len(sessions), "items": sessions}
+
+
 class SchedulerToggleReq(BaseModel):
     enabled: bool
     type: Optional[str] = None   # "scan" / "verify_alive" / None=兩個都 toggle（legacy）

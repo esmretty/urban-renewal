@@ -212,28 +212,15 @@
       </section>
 
       <section class="panel">
-        <h2>操作紀錄（手動 + scheduler）</h2>
+        <h2>執行紀錄（手動 + scheduler + 偵測下架）</h2>
+        <p style="font-size:12px; color:#666; margin: 0 0 8px;">
+          每個 row = 一次執行（batch 或 verify-alive）。點 row 看每筆物件被怎麼處理。
+        </p>
         <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; font-size:13px;">
-          <label>過濾：
-            <select id="runlog-filter" onchange="loadRunLogs()">
-              <option value="">全部</option>
-              <option value="manual">手動</option>
-              <option value="scheduler">scheduler</option>
-              <option value="verify_alive">偵測下架</option>
-              <option value="retry_queue">重試佇列</option>
-            </select>
-          </label>
-          <label>顯示筆數：
-            <select id="runlog-limit" onchange="loadRunLogs()">
-              <option value="100">100</option>
-              <option value="200" selected>200</option>
-              <option value="500">500</option>
-            </select>
-          </label>
-          <button onclick="loadRunLogs()">重新整理</button>
-          <span id="runlog-count" style="color:#666;"></span>
+          <button onclick="loadRunSessions()">重新整理</button>
+          <span id="runsession-count" style="color:#666;"></span>
         </div>
-        <div id="runlog-box" style="max-height:400px; overflow-y:auto; font-size:12px;">載入中…</div>
+        <div id="runsession-box" style="max-height:500px; overflow-y:auto; font-size:13px;">載入中…</div>
       </section>
 
     </div>
@@ -309,6 +296,22 @@
     <!-- ════════════ /會員資料 page ════════════ -->
 
     </main>
+  </div>
+</div>
+
+<!-- Run session detail modal -->
+<div id="session-modal" class="modal hidden" onclick="if(event.target===this)closeSessionModal()">
+  <div class="modal-card" style="max-width: 900px; width: 94vw;">
+    <div class="modal-head">
+      <h3 id="session-modal-title">執行紀錄詳情</h3>
+      <button onclick="closeSessionModal()">×</button>
+    </div>
+    <div id="session-modal-body" style="padding: 12px 18px; max-height: 70vh; overflow-y: auto;">
+      載入中…
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeSessionModal()">關閉</button>
+    </div>
   </div>
 </div>
 

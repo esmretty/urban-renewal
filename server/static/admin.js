@@ -145,7 +145,7 @@ window.loadAll = async function () {
   loadWhitelist();
   loadMaintenance();
   loadRetryQueue();
-  loadRunLogs();
+  loadRunSessions();
   // 頁面載入時若 verify-alive 還在跑 → 自動恢復 polling 顯示進度
   _resumeVerifyAlivePollIfRunning();
 };
@@ -163,7 +163,181 @@ async function _resumeVerifyAlivePollIfRunning() {
   } catch {}
 }
 
-// ── 操作紀錄（手動 + scheduler 每次 action 都記錄到物件層級）──────────
+// ── 執行紀錄 session view（依 batch_start/end 或 verify_alive_start/end 分組）──
+const _ACTION_LABEL = {
+  batch_start: "🚀 開始", batch_end: "🏁 結束",
+  new: "✓ 新", enrich: "↻ 補", dup_merge: "× 合併",
+  replacement: "🔁 換物件", cross_source: "🔗 跨來源",
+  verify_alive_start: "🔍 開始驗活", verify_alive_end: "✓ 完成驗活",
+  verify_alive_archive: "📦 archive", verify_alive_prune: "✂ 清死連結",
+  retry_attempt: "♻ 重試", error: "❌ 錯誤",
+};
+const _ACTION_COLOR = {
+  batch_start: "#2980b9", batch_end: "#27ae60",
+  new: "#27ae60", enrich: "#c78a00", dup_merge: "#7f8c8d",
+  replacement: "#e67e22", cross_source: "#9b59b6",
+  verify_alive_start: "#2980b9", verify_alive_end: "#27ae60",
+  verify_alive_archive: "#c0392b", verify_alive_prune: "#1e88e5",
+  retry_attempt: "#c78a00", error: "#c0392b",
+};
+
+let _runSessionsCache = [];
+
+function _triggerLabel(t) {
+  if (!t) return "—";
+  if (t === "manual_batch") return "🖱 手動 batch";
+  if (t.startsWith("scheduler_scan_")) return `⏰ 排程 batch #${t.replace("scheduler_scan_", "")}`;
+  if (t === "verify_alive_manual") return "🖱 手動偵測下架";
+  if (t === "verify_alive_scheduler") return "⏰ 排程偵測下架";
+  if (t === "retry_queue") return "♻ 重試佇列";
+  return t;
+}
+
+function _sessionSummary(sess) {
+  const c = sess.counts || {};
+  const parts = [];
+  if (c.new) parts.push(`<span style="color:#27ae60;">新 ${c.new}</span>`);
+  if (c.enrich) parts.push(`<span style="color:#c78a00;">補 ${c.enrich}</span>`);
+  if (c.dup_merge) parts.push(`<span style="color:#7f8c8d;">合併 ${c.dup_merge}</span>`);
+  if (c.replacement) parts.push(`<span style="color:#e67e22;">換物件 ${c.replacement}</span>`);
+  if (c.cross_source) parts.push(`<span style="color:#9b59b6;">跨來源 ${c.cross_source}</span>`);
+  if (c.verify_alive_archive) parts.push(`<span style="color:#c0392b;">archive ${c.verify_alive_archive}</span>`);
+  if (c.verify_alive_prune) parts.push(`<span style="color:#1e88e5;">清死連結 ${c.verify_alive_prune}</span>`);
+  if (c.error) parts.push(`<span style="color:#c0392b;">錯誤 ${c.error}</span>`);
+  return parts.length ? parts.join(" ｜ ") : `<span style="color:#888;">無動作</span>`;
+}
+
+function _fmtSessionDuration(sess) {
+  if (!sess.started_at || !sess.ended_at) return "—";
+  const ms = new Date(sess.ended_at).getTime() - new Date(sess.started_at).getTime();
+  if (ms < 1000) return "<1s";
+  if (ms < 60000) return `${Math.round(ms / 1000)}s`;
+  return `${Math.floor(ms / 60000)}m${Math.round((ms % 60000) / 1000)}s`;
+}
+
+window.loadRunSessions = async function () {
+  const box = document.getElementById("runsession-box");
+  const countEl = document.getElementById("runsession-count");
+  if (!box) return;
+  try {
+    const r = await authedFetch("/admin/run-sessions?limit=50");
+    if (!r.ok) {
+      box.innerHTML = `<div style="color:#c0392b;">載入失敗 HTTP ${r.status}</div>`;
+      return;
+    }
+    const data = await r.json();
+    _runSessionsCache = data.items || [];
+    if (countEl) countEl.textContent = `共 ${data.count} 次執行`;
+    if (!_runSessionsCache.length) {
+      box.innerHTML = `<div style="color:#888; padding:8px;">尚無執行紀錄</div>`;
+      return;
+    }
+    box.innerHTML = `<table style="width:100%; border-collapse:collapse;">
+      <thead><tr style="background:#f0ece0; text-align:left;">
+        <th style="padding:6px 8px; width:140px;">開始</th>
+        <th style="padding:6px 8px; width:60px;">耗時</th>
+        <th style="padding:6px 8px; width:170px;">類型</th>
+        <th style="padding:6px 8px; width:70px;">狀態</th>
+        <th style="padding:6px 8px;">摘要（點 row 看明細）</th>
+      </tr></thead>
+      <tbody>${_runSessionsCache.map((sess, idx) => {
+        const t = sess.started_at ? new Date(sess.started_at).toLocaleString("zh-TW", {hour12:false}) : "—";
+        const status = sess.status === "running" ? "🟢 進行中"
+                     : sess.status === "interrupted" ? "⚠ 中斷"
+                     : sess.status === "orphan_end" ? "⚠ 孤兒"
+                     : "✓ 完成";
+        return `<tr style="border-bottom:1px solid #eee; cursor:pointer;" onclick="showSessionModal(${idx})" onmouseover="this.style.background='#fffaed'" onmouseout="this.style.background=''">
+          <td style="padding:5px 8px; font-family:Consolas,monospace; font-size:11px; color:#555;">${esc(t)}</td>
+          <td style="padding:5px 8px; font-size:11px; color:#888;">${esc(_fmtSessionDuration(sess))}</td>
+          <td style="padding:5px 8px;">${esc(_triggerLabel(sess.trigger))}</td>
+          <td style="padding:5px 8px; font-size:11px;">${status}</td>
+          <td style="padding:5px 8px; font-size:12px;">${_sessionSummary(sess)}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>`;
+  } catch (e) {
+    box.innerHTML = `<div style="color:#c0392b;">載入失敗：${esc(e.message)}</div>`;
+  }
+};
+
+window.showSessionModal = function (idx) {
+  const sess = _runSessionsCache[idx];
+  if (!sess) return;
+  document.getElementById("session-modal-title").textContent =
+    `${_triggerLabel(sess.trigger)} ｜ ${sess.started_at ? new Date(sess.started_at).toLocaleString("zh-TW", {hour12:false}) : "?"}`;
+  const body = document.getElementById("session-modal-body");
+  let topInfo = `<div style="background:#f7f3ea; padding:10px 12px; border-radius:4px; margin-bottom:12px; font-size:12px;">
+    <div><b>開始：</b>${esc(sess.start_log?.message || "?")}</div>`;
+  if (sess.end_log) {
+    topInfo += `<div style="margin-top:4px;"><b>結束：</b>${esc(sess.end_log.message || "?")}（耗時 ${esc(_fmtSessionDuration(sess))}）</div>`;
+  } else {
+    topInfo += `<div style="margin-top:4px; color:#c0392b;"><b>狀態：</b>${esc(sess.status)}（無結束 log，可能還在跑或被中斷）</div>`;
+  }
+  topInfo += `</div>`;
+
+  const actions = sess.actions || [];
+  if (!actions.length) {
+    body.innerHTML = topInfo + `<div style="color:#888; padding:12px; text-align:center;">這次執行沒有動到任何物件</div>`;
+    document.getElementById("session-modal").classList.remove("hidden");
+    return;
+  }
+  const _urlForSid = (sid) => {
+    if (!sid) return null;
+    const m = sid.match(/^591_(\d+)/);
+    if (m) return `https://sale.591.com.tw/home/house/detail/2/${m[1]}.html`;
+    const my = sid.match(/^yongqing_(\d+)/);
+    if (my) return `https://buy.yungching.com.tw/house/${my[1]}`;
+    return null;
+  };
+  const rows = actions.map(a => {
+    const t = a.at ? new Date(a.at).toLocaleTimeString("zh-TW", {hour12:false}) : "—";
+    const acolor = _ACTION_COLOR[a.action] || "#555";
+    const alabel = _ACTION_LABEL[a.action] || a.action;
+    const sid = a.source_id || "";
+    const did = a.doc_id || "";
+    const url = _urlForSid(sid);
+    const sidCell = sid
+      ? (url
+          ? `<a href="${esc(url)}" target="_blank" rel="noopener" style="color:#2980b9; font-family:Consolas,monospace; font-size:11px;">${esc(sid)} ↗</a>`
+          : `<span style="font-family:Consolas,monospace; font-size:11px;">${esc(sid)}</span>`)
+      : "—";
+    const didCell = did
+      ? `<span style="color:#888; font-size:10px; font-family:Consolas,monospace;">${esc(did.slice(0, 14))}</span>`
+      : "";
+    const det = a.details || {};
+    let extra = "";
+    if (det.merged_into) extra += `<div style="color:#888; font-size:11px;">→ 併入 <span style="font-family:Consolas,monospace;">${esc(det.merged_into.slice(0, 14))}</span>${det.discarded ? "（捨棄）" : ""}</div>`;
+    if (det.address) extra += `<div style="color:#666; font-size:11px;">📍 ${esc(String(det.address).slice(0, 50))}</div>`;
+    if (det.conflicts && det.conflicts.length) extra += `<div style="color:#c0392b; font-size:11px;">⚠ 欄位衝突保留舊值：${esc(det.conflicts.join(", "))}</div>`;
+    if (det.dead_urls && det.dead_urls.length) extra += `<div style="color:#c0392b; font-size:11px;">死連結：${det.dead_urls.map(u => `<a href="${esc(u)}" target="_blank" style="color:#c0392b;">${esc(u.slice(0, 60))} ↗</a>`).join("<br>")}</div>`;
+    return `<tr style="border-bottom:1px solid #eee;">
+      <td style="padding:4px 6px; font-family:Consolas,monospace; font-size:11px; color:#666;">${esc(t)}</td>
+      <td style="padding:4px 6px; color:${acolor}; font-weight:600; font-size:12px; white-space:nowrap;">${esc(alabel)}</td>
+      <td style="padding:4px 6px;">${sidCell}${didCell ? "<br>" + didCell : ""}</td>
+      <td style="padding:4px 6px; font-size:12px;">${esc(a.message || "")}${extra}</td>
+    </tr>`;
+  }).join("");
+  body.innerHTML = topInfo + `
+    <div style="font-size:13px; margin-bottom:6px;">
+      <b>每筆物件動作（${actions.length} 筆）：</b>
+    </div>
+    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+      <thead><tr style="background:#f0ece0; text-align:left;">
+        <th style="padding:5px 6px; width:80px;">時間</th>
+        <th style="padding:5px 6px; width:90px;">動作</th>
+        <th style="padding:5px 6px; width:220px;">物件 / 來源</th>
+        <th style="padding:5px 6px;">細節</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  document.getElementById("session-modal").classList.remove("hidden");
+};
+
+window.closeSessionModal = function () {
+  document.getElementById("session-modal").classList.add("hidden");
+};
+
+// ── 舊版平鋪 log（保留 function 但 UI 不再呼叫）────────────────────────
 window.loadRunLogs = async function () {
   const box = document.getElementById("runlog-box");
   const countEl = document.getElementById("runlog-count");
