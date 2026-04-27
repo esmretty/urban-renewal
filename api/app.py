@@ -2752,19 +2752,21 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     # 重抓到 = 物件還活著，清除 archived 旗標
                     if merged.get("archived") is True:
                         merged["archived"] = False
-                    if merged != existing:
-                        # enrich path：existing 有 id 欄位（migration 後一定有，新 doc 也會有）
-                        existing_doc_id = existing.get("id")
-                        if not existing_doc_id:
-                            from database.db import find_doc_by_source_id
-                            existing_doc_id, _ = find_doc_by_source_id(src_id)
-                        if existing_doc_id:
-                            col.document(existing_doc_id).set(_safe_doc(merged))
-                            enrich_count += 1
-                            if conflicts:
-                                progress_callback(f"  ⚠ {src_id} 欄位衝突保留舊值：{','.join(conflicts)}", pct)
-                        else:
-                            logger.error(f"enrich 找不到 doc id for source_id={src_id}，跳過")
+                    # 一律寫 last_enrich_attempt_at（即使 merge 沒實際改任何欄位）
+                    # 用途：避免「永遠補不到的欄位」反覆觸發 enrich（591 card 本來就沒地坪 → 怎麼 enrich 都缺）
+                    merged["last_enrich_attempt_at"] = now_tw_iso()
+                    # existing 也算一筆「動到」(force write 即使內容沒變)，所以拿掉舊的 != 判斷
+                    existing_doc_id = existing.get("id")
+                    if not existing_doc_id:
+                        from database.db import find_doc_by_source_id
+                        existing_doc_id, _ = find_doc_by_source_id(src_id)
+                    if existing_doc_id:
+                        col.document(existing_doc_id).set(_safe_doc(merged))
+                        enrich_count += 1
+                        if conflicts:
+                            progress_callback(f"  ⚠ {src_id} 欄位衝突保留舊值：{','.join(conflicts)}", pct)
+                    else:
+                        logger.error(f"enrich 找不到 doc id for source_id={src_id}，跳過")
                     continue
 
                 # ─ 全新物件：呼叫共用 pipeline ─

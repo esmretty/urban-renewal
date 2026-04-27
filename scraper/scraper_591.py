@@ -465,20 +465,24 @@ def _scrape_district(
                             )
                         continue
 
-                    # 「已分析過且在 3 天內」視為已處理：即使 is_record_complete=False
-                    # （通常是 591 沒登記地坪，怎麼 enrich 都補不到），也算累進 consecutive_complete，
-                    # 讓 batch 能正常停在已追上進度的位置。
+                    # 「已分析過且在 3 天內」OR「最近 enrich 過且在 3 天內」視為已處理：
+                    # 即使 is_record_complete=False（591 card 本來就沒地坪，怎麼 enrich 都補不到），
+                    # 也算累進 consecutive_complete，讓 batch 正常停在已追上進度的位置。
+                    # 同時避免「永遠缺欄位」物件每次 batch 都觸發 enrich → 13 筆無限重複的 bug。
                     _recently_analyzed = False
-                    _comp_at = existing.get("analysis_completed_at")
-                    if _comp_at:
+                    from datetime import datetime as _dt, timezone as _tz
+                    for _ts_field in ("analysis_completed_at", "last_enrich_attempt_at"):
+                        _ts_iso = existing.get(_ts_field)
+                        if not _ts_iso:
+                            continue
                         try:
-                            from datetime import datetime as _dt, timezone as _tz
-                            _ts = _dt.fromisoformat(_comp_at.replace("Z", "+00:00"))
+                            _ts = _dt.fromisoformat(_ts_iso.replace("Z", "+00:00"))
                             if _ts.tzinfo is None:
                                 _ts = _ts.replace(tzinfo=_tz.utc)
                             _age_hr = (_dt.now(_tz.utc) - _ts).total_seconds() / 3600
                             if _age_hr < 72:
                                 _recently_analyzed = True
+                                break
                         except Exception:
                             pass
 
