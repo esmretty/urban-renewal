@@ -572,20 +572,22 @@ function renderScheduler(s) {
 function _renderSchedulerByType(s, filterType, box) {
   if (!box) return;
   const running = s.currently_running;
-  const enabled = s.enabled;
+  // per-type enabled（後端回；舊 client 也仍能看 s.enabled）
+  const enabled = filterType === "scan"
+    ? (s.scan_enabled !== undefined ? s.scan_enabled : s.enabled)
+    : (s.verify_alive_enabled !== undefined ? s.verify_alive_enabled : s.enabled);
   const stateText = running ? "🟢 進行中"
                   : (enabled ? "🟦 待機中" : "⚪ 已停用");
   const stateColor = running ? "#27ae60" : (enabled ? "#2980b9" : "#95a5a6");
 
   const toggleBtn = enabled
-    ? `<button onclick="toggleScheduler(false)" style="background:#27ae60; color:#fff; border:none; padding:5px 12px; border-radius:4px; cursor:pointer; font-weight:600; font-size:13px;">● 已啟用</button>`
-    : `<button onclick="toggleScheduler(true)"  style="background:#c0392b; color:#fff; border:none; padding:5px 12px; border-radius:4px; cursor:pointer; font-weight:600; font-size:13px;">● 已停用</button>`;
+    ? `<button onclick="toggleScheduler(false, '${filterType}')" class="sched-toggle on">● 已啟用</button>`
+    : `<button onclick="toggleScheduler(true, '${filterType}')"  class="sched-toggle off">● 已停用</button>`;
 
   const headerRow = `
-    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px; font-size:13px;">
+    <div class="sched-header-row">
       ${toggleBtn}
       <b style="color:${stateColor}">${stateText}</b>
-      <span style="color:#555;">最近：${_fmtDate(s.last_run_at)}</span>
     </div>`;
 
   // 過濾出該 tab 的命令（記住原始 idx 用於套用 / 刪除）
@@ -636,17 +638,15 @@ function _renderCmdRow(cmd, i) {
   // 套用狀態：比對 draft vs server（同 idx）
   const applied = _isCmdAppliedNew(cmd, server);
   const appliedBadge = !server
-    ? `<span style="color:#c0392b; font-size:11px; font-weight:600;">⚠ 未套用 (新增中)</span>`
+    ? `<span class="sched-badge unapplied">⚠ 未套用 (新增中)</span>`
     : applied
-      ? `<span style="color:#27ae60; font-size:11px; font-weight:600;">✓ 已套用</span>`
-      : `<span style="color:#c0392b; font-size:11px; font-weight:600;">⚠ 未套用 (按下套用才生效)</span>`;
-  const lastRunStr = (server && server.last_run_at)
-    ? `<span style="color:#666; font-size:11px;">上次跑：${_fmtDate(server.last_run_at)}</span>`
-    : `<span style="color:#888; font-size:11px;">尚未跑過</span>`;
-  const nextDueStr = (server && server.last_run_at)   // 顯示 next_due 需要 cmd 已被排程過
-    ? ""   // 沒在 server response 裡，先不顯示
-    : "";
-  const removeBtn = `<button onclick="schedRemoveCmd(${i})" style="margin-left:auto; padding:2px 8px; color:#c0392b;">刪除</button>`;
+      ? `<span class="sched-badge applied">✓ 已套用</span>`
+      : `<span class="sched-badge unapplied">⚠ 未套用</span>`;
+  // 顯示「下次執行時間」（用戶要求：寫下一次而非上一次）
+  const nextDueStr = (server && server.next_due_at)
+    ? `<span class="sched-nextdue">下次：${_fmtDate(server.next_due_at)}（${_countdown(server.next_due_at)}）</span>`
+    : `<span class="sched-nextdue muted">下次：套用後計算</span>`;
+  const removeBtn = `<button onclick="schedRemoveCmd(${i})" class="sched-remove">刪除</button>`;
 
   if (cmdType === "verify_alive") {
     // 偵測下架命令：只選 interval
@@ -658,27 +658,26 @@ function _renderCmdRow(cmd, i) {
       ? `<span style="color:#27ae60; font-size:12px;">✓ 已套用：偵測下架 / 每 ${Number(server.interval_hr||24)} 小時</span>`
       : `<span style="color:#c0392b; font-size:12px;">⚠ 未套用（按下套用才生效）</span>`;
     return `
-      <div style="border:1px solid #1e88e5; padding:10px 12px; border-radius:5px; margin-bottom:8px; background:#f0f7ff;">
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+      <div class="sched-cmd sched-cmd--verify">
+        <div class="sched-cmd-head">
           <b>命令 ${i + 1}</b>
-          <span style="background:#1e88e5; color:#fff; padding:1px 8px; border-radius:3px; font-size:12px;">偵測下架</span>
+          <span class="sched-type-badge verify">偵測下架</span>
           ${appliedBadge}
-          ${lastRunStr}
           ${removeBtn}
         </div>
-        <div style="margin-bottom:6px; font-size:13px; color:#555;">
-          掃描所有非已封存物件，HTTP 驗證每個來源 URL 是否還活著，全部失效就自動 archive。
-          下次執行一定落在整點。
+        <div class="sched-cmd-desc">掃描非封存物件、HTTP 驗活，全失效就自動 archive。</div>
+        <div class="sched-cmd-controls">
+          <label>每
+            <select onchange="_schedDraft.commands[${i}].interval_hr = parseInt(this.value)||24; _touchApplyBtns()">
+              ${intervalOpts}
+            </select>
+            跑一次
+          </label>
+          <button onclick="applySchedulerConfig()" class="sched-apply">套用</button>
         </div>
-        <div>
-          每
-          <select style="padding:3px 6px;"
-                  onchange="_schedDraft.commands[${i}].interval_hr = parseInt(this.value)||24; _touchApplyBtns()">
-            ${intervalOpts}
-          </select>
-          跑一次
-          <button onclick="applySchedulerConfig()" style="margin-left:8px; padding:3px 12px;">套用</button>
-          <span style="margin-left:8px;">${appliedDetail}</span>
+        <div class="sched-cmd-footer">
+          ${nextDueStr}
+          <span class="sched-applied-detail">${appliedDetail}</span>
         </div>
       </div>`;
   }
@@ -717,38 +716,42 @@ function _renderCmdRow(cmd, i) {
     ? `<span style="color:#27ae60; font-size:12px;">✓ 已套用：${esc(_normSources(server).map(s=>srcLabelCN[s]||s).join("+"))} / ${esc((server.districts||[]).join("、"))} / ${Number(server.limit)} 筆 / 每 ${Number(server.interval_hr||3)} 小時</span>`
     : `<span style="color:#c0392b; font-size:12px;">⚠ 未套用（按下套用才生效）</span>`;
   return `
-    <div style="border:1px solid #c78a00; padding:10px 12px; border-radius:5px; margin-bottom:8px; background:#fffaed;">
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+    <div class="sched-cmd sched-cmd--scan">
+      <div class="sched-cmd-head">
         <b>命令 ${i + 1}</b>
-        <span style="background:#c78a00; color:#fff; padding:1px 8px; border-radius:3px; font-size:12px;">掃描新物件</span>
+        <span class="sched-type-badge scan">掃描新物件</span>
         ${appliedBadge}
-        ${lastRunStr}
         ${removeBtn}
       </div>
-      <div style="margin-bottom:6px;">
-        <span style="font-size:12px; color:#666; margin-right:4px;">來源：</span>
-        ${sourceChips}
+      <div class="sched-cmd-row">
+        <span class="sched-label">來源</span>
+        <div class="sched-chips">${sourceChips}</div>
       </div>
-      <div style="margin-bottom:6px;">
-        <span style="font-size:12px; color:#666; margin-right:4px;">行政區：</span>
-        ${distChips}
-        <span style="color:#7f8c8d; font-size:12px; margin-left:4px;">
-          （已選 ${(cmd.districts||[]).length}/${_schedMeta.maxDistricts}）
-        </span>
+      <div class="sched-cmd-row">
+        <span class="sched-label">行政區</span>
+        <div class="sched-chips">
+          ${distChips}
+          <span class="sched-count">（${(cmd.districts||[]).length}/${_schedMeta.maxDistricts}）</span>
+        </div>
       </div>
-      <div>
-        每次最多
-        <input type="number" min="1" max="300" value="${cmd.limit || 30}" style="width:70px; padding:3px 6px;"
-               oninput="_schedDraft.commands[${i}].limit = parseInt(this.value)||30; _touchApplyBtns()">
-        筆 ｜ 每
-        <select style="padding:3px 6px;"
-                onchange="_schedDraft.commands[${i}].interval_hr = parseInt(this.value)||3; _touchApplyBtns()">
-          ${intervalOpts}
-        </select>
-        跑一次（套用後下次執行落在整點）
-        <button onclick="applySchedulerConfig()" style="margin-left:8px; padding:3px 12px;">套用</button>
+      <div class="sched-cmd-controls">
+        <label>每次最多
+          <input type="number" min="1" max="300" value="${cmd.limit || 30}"
+                 oninput="_schedDraft.commands[${i}].limit = parseInt(this.value)||30; _touchApplyBtns()">
+          筆
+        </label>
+        <label>每
+          <select onchange="_schedDraft.commands[${i}].interval_hr = parseInt(this.value)||3; _touchApplyBtns()">
+            ${intervalOpts}
+          </select>
+          跑一次
+        </label>
+        <button onclick="applySchedulerConfig()" class="sched-apply">套用</button>
       </div>
-      <div style="margin-top:6px;">${appliedDetail}</div>
+      <div class="sched-cmd-footer">
+        ${nextDueStr}
+        <span class="sched-applied-detail">${appliedDetail}</span>
+      </div>
     </div>`;
 }
 
@@ -938,12 +941,13 @@ window.runOcrScan = async function () {
   }
 };
 
-window.toggleScheduler = async function (on) {
+window.toggleScheduler = async function (on, type) {
+  // type: "scan" / "verify_alive" / undefined（兩個都 toggle）
   try {
     const r = await authedFetch("/admin/scheduler/toggle", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled: !!on }),
+      body: JSON.stringify({ enabled: !!on, type: type || null }),
     });
     if (!r.ok) { alert("切換失敗"); return; }
     loadSchedulerStatus();

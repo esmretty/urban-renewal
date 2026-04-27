@@ -571,8 +571,12 @@ async def _scheduled_scrape_loop():
             break
         try:
             cfg = _load_scheduler_config()
-            if not cfg.get("enabled"):
-                continue
+            # per-type enabled：未設定回退 legacy enabled
+            legacy_en = bool(cfg.get("enabled"))
+            scan_en = bool(cfg.get("scan_enabled", legacy_en))
+            verify_en = bool(cfg.get("verify_alive_enabled", legacy_en))
+            if not (scan_en or verify_en):
+                continue   # 兩個 type 都關，沒事做
             if _scrape_running:
                 continue   # 上次還沒跑完，等下個 tick
             cmds = cfg.get("commands") or []
@@ -580,10 +584,14 @@ async def _scheduled_scrape_loop():
                 continue
 
             # 找最早 due 的 cmd（依 next_due_at 比對，next_due_at 一律落在 interval 整點）
+            # 跳過該 type 已停用的 cmd
             now = now_tw()
             due_cmd = None
             due_idx = None
             for idx, cmd in enumerate(cmds):
+                cmd_type = (cmd.get("type") or "scan").lower()
+                if cmd_type == "scan" and not scan_en: continue
+                if cmd_type == "verify_alive" and not verify_en: continue
                 interval_hr = int(cmd.get("interval_hr") or cfg.get("interval_hr") or 24)
                 state = _cmd_state_get(idx)
                 nxt = state.get("next_due_at")
@@ -977,9 +985,13 @@ async def scheduler_status(admin: dict = Depends(require_admin)):
         cs = state.get(f"cmd_{i}") or {}
         c2["last_run_at"] = cs.get("last_run_at")
         c2["last_status"] = cs.get("last_status")
+        c2["next_due_at"] = cs.get("next_due_at")   # 加 next_due_at 給 UI 顯示
         cmds_with_state.append(c2)
+    legacy_en = bool(cfg.get("enabled"))
     return {
-        "enabled": bool(cfg.get("enabled")),
+        "enabled": legacy_en,                                            # 舊欄位保留
+        "scan_enabled": bool(cfg.get("scan_enabled", legacy_en)),        # per-type
+        "verify_alive_enabled": bool(cfg.get("verify_alive_enabled", legacy_en)),
         "interval_hr": int(cfg.get("interval_hr") or 1),
         "commands": cmds_with_state,
         "last_run_at": _scheduler_last_run_at,
@@ -1019,21 +1031,33 @@ async def scheduler_history(days: int = 7, admin: dict = Depends(require_admin))
 
 class SchedulerToggleReq(BaseModel):
     enabled: bool
+    type: Optional[str] = None   # "scan" / "verify_alive" / None=兩個都 toggle（legacy）
 
 
 @app.post("/admin/scheduler/toggle")
 async def scheduler_toggle(body: SchedulerToggleReq, admin: dict = Depends(require_admin)):
-    """啟用/停用定時 batch。存 Firestore 讓 runtime toggle 跨重啟保留。
-    啟用時會 wake loop → 倒數立刻重算（避免沿用關閉期間累積的舊倒數）。"""
-    get_firestore().collection("settings").document("scheduler").set({
-        "enabled": body.enabled,
+    """啟用/停用定時 batch（per-type）。存 Firestore 讓 runtime toggle 跨重啟保留。
+    啟用時會 wake loop → 倒數立刻重算（避免沿用關閉期間累積的舊倒數）。
+    type 帶值（"scan" / "verify_alive"）時只 toggle 該 type；不帶 = 兩個都 toggle（legacy）。"""
+    update = {
         "updated_at": now_tw_iso(),
         "updated_by_email": admin.get("email") or "",
-    }, merge=True)
-    logger.warning("[scheduler] %s 設定 enabled=%s", admin.get("email"), body.enabled)
+    }
+    t = (body.type or "").lower()
+    if t == "scan":
+        update["scan_enabled"] = body.enabled
+    elif t == "verify_alive":
+        update["verify_alive_enabled"] = body.enabled
+    else:
+        # legacy：兩個都 toggle，並維持舊 enabled 欄位
+        update["enabled"] = body.enabled
+        update["scan_enabled"] = body.enabled
+        update["verify_alive_enabled"] = body.enabled
+    get_firestore().collection("settings").document("scheduler").set(update, merge=True)
+    logger.warning("[scheduler] %s 設定 type=%s enabled=%s", admin.get("email"), t or "all", body.enabled)
     if body.enabled and _sched_wake_event is not None:
         _sched_wake_event.set()
-    return {"status": "ok", "enabled": body.enabled}
+    return {"status": "ok", "type": t or "all", "enabled": body.enabled}
 
 
 class CommandSpec(BaseModel):

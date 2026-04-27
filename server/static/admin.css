@@ -444,3 +444,109 @@ tr:hover { background: #fafbfc; }
   font-size: 11px; margin: 0; border-radius: 3px; font-family: Consolas, monospace;
 }
 
+
+/* ── Scheduler tab：新 compact layout（per-tab toggle、show next_due_at） ── */
+.sched-header-row {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+  margin-bottom: 10px; font-size: 13px;
+}
+.sched-toggle {
+  border: none; padding: 5px 12px; border-radius: 4px;
+  cursor: pointer; font-weight: 600; font-size: 13px; color: #fff;
+}
+.sched-toggle.on { background: #27ae60; }
+.sched-toggle.off { background: #c0392b; }
+
+/* 每個命令卡片 */
+.sched-cmd {
+  border: 1px solid #c78a00; padding: 10px 12px; border-radius: 5px;
+  margin-bottom: 8px; background: #fffaed;
+}
+.sched-cmd--verify { border-color: #1e88e5; background: #f0f7ff; }
+
+.sched-cmd-head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.sched-cmd-head > b { font-size: 13px; }
+.sched-type-badge {
+  color: #fff; padding: 1px 8px; border-radius: 3px; font-size: 12px;
+}
+.sched-type-badge.scan { background: #c78a00; }
+.sched-type-badge.verify { background: #1e88e5; }
+
+.sched-badge {
+  font-size: 11px; font-weight: 600;
+}
+.sched-badge.applied { color: #27ae60; }
+.sched-badge.unapplied { color: #c0392b; }
+
+.sched-remove {
+  margin-left: auto; padding: 2px 8px; color: #c0392b;
+  background: #fff; border: 1px solid #e0e0e0; border-radius: 3px;
+  cursor: pointer; font-size: 12px;
+}
+
+.sched-cmd-desc {
+  font-size: 13px; color: #555; margin-bottom: 8px;
+}
+
+/* row：左 label、右 chips/控制（小螢幕直接堆疊） */
+.sched-cmd-row {
+  display: grid; grid-template-columns: 60px 1fr;
+  gap: 6px; align-items: start; margin-bottom: 6px;
+}
+.sched-label {
+  font-size: 12px; color: #666; padding-top: 3px;
+}
+.sched-chips {
+  display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center;
+}
+.sched-chips label { font-size: 13px; cursor: pointer; }
+.sched-count { color: #7f8c8d; font-size: 12px; }
+
+/* 控制列（限筆 / 間隔 / 套用），自然 wrap 到下一行 */
+.sched-cmd-controls {
+  display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center;
+  margin-top: 8px; padding-top: 8px; border-top: 1px dashed #e0d8b8;
+}
+.sched-cmd-controls label {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 13px;
+}
+.sched-cmd-controls input[type="number"] {
+  width: 70px; padding: 3px 6px;
+}
+.sched-cmd-controls select {
+  padding: 3px 6px;
+}
+.sched-apply {
+  padding: 4px 14px; background: #c78a00; color: #fff;
+  border: none; border-radius: 3px; cursor: pointer; font-weight: 600;
+  margin-left: auto;
+}
+.sched-cmd--verify .sched-apply { background: #1e88e5; }
+
+.sched-cmd-footer {
+  display: flex; flex-wrap: wrap; gap: 4px 12px;
+  margin-top: 8px; font-size: 12px;
+}
+.sched-nextdue {
+  color: #2980b9; font-weight: 600;
+}
+.sched-nextdue.muted { color: #888; font-weight: 400; }
+.sched-applied-detail { flex: 1; min-width: 200px; }
+
+/* ── 小螢幕 PC（< 1280px）：縮排 / 字級 / row 改堆疊 ── */
+@media (max-width: 1279px) {
+  .sched-cmd { padding: 8px 10px; }
+  .sched-cmd-head > b { font-size: 12px; }
+  .sched-cmd-row { grid-template-columns: 1fr; gap: 4px; }
+  .sched-label { padding-top: 0; }
+  .sched-chips { gap: 4px 8px; }
+  .sched-chips label { font-size: 12px; }
+  .sched-cmd-controls { font-size: 12px; }
+  .sched-cmd-controls label { font-size: 12px; }
+  .sched-apply { margin-left: 0; }
+  .sched-cmd-footer { font-size: 11px; }
+}
