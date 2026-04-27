@@ -803,7 +803,7 @@ function _renderCmdRow(cmd, i, displayNum) {
         <div class="sched-cmd-desc">掃描非封存物件、HTTP 驗活，全失效就自動 archive。</div>
         <div class="sched-cmd-controls">
           <label>每
-            <select onchange="_schedDraft.commands[${i}].interval_hr = parseInt(this.value)||24; _touchApplyBtns()">
+            <select onchange="schedSetInterval(${i}, this.value, 24)">
               ${intervalOpts}
             </select>
             跑一次
@@ -872,11 +872,11 @@ function _renderCmdRow(cmd, i, displayNum) {
       <div class="sched-cmd-controls">
         <label>每次最多
           <input type="number" min="1" max="300" value="${cmd.limit || 30}"
-                 oninput="_schedDraft.commands[${i}].limit = parseInt(this.value)||30; _touchApplyBtns()">
+                 oninput="schedSetLimit(${i}, this.value)">
           筆
         </label>
         <label>每
-          <select onchange="_schedDraft.commands[${i}].interval_hr = parseInt(this.value)||3; _touchApplyBtns()">
+          <select onchange="schedSetInterval(${i}, this.value, 3)">
             ${intervalOpts}
           </select>
           跑一次
@@ -916,6 +916,30 @@ function refreshVerifyAliveWarning() {
     dangerPanel.insertBefore(warn, dangerPanel.firstChild);
   }
 }
+
+// 設定 cmd 的 interval_hr — 給 select onchange 用，集中加 console log 便於 debug
+window.schedSetInterval = function (idx, val, fallback) {
+  fallback = parseInt(fallback) || 3;
+  const newVal = parseInt(val) || fallback;
+  const cmd = _schedDraft.commands[idx];
+  if (!cmd) {
+    console.error(`[scheduler] schedSetInterval: no cmd at idx ${idx}`);
+    return;
+  }
+  console.log(`[scheduler] schedSetInterval idx=${idx} ${cmd.interval_hr} → ${newVal}`);
+  cmd.interval_hr = newVal;
+  _touchApplyBtns();
+};
+
+// 設定 cmd 的 limit — 同上
+window.schedSetLimit = function (idx, val) {
+  const newVal = parseInt(val) || 30;
+  const cmd = _schedDraft.commands[idx];
+  if (!cmd) return;
+  console.log(`[scheduler] schedSetLimit idx=${idx} ${cmd.limit} → ${newVal}`);
+  cmd.limit = newVal;
+  _touchApplyBtns();
+};
 
 window.schedToggleSource = function (idx, src, on) {
   const cmd = _schedDraft.commands[idx];
