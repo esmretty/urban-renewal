@@ -202,6 +202,10 @@ def _parse_listing_card_OLD_UNUSED(card_a, listing_first_seen: bool = False) -> 
         "total_floors": total_floors,
         "floor": floor,
         "building_age": building_age,
+        "building_age_completed_year": (
+            __import__("database.models", fromlist=["age_to_completed_year"]).age_to_completed_year(building_age)
+        ),
+        "building_age_source": "yongqing_card" if building_age else None,
         "building_area_ping": building_area_ping,
         "price_ntd": price_ntd,
         "price_per_ping": (price_ntd / building_area_ping) if (price_ntd and building_area_ping) else None,
@@ -311,7 +315,11 @@ def _parse_detail_html(item: dict, detail_html: str) -> None:
     age_m = re.search(r"屋齡[\s:：]*([\d.]+)\s*年", text)
     if age_m:
         try:
-            item["building_age"] = float(age_m.group(1))
+            from database.models import age_to_completed_year as _atc
+            _age = float(age_m.group(1))
+            item["building_age"] = _age
+            item["building_age_completed_year"] = _atc(_age)
+            item["building_age_source"] = "yongqing_detail"
         except ValueError:
             pass
 
@@ -735,7 +743,11 @@ def scrape_yongqing_single(url: str) -> Optional[dict]:
         # 屋齡
         age_m = re.search(r"屋齡[\s:：]*([\d.]+)\s*年", text)
         if age_m:
-            item["building_age"] = float(age_m.group(1))
+            from database.models import age_to_completed_year as _atc
+            _age = float(age_m.group(1))
+            item["building_age"] = _age
+            item["building_age_completed_year"] = _atc(_age)
+            item["building_age_source"] = "yongqing_single"
 
         item["building_type"] = "公寓"   # 暫預設，可由詳情頁 enrich 修正
 

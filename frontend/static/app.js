@@ -5,6 +5,17 @@
 // ── XSS 防護：HTML escape helper ────────────────────────────────────────────
 // 任何「會進 innerHTML 的後端/爬蟲/用戶文字」都要先過 esc()。
 // 純常數字串、已經 encodeURIComponent 過的 URL、已知格式的數字不需要（但包了也不會壞）。
+// 屋齡顯示：優先用 completed_year 重算當下屋齡（爬蟲時存的，會跟年份走），
+// 缺漏才回退用 building_age（舊資料 / scrape 時沒寫 completed_year）
+function currentAge(p) {
+  if (!p) return null;
+  const yc = p.building_age_completed_year;
+  if (yc && Number.isFinite(yc) && yc > 1900) {
+    return new Date().getFullYear() - yc;
+  }
+  return p.building_age ?? null;
+}
+
 function esc(s) {
   if (s === null || s === undefined) return "";
   return String(s)
@@ -564,7 +575,7 @@ function rowHTML(p) {
       <div class="sub ${hotCls('land_p')}">${perLand} 萬</div>
     </div>
     <div class="c c-val c-floor" data-label="樓層">${floorStr}</div>
-    <div class="c c-val c-age" data-label="屋齡">${p.building_age ?? "—"}</div>
+    <div class="c c-val c-age" data-label="屋齡">${currentAge(p) ?? "—"}</div>
     <div class="c c-note" data-label="說明">${noteCell}</div>
     <div class="c c-val c-multi" data-label="獲利倍數">${multiCell}</div>
     <div class="c c-del">${_rowActionHTML(p)}</div>
@@ -659,7 +670,7 @@ function cardHTML(p) {
     ? `${fmt1(p.price_ntd / 10000 / buildingArea)} 萬/建坪` : null;
   const perLandPing = (p.price_ntd && landArea)
     ? `${fmt1(p.price_ntd / 10000 / landArea)} 萬/地坪` : null;
-  const ageYears = p.building_age;
+  const ageYears = currentAge(p);
   const mrtStr = p.nearest_mrt
     ? `🚇 ${esc(p.nearest_mrt)} ${Math.round(p.nearest_mrt_dist_m || 0)}m`
     : "";
@@ -766,7 +777,7 @@ function renderMapMarkers(props) {
 
     marker.bindTooltip(
       `${p.district} ${p.building_type}<br>
-       ${p.price_ntd ? formatWan(p.price_ntd) : "—"} | 屋齡${p.building_age || "?"}年`,
+       ${p.price_ntd ? formatWan(p.price_ntd) : "—"} | 屋齡${currentAge(p) || "?"}年`,
       { direction: "top" }
     );
 
@@ -895,7 +906,7 @@ function buildDetailHTML(p) {
               <tr><td>原始地址</td><td>${esc(stripCityDist(p.address || p.title))}${p.address_road_fixed ? `<div class="addr-fixed-note">已自動修正：${esc(p.address_road_fixed.from)} → ${esc(p.address_road_fixed.to)}</div>` : ""}${p.address_suspicious ? `<div class="addr-suspicious">⚠ 路名可能不存在於此行政區，請自行確認</div>` : ""}</td></tr>
               <tr><td>推測地址 ${p.address_inferred ? `<span class="inferred-tag">${p.address_inferred_confidence === "unique" ? "★實登" : p.address_inferred_confidence === "multi" ? "推測" : "≈推測"}</span>` : ""}</td><td>${inferredAddressCellHTML(p)}</td></tr>
               <tr><td>類型 / 樓層</td><td>${esc(p.building_type || "—")} ・ ${floorStr}</td></tr>
-              <tr><td>屋齡</td><td>${p.building_age ? p.building_age + " 年" : "未知"}</td></tr>
+              <tr><td>屋齡</td><td>${currentAge(p) != null ? currentAge(p) + " 年" + (p.building_age_completed_year ? ` <span style="color:#888;font-size:11px">（${p.building_age_completed_year} 年完工）</span>` : "") : "未知"}</td></tr>
               <tr><td>售價</td><td class="fw-bold text-warning">${priceStr}${(p.lvr_records && p.lvr_records.length) ? ` <span class="lvr-icon" onclick="event.stopPropagation()" onmouseenter="showLvrPopup(event, '${p.id}')" onmouseleave="hideLvrPopup()">實</span>` : ""}</td></tr>
               <tr><td>欲出價</td>
                 <td><input type="number" class="inline-edit" min="0" step="10"
@@ -1226,7 +1237,7 @@ function computeRowMultiples(p) {
   if (!land || effFar == null || !price) return { w: null, d: null };
   const coeff = p.rebuild_coeff ?? 1.57;
   const [ratio, parking] = lookupShareRatio(price);
-  const isFangzai = p.city === "台北市" && p.building_age && (new Date().getFullYear() - p.building_age) <= 1974;
+  const isFangzai = p.city === "台北市" && currentAge(p) && (new Date().getFullYear() - currentAge(p)) <= 1974;
   const bonusW = p.bonus_weishau ?? 0.30;
   const bonusD = p.bonus_dugen ?? (isFangzai ? 0.80 : 0.50);
   const is1F = Number(p.floor) === 1;
@@ -1387,7 +1398,7 @@ function renewalV2HTML(p) {
   const coeff = p.rebuild_coeff ?? 1.57;
   const price = p.new_house_price_wan_override ?? DISTRICT_NEW_HOUSE_PRICE[p.district] ?? null;
   const [ratio, parking] = lookupShareRatio(price);
-  const isFangzai = p.city === "台北市" && p.building_age && (new Date().getFullYear() - p.building_age) <= 1974;
+  const isFangzai = p.city === "台北市" && currentAge(p) && (new Date().getFullYear() - currentAge(p)) <= 1974;
   const bonusW = p.bonus_weishau ?? 0.30;
   const bonusD = p.bonus_dugen ?? (isFangzai ? 0.80 : 0.50);
   // 樓層加成：1F 預設 20%，其他樓層 0%。用戶可改，0~80%，5% 為單位。
@@ -1858,7 +1869,7 @@ function renderBidSection() {
   const effFar = effectiveFarPct(zoning, roadWidth);
   const coeff = p.rebuild_coeff ?? 1.57;
   const [ratio, parking] = lookupShareRatio(price);
-  const isFangzai = p.city === "台北市" && p.building_age && (new Date().getFullYear() - p.building_age) <= 1974;
+  const isFangzai = p.city === "台北市" && currentAge(p) && (new Date().getFullYear() - currentAge(p)) <= 1974;
   const bonusW = p.bonus_weishau ?? 0.30;
   const bonusD = p.bonus_dugen ?? (isFangzai ? 0.80 : 0.50);
   const is1F = Number(p.floor) === 1;

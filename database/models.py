@@ -15,6 +15,18 @@ REQUIRED_FIELDS = [
 ]
 
 
+def age_to_completed_year(age) -> Optional[int]:
+    """把「屋齡 N 年」回推成完工年 = 當前年 - N。
+    抓爬蟲那刻轉換 → 之後 UI 顯示時當下重算（屋齡會跟著年份走）。"""
+    try:
+        if age is None: return None
+        a = int(round(float(age)))
+        if a < 0 or a > 200: return None
+        return now_tw().year - a
+    except Exception:
+        return None
+
+
 def extract_district(s: str) -> str:
     """從字串抽出台灣行政區名，忽略「市」字前綴（避免誤抓「市大安區」這種跨字 match）。"""
     if not s:

@@ -379,6 +379,8 @@ def _parse_api_items(house_list: list, city: str, target_districts: Optional[set
             "total_floors": total_floors,
             "floor": floor_str,
             "building_age": age,
+            "building_age_completed_year": __import__("database.models", fromlist=["age_to_completed_year"]).age_to_completed_year(age),
+            "building_age_source": "591_card" if age else None,
             "building_area_ping": area_ping,
             "price_ntd": price_ntd,
             "price_per_ping": (price_ntd / area_ping) if price_ntd and area_ping else None,
@@ -770,6 +772,8 @@ def _parse_card(card, page: Page, city: str, district: str, building_type: str, 
             "total_floors": total_floors,
             "floor": floor_str,
             "building_age": age,
+            "building_age_completed_year": __import__("database.models", fromlist=["age_to_completed_year"]).age_to_completed_year(age),
+            "building_age_source": "591_card" if age else None,
             "building_area_ping": area_ping,
             "price_ntd": price,
             "price_per_ping": (price / area_ping) if price and area_ping else None,
@@ -1152,7 +1156,11 @@ def fetch_listing_detail(ctx: BrowserContext, url: str) -> dict:
         # 屋齡（從限定範圍內抓）
         age_m = re.search(r"屋齡[：:\s]*(\d+)\s*年", info_text_limited)
         if age_m:
-            extra["building_age"] = int(age_m.group(1))
+            from database.models import age_to_completed_year as _atc
+            _age = int(age_m.group(1))
+            extra["building_age"] = _age
+            extra["building_age_completed_year"] = _atc(_age)
+            extra["building_age_source"] = "591_detail"
 
     except Exception as e:
         logger.debug(f"Detail fetch error for {url}: {e}")
