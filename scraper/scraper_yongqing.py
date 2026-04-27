@@ -239,18 +239,204 @@ def _parse_listing_page(html: str) -> list[dict]:
 
 # ── 詳情頁（用 Playwright 拿座標 + BeautifulSoup parse 詳細欄位）────────────
 
-def _enrich_from_detail_once(item: dict, headless: bool = True) -> dict:
-    """單次 enrich attempt（不 retry）。實際 caller 應該用 _enrich_from_detail 走 retry 邏輯。"""
-    """開永慶詳情頁，補上：座標、土地坪、使用分區、建物分項、社區名。
-    回傳更新後的 item（in-place 也會改）。"""
-    from playwright.sync_api import sync_playwright
+def _parse_detail_html(item: dict, detail_html: str) -> None:
+    """解析詳情頁 HTML（無論 HTTP 拿到的還是 Playwright render 過的）。
+    從 SSR HTML 中 grep 全部欄位（不含座標 — 座標需 Playwright render JS）。
+    結果 in-place 寫入 item。"""
+    if not detail_html:
+        return
+    soup = BeautifulSoup(detail_html, "html.parser")
+    text = soup.get_text(" ", strip=True)
 
-    url = item["url"]
+    # === 從 ld+json (schema.org Product) 抓基本欄位 ===
+    import json as _json
+    for sc in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = _json.loads(sc.string or "")
+        except Exception:
+            continue
+        if isinstance(data, dict) and data.get("@type") == "Product":
+            if not item.get("title"):
+                item["title"] = data.get("name")
+            img = data.get("image")
+            if img and not item.get("image_url"):
+                item["image_url"] = img if isinstance(img, str) else (img[0] if img else None)
+            offers = data.get("offers") or {}
+            if offers.get("price"):
+                try:
+                    item["price_ntd"] = int(offers["price"]) * 10000   # 永慶 price 單位是萬
+                except (ValueError, TypeError):
+                    pass
+            yc_id = data.get("productID")
+            if yc_id:
+                item["_yongqing_yc_id"] = yc_id
+            break
+
+    # === 從文字 grep 詳細欄位 ===
+
+    # 地址（含路段）— 收緊 regex 不讓貪婪吃到「整層住家」這類後綴
+    # 格式：城市 + 區 + 路名 + 可選的「X段」結尾
+    addr_m = re.search(
+        r"((?:台北市|新北市|桃園市|台中市|高雄市)[一-龥]{2,4}區[一-龥]{1,8}(?:路|街|大道)(?:[一二三四五六七八九十]段)?)",
+        text,
+    )
+    if addr_m:
+        item["address"] = addr_m.group(1)
+        cm = re.match(r"^(台北市|新北市|桃園市|台中市|高雄市)", addr_m.group(1))
+        if cm:
+            item["city"] = cm.group(1)
+        dm = re.search(r"(?:台北市|新北市|桃園市|台中市|高雄市)([一-龥]{2,4}區)", addr_m.group(1))
+        if dm:
+            item["district"] = dm.group(1)
+
+    # 樓層：「5/14樓」「1/4樓」
+    floor_m = re.search(r"(\d+)\s*/\s*(\d+)\s*樓", text)
+    if floor_m:
+        item["floor"] = floor_m.group(1)
+        item["total_floors"] = int(floor_m.group(2))
+
+    # 屋齡
+    age_m = re.search(r"屋齡[\s:：]*([\d.]+)\s*年", text)
+    if age_m:
+        try:
+            item["building_age"] = float(age_m.group(1))
+        except ValueError:
+            pass
+
+    # 建物坪數：對應 591 的「權狀坪」= 永慶的「建物坪數」(含車位)
+    # 永慶詳情頁實際呈現：「建物坪數 387.76坪 (含車位 114.22 坪)」
+    # 然後分項：主建物 / 共同使用 / 附屬建物
+    # 591 卡片 area 欄位 = 建物權狀坪(含車位) → 對齊永慶「建物坪數」
+    total_m = re.search(r"建物坪數[\s:：]*([\d.]+)", text)
+    if not total_m:
+        # 緊湊版「建物387.76坪」也接受
+        total_m = re.search(r"建物\s*([\d.]+)\s*坪", text)
+    if total_m:
+        try:
+            item["building_area_ping"] = float(total_m.group(1))
+        except ValueError:
+            pass
+
+    # 額外存「主建物」當參考欄位（永慶獨家資訊，不取代 building_area_ping）
+    main_m = re.search(r"主建物[\s:：]*([\d.]+)", text)
+    if main_m:
+        try:
+            item["building_area_main_ping"] = float(main_m.group(1))
+        except ValueError:
+            pass
+
+    # 若主流程仍抓不到「建物坪數」，最後 fallback 才用主建物
+    if not item.get("building_area_ping") and item.get("building_area_main_ping"):
+        item["building_area_ping"] = item["building_area_main_ping"]
+        logger.warning(f"yongqing {item.get('source_id')} 抓不到「建物坪數」，用主建物 fallback")
+
+    # 土地坪數
+    m = re.search(r"土地坪數[\s:：]*([\d.]+)", text)
+    if not m:
+        m = re.search(r"土地[\s:：]?\s*([\d.]+)\s*坪", text)
+    if m:
+        try:
+            item["land_area_ping"] = float(m.group(1))
+        except ValueError:
+            pass
+
+    # 使用分區（過濾含糊回答）
+    zoning_m = re.search(
+        r"使用分區[\s:：]*([^，,。\s]+(?:住宅區|商業區|工業區|農業區|文教區|風景區|保護區))",
+        text,
+    )
+    if zoning_m:
+        zoning_raw = zoning_m.group(1)
+        if not any(bad in zoning_raw for bad in ["謄本", "複雜", "不明", "未知"]):
+            item["zoning_original"] = zoning_raw
+
+    # 型態（建物類型）：從「型態 X」字樣抓
+    # 永慶 type 詞彙：公寓 / 無電梯公寓 / 電梯大廈 / 華廈 / 透天 / 店面 / 套房 等
+    type_m = re.search(r"型態\s+([^\s，,。]{1,8})", text)
+    if type_m:
+        yc_type = type_m.group(1)
+        # 對應到我們系統的 building_type 詞彙
+        type_map = {
+            "公寓": "公寓",
+            "無電梯公寓": "公寓",
+            "電梯大廈": "電梯大樓",
+            "電梯大樓": "電梯大樓",
+            "華廈": "華廈",
+            "透天": "透天厝",
+            "透天厝": "透天厝",
+            "店面": "店面",
+            "套房": "套房",
+        }
+        item["building_type"] = type_map.get(yc_type, yc_type)
+        item["_yongqing_type_raw"] = yc_type   # 保留原文 debug 用
+
+    # 社區名稱 — 從 BreadcrumbList JSON-LD 拿（不抓自由文字避免誤抓 UI label）
+    for sc in soup.find_all("script", type="application/ld+json"):
+        try:
+            bdata = _json.loads(sc.string or "")
+        except Exception:
+            continue
+        if isinstance(bdata, dict) and bdata.get("@type") == "BreadcrumbList":
+            breadcrumbs = bdata.get("itemListElement", [])
+            # 社區名稱通常在 breadcrumb 最後一個 (position 5 之後)
+            # 例：買屋 / 台北市 / 大安區 / 安和路二段 / 安和名園
+            # 取最後一個非「路/街/大道」結尾的就是社區名
+            for el in reversed(breadcrumbs):
+                name = el.get("name") or ""
+                if name and not re.search(r"(?:路|街|大道|區|市)$", name):
+                    if name not in (item.get("city") or "", item.get("district") or ""):
+                        item["community_name"] = name
+                        break
+            break
+
+    # 計算單價
+    if item.get("price_ntd") and item.get("building_area_ping"):
+        item["price_per_ping"] = item["price_ntd"] / item["building_area_ping"]
+
+
+# ── 兩階段 enrich ─────────────────────────────────────────────────────────────
+# Stage 1（快）：HTTP 抓 SSR HTML + parse 全部非座標欄位（~1 秒/筆）
+# Stage 2（慢）：Playwright 開頁面 + 滾地圖 + 抓座標（~7-10 秒/筆）
+# 主流程先 Stage 1 快速過濾掉不要的（樓高 > 5、enrich fail），
+# 通過的物件才跑 Stage 2 拿座標
+def _enrich_basic_via_http(item: dict, max_retries: int = 2) -> bool:
+    """Stage 1：HTTP 拿 SSR HTML + parse 全部欄位（除座標）。
+    回傳 True 表示拿到核心欄位（type / address / price），False 表示失敗。
+    失敗時不寫 item。"""
     house_id = item.get("_yongqing_house_id")
+    url = item["url"]
+    last_err = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            html = _fetch(url, retries=1)   # _fetch 內部已有自己 retry，外面這層用 max_retries 包
+            if html and len(html) > 5000 and '"@type":"Product"' in html:
+                _parse_detail_html(item, html)
+                if _enrich_did_succeed(item):
+                    if attempt > 1:
+                        logger.info(f"yongqing HTTP-enrich {house_id} 第 {attempt} 次成功")
+                    return True
+                last_err = (
+                    f"missing core fields after parse: price={item.get('price_ntd')}, "
+                    f"addr={item.get('address')}, type_raw={item.get('_yongqing_type_raw')}"
+                )
+            else:
+                last_err = f"HTML 不完整（{len(html or '')} chars）"
+            logger.warning(f"yongqing HTTP-enrich {house_id} attempt {attempt}: {last_err}")
+        except Exception as e:
+            last_err = str(e)[:120]
+            logger.warning(f"yongqing HTTP-enrich {house_id} attempt {attempt} exception: {last_err}")
+        if attempt < max_retries:
+            time.sleep(2.0)
+    logger.warning(f"yongqing HTTP-enrich FAILED {house_id} ({max_retries} 次)：{last_err}")
+    return False
 
-    coords_lat = coords_lng = None
-    detail_html = None
 
+def _enrich_coords_via_playwright(item: dict, headless: bool = True, timeout_sec: int = 25) -> bool:
+    """Stage 2：Playwright 開頁面拿座標。失敗不影響整體 ingest（座標可選）。
+    回傳 True 表示拿到座標，False 表示沒拿到（仍可繼續 ingest，地址 fallback geocoding）。"""
+    from playwright.sync_api import sync_playwright
+    house_id = item.get("_yongqing_house_id")
+    url = item["url"]
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=headless)
@@ -260,29 +446,8 @@ def _enrich_from_detail_once(item: dict, headless: bool = True) -> dict:
                 viewport={"width": 1280, "height": 900},
             )
             page = ctx.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            # 主動等 SSR 的 JSON-LD Product 區塊出現（這是核心欄位來源；沒這個 enrich 必失敗）
-            try:
-                page.wait_for_function(
-                    """() => {
-                        const scripts = document.querySelectorAll('script[type="application/ld+json"]');
-                        for (const s of scripts) {
-                            try {
-                                const d = JSON.parse(s.textContent || '');
-                                if (d && d['@type'] === 'Product') return true;
-                            } catch (e) {}
-                        }
-                        return false;
-                    }""",
-                    timeout=15_000,
-                )
-            except Exception as e:
-                logger.warning(f"yongqing {house_id} 等 ld+json Product 超時：{e}")
-            try:
-                page.wait_for_load_state("networkidle", timeout=8_000)
-            except Exception:
-                pass
-            # 滾到地圖區強制 lazy-load（座標用）
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout_sec * 1000)
+            # 滾到地圖區強制 lazy-load
             try:
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.5)")
                 page.wait_for_timeout(1500)
@@ -290,8 +455,6 @@ def _enrich_from_detail_once(item: dict, headless: bool = True) -> dict:
                 page.wait_for_timeout(1500)
             except Exception:
                 pass
-
-            # 抓座標（從 DOM 的 google maps 連結）
             try:
                 gmap_href = page.evaluate(
                     "() => document.querySelector('a[href*=\"google.com/maps\"]')?.href"
@@ -299,175 +462,18 @@ def _enrich_from_detail_once(item: dict, headless: bool = True) -> dict:
                 if gmap_href:
                     m = re.search(r"q=(-?\d+\.\d+),(-?\d+\.\d+)", gmap_href)
                     if m:
-                        coords_lat = float(m.group(1))
-                        coords_lng = float(m.group(2))
+                        item["latitude"] = float(m.group(1))
+                        item["longitude"] = float(m.group(2))
+                        item["source_latitude"] = item["latitude"]
+                        item["source_longitude"] = item["longitude"]
+                        browser.close()
+                        return True
             except Exception as e:
                 logger.warning(f"yongqing 座標抓取失敗 {house_id}: {e}")
-
-            # 抓 render 後的 HTML（用 BeautifulSoup parse 結構化欄位）
-            detail_html = page.content()
-
             browser.close()
     except Exception as e:
-        logger.warning(f"yongqing detail page Playwright 失敗 {house_id}: {e}")
-        return item
-
-    if coords_lat and coords_lng:
-        item["latitude"] = coords_lat
-        item["longitude"] = coords_lng
-        item["source_latitude"] = coords_lat
-        item["source_longitude"] = coords_lng
-
-    if detail_html:
-        soup = BeautifulSoup(detail_html, "html.parser")
-        text = soup.get_text(" ", strip=True)
-
-        # === 從 ld+json (schema.org Product) 抓基本欄位 ===
-        import json as _json
-        for sc in soup.find_all("script", type="application/ld+json"):
-            try:
-                data = _json.loads(sc.string or "")
-            except Exception:
-                continue
-            if isinstance(data, dict) and data.get("@type") == "Product":
-                if not item.get("title"):
-                    item["title"] = data.get("name")
-                img = data.get("image")
-                if img and not item.get("image_url"):
-                    item["image_url"] = img if isinstance(img, str) else (img[0] if img else None)
-                offers = data.get("offers") or {}
-                if offers.get("price"):
-                    try:
-                        item["price_ntd"] = int(offers["price"]) * 10000   # 永慶 price 單位是萬
-                    except (ValueError, TypeError):
-                        pass
-                yc_id = data.get("productID")
-                if yc_id:
-                    item["_yongqing_yc_id"] = yc_id
-                break
-
-        # === 從文字 grep 詳細欄位 ===
-
-        # 地址（含路段）— 收緊 regex 不讓貪婪吃到「整層住家」這類後綴
-        # 格式：城市 + 區 + 路名 + 可選的「X段」結尾
-        addr_m = re.search(
-            r"((?:台北市|新北市|桃園市|台中市|高雄市)[一-龥]{2,4}區[一-龥]{1,8}(?:路|街|大道)(?:[一二三四五六七八九十]段)?)",
-            text,
-        )
-        if addr_m:
-            item["address"] = addr_m.group(1)
-            cm = re.match(r"^(台北市|新北市|桃園市|台中市|高雄市)", addr_m.group(1))
-            if cm:
-                item["city"] = cm.group(1)
-            dm = re.search(r"(?:台北市|新北市|桃園市|台中市|高雄市)([一-龥]{2,4}區)", addr_m.group(1))
-            if dm:
-                item["district"] = dm.group(1)
-
-        # 樓層：「5/14樓」「1/4樓」
-        floor_m = re.search(r"(\d+)\s*/\s*(\d+)\s*樓", text)
-        if floor_m:
-            item["floor"] = floor_m.group(1)
-            item["total_floors"] = int(floor_m.group(2))
-
-        # 屋齡
-        age_m = re.search(r"屋齡[\s:：]*([\d.]+)\s*年", text)
-        if age_m:
-            try:
-                item["building_age"] = float(age_m.group(1))
-            except ValueError:
-                pass
-
-        # 建物坪數：對應 591 的「權狀坪」= 永慶的「建物坪數」(含車位)
-        # 永慶詳情頁實際呈現：「建物坪數 387.76坪 (含車位 114.22 坪)」
-        # 然後分項：主建物 / 共同使用 / 附屬建物
-        # 591 卡片 area 欄位 = 建物權狀坪(含車位) → 對齊永慶「建物坪數」
-        total_m = re.search(r"建物坪數[\s:：]*([\d.]+)", text)
-        if not total_m:
-            # 緊湊版「建物387.76坪」也接受
-            total_m = re.search(r"建物\s*([\d.]+)\s*坪", text)
-        if total_m:
-            try:
-                item["building_area_ping"] = float(total_m.group(1))
-            except ValueError:
-                pass
-
-        # 額外存「主建物」當參考欄位（永慶獨家資訊，不取代 building_area_ping）
-        main_m = re.search(r"主建物[\s:：]*([\d.]+)", text)
-        if main_m:
-            try:
-                item["building_area_main_ping"] = float(main_m.group(1))
-            except ValueError:
-                pass
-
-        # 若主流程仍抓不到「建物坪數」，最後 fallback 才用主建物
-        if not item.get("building_area_ping") and item.get("building_area_main_ping"):
-            item["building_area_ping"] = item["building_area_main_ping"]
-            logger.warning(f"yongqing {item.get('source_id')} 抓不到「建物坪數」，用主建物 fallback")
-
-        # 土地坪數
-        m = re.search(r"土地坪數[\s:：]*([\d.]+)", text)
-        if not m:
-            m = re.search(r"土地[\s:：]?\s*([\d.]+)\s*坪", text)
-        if m:
-            try:
-                item["land_area_ping"] = float(m.group(1))
-            except ValueError:
-                pass
-
-        # 使用分區（過濾含糊回答）
-        zoning_m = re.search(
-            r"使用分區[\s:：]*([^，,。\s]+(?:住宅區|商業區|工業區|農業區|文教區|風景區|保護區))",
-            text,
-        )
-        if zoning_m:
-            zoning_raw = zoning_m.group(1)
-            if not any(bad in zoning_raw for bad in ["謄本", "複雜", "不明", "未知"]):
-                item["zoning_original"] = zoning_raw
-
-        # 型態（建物類型）：從「型態 X」字樣抓
-        # 永慶 type 詞彙：公寓 / 無電梯公寓 / 電梯大廈 / 華廈 / 透天 / 店面 / 套房 等
-        type_m = re.search(r"型態\s+([^\s，,。]{1,8})", text)
-        if type_m:
-            yc_type = type_m.group(1)
-            # 對應到我們系統的 building_type 詞彙
-            type_map = {
-                "公寓": "公寓",
-                "無電梯公寓": "公寓",
-                "電梯大廈": "電梯大樓",
-                "電梯大樓": "電梯大樓",
-                "華廈": "華廈",
-                "透天": "透天厝",
-                "透天厝": "透天厝",
-                "店面": "店面",
-                "套房": "套房",
-            }
-            item["building_type"] = type_map.get(yc_type, yc_type)
-            item["_yongqing_type_raw"] = yc_type   # 保留原文 debug 用
-
-        # 社區名稱 — 從 BreadcrumbList JSON-LD 拿（不抓自由文字避免誤抓 UI label）
-        for sc in soup.find_all("script", type="application/ld+json"):
-            try:
-                bdata = _json.loads(sc.string or "")
-            except Exception:
-                continue
-            if isinstance(bdata, dict) and bdata.get("@type") == "BreadcrumbList":
-                breadcrumbs = bdata.get("itemListElement", [])
-                # 社區名稱通常在 breadcrumb 最後一個 (position 5 之後)
-                # 例：買屋 / 台北市 / 大安區 / 安和路二段 / 安和名園
-                # 取最後一個非「路/街/大道」結尾的就是社區名
-                for el in reversed(breadcrumbs):
-                    name = el.get("name") or ""
-                    if name and not re.search(r"(?:路|街|大道|區|市)$", name):
-                        if name not in (item.get("city") or "", item.get("district") or ""):
-                            item["community_name"] = name
-                            break
-                break
-
-        # 計算單價
-        if item.get("price_ntd") and item.get("building_area_ping"):
-            item["price_per_ping"] = item["price_ntd"] / item["building_area_ping"]
-
-    return item
+        logger.warning(f"yongqing Playwright 失敗 {house_id}: {e}")
+    return False
 
 
 def _enrich_did_succeed(item: dict) -> bool:
@@ -480,32 +486,13 @@ def _enrich_did_succeed(item: dict) -> bool:
 
 
 def _enrich_from_detail(item: dict, headless: bool = True, max_retries: int = 2) -> bool:
-    """Enrich with retry。回傳 True/False 表示是否成功（核心欄位都拿到）。
-    失敗 → caller 應跳過該 item，不要寫進 DB。"""
-    last_err = None
-    for attempt in range(1, max_retries + 1):
-        try:
-            _enrich_from_detail_once(item, headless=headless)
-            if _enrich_did_succeed(item):
-                if attempt > 1:
-                    logger.info(f"yongqing enrich {item.get('_yongqing_house_id')} 第 {attempt} 次嘗試成功")
-                return True
-            # 沒拿到核心欄位 → log + 重試
-            last_err = (
-                f"missing core fields after attempt {attempt}: "
-                f"price={item.get('price_ntd')}, addr={item.get('address')}, "
-                f"type_raw={item.get('_yongqing_type_raw')}"
-            )
-            logger.warning(f"yongqing enrich {item.get('_yongqing_house_id')} {last_err}")
-        except Exception as e:
-            last_err = str(e)[:120]
-            logger.warning(f"yongqing enrich {item.get('_yongqing_house_id')} attempt {attempt} exception: {last_err}")
-        if attempt < max_retries:
-            time.sleep(3.0)   # 重試前停一下，避免立刻撞 rate limit / 給網路恢復時間
-    logger.warning(
-        f"yongqing enrich FAILED 最終放棄 {item.get('_yongqing_house_id')} ({max_retries} 次)：{last_err}"
-    )
-    return False
+    """[向後相容] 完整 enrich (HTTP + Playwright)。新主流程已分兩階段，這個給 single-URL 用。
+    回傳 True/False 表示是否成功（核心欄位都拿到）。"""
+    if not _enrich_basic_via_http(item, max_retries=max_retries):
+        return False
+    # 座標失敗不算整體失敗（pipeline 會自己 fallback geocoding）
+    _enrich_coords_via_playwright(item, headless=headless)
+    return True
 
 
 # ── 公開主流程 ──────────────────────────────────────────────────────────────
@@ -583,38 +570,44 @@ def scrape_yongqing(
                     break
                 continue
 
-            # 全新物件 → 補詳情頁
+            # 全新物件 → 兩階段 enrich
             consecutive_complete = 0
-            progress_callback(f"  ✓ 永慶新物件 候選: {item.get('title','')[:30]}")
-            ok = _enrich_from_detail(item, headless=headless, max_retries=2)
-            if not ok:
-                # 詳情頁整個 enrich 失敗 → 不寫進 DB，避免空殼物件
-                # 進「失敗重試佇列」10 分鐘後自動重抓（非 404 = 物件可能還活著只是暫時抓不到）
+            progress_callback(f"  → 永慶 HTTP 抓詳情: {item.get('title','')[:30]}")
+
+            # Stage 1：HTTP 拿全部欄位（除座標）— 快（~1 秒/筆）
+            ok_basic = _enrich_basic_via_http(item, max_retries=2)
+            if not ok_basic:
+                # HTTP 都拿不到 → 進重試佇列（10 分鐘後再試）
                 try:
                     from database.retry_queue import enqueue as _retry_enqueue
                     _retry_enqueue(
                         source_id=item["source_id"],
                         source="永慶",
                         url=item["url"],
-                        error="enrich failed: detail page missing core fields after 2 retries",
+                        error="HTTP enrich failed: SSR HTML 不完整或 parse 失敗",
                         extra_context={"district": item.get("district"), "title": item.get("title")},
                     )
                 except Exception as _eq:
                     logger.warning(f"retry_queue enqueue 失敗 {item.get('source_id')}: {_eq}")
                 progress_callback(
-                    f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：enrich 失敗，已加入重試佇列（10 分鐘後再試）"
+                    f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：HTTP enrich 失敗，已加入重試佇列"
                 )
-                _human_sleep()
                 continue
 
-            # 過濾：只看樓高 — 5 樓含以下分析（不論網頁標哪種型態，4-5F 老建築都當公寓看）
+            # 過濾：只看樓高 — 5 樓含以下分析
             tf = item.get("total_floors")
             if tf and int(tf) > 5:
                 progress_callback(
                     f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：總樓層 {tf} 樓 > 5（型態={item.get('_yongqing_type_raw','-')}）"
                 )
-                _human_sleep()
                 continue
+
+            # Stage 2：通過樓高 filter 的才開 Playwright 拿座標（~7-10 秒/筆）
+            progress_callback(f"  → 永慶 Playwright 拿座標: {item.get('address','')[:20]}")
+            got_coords = _enrich_coords_via_playwright(item, headless=headless, timeout_sec=20)
+            if not got_coords:
+                # 座標拿不到不算整體失敗（pipeline 會自己 fallback geocoding）
+                logger.info(f"yongqing {item.get('_yongqing_house_id')} 座標拿不到，繼續 ingest（pipeline 會 fallback）")
 
             new_items.append(item)
             progress_callback(f"  ✓ 已加入：第 {len(new_items)} 筆 {item.get('address','')[:25]}")
