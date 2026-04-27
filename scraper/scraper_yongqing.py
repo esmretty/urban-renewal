@@ -239,7 +239,8 @@ def _parse_listing_page(html: str) -> list[dict]:
 
 # ── 詳情頁（用 Playwright 拿座標 + BeautifulSoup parse 詳細欄位）────────────
 
-def _enrich_from_detail(item: dict, headless: bool = True) -> dict:
+def _enrich_from_detail_once(item: dict, headless: bool = True) -> dict:
+    """單次 enrich attempt（不 retry）。實際 caller 應該用 _enrich_from_detail 走 retry 邏輯。"""
     """開永慶詳情頁，補上：座標、土地坪、使用分區、建物分項、社區名。
     回傳更新後的 item（in-place 也會改）。"""
     from playwright.sync_api import sync_playwright
@@ -260,11 +261,28 @@ def _enrich_from_detail(item: dict, headless: bool = True) -> dict:
             )
             page = ctx.new_page()
             page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            # 主動等 SSR 的 JSON-LD Product 區塊出現（這是核心欄位來源；沒這個 enrich 必失敗）
             try:
-                page.wait_for_load_state("networkidle", timeout=12_000)
+                page.wait_for_function(
+                    """() => {
+                        const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+                        for (const s of scripts) {
+                            try {
+                                const d = JSON.parse(s.textContent || '');
+                                if (d && d['@type'] === 'Product') return true;
+                            } catch (e) {}
+                        }
+                        return false;
+                    }""",
+                    timeout=15_000,
+                )
+            except Exception as e:
+                logger.warning(f"yongqing {house_id} 等 ld+json Product 超時：{e}")
+            try:
+                page.wait_for_load_state("networkidle", timeout=8_000)
             except Exception:
                 pass
-            # 滾到地圖區強制 lazy-load
+            # 滾到地圖區強制 lazy-load（座標用）
             try:
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.5)")
                 page.wait_for_timeout(1500)
@@ -452,6 +470,44 @@ def _enrich_from_detail(item: dict, headless: bool = True) -> dict:
     return item
 
 
+def _enrich_did_succeed(item: dict) -> bool:
+    """判定 enrich 是否成功 — 看核心欄位有沒有抓到。"""
+    return bool(
+        item.get("price_ntd")
+        and item.get("address")
+        and item.get("_yongqing_type_raw")    # 抓到型態才算詳情頁完整解析
+    )
+
+
+def _enrich_from_detail(item: dict, headless: bool = True, max_retries: int = 2) -> bool:
+    """Enrich with retry。回傳 True/False 表示是否成功（核心欄位都拿到）。
+    失敗 → caller 應跳過該 item，不要寫進 DB。"""
+    last_err = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            _enrich_from_detail_once(item, headless=headless)
+            if _enrich_did_succeed(item):
+                if attempt > 1:
+                    logger.info(f"yongqing enrich {item.get('_yongqing_house_id')} 第 {attempt} 次嘗試成功")
+                return True
+            # 沒拿到核心欄位 → log + 重試
+            last_err = (
+                f"missing core fields after attempt {attempt}: "
+                f"price={item.get('price_ntd')}, addr={item.get('address')}, "
+                f"type_raw={item.get('_yongqing_type_raw')}"
+            )
+            logger.warning(f"yongqing enrich {item.get('_yongqing_house_id')} {last_err}")
+        except Exception as e:
+            last_err = str(e)[:120]
+            logger.warning(f"yongqing enrich {item.get('_yongqing_house_id')} attempt {attempt} exception: {last_err}")
+        if attempt < max_retries:
+            time.sleep(3.0)   # 重試前停一下，避免立刻撞 rate limit / 給網路恢復時間
+    logger.warning(
+        f"yongqing enrich FAILED 最終放棄 {item.get('_yongqing_house_id')} ({max_retries} 次)：{last_err}"
+    )
+    return False
+
+
 # ── 公開主流程 ──────────────────────────────────────────────────────────────
 
 def scrape_yongqing(
@@ -530,23 +586,21 @@ def scrape_yongqing(
             # 全新物件 → 補詳情頁
             consecutive_complete = 0
             progress_callback(f"  ✓ 永慶新物件 候選: {item.get('title','')[:30]}")
-            try:
-                _enrich_from_detail(item, headless=headless)
-            except Exception as e:
-                logger.warning(f"永慶詳情頁 enrich 失敗 {src_id}: {e}")
+            ok = _enrich_from_detail(item, headless=headless, max_retries=2)
+            if not ok:
+                # 詳情頁整個 enrich 失敗 → 不寫進 DB，避免空殼物件
+                progress_callback(
+                    f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：詳情頁 enrich 失敗（重試 2 次都拿不到核心欄位）"
+                )
+                _human_sleep()
+                continue
 
-            # 過濾非公寓：第一階段只要公寓（永慶 type 詞「公寓」「無電梯公寓」都對應）
+            # 過濾非公寓：詳情頁抓到實際型態，不是公寓就跳過
             actual_type = item.get("building_type")
             if actual_type and actual_type != "公寓":
                 progress_callback(
                     f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：型態 {item.get('_yongqing_type_raw') or actual_type} 不是公寓"
                 )
-                _human_sleep()
-                continue
-
-            # 進一步檢查：詳情頁完全沒抓到型態 + 缺核心欄位 → 大概率是非公寓 layout 不同 → skip
-            if not actual_type and not item.get("price_ntd"):
-                progress_callback(f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：型態未知且無價格")
                 _human_sleep()
                 continue
 
