@@ -409,6 +409,21 @@ def analyze_single_property(
             land_area_ping=item.get("land_area_ping"),
         )
         item["lvr_records"] = t.get("lvr_records", [])[:20]
+        # 屋齡回推：若 item 沒帶 building_age（如 manual 物件、或卡片沒寫），
+        # 從 LVR records 的 year_completed 算「當前屋齡」(每次重抓會自動更新)
+        if not item.get("building_age") and item.get("lvr_records"):
+            yrs = [r.get("year_completed") for r in item["lvr_records"]
+                   if isinstance(r.get("year_completed"), int) and r.get("year_completed") > 1900]
+            if yrs:
+                # 取最早年份（同棟可能有多筆，建築完工年該一致；保守取最小）
+                completed = min(yrs)
+                from datetime import datetime as _dt
+                age = _dt.now().year - completed
+                if 0 <= age <= 200:
+                    item["building_age"] = age
+                    item["building_age_source"] = "lvr_year_completed"
+                    item["building_age_completed_year"] = completed
+                    logger.info(f"[{src_id}] 屋齡從 LVR 回推：完工 {completed} 年 → 屋齡 {age}")
         lvr_land = t.get("lvr_land_ping")
         if lvr_land:
             if not item.get("land_area_ping"):
