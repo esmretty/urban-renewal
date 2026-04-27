@@ -476,7 +476,8 @@ let _schedulerTimer = null;
 // UI 編輯中的 draft（還沒套用的）。每欄位標記 "已套用 / 未套用"
 let _schedDraft = { interval_hr: 1, commands: [] };
 let _schedServer = { interval_hr: 1, commands: [] };   // server 當前真實值（套用對照）
-let _schedMeta = { allowed: [], maxCmds: 3, maxDistricts: 5, interSleep: 30, intervalOpts: [1,3,6,12,24] };
+let _schedMeta = { allowed: [], maxCmds: 5, maxDistricts: 5, interSleep: 30, intervalOpts: [1,3,6,12,24], verifyIntervalOpts: [12,24,72,360] };
+let _lastVerifyAliveAt = null;
 
 async function loadSchedulerStatus() {
   let running = false;
@@ -486,11 +487,15 @@ async function loadSchedulerStatus() {
     const s = await r.json();
     _schedMeta = {
       allowed: s.allowed_districts || [],
-      maxCmds: s.max_commands || 3,
+      maxCmds: s.max_commands || 5,
       maxDistricts: s.max_districts_per_command || 5,
       interSleep: s.inter_command_sleep_sec || 30,
       intervalOpts: s.allowed_interval_hr || [1, 3, 6, 12, 24],
+      verifyIntervalOpts: s.allowed_verify_interval_hr || [12, 24, 72, 360],
     };
+    _lastVerifyAliveAt = s.last_verify_alive_at || null;
+    // 觸發 dashboard 警告檢查
+    if (typeof refreshVerifyAliveWarning === "function") refreshVerifyAliveWarning();
     _schedServer = {
       interval_hr: s.interval_hr,
       commands: JSON.parse(JSON.stringify(s.commands || [])),
@@ -570,63 +575,69 @@ function renderScheduler(s) {
       <div style="color:#555;">最近執行：${_fmtDate(s.last_run_at)} ${s.last_status ? `（${esc(s.last_status)}）` : ""}</div>
     </div>`;
 
-  // interval row
-  const intervalApplied = _isIntervalApplied();
-  const intervalOpts = _schedMeta.intervalOpts.map(h =>
-    `<option value="${h}" ${Number(_schedDraft.interval_hr) === h ? "selected" : ""}>${h} 小時</option>`
-  ).join("");
-  const intervalRow = `
-    <div style="margin-bottom:14px;">
-      每
-      <select id="sched-interval" style="padding:3px 6px;"
-              onchange="_schedDraft.interval_hr = parseInt(this.value)||1; _touchApplyBtns()">
-        ${intervalOpts}
-      </select>
-      跑一次（於台北時區整點觸發）
-      <button onclick="applySchedulerConfig()" style="margin-left:8px; padding:3px 12px;">套用</button>
-      <span id="sched-interval-applied" style="margin-left:8px; color:${intervalApplied ? '#27ae60' : '#c0392b'}; font-size:12px;">
-        ${intervalApplied ? `✓ 已套用：每 ${_schedServer.interval_hr} 小時` : "⚠ 未套用（按下套用才生效）"}
-      </span>
-    </div>`;
-
-  // commands
+  // commands（每命令各自 interval；不再有全域 interval row）
   const cmdHtml = _schedDraft.commands.map((cmd, i) => _renderCmdRow(cmd, i)).join("");
-  const addBtnHtml = _schedDraft.commands.length < _schedMeta.maxCmds
-    ? `<button onclick="schedAddCmd()" style="padding:4px 14px;">+ 新增命令</button>`
-    : "";
+  const addScanBtn = `<button onclick="schedAddCmd('scan')" style="padding:4px 14px; margin-right:6px;">+ 新增「掃描新物件」</button>`;
+  const addVerifyBtn = `<button onclick="schedAddCmd('verify_alive')" style="padding:4px 14px;">+ 新增「偵測下架」</button>`;
 
-  box.innerHTML = headerRow + intervalRow +
-    `<div style="font-weight:600; margin-bottom:6px;">命令清單（依序執行，兩命令之間休息 ${_schedMeta.interSleep} 秒）</div>` +
+  box.innerHTML = headerRow +
+    `<div style="font-weight:600; margin:14px 0 6px;">命令清單（每命令各自時間，到時間就跑）</div>` +
     cmdHtml +
-    `<div style="margin-top:8px;">${addBtnHtml}</div>`;
+    `<div style="margin-top:8px;">${addScanBtn}${addVerifyBtn}</div>`;
 }
 
 function _renderCmdRow(cmd, i) {
-  const applied = _isCmdApplied(i);
+  const cmdType = cmd.type || "scan";
   const server = _schedServer.commands[i];
-  const srcLabelCN = { "591": "591", "yongqing": "永慶", "sinyi": "信義" };
-  const srcsLabel = (cmd) => _normSources(cmd).map(s => srcLabelCN[s] || s).join("+");
-  const appliedText = applied
-    ? `<span style="color:#27ae60; font-size:12px;">✓ 已套用：${esc(srcsLabel(server))} / ${esc((server.districts || []).join("、"))} / ${Number(server.limit)} 筆</span>`
-    : `<span style="color:#c0392b; font-size:12px;">⚠ 未套用（按下套用才生效）</span>`;
+  const lastRunStr = (server && server.last_run_at)
+    ? `<span style="color:#666; font-size:11px;">上次跑：${_fmtDate(server.last_run_at)}</span>`
+    : `<span style="color:#888; font-size:11px;">尚未跑過</span>`;
+  const removeBtn = `<button onclick="schedRemoveCmd(${i})" style="margin-left:auto; padding:2px 8px; color:#c0392b;">刪除</button>`;
 
-  // 跟手動 batch 同樣順序：大安 信義 中山 中正 文山 松山 大同 萬華 南港
-  // 顯示去掉「區」字（值仍是「X區」字串給後端）
+  if (cmdType === "verify_alive") {
+    // 偵測下架命令：只選 interval
+    const intervalOpts = _schedMeta.verifyIntervalOpts.map(h => {
+      const sel = Number(cmd.interval_hr) === h ? "selected" : "";
+      return `<option value="${h}" ${sel}>${h} 小時</option>`;
+    }).join("");
+    return `
+      <div style="border:1px solid #1e88e5; padding:10px 12px; border-radius:5px; margin-bottom:8px; background:#f0f7ff;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+          <b>命令 ${i + 1}</b>
+          <span style="background:#1e88e5; color:#fff; padding:1px 8px; border-radius:3px; font-size:12px;">偵測下架</span>
+          ${lastRunStr}
+          ${removeBtn}
+        </div>
+        <div style="margin-bottom:6px; font-size:13px; color:#555;">
+          掃描所有非已封存物件，HTTP 驗證每個來源 URL 是否還活著，全部失效就自動 archive。
+        </div>
+        <div>
+          每
+          <select style="padding:3px 6px;"
+                  onchange="_schedDraft.commands[${i}].interval_hr = parseInt(this.value)||24; _touchApplyBtns()">
+            ${intervalOpts}
+          </select>
+          跑一次
+          <button onclick="applySchedulerConfig()" style="margin-left:8px; padding:3px 12px;">套用</button>
+        </div>
+      </div>`;
+  }
+
+  // scan 類型
   const ORDER = ["大安區", "信義區", "中山區", "中正區", "文山區", "松山區", "大同區", "萬華區", "南港區"];
   const ordered = ORDER.filter(d => _schedMeta.allowed.includes(d))
     .concat(_schedMeta.allowed.filter(d => !ORDER.includes(d)));
   const distChips = ordered.map(d => {
-    const checked = cmd.districts.includes(d) ? "checked" : "";
+    const checked = (cmd.districts || []).includes(d) ? "checked" : "";
     const label = d.replace(/區$/, "");
     return `<label style="margin-right:8px;"><input type="checkbox" ${checked}
        onchange="schedToggleDist(${i}, '${d}', this.checked)"> ${label}</label>`;
   }).join("");
 
-  // 來源 checkbox 多選（固定順序：591 永慶 信義；信義先註明 coming-soon）
   const SOURCES = [
-    { key: "591",      name: "591" },
+    { key: "591", name: "591" },
     { key: "yongqing", name: "永慶" },
-    { key: "sinyi",    name: "信義 (尚未支援)", disabled: true },
+    { key: "sinyi", name: "信義 (尚未支援)", disabled: true },
   ];
   const curSources = new Set(_normSources(cmd));
   const sourceChips = SOURCES.map(s => {
@@ -636,35 +647,70 @@ function _renderCmdRow(cmd, i) {
        onchange="schedToggleSource(${i}, '${s.key}', this.checked)"> ${esc(s.name)}</label>`;
   }).join("");
 
+  const intervalOpts = _schedMeta.intervalOpts.map(h => {
+    const sel = Number(cmd.interval_hr || 3) === h ? "selected" : "";
+    return `<option value="${h}" ${sel}>${h} 小時</option>`;
+  }).join("");
+
   return `
-    <div style="border:1px solid #e5e5e5; padding:10px 12px; border-radius:5px; margin-bottom:8px;">
+    <div style="border:1px solid #c78a00; padding:10px 12px; border-radius:5px; margin-bottom:8px; background:#fffaed;">
       <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
         <b>命令 ${i + 1}</b>
-        ${_schedDraft.commands.length > 1 ? `<button onclick="schedRemoveCmd(${i})" style="margin-left:auto; padding:2px 8px; color:#c0392b;">刪除</button>` : ""}
+        <span style="background:#c78a00; color:#fff; padding:1px 8px; border-radius:3px; font-size:12px;">掃描新物件</span>
+        ${lastRunStr}
+        ${removeBtn}
       </div>
       <div style="margin-bottom:6px;">
         <span style="font-size:12px; color:#666; margin-right:4px;">來源：</span>
         ${sourceChips}
-        <span style="color:#7f8c8d; font-size:11px; margin-left:4px;">
-          （依固定順序執行：591 → 永慶 → 信義）
-        </span>
       </div>
       <div style="margin-bottom:6px;">
         <span style="font-size:12px; color:#666; margin-right:4px;">行政區：</span>
         ${distChips}
         <span style="color:#7f8c8d; font-size:12px; margin-left:4px;">
-          （已選 ${cmd.districts.length}/${_schedMeta.maxDistricts}）
+          （已選 ${(cmd.districts||[]).length}/${_schedMeta.maxDistricts}）
         </span>
       </div>
       <div>
         每次最多
-        <input type="number" min="1" max="300" value="${cmd.limit}" style="width:70px; padding:3px 6px;"
+        <input type="number" min="1" max="300" value="${cmd.limit || 30}" style="width:70px; padding:3px 6px;"
                oninput="_schedDraft.commands[${i}].limit = parseInt(this.value)||30; _touchApplyBtns()">
-        筆
+        筆 ｜ 每
+        <select style="padding:3px 6px;"
+                onchange="_schedDraft.commands[${i}].interval_hr = parseInt(this.value)||3; _touchApplyBtns()">
+          ${intervalOpts}
+        </select>
+        跑一次
         <button onclick="applySchedulerConfig()" style="margin-left:8px; padding:3px 12px;">套用</button>
-        <span style="margin-left:8px;">${appliedText}</span>
       </div>
     </div>`;
+}
+
+// 偵測下架警告：超過 360hr 沒跑 → 把「危險區域」panel 變成紅色警告
+function refreshVerifyAliveWarning() {
+  const dangerPanel = document.querySelector(".panel-danger");
+  if (!dangerPanel) return;
+  // 移除上次的警告（若有）
+  const existing = document.getElementById("verify-alive-warning");
+  if (existing) existing.remove();
+  if (!_lastVerifyAliveAt) {
+    // 從未跑過 → 警告
+    const warn = document.createElement("div");
+    warn.id = "verify-alive-warning";
+    warn.style.cssText = "background:#fff3cd; border:2px solid #ffc107; color:#856404; padding:10px 14px; border-radius:5px; margin-bottom:12px; font-size:14px; font-weight:600;";
+    warn.innerHTML = "⚠️ <b>警告：從未執行偵測下架</b><br><span style=\"font-weight:normal; font-size:13px;\">建議在「定時 batch 排程」加一個「偵測下架」命令，避免下架物件累積。</span>";
+    dangerPanel.insertBefore(warn, dangerPanel.firstChild);
+    return;
+  }
+  const lastMs = new Date(_lastVerifyAliveAt).getTime();
+  const elapsedHr = (Date.now() - lastMs) / 3600000;
+  if (elapsedHr > 360) {
+    const warn = document.createElement("div");
+    warn.id = "verify-alive-warning";
+    warn.style.cssText = "background:#f8d7da; border:2px solid #dc3545; color:#721c24; padding:10px 14px; border-radius:5px; margin-bottom:12px; font-size:14px; font-weight:600;";
+    warn.innerHTML = `⚠️ <b>嚴重警告：${Math.round(elapsedHr)} 小時沒偵測下架（超過 360 小時）</b><br><span style="font-weight:normal; font-size:13px;">上次：${_fmtDate(_lastVerifyAliveAt)}<br>排程的「偵測下架」命令可能停了或從未啟用。請檢查定時 batch 排程。</span>`;
+    dangerPanel.insertBefore(warn, dangerPanel.firstChild);
+  }
 }
 
 window.schedToggleSource = function (idx, src, on) {
@@ -709,10 +755,21 @@ window.schedToggleDist = function (idx, d, on) {
   _touchApplyBtns();
 };
 
-window.schedAddCmd = function () {
-  if (_schedDraft.commands.length >= _schedMeta.maxCmds) return;
-  // 預設：所有目前支援的來源都勾（591 + 永慶；信義尚未支援不算）
-  _schedDraft.commands.push({ districts: [], limit: 30, sources: ["591", "yongqing"] });
+window.schedAddCmd = function (type) {
+  type = type || "scan";
+  if (_schedDraft.commands.length >= _schedMeta.maxCmds) {
+    alert(`命令數已達上限 ${_schedMeta.maxCmds}`);
+    return;
+  }
+  if (type === "verify_alive") {
+    _schedDraft.commands.push({ type: "verify_alive", interval_hr: 24 });
+  } else {
+    // scan: 預設所有目前支援的來源都勾（591 + 永慶；信義尚未支援不算）
+    _schedDraft.commands.push({
+      type: "scan", districts: [], limit: 30,
+      sources: ["591", "yongqing"], interval_hr: 3,
+    });
+  }
   _touchApplyBtns();
 };
 
@@ -727,15 +784,9 @@ window.schedRemoveCmd = function (idx) {
 
 window.applySchedulerConfig = async function () {
   try {
-    // 以 DOM 當下值為準（避免 _schedDraft 被 poll 覆蓋的隱性 race）
-    const selEl = document.getElementById("sched-interval");
-    const domInterval = selEl ? parseInt(selEl.value) : NaN;
-    const intervalToSend = Number.isFinite(domInterval) && domInterval > 0
-      ? domInterval
-      : (parseInt(_schedDraft.interval_hr) || 1);
-    _schedDraft.interval_hr = intervalToSend;
+    // 全域 interval_hr 已 deprecated；保留欄位避免後端 422
     const payload = {
-      interval_hr: intervalToSend,
+      interval_hr: parseInt(_schedDraft.interval_hr) || 3,
       commands: _schedDraft.commands,
     };
     console.log("[scheduler] 套用 payload", payload);

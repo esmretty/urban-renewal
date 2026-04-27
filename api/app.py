@@ -457,45 +457,161 @@ async def _retry_queue_loop():
             await asyncio.sleep(30)
 
 
+def _cmd_state_get(cmd_idx: int) -> dict:
+    """讀某 command 的 last_run_at 等狀態（per-command）。"""
+    try:
+        doc = get_firestore().collection("settings").document("scheduler_state").get()
+        if doc.exists:
+            data = doc.to_dict() or {}
+            return data.get(f"cmd_{cmd_idx}") or {}
+    except Exception as e:
+        logger.warning(f"[scheduler] _cmd_state_get fail: {e}")
+    return {}
+
+
+def _cmd_state_set(cmd_idx: int, **kwargs):
+    """更新某 command 的狀態。"""
+    try:
+        get_firestore().collection("settings").document("scheduler_state").set(
+            {f"cmd_{cmd_idx}": kwargs}, merge=True
+        )
+    except Exception as e:
+        logger.warning(f"[scheduler] _cmd_state_set fail: {e}")
+
+
+async def _run_verify_alive_command(progress=None):
+    """偵測下架命令：掃所有非 archived properties，HTTP 驗活每個 source URL。
+    全部 sources 都失效 → archive doc。"""
+    from analysis.lvr_index import _haversine   # noqa
+    col = get_col()
+    docs = list(col.stream())
+    total = len(docs)
+    archived_count = 0
+    skipped = 0
+    started = now_tw_iso()
+    logger.info(f"[verify-alive] 開始掃 {total} 筆物件")
+    if progress:
+        progress(f"開始偵測下架（掃 {total} 筆）", 0)
+
+    for i, d in enumerate(docs):
+        data = d.to_dict() or {}
+        if data.get("archived") is True:
+            skipped += 1
+            continue
+        sources = data.get("sources") or []
+        if not sources and data.get("url"):
+            sources = [{"name": data.get("source"), "url": data.get("url")}]
+        if not sources:
+            continue
+
+        # 驗活每個 source URL（用 _verify_source_alive helper）
+        all_dead = True
+        any_alive = False
+        for s in sources:
+            url = s.get("url")
+            if not url:
+                continue
+            alive, _reason = _verify_source_alive(url, timeout=8)
+            if alive:
+                any_alive = True
+                all_dead = False
+                break   # 一個活著就夠，不用再驗
+            await asyncio.sleep(2)   # rate-limit 友善
+
+        if all_dead and not any_alive:
+            col.document(d.id).update({
+                "archived": True,
+                "archived_at": now_tw_iso(),
+                "archived_reason": "verify-alive: 所有來源 URL 都失效（404/410/已下架字樣）",
+            })
+            archived_count += 1
+            logger.info(f"[verify-alive] archived {d.id}")
+
+        if (i + 1) % 20 == 0 and progress:
+            progress(f"已掃 {i+1}/{total}，archive {archived_count} 筆", 50.0 * (i+1) / total)
+        await asyncio.sleep(0.5)   # 別讓 verify 把 CPU 吃光
+
+    msg = f"完成偵測下架：掃 {total} / 跳過已 archived {skipped} / 新 archived {archived_count}"
+    logger.info(f"[verify-alive] {msg}")
+    if progress:
+        progress(msg, 100)
+    # 紀錄全域 last_verify_alive_at（給 dashboard 警告用）
+    get_firestore().collection("settings").document("scheduler_state").set(
+        {"last_verify_alive_at": now_tw_iso(), "last_verify_alive_archived": archived_count}, merge=True
+    )
+    return {"started": started, "finished": now_tw_iso(), "total": total,
+            "archived": archived_count, "skipped": skipped}
+
+
 async def _scheduled_scrape_loop():
-    """每 tick 從 Firestore 讀最新 config；依序執行命令，命令間休息 30 秒。
-    收到 _sched_wake_event（toggle 啟用時）→ 中斷當前 sleep，重算倒數（不觸發執行）。"""
+    """新版 per-cmd loop：每 60 秒檢查每個 cmd 是否到 due（now - last_run_at >= interval_hr）。
+    Due 的 cmd 一次跑一個（多個同時 due 也只跑一個，下次 tick 才跑下個）。
+    Cmd type:
+      - "scan": 掃描新物件（既有邏輯）
+      - "verify_alive": 偵測下架
+    """
     global _scheduler_last_run_at, _scheduler_last_status, _scheduler_next_tick_at
     while True:
-        cfg = _load_scheduler_config()
-        interval_hr = int(cfg.get("interval_hr") or 1)
-        next_tick = _compute_next_tick(interval_hr)
-        _scheduler_next_tick_at = next_tick.isoformat()
-        interval_sec = max(1, (next_tick - now_tw()).total_seconds())
-        woken_by_event = False
         try:
-            try:
-                if _sched_wake_event is not None:
-                    await asyncio.wait_for(_sched_wake_event.wait(), timeout=interval_sec)
-                    _sched_wake_event.clear()
-                    woken_by_event = True
-                else:
-                    await asyncio.sleep(interval_sec)
-            except asyncio.TimeoutError:
-                pass   # 正常 tick（抵達整點）
+            await asyncio.sleep(60)
         except asyncio.CancelledError:
             logger.info("[scheduler] loop cancelled (server shutdown)")
             break
-        if woken_by_event:
-            logger.info("[scheduler] wake event received, 重新計算下一個整點")
-            continue   # 不執行，只是重算 next_tick_at
         try:
-            cfg = _load_scheduler_config()   # 再讀一次以拿最新 enabled/commands
+            cfg = _load_scheduler_config()
             if not cfg.get("enabled"):
-                logger.info("[scheduler] disabled, skip this tick")
                 continue
             if _scrape_running:
-                logger.warning("[scheduler] 上一次 batch 還沒跑完，本次 tick 跳過")
-                continue
-            cmds = [c for c in (cfg.get("commands") or []) if c and c.get("districts")]
+                continue   # 上次還沒跑完，等下個 tick
+            cmds = cfg.get("commands") or []
             if not cmds:
-                logger.info("[scheduler] 無可執行命令，skip")
                 continue
+
+            # 找最早 due 的 cmd
+            now = now_tw()
+            due_cmd = None
+            due_idx = None
+            for idx, cmd in enumerate(cmds):
+                interval_hr = int(cmd.get("interval_hr") or cfg.get("interval_hr") or 24)
+                state = _cmd_state_get(idx)
+                last_run = state.get("last_run_at")
+                if not last_run:
+                    due_cmd = cmd
+                    due_idx = idx
+                    break
+                try:
+                    last_dt = datetime.fromisoformat(last_run)
+                    elapsed_hr = (now - last_dt).total_seconds() / 3600
+                    if elapsed_hr >= interval_hr:
+                        due_cmd = cmd
+                        due_idx = idx
+                        break
+                except Exception:
+                    due_cmd = cmd
+                    due_idx = idx
+                    break
+            if not due_cmd:
+                continue
+
+            cmd_type = due_cmd.get("type") or "scan"
+            started_at_iso = now_tw_iso()
+            _scheduler_last_run_at = started_at_iso
+
+            if cmd_type == "verify_alive":
+                logger.info(f"[scheduler] 命令 {due_idx} 觸發：偵測下架")
+                try:
+                    result = await _run_verify_alive_command()
+                    _scheduler_last_status = (
+                        f"偵測下架：掃 {result['total']} / archived {result['archived']}"
+                    )
+                except Exception as e:
+                    logger.exception(f"[scheduler] verify_alive 失敗: {e}")
+                    _scheduler_last_status = f"偵測下架失敗: {e}"
+                _cmd_state_set(due_idx, last_run_at=now_tw_iso(), last_status=_scheduler_last_status)
+                continue
+
+            # cmd_type == "scan" → 既有掃描新物件邏輯（fall through）
+            cmds = [due_cmd]   # 本 tick 只跑這 1 個
             started_at_iso = now_tw_iso()
             _scheduler_last_run_at = started_at_iso
             logger.info("[scheduler] 開始執行 %d 個命令", len(cmds))
@@ -579,6 +695,8 @@ async def _scheduled_scrape_loop():
                 f"完成 {done_count}/{len(cmds)} 個命令（新增 {total_new} / 補 {total_enrich} / 重複 {total_skip_dup}）"
             )
             logger.info("[scheduler] 全部完成 %s", _scheduler_last_status)
+            # 更新該 cmd 的 last_run_at（per-cmd 模式）
+            _cmd_state_set(due_idx, last_run_at=now_tw_iso(), last_status=_scheduler_last_status)
         except Exception as e:
             logger.exception("[scheduler] 定時 batch 失敗: %s", e)
             _scheduler_last_status = f"失敗: {e}"
@@ -830,17 +948,30 @@ async def scheduler_status(admin: dict = Depends(require_admin)):
     """回傳定時 batch 目前狀態 + 設定，給 admin UI 顯示。"""
     from config import TAIPEI_DISTRICTS
     cfg = _load_scheduler_config()
+    # 讀 per-cmd 狀態 + last_verify_alive_at
+    state_doc = get_firestore().collection("settings").document("scheduler_state").get()
+    state = (state_doc.to_dict() or {}) if state_doc.exists else {}
+    cmds_with_state = []
+    for i, c in enumerate(cfg.get("commands") or []):
+        c2 = dict(c)
+        cs = state.get(f"cmd_{i}") or {}
+        c2["last_run_at"] = cs.get("last_run_at")
+        c2["last_status"] = cs.get("last_status")
+        cmds_with_state.append(c2)
     return {
         "enabled": bool(cfg.get("enabled")),
         "interval_hr": int(cfg.get("interval_hr") or 1),
-        "commands": cfg.get("commands") or [],
+        "commands": cmds_with_state,
         "last_run_at": _scheduler_last_run_at,
         "last_status": _scheduler_last_status,
         "next_tick_at": _scheduler_next_tick_at,
         "currently_running": _scrape_running,
+        "last_verify_alive_at": state.get("last_verify_alive_at"),
+        "last_verify_alive_archived": state.get("last_verify_alive_archived"),
         # UI 選項用
         "allowed_districts": list(TAIPEI_DISTRICTS.keys()),
         "allowed_interval_hr": list(SCHEDULER_ALLOWED_INTERVAL_HR),
+        "allowed_verify_interval_hr": list(SCHEDULER_VERIFY_INTERVAL_HR),
         "max_commands": SCHEDULER_MAX_COMMANDS,
         "max_districts_per_command": SCHEDULER_MAX_DISTRICTS_PER_CMD,
         "inter_command_sleep_sec": SCHEDULER_INTER_COMMAND_SLEEP_SEC,
@@ -886,12 +1017,15 @@ async def scheduler_toggle(body: SchedulerToggleReq, admin: dict = Depends(requi
 
 
 class CommandSpec(BaseModel):
-    districts: List[str]
-    limit: int
-    # sources: 一個命令可以一次跑多個來源。預設 ["591"] 向下相容。
-    # 跑的時候依固定順序 591 → yongqing → sinyi（不照 admin 勾選的順序）
+    # type: "scan" = 掃描新物件（既有），"verify_alive" = 偵測下架
+    type: Optional[str] = "scan"
+    interval_hr: Optional[int] = None   # per-command interval；None 表示用全域 default
+
+    # 「掃描新物件」用：
+    districts: Optional[List[str]] = None
+    limit: Optional[int] = None
     sources: Optional[List[str]] = None
-    source: Optional[str] = None        # 舊欄位 backward compat（讀到時轉成 sources=[source]）
+    source: Optional[str] = None        # 舊欄位 backward compat
 
 
 class SchedulerConfigReq(BaseModel):
@@ -899,53 +1033,76 @@ class SchedulerConfigReq(BaseModel):
     commands: List[CommandSpec]
 
 
+SCHEDULER_VERIFY_INTERVAL_HR = (12, 24, 72, 360)   # 偵測下架可選的間隔
+
+
 @app.post("/admin/scheduler/config")
 async def scheduler_set_config(body: SchedulerConfigReq, admin: dict = Depends(require_admin)):
-    """套用 admin UI 整份排程設定（interval + commands list）。
-    interval_hr 只能是 1/3/6/12/24，tick 發生在台北時區整點。"""
+    """套用 admin UI 整份排程設定（commands list；每命令各自 interval）。"""
     from config import TAIPEI_DISTRICTS
-    if body.interval_hr not in SCHEDULER_ALLOWED_INTERVAL_HR:
-        raise HTTPException(400, f"interval_hr 必須為 {list(SCHEDULER_ALLOWED_INTERVAL_HR)} 其中一個")
-    if len(body.commands) > SCHEDULER_MAX_COMMANDS:
-        raise HTTPException(400, f"最多 {SCHEDULER_MAX_COMMANDS} 個命令")
+    if len(body.commands) > SCHEDULER_MAX_COMMANDS + 2:   # 多留 2 個 slot 給 verify_alive
+        raise HTTPException(400, f"最多 {SCHEDULER_MAX_COMMANDS + 2} 個命令")
     allowed = set(TAIPEI_DISTRICTS.keys())
     cleaned = []
+    VALID_SOURCES = ("591", "yongqing", "sinyi")
     for idx, c in enumerate(body.commands):
-        if len(c.districts) == 0:
-            continue   # 空命令跳過（admin 可留空 slot）
-        if len(c.districts) > SCHEDULER_MAX_DISTRICTS_PER_CMD:
-            raise HTTPException(400, f"命令 {idx+1} 最多選 {SCHEDULER_MAX_DISTRICTS_PER_CMD} 區（收到 {len(c.districts)}）")
-        for d in c.districts:
-            if d not in allowed:
-                raise HTTPException(400, f"命令 {idx+1}：「{d}」不是合法行政區")
-        if c.limit < 1 or c.limit > 300:
-            raise HTTPException(400, f"命令 {idx+1}：limit 必須 1~300（收到 {c.limit}）")
-        # sources 處理：優先 sources（新欄位），舊資料用 source 轉換
-        raw_sources = c.sources if c.sources else ([c.source] if c.source else ["591"])
-        cmd_sources = [(s or "").lower() for s in raw_sources if s]
-        VALID_SOURCES = ("591", "yongqing", "sinyi")
-        for s in cmd_sources:
-            if s not in VALID_SOURCES:
-                raise HTTPException(400, f"命令 {idx+1}：source 必須是 {VALID_SOURCES} 之一（收到 {s!r}）")
-        if not cmd_sources:
-            raise HTTPException(400, f"命令 {idx+1}：至少要勾一個來源")
-        # 排序成固定順序：591 → yongqing → sinyi（執行時也照這個順序）
-        cmd_sources = [s for s in VALID_SOURCES if s in cmd_sources]
-        cleaned.append({"districts": list(c.districts), "limit": int(c.limit), "sources": cmd_sources})
+        cmd_type = (c.type or "scan").lower()
+        if cmd_type not in ("scan", "verify_alive"):
+            raise HTTPException(400, f"命令 {idx+1}：type 必須是 scan / verify_alive（收到 {c.type!r}）")
+
+        if cmd_type == "scan":
+            # 掃描新物件：要 districts + limit + sources
+            districts = c.districts or []
+            if not districts:
+                continue   # 空命令跳過
+            if len(districts) > SCHEDULER_MAX_DISTRICTS_PER_CMD:
+                raise HTTPException(400, f"命令 {idx+1} 最多選 {SCHEDULER_MAX_DISTRICTS_PER_CMD} 區")
+            for d in districts:
+                if d not in allowed:
+                    raise HTTPException(400, f"命令 {idx+1}：「{d}」不是合法行政區")
+            limit = int(c.limit or 30)
+            if limit < 1 or limit > 300:
+                raise HTTPException(400, f"命令 {idx+1}：limit 必須 1~300")
+            raw_sources = c.sources if c.sources else ([c.source] if c.source else ["591"])
+            cmd_sources = [(s or "").lower() for s in raw_sources if s]
+            for s in cmd_sources:
+                if s not in VALID_SOURCES:
+                    raise HTTPException(400, f"命令 {idx+1}：source 必須是 {VALID_SOURCES} 之一")
+            if not cmd_sources:
+                raise HTTPException(400, f"命令 {idx+1}：至少要勾一個來源")
+            cmd_sources = [s for s in VALID_SOURCES if s in cmd_sources]
+            interval_hr = int(c.interval_hr or 3)
+            if interval_hr not in SCHEDULER_ALLOWED_INTERVAL_HR:
+                raise HTTPException(400, f"命令 {idx+1}：interval_hr 必須為 {list(SCHEDULER_ALLOWED_INTERVAL_HR)}")
+            cleaned.append({
+                "type": "scan",
+                "interval_hr": interval_hr,
+                "districts": list(districts),
+                "limit": limit,
+                "sources": cmd_sources,
+            })
+        else:
+            # verify_alive：只要 interval_hr
+            interval_hr = int(c.interval_hr or 24)
+            if interval_hr not in SCHEDULER_VERIFY_INTERVAL_HR:
+                raise HTTPException(400, f"命令 {idx+1}（偵測下架）：interval_hr 必須為 {list(SCHEDULER_VERIFY_INTERVAL_HR)}")
+            cleaned.append({
+                "type": "verify_alive",
+                "interval_hr": interval_hr,
+            })
+
     if not cleaned:
         raise HTTPException(400, "至少需要 1 個有效命令")
     get_firestore().collection("settings").document("scheduler").set({
-        "interval_hr": int(body.interval_hr),
+        "interval_hr": int(body.interval_hr or 3),   # 留著向下相容（已 deprecated）
         "commands": cleaned,
         "updated_at": now_tw_iso(),
         "updated_by_email": admin.get("email") or "",
     }, merge=True)
-    logger.warning("[scheduler] %s 套用設定 interval=%dhr commands=%s",
-                   admin.get("email"), body.interval_hr, cleaned)
-    # 套用新 config 後也 wake loop → 讓下次 tick 時間立刻生效
+    logger.warning("[scheduler] %s 套用設定 commands=%s", admin.get("email"), cleaned)
     if _sched_wake_event is not None:
         _sched_wake_event.set()
-    return {"status": "ok", "interval_hr": body.interval_hr, "commands": cleaned}
+    return {"status": "ok", "commands": cleaned}
 
 
 @app.post("/admin/properties/{property_id:path}/reanalyze")
