@@ -108,13 +108,33 @@ def _is_replacement_change(existing: dict, incoming: dict) -> bool:
     return False
 
 
+# 各 host 的 403/429 cooldown timestamp（epoch sec）；避免同一 host 連續 hit
+_VERIFY_403_BY_HOST: dict = {}
+_VERIFY_COOLDOWN_SEC = 30
+
+
 def _verify_source_alive(url: str, timeout: int = 8) -> tuple:
     """情況 D：驗證一個來源 URL 是否還活著。
     回傳 (is_alive: bool, reason: str)
     保守原則：HTTP 錯誤 / timeout 一律當成「還活著」(回傳 True)，避免誤刪。
-    只有明確 404/410 + 「下架/已售出」字樣才判定 dead。"""
+    只有明確 404/410 + 「下架/已售出」字樣才判定 dead。
+
+    Anti-bot 處理：對同一 host（特別是永慶）若剛被 403/429 → 短暫 cooldown
+    避免 verify 把人家整個 ban 掉。"""
     if not url:
         return (False, "no url")
+    import time as _t
+    try:
+        from urllib.parse import urlparse
+        host = urlparse(url).netloc.lower()
+    except Exception:
+        host = ""
+    # 若同 host 剛被 403 → cooldown
+    last403 = _VERIFY_403_BY_HOST.get(host, 0)
+    if last403 and (_t.time() - last403) < _VERIFY_COOLDOWN_SEC:
+        wait = _VERIFY_COOLDOWN_SEC - (_t.time() - last403)
+        logger.info(f"[verify-alive] {host} cooldown {wait:.1f}s（剛 403）")
+        _t.sleep(wait)
     try:
         import requests
         import urllib3
@@ -124,6 +144,10 @@ def _verify_source_alive(url: str, timeout: int = 8) -> tuple:
                          verify=False, allow_redirects=True)
         if r.status_code in (404, 410):
             return (False, f"HTTP {r.status_code}")
+        if r.status_code in (403, 429):
+            # 記錄 cooldown，下次同 host 要等 _VERIFY_COOLDOWN_SEC 秒
+            _VERIFY_403_BY_HOST[host] = _t.time()
+            return (True, f"HTTP {r.status_code} (rate-limited - keep)")
         if r.status_code != 200:
             return (True, f"HTTP {r.status_code} (uncertain - keep)")
         # 591 / 永慶下架頁偵測
@@ -586,7 +610,9 @@ async def _run_verify_alive_command(progress=None, trigger_label: str = "verify_
 
             if (i + 1) % 20 == 0 and progress:
                 progress(f"已掃 {i+1}/{total}，archive {archived_count} 筆", 50.0 * (i+1) / total)
-            await asyncio.sleep(0.5)   # 別讓 verify 把 CPU 吃光
+            # 動態 sleep：剛打過 yungching 的 doc → 等久一點避免 anti-bot
+            _has_yc = any("yungching.com.tw" in (s.get("url") or "") for s in sources)
+            await asyncio.sleep(3.0 if _has_yc else 0.5)
     except Exception as _e:
         logger.exception(f"[verify-alive] 掃描中斷：{_e}")
         _write_progress(current=i + 1 if 'i' in locals() else 0, finished=True, error=_e)
