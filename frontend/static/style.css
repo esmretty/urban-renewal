@@ -719,15 +719,14 @@ input.tb-input[disabled] {
   background: repeating-linear-gradient(
     -45deg, #ffffff, #ffffff 8px, #f7f3ea 8px, #f7f3ea 16px
   );                                /* 未分析：斜紋白 */
-  border-left: 5px solid #c8c2a8;   /* 未分析：灰色左邊條 */
+  /* 邊條改用 .property-rows > 的 inset shadow 統一；不再撐版面 */
   opacity: 0.85;
 }
 .property-row.is-pending .c { color: #6b6f80; }
 .property-row.is-pending:hover { opacity: 1; }
 .property-row.is-deprioritized {
   background: #ffffff;
-  border: 1px solid #e8e8e8;            /* 淡灰 border 取代米色 */
-  border-left: 5px solid #e0e0e0;       /* 淡灰左條取代米色 */
+  /* 邊條改用 .property-rows > 的 inset shadow 統一；不再用 border 撐版面 */
   color: #b0b0b0;
 }
 .property-row.is-deprioritized .c { color: #b0b0b0; }
@@ -768,31 +767,35 @@ input.tb-input[disabled] {
 }
 .explore-hide-bad input { margin: 0; cursor: pointer; }
 
-/* ── 觀察清單 tab：中性灰色系（只覆寫表格，不動 app 背景） ── */
+/* ── 觀察清單 tab：淡綠色系（只覆寫表格，不動 app 背景） ── */
 body[data-tab="watchlist"] .property-row {
-  background: #f1f3f5;
-  border-color: #d4d8dd;
-  border-left-color: #6c757d;
+  background: #eaf5ea;
+  border-color: #c5dfc5;
+}
+body[data-tab="watchlist"] .property-rows > .property-row {
+  box-shadow: inset 5px 0 0 0 #5cb85c;   /* 淡綠 left bar */
 }
 body[data-tab="watchlist"] .property-row.is-pending {
   background: repeating-linear-gradient(
-    -45deg, #ffffff, #ffffff 8px, #ebedef 8px, #ebedef 16px
+    -45deg, #ffffff, #ffffff 8px, #e0eee0 8px, #e0eee0 16px
   );
-  border-left-color: #adb5bd;
+}
+body[data-tab="watchlist"] .property-rows > .property-row.is-pending {
+  box-shadow: inset 5px 0 0 0 #a8cba8;
 }
 body[data-tab="watchlist"] .property-row--head {
-  background: #ced4da;
-  border-color: #99a1a8;
+  background: #d4e8d4;
+  border-color: #a8cba8;
 }
 body[data-tab="watchlist"] .property-row--head-top {
-  background: #adb5bd;
-  border-color: #868e96;
+  background: #c4dfc4;
+  border-color: #95c195;
 }
-body[data-tab="watchlist"] .property-row--head .c { color: #2b3035 !important; }
-body[data-tab="watchlist"] .property-row--head-top .c { color: #1a1d20 !important; }
+body[data-tab="watchlist"] .property-row--head .c { color: #1f4d1f !important; }
+body[data-tab="watchlist"] .property-row--head-top .c { color: #143a14 !important; }
 body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
-  background: #e2e6ea;
-  box-shadow: 0 1px 4px rgba(73,80,87,0.18);
+  background: #d8ecd8;
+  box-shadow: inset 5px 0 0 0 #5cb85c, 0 1px 4px rgba(60,160,60,0.18);
 }
 .property-row:not(.property-row--head):hover {
   background: #eaf2ff;           /* hover：冷色淺藍，與底色反差 */
@@ -1152,13 +1155,13 @@ body[data-tab="explore"] .wl-only { display: none !important; }
   vertical-align: middle;
   animation: badge-new-pulse 1.6s ease-in-out infinite;
 }
-/* 地址 cell：地址過長時可折到第二行，完整顯示不截字。
-   不用 flex — flex 容器內匿名 text item 的 min-content 會擋掉 wrap。
-   改用 block + inline 流，text wraps 自然，badges 直接 inline 跟在後面。*/
+/* 地址 cell：用 flex（左 .addr-text 文字、右 .addr-badges NEW/事件）。
+   .addr-text min-width:0 + word-break: break-all 讓中文地址過長時 wrap 到第二行。*/
 .c.c-addr {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   white-space: normal;
-  word-break: break-all;
   line-height: 1.3;
   min-width: 0;
   overflow: hidden;        /* 維持 grid item min-width:0 行為 */
@@ -1166,16 +1169,36 @@ body[data-tab="explore"] .wl-only { display: none !important; }
   padding-top: 4px;
   padding-bottom: 4px;
 }
-.c.c-addr > .inferred-tag,
-.c.c-addr > .fc-badge,
-.c.c-addr > .map-link,
-.c.c-addr > .badge-new,
-.c.c-addr > .event-badge,
-.c.c-addr > .archived-badge {
+/* 左半：地址文字 + 推測/法拍/map 圖示，可換行 */
+.c.c-addr > .addr-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-all;
+}
+.c.c-addr > .addr-text > .inferred-tag,
+.c.c-addr > .addr-text > .fc-badge,
+.c.c-addr > .addr-text > .map-link {
   vertical-align: middle;
   margin-left: 4px;
 }
-.c.c-addr > a.map-link { margin-left: 2px; }
+/* 右半：NEW + 事件 badges 群組，整組靠右 */
+.c.c-addr > .addr-badges {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+/* 群組內 badge order：event 在 archived 在 NEW 之左（HTML 已照此順序輸出）*/
+.c.c-addr > .addr-badges > .badge-new,
+.c.c-addr > .addr-badges > .event-badge,
+.c.c-addr > .addr-badges > .archived-badge {
+  margin-left: 0;     /* 用 gap 控間距，不疊 margin */
+  vertical-align: middle;
+}
+/* badge-new 不要再用 margin-left:auto 推到底（現在靠 .addr-badges 的 margin-left:auto）*/
+.c.c-addr .badge-new { margin-left: 0; }
 @keyframes badge-new-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }

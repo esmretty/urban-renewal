@@ -553,7 +553,7 @@ function rowHTML(p) {
     <div class="c c-type" data-label="類型">${typeIcon} ${esc(typeLabel)}</div>
     <div class="c c-city" data-label="縣市">${esc(p.city || "—")}</div>
     <div class="c c-district" data-label="區">${esc(p.district || "—")}</div>
-    <div class="c c-addr" title="${esc(roadOnly)}" data-label="地址">${esc(roadOnly)}${p.address_inferred ? '<span class="inferred-tag">推測</span>' : ''}${p.is_foreclosure ? '<span class="fc-badge" title="法拍屋">法拍屋</span>' : ''}<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener noreferrer" class="map-link" onclick="event.stopPropagation()" title="Google Maps">📍</a>${evBadge}${archivedBadge}${newBadge}</div>
+    <div class="c c-addr" title="${esc(roadOnly)}" data-label="地址"><span class="addr-text">${esc(roadOnly)}${p.address_inferred ? '<span class="inferred-tag">推測</span>' : ''}${p.is_foreclosure ? '<span class="fc-badge" title="法拍屋">法拍屋</span>' : ''}<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener noreferrer" class="map-link" onclick="event.stopPropagation()" title="Google Maps">📍</a></span>${(evBadge || archivedBadge || newBadge) ? `<span class="addr-badges">${evBadge}${archivedBadge}${newBadge}</span>` : ''}</div>
     <div class="c c-val c-total ${hotCls('price')}" data-label="總價">${priceStr}${(p.lvr_records && p.lvr_records.length) ? `<span class="lvr-icon" onclick="event.stopPropagation()" onmouseenter="showLvrPopup(event, '${p.id}')" onmouseleave="hideLvrPopup()">實</span>` : ""}</div>
     <div class="c c-val c-bld-combo" data-label="建坪/單價">
       <div class="${hotCls('bldA')}">${p.building_area_ping ?? "—"} 坪</div>
