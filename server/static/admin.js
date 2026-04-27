@@ -1017,16 +1017,17 @@ window.applySchedulerConfig = async function () {
       alert("套用失敗：" + msg);
       return;
     }
-    // 成功：強制清空 draft → 下次 loadSchedulerStatus 會從 server 重新 hydrate，
-    // 確保 UI 顯示與 server 一致（不會殘留 stale draft 假裝已套用）
-    _schedDraft = { interval_hr: 1, commands: [] };
+    // 成功：保留 draft（用戶剛剛改的勾選 / 下拉值不該被重新讀的 server 蓋掉）
+    // 只更新 _schedServer 讓 _isCmdAppliedNew 比對能變綠 ✓ 已套用
     await loadSchedulerStatus();
     console.log("[scheduler] 套用後 server commands:", JSON.stringify(_schedServer.commands, null, 2));
-    // 找出剛剛 POST 的 cmd，顯示新值給用戶
-    const sentCmd = (payload.commands || []).find(c => c);
-    if (sentCmd) {
-      const ihr = sentCmd.interval_hr;
-      console.log(`[scheduler] ✓ 套用成功，interval_hr=${ihr}`);
+    // 比對 draft 與 server，若不一致警告（可能 backend 拒收某欄位）
+    const mismatched = (_schedDraft.commands || []).filter((d, i) => {
+      const s = _schedServer.commands[i];
+      return s && (Number(d.interval_hr) !== Number(s.interval_hr) || Number(d.limit) !== Number(s.limit));
+    });
+    if (mismatched.length) {
+      console.warn("[scheduler] ⚠ draft vs server mismatch（backend 可能拒收）:", mismatched);
     }
   } catch (e) {
     console.error("[scheduler] apply failed:", e);
