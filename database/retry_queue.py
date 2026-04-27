@@ -63,7 +63,9 @@ def enqueue(source_id: str, source: str, url: str, error: str,
         })
         return existing[0].id
 
-    # 新 entry
+    # 新 entry：attempts 從 2 開始（caller 在 enqueue 之前已試過 1 次失敗）
+    # 這樣 MAX_ATTEMPTS=4 → 進 queue 後最多再 retry 2 次（attempts=3, 4），第 3 次會抵達 5 abandon
+    # 避免「batch 1 次 + queue 4 次 = 5 次」這種太多次的情況
     data = {
         "source_id": source_id,
         "source": source,
@@ -71,7 +73,7 @@ def enqueue(source_id: str, source: str, url: str, error: str,
         "first_failed_at": _iso(now),
         "last_failed_at": _iso(now),
         "retry_at": _iso(retry_at),
-        "attempts": 1,
+        "attempts": 2,
         "status": "pending",
         "last_error": error[:500],
     }
