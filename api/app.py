@@ -2410,9 +2410,15 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                             url_alt = dd.get("url_alt") or []
                             pub_alt = list(dd.get("published_at_alt") or [])
                             existing_url = dd.get("url") or ""
+                            # source_ids 平面索引：把這個 src_id 加進去 → 下次 find_doc_by_source_id 找得到
+                            source_ids_arr = list(dd.get("source_ids") or [])
+                            if dd.get("source_id") and dd["source_id"] not in source_ids_arr:
+                                source_ids_arr.append(dd["source_id"])
+                            if src_id not in source_ids_arr:
+                                source_ids_arr.append(src_id)
+                            update_payload = {"source_ids": source_ids_arr}
                             if new_url and new_url != existing_url and new_url not in url_alt:
                                 url_alt.append(new_url)
-                                # 同步補該 alt url 的刊登時間（靠 scrape session 時間；詳情頁 pub_text 尚未抓）
                                 from database.models import _parse_published_at
                                 _pub_iso = (
                                     _parse_published_at(item.get("_published_text"))
@@ -2420,10 +2426,9 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                     or now_tw_iso()
                                 )
                                 pub_alt.append(_pub_iso)
-                                col.document(dup_sid).update({
-                                    "url_alt": url_alt,
-                                    "published_at_alt": pub_alt,
-                                })
+                                update_payload["url_alt"] = url_alt
+                                update_payload["published_at_alt"] = pub_alt
+                            col.document(dup_sid).update(update_payload)
                         progress_callback(f"  ⏭ 重複物件（已合併網址）：{(item.get('title') or '')[:25]}", pct)
                         progress_callback(
                             f"    └ 新 ID {item.get('source_id')} → 併入 {dup_sid}",
@@ -2679,10 +2684,20 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                         new_richness = doc_richness(item)
                         old_richness = doc_richness(best_old)
 
-                        # 合併 URL：把新 item 的 591 連結併進 keeper 的 url_alt
+                        # 合併 URL + 把新 src_id 寫進 keeper 的 source_ids 平面索引
+                        # → 下次 find_doc_by_source_id 找得到，不會再被當「新」處理
                         def _merge_url_to_keeper(keeper_doc, new_item):
                             out = {}
                             new_url = new_item.get("url")
+                            new_sid = new_item.get("source_id")
+                            # source_ids 索引（一定要更新，避免下次又跑 dup_merge）
+                            sid_arr = list(keeper_doc.get("source_ids") or [])
+                            if keeper_doc.get("source_id") and keeper_doc["source_id"] not in sid_arr:
+                                sid_arr.append(keeper_doc["source_id"])
+                            if new_sid and new_sid not in sid_arr:
+                                sid_arr.append(new_sid)
+                            out["source_ids"] = sid_arr
+                            # url_alt（新 url 才加）
                             if not new_url or new_url == keeper_doc.get("url"):
                                 return out
                             url_alt = list(keeper_doc.get("url_alt") or [])

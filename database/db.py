@@ -75,15 +75,25 @@ def gen_dated_id(when_iso: Optional[str] = None) -> str:
 
 
 def find_doc_by_source_id(source_id: str) -> tuple:
-    """用 source_id 欄位查 properties，回傳 (doc_id, dict) 或 (None, None)。
-    Migration 後 doc_id 不再是 source_id 字串，改成 UUID 格式 → 一律用 query 找。"""
+    """用 source_id 找 properties，回傳 (doc_id, dict) 或 (None, None)。
+    Migration 後 doc_id 不再是 source_id 字串，改成 UUID 格式。
+    一個 UUID doc 可能掛多個 source_id（dup merge / 跨來源），所以查兩個地方：
+      1. 主來源 source_id 欄位（== query）
+      2. source_ids 平面陣列欄位（array_contains query）— 含所有 merged 進來的 sid
+    這樣同一 591 sid 不會反覆被當成「新物件」每次又 dup_merge 一次。"""
     from google.cloud.firestore_v1.base_query import FieldFilter
     if not source_id:
         return (None, None)
-    docs = list(get_col().where(filter=FieldFilter("source_id", "==", source_id)).limit(1).stream())
-    if not docs:
-        return (None, None)
-    return (docs[0].id, docs[0].to_dict())
+    col = get_col()
+    # 1. 直接用 source_id 欄位
+    docs = list(col.where(filter=FieldFilter("source_id", "==", source_id)).limit(1).stream())
+    if docs:
+        return (docs[0].id, docs[0].to_dict())
+    # 2. 查 source_ids 平面陣列（dup merge 時會 append 進來）
+    docs = list(col.where(filter=FieldFilter("source_ids", "array_contains", source_id)).limit(1).stream())
+    if docs:
+        return (docs[0].id, docs[0].to_dict())
+    return (None, None)
 
 
 def get_user_doc(uid: str):
