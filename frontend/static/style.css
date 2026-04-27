@@ -241,8 +241,10 @@ body {
   border-bottom: none;
 }
 /* ── 觀察清單頂部「新增物件」三欄區塊 ── */
+/* padding 跟 explore tab 的 filter 區一致（避免緊貼 sidebar/topbar 邊緣） */
 #sec-capture {
-  margin-bottom: 10px;
+  padding: 12px 16px 14px;
+  margin-bottom: 0;
 }
 .capture-grid {
   display: grid;
@@ -251,21 +253,23 @@ body {
   height: 180px;
 }
 .capture-col {
-  background: #fdf6e0;
-  border: 1px solid #e3dfd2;
+  background: #ffffff;                  /* admin 風：白底 */
+  border: 1px solid #e0d9c2;
   border-radius: 6px;
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
-.capture-col--explore { background: #f4ecd6; border-color: #d8c88f; }
+.capture-col--explore { background: #f7f3ea; border-color: #d8c88f; }
 .capture-col__title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
-  color: #6b5710;
+  color: #5c4a0a;
   margin-bottom: 8px;
   letter-spacing: 0.5px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed #e3d8b4;
 }
 .capture-col__body {
   display: flex;
@@ -521,8 +525,8 @@ body {
   grid-template-columns: 1.5fr 1.3fr 1.0fr 140px;
 }
 .filter-col--action {
-  background: #fff7df;
-  border-color: #e3c864;
+  background: #f7f3ea;
+  border-color: #d8c88f;
   align-items: center;
   justify-content: center;
 }
@@ -542,8 +546,8 @@ body {
   font-size: 12px;
 }
 .filter-col {
-  background: #fdf9ec;
-  border: 1px solid #e8ddbe;
+  background: #ffffff;                /* admin 風：白底 */
+  border: 1px solid #e0d9c2;
   border-radius: 6px;
   padding: 8px 10px;
   display: flex;
@@ -553,7 +557,7 @@ body {
 .filter-col__title {
   font-size: 12px;
   font-weight: 700;
-  color: #6b5710;
+  color: #5c4a0a;
   letter-spacing: 0.5px;
   padding-bottom: 2px;
   border-bottom: 1px dashed #e3d8b4;
@@ -661,8 +665,33 @@ input.tb-input[disabled] {
 
 /* ── 物件列表 ── */
 .property-rows {
-  padding: 10px 16px;
+  padding: 0;                          /* 內部 head/row 自帶 border，不再 wrapper padding */
+  margin: 12px 16px 16px;              /* 跟上面 filter-bar 對齊 */
+  background: #ffffff;
+  border: 1px solid #e0d9c2;
+  border-radius: 8px;                  /* 表格四角圓弧 */
+  overflow: hidden;                    /* 讓子元素 sharp corner 被裁掉 */
 }
+/* head/row 在 wrapper 內部 → 取消個別 border-radius，由 wrapper 統一 */
+.property-rows > .property-row,
+.property-rows > .property-row--head,
+.property-rows > .property-row--head-top {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  margin-bottom: 0;
+  border-top: 1px solid #f0ece0;
+}
+.property-rows > *:first-child { border-top: none; }
+/* 已分析金色 left 邊條保留 — 用內側偽元素或 inset shadow 模擬，不影響 wrapper 圓角 */
+.property-rows > .property-row {
+  box-shadow: inset 5px 0 0 0 #c78a00;
+  padding-left: 15px;
+}
+.property-rows > .property-row.is-pending { box-shadow: inset 5px 0 0 0 #c8c2a8; }
+.property-rows > .property-row.is-deprioritized { box-shadow: inset 5px 0 0 0 #e0e0e0; }
+.property-rows > .property-row--head,
+.property-rows > .property-row--head-top { box-shadow: none; padding-left: 10px; }
 .property-row {
   display: grid;
   /* 來源(含刊登時間) | 類型 | 市 | 區 | 地址 | 總+實 | 建+單 | 土+單 | 樓 | 齡 | 說明 | 獲利倍數 | 動作 */
@@ -770,10 +799,10 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   box-shadow: 0 1px 4px rgba(70,110,200,0.18);
 }
 .property-row--head {
-  background: #d8c88f;
-  border: 1px solid #b89b45;
+  background: #f7f3ea;
+  border: 1px solid #e0d9c2;
   cursor: default;
-  padding: 8px 10px;
+  padding: 6px 10px;
   margin-bottom: 0;
   border-radius: 0;
 }
@@ -781,18 +810,31 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   color: #5c4a0a !important;
   font-weight: 700 !important;
   text-align: center !important;
+  font-size: 12px !important;
+  line-height: 1.25;
+}
+.property-row--head .c .sub {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: #8b7c4a;
+  margin-top: 1px;
+  letter-spacing: 0.3px;
 }
 .property-row--head-top {
-  background: #c8b478;
+  background: #ebe4cf;
   margin-bottom: 0;
   border-bottom: none;
+  padding: 4px 10px;
 }
 .property-row--head-top .c {
   text-align: center;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 700;
   letter-spacing: 1px;
   padding: 4px 0;
   border-left: none;
+  color: #5c4a0a !important;
 }
 .c-group-left  { grid-column: 1 / span 10; }
 .c-group-right {
