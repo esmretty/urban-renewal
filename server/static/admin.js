@@ -88,7 +88,8 @@ async function authedFetch(url, init = {}) {
   const token = await _user.getIdToken();
   const headers = new Headers(init.headers || {});
   headers.set("Authorization", "Bearer " + token);
-  return fetch(url, { ...init, headers });
+  // 一律 no-store：admin 介面要看 live 真實狀態，瀏覽器不該 cache GET response
+  return fetch(url, { ...init, headers, cache: "no-store" });
 }
 
 let _propTab = "batch";   // batch | user_url | manual
@@ -1018,6 +1019,13 @@ window.applySchedulerConfig = async function () {
     // 確保 UI 顯示與 server 一致（不會殘留 stale draft 假裝已套用）
     _schedDraft = { interval_hr: 1, commands: [] };
     await loadSchedulerStatus();
+    console.log("[scheduler] 套用後 server commands:", JSON.stringify(_schedServer.commands, null, 2));
+    // 找出剛剛 POST 的 cmd，顯示新值給用戶
+    const sentCmd = (payload.commands || []).find(c => c);
+    if (sentCmd) {
+      const ihr = sentCmd.interval_hr;
+      console.log(`[scheduler] ✓ 套用成功，interval_hr=${ihr}`);
+    }
   } catch (e) {
     console.error("[scheduler] apply failed:", e);
     alert("套用失敗：" + e.message);
