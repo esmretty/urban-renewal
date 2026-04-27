@@ -129,7 +129,22 @@ window.loadAll = async function () {
   loadMaintenance();
   loadRetryQueue();
   loadRunLogs();
+  // 頁面載入時若 verify-alive 還在跑 → 自動恢復 polling 顯示進度
+  _resumeVerifyAlivePollIfRunning();
 };
+
+async function _resumeVerifyAlivePollIfRunning() {
+  try {
+    const r = await authedFetch("/admin/verify_alive/progress");
+    if (!r.ok) return;
+    const p = await r.json();
+    if (p.running) {
+      _stopVerifyAlivePoll();
+      _verifyAlivePollTimer = setInterval(_pollVerifyAliveOnce, 2000);
+      _pollVerifyAliveOnce();
+    }
+  } catch {}
+}
 
 // ── 操作紀錄（手動 + scheduler 每次 action 都記錄到物件層級）──────────
 window.loadRunLogs = async function () {
@@ -672,17 +687,66 @@ function _renderSchedulerByType(s, filterType, box) {
   box.innerHTML = headerRow + cmdHtml + `<div style="margin-top:8px;">${addBtn}</div>`;
 }
 
+// poll verify-alive 進度（live）
+let _verifyAlivePollTimer = null;
+function _stopVerifyAlivePoll() {
+  if (_verifyAlivePollTimer) { clearInterval(_verifyAlivePollTimer); _verifyAlivePollTimer = null; }
+}
+
+async function _pollVerifyAliveOnce() {
+  const statusEl = document.getElementById("verify-alive-status");
+  if (!statusEl) return;
+  try {
+    const r = await authedFetch("/admin/verify_alive/progress");
+    if (!r.ok) return;
+    const p = await r.json();
+    if (!p.total && !p.running) return;
+    const pct = p.total ? Math.round((p.current / p.total) * 100) : 0;
+    const archivedList = (p.archived_items || []).slice(-10).reverse();
+    const listHTML = archivedList.length
+      ? `<div style="margin-top:6px; max-height:160px; overflow-y:auto; font-size:11px; background:#fff; padding:4px 6px; border-radius:3px;">
+           <b>最近 archive：</b>
+           ${archivedList.map(a => `<div style="border-bottom:1px solid #f0e0e0; padding:2px 0;">
+             📦 ${esc(a.source_id || "")} <span style="color:#888">${esc((a.address || "").slice(0, 30))}</span>
+           </div>`).join("")}
+         </div>`
+      : "";
+    const stateIcon = p.running ? "⏳" : (p.error ? "❌" : "✅");
+    const stateText = p.running ? "進行中" : (p.error ? `失敗：${esc(p.error)}` : "完成");
+    statusEl.innerHTML = `
+      <div style="margin-bottom:4px;">${stateIcon} ${stateText}：${p.current || 0}/${p.total || 0}（${pct}%），已 archive <b style="color:#c0392b">${p.archived_count || 0}</b> 筆，跳過 ${p.skipped || 0} 筆</div>
+      <div style="background:#e8e4d8; height:8px; border-radius:4px; overflow:hidden;">
+        <div style="background:#1e88e5; height:100%; width:${pct}%; transition:width 0.3s;"></div>
+      </div>
+      ${listHTML}
+    `;
+    if (!p.running) {
+      _stopVerifyAlivePoll();
+      // 完成後 refresh 物件列表 + 警告
+      setTimeout(() => {
+        if (typeof refreshVerifyAliveWarning === "function") refreshVerifyAliveWarning();
+        if (typeof loadAll === "function") loadAll();
+      }, 800);
+    }
+  } catch (e) {
+    console.warn("[verify-alive] poll failed:", e);
+  }
+}
+
 window.runVerifyAliveNow = async function () {
   const statusEl = document.getElementById("verify-alive-status");
   if (!confirm("立即執行偵測下架？\n會掃描所有非已封存物件並 HTTP 驗活，可能需要數分鐘。")) return;
-  if (statusEl) statusEl.textContent = "⏳ 已啟動，背景執行中（看 server log 或重新整理排程紀錄查進度）";
+  if (statusEl) statusEl.textContent = "⏳ 啟動中…";
   try {
     const r = await authedFetch("/admin/verify_alive/run-now", { method: "POST" });
     if (!r.ok) {
       if (statusEl) statusEl.textContent = `❌ 啟動失敗 (${r.status})`;
       return;
     }
-    if (statusEl) statusEl.textContent = "✓ 已啟動，背景執行中。完成後重新整理 dashboard 警告 / 物件列表會看到 archived 變動。";
+    // 開始 live poll（每 2 秒，背景跑一定要清舊 timer）
+    _stopVerifyAlivePoll();
+    _verifyAlivePollTimer = setInterval(_pollVerifyAliveOnce, 2000);
+    _pollVerifyAliveOnce();   // 立刻第一次
   } catch (e) {
     if (statusEl) statusEl.textContent = `❌ 失敗：${e.message}`;
   }

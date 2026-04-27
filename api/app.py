@@ -493,7 +493,9 @@ def _cmd_state_set(cmd_idx: int, **kwargs):
 
 async def _run_verify_alive_command(progress=None, trigger_label: str = "verify_alive_scheduler"):
     """偵測下架命令：掃所有非 archived properties，HTTP 驗活每個 source URL。
-    全部 sources 都失效 → archive doc。"""
+    全部 sources 都失效 → archive doc。
+
+    進度同步寫進 Firestore settings/verify_alive_progress（給 admin UI live poll）。"""
     from analysis.lvr_index import _haversine   # noqa
     from database.run_log import log_action
     col = get_col()
@@ -501,53 +503,94 @@ async def _run_verify_alive_command(progress=None, trigger_label: str = "verify_
     total = len(docs)
     archived_count = 0
     skipped = 0
+    archived_items = []   # 最近 archive 的物件，給 UI live 顯示
     started = now_tw_iso()
     logger.info(f"[verify-alive] 開始掃 {total} 筆物件")
     log_action(trigger_label, "verify_alive_start", message=f"開始掃 {total} 筆")
     if progress:
         progress(f"開始偵測下架（掃 {total} 筆）", 0)
 
-    for i, d in enumerate(docs):
-        data = d.to_dict() or {}
-        if data.get("archived") is True:
-            skipped += 1
-            continue
-        sources = data.get("sources") or []
-        if not sources and data.get("url"):
-            sources = [{"name": data.get("source"), "url": data.get("url")}]
-        if not sources:
-            continue
+    # progress 寫入 helper（best-effort，失敗不影響主流程）
+    _prog_doc_ref = get_firestore().collection("settings").document("verify_alive_progress")
+    def _write_progress(current, finished=False, error=None):
+        try:
+            payload = {
+                "trigger": trigger_label,
+                "started_at": started,
+                "current": current,
+                "total": total,
+                "archived_count": archived_count,
+                "skipped": skipped,
+                "archived_items": archived_items[-30:],   # 最近 30 筆
+                "finished": finished,
+                "updated_at": now_tw_iso(),
+            }
+            if error: payload["error"] = str(error)
+            _prog_doc_ref.set(payload)
+        except Exception as e:
+            logger.warning("[verify-alive] write progress failed: %s", e)
+    _write_progress(current=0)
 
-        # 驗活每個 source URL（用 _verify_source_alive helper）
-        all_dead = True
-        any_alive = False
-        for s in sources:
-            url = s.get("url")
-            if not url:
+    try:
+        for i, d in enumerate(docs):
+            data = d.to_dict() or {}
+            if data.get("archived") is True:
+                skipped += 1
+                if (i + 1) % 5 == 0:
+                    _write_progress(current=i + 1)
                 continue
-            alive, _reason = _verify_source_alive(url, timeout=8)
-            if alive:
-                any_alive = True
-                all_dead = False
-                break   # 一個活著就夠，不用再驗
-            await asyncio.sleep(2)   # rate-limit 友善
+            sources = data.get("sources") or []
+            if not sources and data.get("url"):
+                sources = [{"name": data.get("source"), "url": data.get("url")}]
+            if not sources:
+                if (i + 1) % 5 == 0:
+                    _write_progress(current=i + 1)
+                continue
 
-        if all_dead and not any_alive:
-            col.document(d.id).update({
-                "archived": True,
-                "archived_at": now_tw_iso(),
-                "archived_reason": "verify-alive: 所有來源 URL 都失效（404/410/已下架字樣）",
-            })
-            archived_count += 1
-            logger.info(f"[verify-alive] archived {d.id}")
-            log_action(trigger_label, "verify_alive_archive",
-                       source_id=data.get("source_id"), doc_id=d.id,
-                       message=f"archived（所有來源失效）",
-                       details={"address": data.get("address")})
+            # 驗活每個 source URL（用 _verify_source_alive helper）
+            all_dead = True
+            any_alive = False
+            for s in sources:
+                url = s.get("url")
+                if not url:
+                    continue
+                alive, _reason = _verify_source_alive(url, timeout=8)
+                if alive:
+                    any_alive = True
+                    all_dead = False
+                    break   # 一個活著就夠，不用再驗
+                await asyncio.sleep(2)   # rate-limit 友善
 
-        if (i + 1) % 20 == 0 and progress:
-            progress(f"已掃 {i+1}/{total}，archive {archived_count} 筆", 50.0 * (i+1) / total)
-        await asyncio.sleep(0.5)   # 別讓 verify 把 CPU 吃光
+            if all_dead and not any_alive:
+                col.document(d.id).update({
+                    "archived": True,
+                    "archived_at": now_tw_iso(),
+                    "archived_reason": "verify-alive: 所有來源 URL 都失效（404/410/已下架字樣）",
+                })
+                archived_count += 1
+                archived_items.append({
+                    "doc_id": d.id,
+                    "source_id": data.get("source_id"),
+                    "address": data.get("address") or data.get("address_inferred") or "",
+                    "at": now_tw_iso(),
+                })
+                logger.info(f"[verify-alive] archived {d.id}")
+                log_action(trigger_label, "verify_alive_archive",
+                           source_id=data.get("source_id"), doc_id=d.id,
+                           message=f"archived（所有來源失效）",
+                           details={"address": data.get("address")})
+                # archive 一發生就立刻寫進度，UI 馬上看得到
+                _write_progress(current=i + 1)
+            elif (i + 1) % 5 == 0:
+                _write_progress(current=i + 1)
+
+            if (i + 1) % 20 == 0 and progress:
+                progress(f"已掃 {i+1}/{total}，archive {archived_count} 筆", 50.0 * (i+1) / total)
+            await asyncio.sleep(0.5)   # 別讓 verify 把 CPU 吃光
+    except Exception as _e:
+        logger.exception(f"[verify-alive] 掃描中斷：{_e}")
+        _write_progress(current=i + 1 if 'i' in locals() else 0, finished=True, error=_e)
+        raise
 
     msg = f"完成偵測下架：掃 {total} / 跳過已 archived {skipped} / 新 archived {archived_count}"
     logger.info(f"[verify-alive] {msg}")
@@ -557,6 +600,7 @@ async def _run_verify_alive_command(progress=None, trigger_label: str = "verify_
     get_firestore().collection("settings").document("scheduler_state").set(
         {"last_verify_alive_at": now_tw_iso(), "last_verify_alive_archived": archived_count}, merge=True
     )
+    _write_progress(current=total, finished=True)
     log_action(trigger_label, "verify_alive_end",
                message=f"完成：掃 {total} / 跳過 {skipped} / 新 archived {archived_count}",
                details={"total": total, "skipped": skipped, "archived": archived_count})
@@ -1037,6 +1081,23 @@ async def scheduler_history(days: int = 7, admin: dict = Depends(require_admin))
     except Exception as e:
         logger.warning(f"scheduler history query failed: {e}")
     return {"days": days, "count": len(items), "items": items}
+
+
+@app.get("/admin/verify_alive/progress")
+async def admin_verify_alive_progress(admin: dict = Depends(require_admin)):
+    """回傳偵測下架的 live 進度：current/total/archived_count + 最近 archive 的物件清單。"""
+    try:
+        doc = get_firestore().collection("settings").document("verify_alive_progress").get()
+        if not doc.exists:
+            return {"running": False}
+        data = doc.to_dict() or {}
+        return {
+            "running": not data.get("finished"),
+            **data,
+        }
+    except Exception as e:
+        logger.warning("[verify-alive] read progress failed: %s", e)
+        return {"running": False, "error": str(e)}
 
 
 @app.get("/admin/run-logs")
