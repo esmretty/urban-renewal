@@ -88,7 +88,7 @@ def notify_high_value_property(doc: dict, multiple: float, scenario: str) -> boo
     scen_text = "\n".join(scen_lines) or "  • (無試算)"
 
     msg = (
-        f"🏠 高價值物件警示（≥3 倍）\n"
+        f"🏠您好，發現高價值物件：\n"
         f"\n"
         f"📍 {city}{district}\n"
         f"   {addr}\n"

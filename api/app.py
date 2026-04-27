@@ -2480,7 +2480,13 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
         else:
             msg += "（listing 無新物件；若同樣 region+section 多次都 0 筆，可能已被限流）"
         progress_callback(msg + "，請稍後重試", 100)
-        return
+        # ★ 修補 bug：0 筆早 return 也要寫 batch_end，否則 admin 執行紀錄 session
+        # 永遠停在「進行中」（4/28 00:01 那筆 stuck session 就是這樣來的）
+        log_action(trigger_label, "batch_end",
+                   message=f"{source_label} 抓到 0 筆（無新物件 / 限流 / 連線異常）",
+                   details={"new_count": 0, "enrich_count": 0, "skip_dup_count": 0,
+                            "price_update_count": 0, "fetch_error": _reason or None})
+        return {"new_count": 0, "enrich_count": 0, "skip_dup_count": 0, "price_update_count": 0}
     progress_callback(f"爬取階段完成，抓到 {len(new_items)} 筆新物件", 50)
 
     # 處理價格變動
