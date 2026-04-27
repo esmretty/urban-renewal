@@ -828,6 +828,39 @@ def analyze_single_property(
             logger.warning(f"zoning lookup 失敗 {src_id}: {ze}")
 
     doc_data["analysis_completed_at"] = now_tw_iso()
+
+    # ── 高價值物件 LINE 通知（≥3 倍）──
+    # 任何情境（危老/都更/防災都更）的 multiple ≥ 3.0 → 推 LINE 給 admin
+    # 若已通知過（doc 有 line_notified_at），不重複；除非倍數有顯著上升
+    try:
+        rv2_check = doc_data.get("renewal_v2") or {}
+        scenarios_check = rv2_check.get("scenarios") or {}
+        max_mult = 0.0
+        max_scen = ""
+        for name, s in scenarios_check.items():
+            m = s.get("multiple")
+            if m is not None and m > max_mult:
+                max_mult = float(m)
+                max_scen = name
+        if max_mult >= 3.0:
+            # 跟既有 doc 比對：若已通知過 + 倍數差不多 → skip
+            should_notify = True
+            if item.get("_existing_doc"):
+                old = item["_existing_doc"]
+                last_notified_at = old.get("line_notified_at")
+                last_notified_mult = old.get("line_notified_max_mult")
+                if last_notified_at and last_notified_mult:
+                    # 倍數沒漲超過 0.3 → 不重發
+                    if max_mult - float(last_notified_mult) < 0.3:
+                        should_notify = False
+            if should_notify:
+                from analysis.line_notify import notify_high_value_property
+                notify_high_value_property({**item, **doc_data}, max_mult, max_scen)
+                doc_data["line_notified_at"] = now_tw_iso()
+                doc_data["line_notified_max_mult"] = max_mult
+    except Exception as _le:
+        logger.warning(f"[{src_id}] LINE 通知 hook 失敗: {_le}")
+
     # 清理一次性分析截圖（用戶永遠看不到的，只是 OCR/Vision 讀取素材）
     _cleanup_ephemeral_screenshots(src_id)
     return {
