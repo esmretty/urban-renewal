@@ -491,10 +491,11 @@ def _cmd_state_set(cmd_idx: int, **kwargs):
         logger.warning(f"[scheduler] _cmd_state_set fail: {e}")
 
 
-async def _run_verify_alive_command(progress=None):
+async def _run_verify_alive_command(progress=None, trigger_label: str = "verify_alive_scheduler"):
     """偵測下架命令：掃所有非 archived properties，HTTP 驗活每個 source URL。
     全部 sources 都失效 → archive doc。"""
     from analysis.lvr_index import _haversine   # noqa
+    from database.run_log import log_action
     col = get_col()
     docs = list(col.stream())
     total = len(docs)
@@ -502,6 +503,7 @@ async def _run_verify_alive_command(progress=None):
     skipped = 0
     started = now_tw_iso()
     logger.info(f"[verify-alive] 開始掃 {total} 筆物件")
+    log_action(trigger_label, "verify_alive_start", message=f"開始掃 {total} 筆")
     if progress:
         progress(f"開始偵測下架（掃 {total} 筆）", 0)
 
@@ -538,6 +540,10 @@ async def _run_verify_alive_command(progress=None):
             })
             archived_count += 1
             logger.info(f"[verify-alive] archived {d.id}")
+            log_action(trigger_label, "verify_alive_archive",
+                       source_id=data.get("source_id"), doc_id=d.id,
+                       message=f"archived（所有來源失效）",
+                       details={"address": data.get("address")})
 
         if (i + 1) % 20 == 0 and progress:
             progress(f"已掃 {i+1}/{total}，archive {archived_count} 筆", 50.0 * (i+1) / total)
@@ -551,6 +557,9 @@ async def _run_verify_alive_command(progress=None):
     get_firestore().collection("settings").document("scheduler_state").set(
         {"last_verify_alive_at": now_tw_iso(), "last_verify_alive_archived": archived_count}, merge=True
     )
+    log_action(trigger_label, "verify_alive_end",
+               message=f"完成：掃 {total} / 跳過 {skipped} / 新 archived {archived_count}",
+               details={"total": total, "skipped": skipped, "archived": archived_count})
     return {"started": started, "finished": now_tw_iso(), "total": total,
             "archived": archived_count, "skipped": skipped}
 
@@ -671,6 +680,7 @@ async def _scheduled_scrape_loop():
                         headless=True, districts=dists, limit=lim,
                         thresholds={}, triggered_by_uid=None,
                         source=src,
+                        trigger_label=f"scheduler_scan_{i}",
                     )
                     # 累加統計
                     for k in ("new_count", "enrich_count", "skip_dup_count", "price_update_count"):
@@ -1027,6 +1037,17 @@ async def scheduler_history(days: int = 7, admin: dict = Depends(require_admin))
     except Exception as e:
         logger.warning(f"scheduler history query failed: {e}")
     return {"days": days, "count": len(items), "items": items}
+
+
+@app.get("/admin/run-logs")
+async def admin_run_logs(limit: int = 200, trigger_prefix: Optional[str] = None,
+                          admin: dict = Depends(require_admin)):
+    """回傳最近的 action log（手動 + scheduler 都記錄）。
+    每筆含 trigger / action / source_id / doc_id / message / details。
+    trigger_prefix 可過濾：'manual' / 'scheduler' / 'verify_alive' / 'retry_queue'。"""
+    from database.run_log import list_recent
+    items = list_recent(limit=min(int(limit), 1000), trigger_prefix=trigger_prefix)
+    return {"count": len(items), "items": items}
 
 
 class SchedulerToggleReq(BaseModel):
@@ -1748,7 +1769,7 @@ async def admin_verify_alive_now(admin: dict = Depends(require_admin)):
     """admin 手動立即執行偵測下架（不等排程）。背景跑、不阻塞 response。"""
     async def _do():
         try:
-            await _run_verify_alive_command()
+            await _run_verify_alive_command(trigger_label="verify_alive_manual")
             logger.warning(f"[verify-alive] {admin.get('email')} 手動觸發完成")
         except Exception as e:
             logger.exception(f"[verify-alive] 手動觸發失敗: {e}")
@@ -2063,6 +2084,7 @@ async def trigger_scrape(req: ScrapeRequest, user: dict = Depends(require_admin)
         limit=limit, thresholds=thresholds,
         triggered_by_uid=user["uid"],
         source=source,
+        trigger_label="manual_batch",
     ))
     label = "、".join(req.districts) if len(req.districts) <= 3 else f"{len(req.districts)} 區"
     src_label = "永慶" if source == "yongqing" else "591"
@@ -2091,7 +2113,7 @@ async def _sse_generator() -> AsyncGenerator[str, None]:
             yield "data: {\"msg\": \"heartbeat\"}\n\n"
 
 
-async def _run_scrape_task(headless: bool = True, districts: list = None, limit: int = 30, thresholds: dict = None, triggered_by_uid: Optional[str] = None, source: str = "591"):
+async def _run_scrape_task(headless: bool = True, districts: list = None, limit: int = 30, thresholds: dict = None, triggered_by_uid: Optional[str] = None, source: str = "591", trigger_label: str = "manual_batch"):
     global _scrape_running, _cancel_requested
     _scrape_running = True
     _cancel_requested = False
@@ -2112,7 +2134,7 @@ async def _run_scrape_task(headless: bool = True, districts: list = None, limit:
 
     stats = None
     try:
-        stats = await asyncio.to_thread(_scrape_and_analyze, headless, progress, districts or [], limit, thresholds, triggered_by_uid, source)
+        stats = await asyncio.to_thread(_scrape_and_analyze, headless, progress, districts or [], limit, thresholds, triggered_by_uid, source, trigger_label)
         _safe_put_progress(
             json.dumps({"msg": "爬取完成！", "done": True, "percent": 100}, ensure_ascii=False)
         )
@@ -2127,10 +2149,13 @@ async def _run_scrape_task(headless: bool = True, districts: list = None, limit:
     return stats or {}
 
 
-def _scrape_and_analyze(headless: bool, progress_callback, districts: list = None, limit: int = 30, thresholds: dict = None, triggered_by_uid: Optional[str] = None, source: str = "591"):
+def _scrape_and_analyze(headless: bool, progress_callback, districts: list = None, limit: int = 30, thresholds: dict = None, triggered_by_uid: Optional[str] = None, source: str = "591", trigger_label: str = "manual_batch"):
     """同步執行爬取 + 分析（在 asyncio.to_thread 中跑）。
     source: "591" 或 "yongqing"。決定要爬哪個來源。"""
+    from database.run_log import log_action
     districts = districts or []
+    log_action(trigger_label, "batch_start", message=f"{source} / {','.join(districts) or 'all'} / limit={limit}",
+               details={"source": source, "districts": districts, "limit": limit, "triggered_by_uid": triggered_by_uid})
     from scraper.scraper_591 import scrape_591
     from analysis.geocoder import geocode_address, get_nearest_mrt
     from analysis.scorer import calculate_score, calculate_renewal_value
@@ -2404,6 +2429,10 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                             f"    └ 新 ID {item.get('source_id')} → 併入 {dup_sid}",
                             pct,
                         )
+                        log_action(trigger_label, "dup_merge",
+                                   source_id=src_id, doc_id=dup_sid,
+                                   message=f"併入 {dup_sid}（{item.get('title','')[:25]}）",
+                                   details={"merged_into": dup_sid})
                         continue
 
                 action = "補資料" if is_enrich else "分析"
@@ -2694,6 +2723,10 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                 f"    └ 新 ID {item.get('source_id')} → 併入 {best_old['_id']}",
                                 pct,
                             )
+                            log_action(trigger_label, "dup_merge",
+                                       source_id=src_id, doc_id=best_old['_id'],
+                                       message=f"併入 {best_old['_id']} 並補欄位",
+                                       details={"merged_into": best_old['_id']})
                             continue
                         else:
                             if url_updates:
@@ -2709,6 +2742,10 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                 f"    └ 新 ID {item.get('source_id')} → 併入 {best_old['_id']}",
                                 pct,
                             )
+                            log_action(trigger_label, "dup_merge",
+                                       source_id=src_id, doc_id=best_old['_id'],
+                                       message=f"併入 {best_old['_id']}（捨棄）",
+                                       details={"merged_into": best_old['_id'], "discarded": True})
                             continue
 
                 # ─ enrich 模式：用 merge 規則合併（用戶覆寫不動、衝突欄位 log）─
@@ -2765,8 +2802,14 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                         enrich_count += 1
                         if conflicts:
                             progress_callback(f"  ⚠ {src_id} 欄位衝突保留舊值：{','.join(conflicts)}", pct)
+                        log_action(trigger_label, "enrich",
+                                   source_id=src_id, doc_id=existing_doc_id,
+                                   message=f"補欄位{('（衝突: '+ ','.join(conflicts) + '）') if conflicts else ''}",
+                                   details={"conflicts": conflicts, "address": existing.get("address")})
                     else:
                         logger.error(f"enrich 找不到 doc id for source_id={src_id}，跳過")
+                        log_action(trigger_label, "error", source_id=src_id,
+                                   message="enrich 找不到 doc")
                     continue
 
                 # ─ 全新物件：呼叫共用 pipeline ─
@@ -2920,6 +2963,11 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 except Exception as _die:
                     logger.debug(f"dup_index 更新失敗 {src_id}: {_die}")
                 new_count += 1
+                log_action(trigger_label, "new",
+                           source_id=src_id, doc_id=target_doc_id,
+                           message=f"新物件入庫：{(doc_data.get('address_inferred') or doc_data.get('address') or '')[:40]}",
+                           details={"address": doc_data.get('address_inferred') or doc_data.get('address'),
+                                    "price_ntd": item.get("price_ntd")})
                 _existing_items.append({
                     "source_id": item.get("source_id"),
                     "price_ntd": item.get("price_ntd"),
@@ -2940,6 +2988,10 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
         f"完成：新增 {new_count} 筆，補資料 {enrich_count} 筆，重複捨棄 {skip_dup_count} 筆，價格變動 {len(price_updates)} 筆",
         100,
     )
+    log_action(trigger_label, "batch_end",
+               message=f"新 {new_count} / 補 {enrich_count} / 重複 {skip_dup_count} / 改價 {len(price_updates)}",
+               details={"new_count": new_count, "enrich_count": enrich_count,
+                        "skip_dup_count": skip_dup_count, "price_update_count": len(price_updates)})
     return {
         "new_count": new_count,
         "enrich_count": enrich_count,

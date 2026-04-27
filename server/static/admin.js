@@ -128,6 +128,71 @@ window.loadAll = async function () {
   loadWhitelist();
   loadMaintenance();
   loadRetryQueue();
+  loadRunLogs();
+};
+
+// ── 操作紀錄（手動 + scheduler 每次 action 都記錄到物件層級）──────────
+window.loadRunLogs = async function () {
+  const box = document.getElementById("runlog-box");
+  const countEl = document.getElementById("runlog-count");
+  if (!box) return;
+  const filter = document.getElementById("runlog-filter")?.value || "";
+  const limit = document.getElementById("runlog-limit")?.value || 200;
+  try {
+    const url = `/admin/run-logs?limit=${limit}` + (filter ? `&trigger_prefix=${encodeURIComponent(filter)}` : "");
+    const r = await authedFetch(url);
+    if (!r.ok) {
+      box.innerHTML = `<div style="color:#c0392b;">載入失敗：HTTP ${r.status}</div>`;
+      return;
+    }
+    const data = await r.json();
+    if (countEl) countEl.textContent = `共 ${data.count} 筆`;
+    if (!data.items.length) {
+      box.innerHTML = `<div style="color:#888; padding:8px;">無紀錄</div>`;
+      return;
+    }
+    const ACTION_COLOR = {
+      batch_start: "#2980b9", batch_end: "#27ae60",
+      new: "#27ae60", enrich: "#c78a00", dup_merge: "#7f8c8d",
+      replacement: "#e67e22", cross_source: "#9b59b6",
+      verify_alive_start: "#2980b9", verify_alive_end: "#27ae60",
+      verify_alive_archive: "#c0392b",
+      retry_attempt: "#c78a00", error: "#c0392b",
+    };
+    const ACTION_LABEL = {
+      batch_start: "🚀 開始", batch_end: "🏁 結束",
+      new: "✓ 新", enrich: "↻ 補", dup_merge: "× 合併",
+      replacement: "🔁 換物件", cross_source: "🔗 跨來源",
+      verify_alive_start: "🔍 開始驗活", verify_alive_end: "✓ 完成驗活",
+      verify_alive_archive: "📦 archive",
+      retry_attempt: "♻ 重試", error: "❌ 錯誤",
+    };
+    box.innerHTML = `<table style="width:100%; border-collapse:collapse;">
+      <thead><tr style="background:#f0ece0; text-align:left;">
+        <th style="padding:4px 6px; width:130px;">時間</th>
+        <th style="padding:4px 6px; width:140px;">trigger</th>
+        <th style="padding:4px 6px; width:90px;">action</th>
+        <th style="padding:4px 6px; width:140px;">物件</th>
+        <th style="padding:4px 6px;">訊息</th>
+      </tr></thead>
+      <tbody>${data.items.map(it => {
+        const t = it.at ? new Date(it.at).toLocaleString("zh-TW", { hour12: false }) : "—";
+        const acolor = ACTION_COLOR[it.action] || "#555";
+        const alabel = ACTION_LABEL[it.action] || it.action;
+        const sid = it.source_id ? esc(it.source_id) : "";
+        const did = it.doc_id ? `<br><span style="color:#888; font-size:10px">${esc(it.doc_id.slice(0, 14))}</span>` : "";
+        return `<tr style="border-bottom:1px solid #eee;">
+          <td style="padding:3px 6px; color:#666; font-family:Consolas,monospace; font-size:11px">${esc(t)}</td>
+          <td style="padding:3px 6px; color:#555">${esc(it.trigger || "")}</td>
+          <td style="padding:3px 6px; color:${acolor}; font-weight:600">${esc(alabel)}</td>
+          <td style="padding:3px 6px; font-family:Consolas,monospace; font-size:11px">${sid}${did}</td>
+          <td style="padding:3px 6px;">${esc(it.message || "")}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>`;
+  } catch (e) {
+    box.innerHTML = `<div style="color:#c0392b;">載入失敗：${esc(e.message)}</div>`;
+  }
 };
 
 
@@ -598,7 +663,7 @@ function _renderSchedulerByType(s, filterType, box) {
   });
 
   const cmdHtml = filteredCmds.length
-    ? filteredCmds.map(({ cmd, origIdx }) => _renderCmdRow(cmd, origIdx)).join("")
+    ? filteredCmds.map(({ cmd, origIdx }, dispIdx) => _renderCmdRow(cmd, origIdx, dispIdx + 1)).join("")
     : `<div style="color:#888; padding:8px; text-align:center;">尚無此類型命令</div>`;
 
   const addLabel = filterType === "scan" ? "+ 新增掃描命令" : "+ 新增偵測下架命令";
@@ -632,9 +697,12 @@ window.switchCmdTab = function (tab) {
   });
 };
 
-function _renderCmdRow(cmd, i) {
+function _renderCmdRow(cmd, i, displayNum) {
+  // i = origIdx（全域 index，用於 onchange / 刪除）
+  // displayNum = 該 tab 內的顯示編號，從 1 開始
   const cmdType = cmd.type || "scan";
   const server = _schedServer.commands[i];
+  if (displayNum === undefined) displayNum = i + 1;   // 向後相容
   // 套用狀態：比對 draft vs server（同 idx）
   const applied = _isCmdAppliedNew(cmd, server);
   const appliedBadge = !server
@@ -660,7 +728,7 @@ function _renderCmdRow(cmd, i) {
     return `
       <div class="sched-cmd sched-cmd--verify">
         <div class="sched-cmd-head">
-          <b>命令 ${i + 1}</b>
+          <b>命令 ${displayNum}</b>
           <span class="sched-type-badge verify">偵測下架</span>
           ${appliedBadge}
           ${removeBtn}
@@ -718,7 +786,7 @@ function _renderCmdRow(cmd, i) {
   return `
     <div class="sched-cmd sched-cmd--scan">
       <div class="sched-cmd-head">
-        <b>命令 ${i + 1}</b>
+        <b>命令 ${displayNum}</b>
         <span class="sched-type-badge scan">掃描新物件</span>
         ${appliedBadge}
         ${removeBtn}

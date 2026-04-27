@@ -242,6 +242,31 @@
       </section>
 
       <section class="panel">
+        <h2>操作紀錄（手動 + scheduler）</h2>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; font-size:13px;">
+          <label>過濾：
+            <select id="runlog-filter" onchange="loadRunLogs()">
+              <option value="">全部</option>
+              <option value="manual">手動</option>
+              <option value="scheduler">scheduler</option>
+              <option value="verify_alive">偵測下架</option>
+              <option value="retry_queue">重試佇列</option>
+            </select>
+          </label>
+          <label>顯示筆數：
+            <select id="runlog-limit" onchange="loadRunLogs()">
+              <option value="100">100</option>
+              <option value="200" selected>200</option>
+              <option value="500">500</option>
+            </select>
+          </label>
+          <button onclick="loadRunLogs()">重新整理</button>
+          <span id="runlog-count" style="color:#666;"></span>
+        </div>
+        <div id="runlog-box" style="max-height:400px; overflow-y:auto; font-size:12px;">載入中…</div>
+      </section>
+
+      <section class="panel">
         <h2>用戶列表</h2>
         <div id="users-box">載入中…</div>
       </section>
