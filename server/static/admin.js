@@ -712,8 +712,10 @@ async function _pollVerifyAliveOnce() {
            </div>`).join("")}
          </div>`
       : "";
-    const stateIcon = p.running ? "⏳" : (p.error ? "❌" : "✅");
-    const stateText = p.running ? "進行中" : (p.error ? `失敗：${esc(p.error)}` : "完成");
+    const stateIcon = p.stale ? "⚠️" : (p.running ? "⏳" : (p.error ? "❌" : "✅"));
+    const stateText = p.stale
+      ? `已中斷（背景 process 死掉，最後更新 ${p.updated_at ? new Date(p.updated_at).toLocaleString("zh-TW", {hour12:false}) : "?"}），可重跑`
+      : (p.running ? "進行中" : (p.error ? `失敗：${esc(p.error)}` : "完成"));
     statusEl.innerHTML = `
       <div style="margin-bottom:4px;">${stateIcon} ${stateText}：${p.current || 0}/${p.total || 0}（${pct}%），已 archive <b style="color:#c0392b">${p.archived_count || 0}</b> 筆，跳過 ${p.skipped || 0} 筆</div>
       <div style="background:#e8e4d8; height:8px; border-radius:4px; overflow:hidden;">

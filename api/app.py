@@ -1150,14 +1150,34 @@ async def scheduler_history(days: int = 7, admin: dict = Depends(require_admin))
 
 @app.get("/admin/verify_alive/progress")
 async def admin_verify_alive_progress(admin: dict = Depends(require_admin)):
-    """回傳偵測下架的 live 進度：current/total/archived_count + 最近 archive 的物件清單。"""
+    """回傳偵測下架的 live 進度：current/total/archived_count + 最近 archive 的物件清單。
+    若 progress doc 超過 60 秒沒更新但 finished=False → 視為 stale（可能是 server restart 中斷），
+    回 stale=True 讓前端停止 poll。"""
     try:
         doc = get_firestore().collection("settings").document("verify_alive_progress").get()
         if not doc.exists:
             return {"running": False}
         data = doc.to_dict() or {}
+        finished = data.get("finished", False)
+        running = not finished
+        # stale check
+        stale = False
+        if running:
+            updated_at = data.get("updated_at")
+            if updated_at:
+                try:
+                    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+                    _ts = _dt.fromisoformat(updated_at.replace("Z", "+00:00"))
+                    if _ts.tzinfo is None:
+                        _ts = _ts.replace(tzinfo=_tz.utc)
+                    if _dt.now(_tz.utc) - _ts > _td(seconds=60):
+                        stale = True
+                        running = False   # 前端停 poll
+                except Exception:
+                    pass
         return {
-            "running": not data.get("finished"),
+            "running": running,
+            "stale": stale,
             **data,
         }
     except Exception as e:
