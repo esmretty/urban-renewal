@@ -457,6 +457,18 @@ async def _retry_queue_loop():
             await asyncio.sleep(30)
 
 
+def _next_interval_boundary(now_dt, interval_hr: int):
+    """回傳下一個 interval 整點邊界（從當天 00:00 起算）。
+    例：now=13:47, interval=3 → 15:00；now=15:00:00.001, interval=3 → 18:00
+    """
+    from datetime import timedelta as _td
+    midnight = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    hours_since = (now_dt - midnight).total_seconds() / 3600
+    # 下一個 boundary：往上取整。若剛好在 boundary 上 (hours_since 為整數倍)，前進到下一個
+    next_idx = int(hours_since // interval_hr) + 1
+    return midnight + _td(hours=next_idx * interval_hr)
+
+
 def _cmd_state_get(cmd_idx: int) -> dict:
     """讀某 command 的 last_run_at 等狀態（per-command）。"""
     try:
@@ -567,29 +579,26 @@ async def _scheduled_scrape_loop():
             if not cmds:
                 continue
 
-            # 找最早 due 的 cmd
+            # 找最早 due 的 cmd（依 next_due_at 比對，next_due_at 一律落在 interval 整點）
             now = now_tw()
             due_cmd = None
             due_idx = None
             for idx, cmd in enumerate(cmds):
                 interval_hr = int(cmd.get("interval_hr") or cfg.get("interval_hr") or 24)
                 state = _cmd_state_get(idx)
-                last_run = state.get("last_run_at")
-                if not last_run:
-                    due_cmd = cmd
-                    due_idx = idx
-                    break
+                nxt = state.get("next_due_at")
+                if not nxt:
+                    # 沒記錄 → 設成下個整點，等到那時才跑（不立刻跑，否則套用設定就觸發）
+                    _cmd_state_set(idx, next_due_at=_next_interval_boundary(now, interval_hr).isoformat())
+                    continue
                 try:
-                    last_dt = datetime.fromisoformat(last_run)
-                    elapsed_hr = (now - last_dt).total_seconds() / 3600
-                    if elapsed_hr >= interval_hr:
+                    nxt_dt = datetime.fromisoformat(nxt)
+                    if now >= nxt_dt:
                         due_cmd = cmd
                         due_idx = idx
                         break
                 except Exception:
-                    due_cmd = cmd
-                    due_idx = idx
-                    break
+                    pass
             if not due_cmd:
                 continue
 
@@ -607,7 +616,13 @@ async def _scheduled_scrape_loop():
                 except Exception as e:
                     logger.exception(f"[scheduler] verify_alive 失敗: {e}")
                     _scheduler_last_status = f"偵測下架失敗: {e}"
-                _cmd_state_set(due_idx, last_run_at=now_tw_iso(), last_status=_scheduler_last_status)
+                # 更新 last_run_at + next_due_at（下次要在整點）
+                _v_interval = int(due_cmd.get("interval_hr") or 24)
+                _cmd_state_set(due_idx,
+                    last_run_at=now_tw_iso(),
+                    last_status=_scheduler_last_status,
+                    next_due_at=_next_interval_boundary(now_tw(), _v_interval).isoformat(),
+                )
                 continue
 
             # cmd_type == "scan" → 既有掃描新物件邏輯（fall through）
@@ -695,8 +710,13 @@ async def _scheduled_scrape_loop():
                 f"完成 {done_count}/{len(cmds)} 個命令（新增 {total_new} / 補 {total_enrich} / 重複 {total_skip_dup}）"
             )
             logger.info("[scheduler] 全部完成 %s", _scheduler_last_status)
-            # 更新該 cmd 的 last_run_at（per-cmd 模式）
-            _cmd_state_set(due_idx, last_run_at=now_tw_iso(), last_status=_scheduler_last_status)
+            # 更新 last_run_at + next_due_at（下次必在整點）
+            _s_interval = int(due_cmd.get("interval_hr") or cfg.get("interval_hr") or 3)
+            _cmd_state_set(due_idx,
+                last_run_at=now_tw_iso(),
+                last_status=_scheduler_last_status,
+                next_due_at=_next_interval_boundary(now_tw(), _s_interval).isoformat(),
+            )
         except Exception as e:
             logger.exception("[scheduler] 定時 batch 失敗: %s", e)
             _scheduler_last_status = f"失敗: {e}"
@@ -1099,7 +1119,23 @@ async def scheduler_set_config(body: SchedulerConfigReq, admin: dict = Depends(r
         "updated_at": now_tw_iso(),
         "updated_by_email": admin.get("email") or "",
     }, merge=True)
-    logger.warning("[scheduler] %s 套用設定 commands=%s", admin.get("email"), cleaned)
+    # 套用後每個 cmd 重設 next_due_at 為「下個整點 boundary」
+    # 這樣不管何時套用，下一次執行一定落在整點
+    now_dt = now_tw()
+    state_updates = {}
+    for idx, c in enumerate(cleaned):
+        ihr = int(c.get("interval_hr") or 3)
+        nxt = _next_interval_boundary(now_dt, ihr)
+        state_updates[f"cmd_{idx}"] = {
+            "next_due_at": nxt.isoformat(),
+            # 保留既有 last_run_at（如果有）
+            **{k: v for k, v in (_cmd_state_get(idx).items())
+               if k not in ("next_due_at",)}
+        }
+    if state_updates:
+        get_firestore().collection("settings").document("scheduler_state").set(state_updates, merge=True)
+    logger.warning("[scheduler] %s 套用設定 commands=%s （next_due_at 已對齊整點）",
+                   admin.get("email"), cleaned)
     if _sched_wake_event is not None:
         _sched_wake_event.set()
     return {"status": "ok", "commands": cleaned}

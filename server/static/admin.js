@@ -539,9 +539,24 @@ function _isCmdApplied(idx) {
   const s = _schedServer.commands[idx];
   if (!d && !s) return true;
   if (!d || !s) return false;
-  return JSON.stringify(d.districts.slice().sort()) === JSON.stringify((s.districts || []).slice().sort())
+  return JSON.stringify((d.districts||[]).slice().sort()) === JSON.stringify((s.districts || []).slice().sort())
       && Number(d.limit) === Number(s.limit)
       && JSON.stringify(_normSources(d)) === JSON.stringify(_normSources(s));
+}
+
+function _isCmdAppliedNew(draft, server) {
+  // 比對 draft 跟 server 是否完全一樣（含 type 和 interval_hr）
+  if (!draft && !server) return true;
+  if (!draft || !server) return false;
+  const dType = draft.type || "scan";
+  const sType = server.type || "scan";
+  if (dType !== sType) return false;
+  if (Number(draft.interval_hr || 0) !== Number(server.interval_hr || 0)) return false;
+  if (dType === "verify_alive") return true;
+  // scan 比對 districts / limit / sources
+  return JSON.stringify((draft.districts||[]).slice().sort()) === JSON.stringify((server.districts || []).slice().sort())
+      && Number(draft.limit) === Number(server.limit)
+      && JSON.stringify(_normSources(draft)) === JSON.stringify(_normSources(server));
 }
 
 function _isIntervalApplied() {
@@ -589,9 +604,19 @@ function renderScheduler(s) {
 function _renderCmdRow(cmd, i) {
   const cmdType = cmd.type || "scan";
   const server = _schedServer.commands[i];
+  // 套用狀態：比對 draft vs server（同 idx）
+  const applied = _isCmdAppliedNew(cmd, server);
+  const appliedBadge = !server
+    ? `<span style="color:#c0392b; font-size:11px; font-weight:600;">⚠ 未套用 (新增中)</span>`
+    : applied
+      ? `<span style="color:#27ae60; font-size:11px; font-weight:600;">✓ 已套用</span>`
+      : `<span style="color:#c0392b; font-size:11px; font-weight:600;">⚠ 未套用 (按下套用才生效)</span>`;
   const lastRunStr = (server && server.last_run_at)
     ? `<span style="color:#666; font-size:11px;">上次跑：${_fmtDate(server.last_run_at)}</span>`
     : `<span style="color:#888; font-size:11px;">尚未跑過</span>`;
+  const nextDueStr = (server && server.last_run_at)   // 顯示 next_due 需要 cmd 已被排程過
+    ? ""   // 沒在 server response 裡，先不顯示
+    : "";
   const removeBtn = `<button onclick="schedRemoveCmd(${i})" style="margin-left:auto; padding:2px 8px; color:#c0392b;">刪除</button>`;
 
   if (cmdType === "verify_alive") {
@@ -600,16 +625,21 @@ function _renderCmdRow(cmd, i) {
       const sel = Number(cmd.interval_hr) === h ? "selected" : "";
       return `<option value="${h}" ${sel}>${h} 小時</option>`;
     }).join("");
+    const appliedDetail = (server && _isCmdAppliedNew(cmd, server))
+      ? `<span style="color:#27ae60; font-size:12px;">✓ 已套用：偵測下架 / 每 ${Number(server.interval_hr||24)} 小時</span>`
+      : `<span style="color:#c0392b; font-size:12px;">⚠ 未套用（按下套用才生效）</span>`;
     return `
       <div style="border:1px solid #1e88e5; padding:10px 12px; border-radius:5px; margin-bottom:8px; background:#f0f7ff;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
           <b>命令 ${i + 1}</b>
           <span style="background:#1e88e5; color:#fff; padding:1px 8px; border-radius:3px; font-size:12px;">偵測下架</span>
+          ${appliedBadge}
           ${lastRunStr}
           ${removeBtn}
         </div>
         <div style="margin-bottom:6px; font-size:13px; color:#555;">
           掃描所有非已封存物件，HTTP 驗證每個來源 URL 是否還活著，全部失效就自動 archive。
+          下次執行一定落在整點。
         </div>
         <div>
           每
@@ -619,6 +649,7 @@ function _renderCmdRow(cmd, i) {
           </select>
           跑一次
           <button onclick="applySchedulerConfig()" style="margin-left:8px; padding:3px 12px;">套用</button>
+          <span style="margin-left:8px;">${appliedDetail}</span>
         </div>
       </div>`;
   }
@@ -652,11 +683,16 @@ function _renderCmdRow(cmd, i) {
     return `<option value="${h}" ${sel}>${h} 小時</option>`;
   }).join("");
 
+  const srcLabelCN = { "591": "591", "yongqing": "永慶", "sinyi": "信義" };
+  const appliedDetail = (server && _isCmdAppliedNew(cmd, server))
+    ? `<span style="color:#27ae60; font-size:12px;">✓ 已套用：${esc(_normSources(server).map(s=>srcLabelCN[s]||s).join("+"))} / ${esc((server.districts||[]).join("、"))} / ${Number(server.limit)} 筆 / 每 ${Number(server.interval_hr||3)} 小時</span>`
+    : `<span style="color:#c0392b; font-size:12px;">⚠ 未套用（按下套用才生效）</span>`;
   return `
     <div style="border:1px solid #c78a00; padding:10px 12px; border-radius:5px; margin-bottom:8px; background:#fffaed;">
       <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
         <b>命令 ${i + 1}</b>
         <span style="background:#c78a00; color:#fff; padding:1px 8px; border-radius:3px; font-size:12px;">掃描新物件</span>
+        ${appliedBadge}
         ${lastRunStr}
         ${removeBtn}
       </div>
@@ -680,9 +716,10 @@ function _renderCmdRow(cmd, i) {
                 onchange="_schedDraft.commands[${i}].interval_hr = parseInt(this.value)||3; _touchApplyBtns()">
           ${intervalOpts}
         </select>
-        跑一次
+        跑一次（套用後下次執行落在整點）
         <button onclick="applySchedulerConfig()" style="margin-left:8px; padding:3px 12px;">套用</button>
       </div>
+      <div style="margin-top:6px;">${appliedDetail}</div>
     </div>`;
 }
 
