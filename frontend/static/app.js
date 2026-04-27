@@ -1272,19 +1272,8 @@ function srcLinksHTML(p) {
     </span>`;
   }
 
-  // 用戶貼 URL 送出 → 「自行調查」標籤 + 該來源連結
-  if (p.source_origin === "user_url") {
-    const t = _fmtPubDate(p.analysis_completed_at || p.scraped_at || p._added_at || null);
-    const srcName = p.source || "591";
-    const cleanedUrl = (srcName === "591") ? clean591Url(p.url) : p.url;
-    const link = p.url ? `<a href="${esc(cleanedUrl)}" target="_blank" rel="noopener noreferrer" class="src-num" onclick="event.stopPropagation()" title="${esc(srcName)} 頁面">
-      <span>${esc(srcName)}</span>${t ? `<span class="src-num-date">${esc(t)}</span>` : ""}
-    </a>` : `<span>${esc(srcName)}${t ? ` <span class="src-num-date">${esc(t)}</span>` : ""}</span>`;
-    return `<span class="src-hover-wrap" onclick="event.stopPropagation()">
-      <span class="src-badge-manual">自行調查</span>
-      <span class="src-hover-popup src-hover-popup--dated">${link}</span>
-    </span>`;
-  }
+  // 用戶貼 URL 送出（source_origin=user_url）— fall through 到下面的 icon badge 渲染，
+  // 顯示對應網站 icon（591/永慶）比「自行調查」標籤更直覺。manual 物件才保留特殊處理。
 
   // 多來源：從 p.sources 拿（新 schema），fallback 用 p.url + p.url_alt（舊 schema）
   let sourceList = [];   // [{name, url, date}]
