@@ -406,6 +406,26 @@ def _enrich_from_detail(item: dict, headless: bool = True) -> dict:
             if not any(bad in zoning_raw for bad in ["謄本", "複雜", "不明", "未知"]):
                 item["zoning_original"] = zoning_raw
 
+        # 型態（建物類型）：從「型態 X」字樣抓
+        # 永慶 type 詞彙：公寓 / 無電梯公寓 / 電梯大廈 / 華廈 / 透天 / 店面 / 套房 等
+        type_m = re.search(r"型態\s+([^\s，,。]{1,8})", text)
+        if type_m:
+            yc_type = type_m.group(1)
+            # 對應到我們系統的 building_type 詞彙
+            type_map = {
+                "公寓": "公寓",
+                "無電梯公寓": "公寓",
+                "電梯大廈": "電梯大樓",
+                "電梯大樓": "電梯大樓",
+                "華廈": "華廈",
+                "透天": "透天厝",
+                "透天厝": "透天厝",
+                "店面": "店面",
+                "套房": "套房",
+            }
+            item["building_type"] = type_map.get(yc_type, yc_type)
+            item["_yongqing_type_raw"] = yc_type   # 保留原文 debug 用
+
         # 社區名稱 — 從 BreadcrumbList JSON-LD 拿（不抓自由文字避免誤抓 UI label）
         for sc in soup.find_all("script", type="application/ld+json"):
             try:
@@ -509,13 +529,29 @@ def scrape_yongqing(
 
             # 全新物件 → 補詳情頁
             consecutive_complete = 0
-            progress_callback(f"  ✓ 永慶新物件 第 {len(new_items)+1} 筆: {item.get('title','')[:30]}")
+            progress_callback(f"  ✓ 永慶新物件 候選: {item.get('title','')[:30]}")
             try:
                 _enrich_from_detail(item, headless=headless)
             except Exception as e:
                 logger.warning(f"永慶詳情頁 enrich 失敗 {src_id}: {e}")
 
+            # 過濾非公寓：第一階段只要公寓（永慶 type 詞「公寓」「無電梯公寓」都對應）
+            actual_type = item.get("building_type")
+            if actual_type and actual_type != "公寓":
+                progress_callback(
+                    f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：型態 {item.get('_yongqing_type_raw') or actual_type} 不是公寓"
+                )
+                _human_sleep()
+                continue
+
+            # 進一步檢查：詳情頁完全沒抓到型態 + 缺核心欄位 → 大概率是非公寓 layout 不同 → skip
+            if not actual_type and not item.get("price_ntd"):
+                progress_callback(f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：型態未知且無價格")
+                _human_sleep()
+                continue
+
             new_items.append(item)
+            progress_callback(f"  ✓ 已加入：第 {len(new_items)} 筆 {item.get('address','')[:25]}")
             if len(new_items) >= limit:
                 stop = True
                 break
