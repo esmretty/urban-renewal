@@ -46,49 +46,102 @@
         <div id="stats-box" class="stats-grid">載入中…</div>
       </section>
 
+      <!-- ── Admin 命令（3 tabs）─────────────────────────── -->
       <section class="panel">
-        <h2>手動 batch 抓取</h2>
-        <div class="scrape-row">
-          <label>來源：
-            <select id="scrape-source" style="padding:4px 8px;">
-              <option value="591">591 房屋</option>
-              <option value="yongqing">永慶房屋（無電梯公寓）</option>
-            </select>
-          </label>
+        <h2>Admin 命令</h2>
+        <div class="cmd-tabs">
+          <button class="cmd-tab active" data-tab="batch" onclick="switchCmdTab('batch')">📥 Batch 抓資料</button>
+          <button class="cmd-tab" data-tab="verify" onclick="switchCmdTab('verify')">🔍 偵測下架</button>
+          <button class="cmd-tab" data-tab="other" onclick="switchCmdTab('other')">🔧 其他</button>
         </div>
-        <div class="scrape-row">
-          <label>台北：</label>
-          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="大安區" checked> 大安</label>
-          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="信義區" checked> 信義</label>
-          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="中山區" checked> 中山</label>
-          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="中正區" checked> 中正</label>
-          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="文山區" checked> 文山</label>
-          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="松山區"> 松山</label>
-          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="大同區"> 大同</label>
-          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="萬華區"> 萬華</label>
-          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="南港區"> 南港</label>
-        </div>
-        <div class="scrape-row">
-          <label>筆數：<input id="scrape-limit" type="number" min="1" max="200" value="30"></label>
-          <label>總樓層≥<input id="thresh-floors" type="number" min="1" max="20" value="6"> 不分析</label>
-          <button id="btn-admin-scrape" onclick="adminTriggerScrape()">開始抓取</button>
-        </div>
-        <div id="scrape-progress" class="scrape-progress hidden">
-          <div class="scrape-bar"><div id="scrape-bar-fill"></div></div>
-          <div id="scrape-msg">準備中…</div>
-          <pre id="scrape-log"></pre>
-        </div>
-      </section>
 
-      <section class="panel">
-        <h2>定時 batch 排程</h2>
-        <div id="scheduler-box" style="font-size:14px; line-height:1.8;">載入中…</div>
-        <details style="margin-top:14px;">
-          <summary style="cursor:pointer; color:#c78a00; font-weight:600; font-size:14px;">
-            ▸ 顯示排程執行紀錄（近 7 天）
-          </summary>
-          <div id="scheduler-history-box" style="font-size:13px; margin-top:10px;">載入中…</div>
-        </details>
+        <!-- Tab: Batch 抓資料 -->
+        <div class="cmd-pane" data-pane="batch">
+          <div class="cmd-pane-grid">
+            <div class="cmd-pane-left">
+              <h4>手動執行</h4>
+              <div class="scrape-row">
+                <label>來源：
+                  <select id="scrape-source" style="padding:4px 8px;">
+                    <option value="591">591 房屋</option>
+                    <option value="yongqing">永慶房屋（無電梯公寓）</option>
+                  </select>
+                </label>
+              </div>
+              <div class="scrape-row">
+                <label>台北：</label>
+                <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="大安區" checked> 大安</label>
+                <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="信義區" checked> 信義</label>
+                <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="中山區" checked> 中山</label>
+                <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="中正區" checked> 中正</label>
+                <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="文山區" checked> 文山</label>
+                <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="松山區"> 松山</label>
+                <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="大同區"> 大同</label>
+                <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="萬華區"> 萬華</label>
+                <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="南港區"> 南港</label>
+              </div>
+              <div class="scrape-row">
+                <label>筆數：<input id="scrape-limit" type="number" min="1" max="200" value="30"></label>
+                <label>總樓層≥<input id="thresh-floors" type="number" min="1" max="20" value="6"> 不分析</label>
+                <button id="btn-admin-scrape" onclick="adminTriggerScrape()">開始抓取</button>
+              </div>
+              <div id="scrape-progress" class="scrape-progress hidden">
+                <div class="scrape-bar"><div id="scrape-bar-fill"></div></div>
+                <div id="scrape-msg">準備中…</div>
+                <pre id="scrape-log"></pre>
+              </div>
+            </div>
+            <div class="cmd-pane-right">
+              <h4>定時 scheduler</h4>
+              <div id="scheduler-box-scan" style="font-size:14px; line-height:1.6;">載入中…</div>
+              <details style="margin-top:14px;">
+                <summary style="cursor:pointer; color:#c78a00; font-weight:600; font-size:14px;">
+                  ▸ 排程執行紀錄（近 7 天）
+                </summary>
+                <div id="scheduler-history-box" style="font-size:13px; margin-top:10px;">載入中…</div>
+              </details>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: 偵測下架 -->
+        <div class="cmd-pane hidden" data-pane="verify">
+          <div class="cmd-pane-grid">
+            <div class="cmd-pane-left">
+              <h4>立即執行</h4>
+              <p style="font-size:13px; color:#555; margin:0 0 10px;">
+                掃描所有非已封存物件，HTTP 驗證每個來源 URL 是否還活著。
+                全部 sources 都失效（404 / 已下架）→ 自動 archive doc。
+              </p>
+              <button onclick="runVerifyAliveNow()" style="padding:8px 18px; background:#1e88e5; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:600;">
+                🔍 立即偵測下架
+              </button>
+              <div id="verify-alive-status" style="margin-top:12px; font-size:13px; color:#666;"></div>
+            </div>
+            <div class="cmd-pane-right">
+              <h4>定時 scheduler</h4>
+              <div id="scheduler-box-verify" style="font-size:14px; line-height:1.6;">載入中…</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: 其他 -->
+        <div class="cmd-pane hidden" data-pane="other">
+          <div class="cmd-pane-grid">
+            <div class="cmd-pane-left">
+              <h4>地址路名一致性掃描</h4>
+              <p style="font-size:13px; color:#555; margin:0 0 10px;">
+                比對每筆物件的 DB 地址路名 vs 591 原生座標反查的路名，找出疑似誤讀的物件。
+              </p>
+              <button onclick="runOcrScan()" style="padding:8px 18px; background:#2c3e50; color:#fff; border:none; border-radius:4px; cursor:pointer;">開始掃描</button>
+              <div id="ocr-scan-result" style="margin-top:12px;"></div>
+            </div>
+            <div class="cmd-pane-right">
+              <h4>定時 scheduler</h4>
+              <p style="font-size:13px; color:#888;">目前無定時排程命令。</p>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section class="panel">
@@ -103,16 +156,6 @@
           </button>
         </div>
         <div id="retry-queue-box" style="font-size:13px;">載入中…</div>
-      </section>
-
-      <section class="panel">
-        <h2>地址路名一致性掃描</h2>
-        <p style="font-size:13px; color:#555; margin:0 0 10px;">
-          比對每筆物件的 DB 地址路名 vs 591 原生座標反查的路名，找出疑似誤讀 / 誤糾正的物件。
-          受害物件可按該筆「重新分析」重跑 OCR 修正。
-        </p>
-        <button onclick="runOcrScan()" style="padding:8px 18px; background:#2c3e50; color:#fff; border:none; border-radius:4px; cursor:pointer;">開始掃描</button>
-        <div id="ocr-scan-result" style="margin-top:12px;"></div>
       </section>
 
       <section class="panel">

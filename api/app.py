@@ -1719,6 +1719,19 @@ async def delete_retry_queue_entry(queue_id: str, admin: dict = Depends(require_
     return {"status": "ok"}
 
 
+@app.post("/admin/verify_alive/run-now")
+async def admin_verify_alive_now(admin: dict = Depends(require_admin)):
+    """admin 手動立即執行偵測下架（不等排程）。背景跑、不阻塞 response。"""
+    async def _do():
+        try:
+            await _run_verify_alive_command()
+            logger.warning(f"[verify-alive] {admin.get('email')} 手動觸發完成")
+        except Exception as e:
+            logger.exception(f"[verify-alive] 手動觸發失敗: {e}")
+    asyncio.create_task(_do())
+    return {"status": "started"}
+
+
 @app.delete("/admin/retry_queue")
 async def clear_retry_queue(admin: dict = Depends(require_admin)):
     """admin 清空整個重試佇列（一鍵全刪）。"""

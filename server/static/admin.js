@@ -564,7 +564,12 @@ function _isIntervalApplied() {
 }
 
 function renderScheduler(s) {
-  const box = document.getElementById("scheduler-box");
+  // 兩個 tab 各自 render 自己的 cmds
+  _renderSchedulerByType(s, "scan", document.getElementById("scheduler-box-scan"));
+  _renderSchedulerByType(s, "verify_alive", document.getElementById("scheduler-box-verify"));
+}
+
+function _renderSchedulerByType(s, filterType, box) {
   if (!box) return;
   const running = s.currently_running;
   const enabled = s.enabled;
@@ -572,34 +577,58 @@ function renderScheduler(s) {
                   : (enabled ? "🟦 待機中" : "⚪ 已停用");
   const stateColor = running ? "#27ae60" : (enabled ? "#2980b9" : "#95a5a6");
 
-  // 啟用/停用按鈕（綠=已啟用，紅=已停用；點一下切換）
   const toggleBtn = enabled
-    ? `<button onclick="toggleScheduler(false)" style="background:#27ae60; color:#fff; border:none; padding:6px 14px; border-radius:4px; cursor:pointer; font-weight:600;">● 已啟用</button>`
-    : `<button onclick="toggleScheduler(true)"  style="background:#c0392b; color:#fff; border:none; padding:6px 14px; border-radius:4px; cursor:pointer; font-weight:600;">● 已停用</button>`;
-
-  // 停用時不顯示倒數（避免誤導「關掉還會跑」）；運行中或待機才顯示
-  const tickDiv = enabled
-    ? `<div>下次 tick：<b>${_countdown(s.next_tick_at)}</b>（${_fmtDate(s.next_tick_at)}）</div>`
-    : `<div style="color:#95a5a6;">下次 tick：— (排程已停用)</div>`;
+    ? `<button onclick="toggleScheduler(false)" style="background:#27ae60; color:#fff; border:none; padding:5px 12px; border-radius:4px; cursor:pointer; font-weight:600; font-size:13px;">● 已啟用</button>`
+    : `<button onclick="toggleScheduler(true)"  style="background:#c0392b; color:#fff; border:none; padding:5px 12px; border-radius:4px; cursor:pointer; font-weight:600; font-size:13px;">● 已停用</button>`;
 
   const headerRow = `
-    <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:10px; font-size:13px;">
       ${toggleBtn}
       <b style="color:${stateColor}">${stateText}</b>
-      ${tickDiv}
-      <div style="color:#555;">最近執行：${_fmtDate(s.last_run_at)} ${s.last_status ? `（${esc(s.last_status)}）` : ""}</div>
+      <span style="color:#555;">最近：${_fmtDate(s.last_run_at)}</span>
     </div>`;
 
-  // commands（每命令各自 interval；不再有全域 interval row）
-  const cmdHtml = _schedDraft.commands.map((cmd, i) => _renderCmdRow(cmd, i)).join("");
-  const addScanBtn = `<button onclick="schedAddCmd('scan')" style="padding:4px 14px; margin-right:6px;">+ 新增「掃描新物件」</button>`;
-  const addVerifyBtn = `<button onclick="schedAddCmd('verify_alive')" style="padding:4px 14px;">+ 新增「偵測下架」</button>`;
+  // 過濾出該 tab 的命令（記住原始 idx 用於套用 / 刪除）
+  const filteredCmds = [];
+  _schedDraft.commands.forEach((cmd, i) => {
+    const t = cmd.type || "scan";
+    if (t === filterType) filteredCmds.push({ cmd, origIdx: i });
+  });
 
-  box.innerHTML = headerRow +
-    `<div style="font-weight:600; margin:14px 0 6px;">命令清單（每命令各自時間，到時間就跑）</div>` +
-    cmdHtml +
-    `<div style="margin-top:8px;">${addScanBtn}${addVerifyBtn}</div>`;
+  const cmdHtml = filteredCmds.length
+    ? filteredCmds.map(({ cmd, origIdx }) => _renderCmdRow(cmd, origIdx)).join("")
+    : `<div style="color:#888; padding:8px; text-align:center;">尚無此類型命令</div>`;
+
+  const addLabel = filterType === "scan" ? "+ 新增掃描命令" : "+ 新增偵測下架命令";
+  const addBtn = `<button onclick="schedAddCmd('${filterType}')" style="padding:4px 12px;">${addLabel}</button>`;
+
+  box.innerHTML = headerRow + cmdHtml + `<div style="margin-top:8px;">${addBtn}</div>`;
 }
+
+window.runVerifyAliveNow = async function () {
+  const statusEl = document.getElementById("verify-alive-status");
+  if (!confirm("立即執行偵測下架？\n會掃描所有非已封存物件並 HTTP 驗活，可能需要數分鐘。")) return;
+  if (statusEl) statusEl.textContent = "⏳ 已啟動，背景執行中（看 server log 或重新整理排程紀錄查進度）";
+  try {
+    const r = await authedFetch("/admin/verify_alive/run-now", { method: "POST" });
+    if (!r.ok) {
+      if (statusEl) statusEl.textContent = `❌ 啟動失敗 (${r.status})`;
+      return;
+    }
+    if (statusEl) statusEl.textContent = "✓ 已啟動，背景執行中。完成後重新整理 dashboard 警告 / 物件列表會看到 archived 變動。";
+  } catch (e) {
+    if (statusEl) statusEl.textContent = `❌ 失敗：${e.message}`;
+  }
+};
+
+window.switchCmdTab = function (tab) {
+  document.querySelectorAll(".cmd-tab").forEach(b => {
+    b.classList.toggle("active", b.dataset.tab === tab);
+  });
+  document.querySelectorAll(".cmd-pane").forEach(p => {
+    p.classList.toggle("hidden", p.dataset.pane !== tab);
+  });
+};
 
 function _renderCmdRow(cmd, i) {
   const cmdType = cmd.type || "scan";
