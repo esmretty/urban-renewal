@@ -84,17 +84,29 @@ def _build_list_url(districts: list[str], building_types: list[str], page: int =
     )
 
 
+_LAST_403_AT = 0.0   # 上次遭 403 的時間 (epoch sec)，用於 cooldown
+
+
 def _fetch(url: str, retries: int = 3) -> Optional[str]:
-    """打永慶 HTTP，回 HTML text 或 None。"""
-    global LAST_FETCH_ERROR
+    """打永慶 HTTP，回 HTML text 或 None。
+    永慶會 rate-limit (403/429)，遇到時 backoff 久一點。"""
+    global LAST_FETCH_ERROR, _LAST_403_AT
+    # 若不久前才被 403，先 cooldown
+    since_403 = time.time() - _LAST_403_AT
+    if _LAST_403_AT and since_403 < 30:
+        wait = 30 - since_403
+        logger.info(f"永慶 cooldown {wait:.1f}s（剛被 403，先休息再打）")
+        time.sleep(wait)
     for attempt in range(retries):
         try:
             r = requests.get(url, headers=DEFAULT_HEADERS, timeout=20, verify=False)
             if r.status_code == 200:
                 return r.text
-            if r.status_code == 429:
-                logger.warning(f"永慶 429 rate limit，等 {(attempt+1)*5}s 重試 {url[:80]}")
-                time.sleep((attempt + 1) * 5)
+            if r.status_code in (403, 429):
+                _LAST_403_AT = time.time()
+                wait = 15 + attempt * 15   # 15s, 30s, 45s
+                logger.warning(f"永慶 {r.status_code} rate limit，等 {wait}s 後重試 {url[:80]}")
+                time.sleep(wait)
                 continue
             LAST_FETCH_ERROR = f"HTTP {r.status_code}"
             logger.warning(f"永慶 fetch fail {r.status_code} {url[:80]}")
@@ -102,7 +114,7 @@ def _fetch(url: str, retries: int = 3) -> Optional[str]:
         except Exception as e:
             LAST_FETCH_ERROR = str(e)[:200]
             logger.warning(f"永慶 fetch exception {e} attempt={attempt+1}/{retries}")
-            time.sleep(2)
+            time.sleep(3)
     return None
 
 
@@ -572,9 +584,13 @@ def scrape_yongqing(
 
             # 全新物件 → 兩階段 enrich
             consecutive_complete = 0
+
+            # 每筆 HTTP 之前 sleep（避免被永慶 anti-bot 偵測）
+            time.sleep(2.5)
+
             progress_callback(f"  → 永慶 HTTP 抓詳情: {item.get('title','')[:30]}")
 
-            # Stage 1：HTTP 拿全部欄位（除座標）— 快（~1 秒/筆）
+            # Stage 1：HTTP 拿全部欄位（除座標）— 快（~1 秒/筆，有 rate-limit cooldown）
             ok_basic = _enrich_basic_via_http(item, max_retries=2)
             if not ok_basic:
                 # HTTP 都拿不到 → 進重試佇列（10 分鐘後再試）
