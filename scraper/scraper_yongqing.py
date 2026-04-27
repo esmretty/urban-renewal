@@ -443,48 +443,71 @@ def _enrich_basic_via_http(item: dict, max_retries: int = 2) -> bool:
     return False
 
 
-def _enrich_coords_via_playwright(item: dict, headless: bool = True, timeout_sec: int = 25) -> bool:
-    """Stage 2：Playwright 開頁面拿座標。失敗不影響整體 ingest（座標可選）。
-    回傳 True 表示拿到座標，False 表示沒拿到（仍可繼續 ingest，地址 fallback geocoding）。"""
+def _enrich_coords_via_playwright_inner(url: str, headless: bool = True, timeout_sec: int = 18) -> Optional[tuple]:
+    """實際跑 Playwright — 給 watchdog 包起來呼叫。失敗回 None。"""
     from playwright.sync_api import sync_playwright
-    house_id = item.get("_yongqing_house_id")
-    url = item["url"]
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=headless)
-            ctx = browser.new_context(
-                user_agent=USER_AGENT,
-                locale="zh-TW",
-                viewport={"width": 1280, "height": 900},
-            )
-            page = ctx.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=timeout_sec * 1000)
-            # 滾到地圖區強制 lazy-load
             try:
-                page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.5)")
-                page.wait_for_timeout(1500)
-                page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.7)")
-                page.wait_for_timeout(1500)
-            except Exception:
-                pass
-            try:
+                ctx = browser.new_context(
+                    user_agent=USER_AGENT,
+                    locale="zh-TW",
+                    viewport={"width": 1280, "height": 900},
+                )
+                page = ctx.new_page()
+                page.goto(url, wait_until="domcontentloaded", timeout=timeout_sec * 1000)
+                # 滾到地圖區強制 lazy-load
+                try:
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.5)")
+                    page.wait_for_timeout(1500)
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.7)")
+                    page.wait_for_timeout(1500)
+                except Exception:
+                    pass
                 gmap_href = page.evaluate(
                     "() => document.querySelector('a[href*=\"google.com/maps\"]')?.href"
                 )
                 if gmap_href:
                     m = re.search(r"q=(-?\d+\.\d+),(-?\d+\.\d+)", gmap_href)
                     if m:
-                        item["latitude"] = float(m.group(1))
-                        item["longitude"] = float(m.group(2))
-                        item["source_latitude"] = item["latitude"]
-                        item["source_longitude"] = item["longitude"]
-                        browser.close()
-                        return True
-            except Exception as e:
-                logger.warning(f"yongqing 座標抓取失敗 {house_id}: {e}")
-            browser.close()
+                        return (float(m.group(1)), float(m.group(2)))
+            finally:
+                try: browser.close()
+                except Exception: pass
     except Exception as e:
-        logger.warning(f"yongqing Playwright 失敗 {house_id}: {e}")
+        logger.warning(f"yongqing Playwright inner 失敗: {e}")
+    return None
+
+
+def _enrich_coords_via_playwright(item: dict, headless: bool = True, timeout_sec: int = 25) -> bool:
+    """Stage 2：Playwright 開頁面拿座標。
+    用 ThreadPoolExecutor 加 hard timeout，超時直接放棄、loop 繼續下一筆。
+    座標拿不到仍可繼續 ingest（pipeline 會 fallback geocoding）。"""
+    import concurrent.futures
+    house_id = item.get("_yongqing_house_id")
+    url = item["url"]
+    HARD_TIMEOUT = timeout_sec + 10   # 內部 18s timeout + 10s buffer = 28s outer
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            fut = ex.submit(_enrich_coords_via_playwright_inner, url, headless, timeout_sec)
+            try:
+                coords = fut.result(timeout=HARD_TIMEOUT)
+            except concurrent.futures.TimeoutError:
+                logger.warning(
+                    f"yongqing Playwright HARD-TIMEOUT {HARD_TIMEOUT}s for {house_id}，"
+                    f"放棄座標繼續 ingest（內部 thread 會自然消亡）"
+                )
+                return False
+        if coords:
+            item["latitude"] = coords[0]
+            item["longitude"] = coords[1]
+            item["source_latitude"] = coords[0]
+            item["source_longitude"] = coords[1]
+            return True
+    except Exception as e:
+        logger.warning(f"yongqing Playwright outer 失敗 {house_id}: {e}")
     return False
 
 
