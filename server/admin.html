@@ -226,6 +226,8 @@
             <option value="error">錯誤</option>
           </select>
           <button onclick="loadAll()">重新整理</button>
+          <button id="batch-del-btn" class="btn-del" onclick="batchDeleteSelected()" disabled style="margin-left:8px">🗑 刪除選取 (0)</button>
+          <button id="clear-sel-btn" onclick="clearSelection()" disabled style="margin-left:4px">清除選取</button>
           <span id="count" class="count"></span>
         </div>
         <table id="tbl">

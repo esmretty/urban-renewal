@@ -958,6 +958,78 @@ function renderStats(s) {
 const PROP_PAGE_SIZE = 100;
 let _propCurrentPage = 1;
 let _propLastFiltered = [];   // 上次過濾後的完整列表（給翻頁用）
+const _selectedIds = new Set();   // 跨頁累積的勾選 id
+
+function _refreshBatchDelBtn() {
+  const btn = document.getElementById("batch-del-btn");
+  const clr = document.getElementById("clear-sel-btn");
+  const n = _selectedIds.size;
+  if (btn) {
+    btn.textContent = `🗑 刪除選取 (${n})`;
+    btn.disabled = n === 0;
+  }
+  if (clr) clr.disabled = n === 0;
+}
+
+window.toggleSelectOne = function (id, checked) {
+  if (checked) _selectedIds.add(id); else _selectedIds.delete(id);
+  _refreshBatchDelBtn();
+  // 同步 header 全選 checkbox 狀態
+  const head = document.getElementById("sel-all");
+  if (head) {
+    const pageIds = _propLastFiltered
+      .slice((_propCurrentPage - 1) * PROP_PAGE_SIZE, _propCurrentPage * PROP_PAGE_SIZE)
+      .map(d => d.id);
+    const allChecked = pageIds.length > 0 && pageIds.every(i => _selectedIds.has(i));
+    const someChecked = pageIds.some(i => _selectedIds.has(i));
+    head.checked = allChecked;
+    head.indeterminate = !allChecked && someChecked;
+  }
+};
+
+window.toggleSelectAllPage = function (checked) {
+  const pageIds = _propLastFiltered
+    .slice((_propCurrentPage - 1) * PROP_PAGE_SIZE, _propCurrentPage * PROP_PAGE_SIZE)
+    .map(d => d.id);
+  pageIds.forEach(id => { if (checked) _selectedIds.add(id); else _selectedIds.delete(id); });
+  // 同步該頁所有 row checkbox
+  document.querySelectorAll(".row-sel-cb").forEach(cb => { cb.checked = checked; });
+  _refreshBatchDelBtn();
+};
+
+window.clearSelection = function () {
+  _selectedIds.clear();
+  document.querySelectorAll(".row-sel-cb").forEach(cb => { cb.checked = false; });
+  const head = document.getElementById("sel-all");
+  if (head) { head.checked = false; head.indeterminate = false; }
+  _refreshBatchDelBtn();
+};
+
+window.batchDeleteSelected = async function () {
+  const ids = Array.from(_selectedIds);
+  if (ids.length === 0) return;
+  if (!confirm(`確定從中央 DB 永久刪除這 ${ids.length} 筆物件？此動作不可還原。`)) return;
+  const btn = document.getElementById("batch-del-btn");
+  if (btn) { btn.disabled = true; btn.textContent = `刪除中… 0/${ids.length}`; }
+  let done = 0, failed = 0;
+  // 並行 5 筆，避免一次打太多 request
+  const CONCURRENCY = 5;
+  const queue = ids.slice();
+  async function worker() {
+    while (queue.length) {
+      const id = queue.shift();
+      try {
+        const r = await authedFetch(`/admin/properties/${encodeURIComponent(id)}`, { method: "DELETE" });
+        if (r.ok) done++; else failed++;
+      } catch { failed++; }
+      if (btn) btn.textContent = `刪除中… ${done + failed}/${ids.length}`;
+    }
+  }
+  await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+  alert(`完成：成功 ${done} 筆，失敗 ${failed} 筆`);
+  _selectedIds.clear();
+  await loadAll();
+};
 
 window.propGoPage = function (delta) {
   const totalPages = Math.max(1, Math.ceil(_propLastFiltered.length / PROP_PAGE_SIZE));
@@ -1005,9 +1077,11 @@ window.renderList = function () {
   const headCols = ["連結", "City", "District", "地址", "類型", "樓層", "總價", "狀態", "抓取時間"];
   if (showSubmitter) headCols.push("送件人");
   headCols.push("動作");
-  document.getElementById("thead").innerHTML =
-    `<tr>${headCols.map(h => `<th>${h}</th>`).join("")}</tr>`;
-  const colspan = headCols.length;
+  // 第一欄：全選 checkbox
+  const headHTML = `<th style="width:32px;text-align:center"><input type="checkbox" id="sel-all" onchange="toggleSelectAllPage(this.checked)"></th>`
+    + headCols.map(h => `<th>${h}</th>`).join("");
+  document.getElementById("thead").innerHTML = `<tr>${headHTML}</tr>`;
+  const colspan = headCols.length + 1;
   const tbody = document.getElementById("tbody");
   if (!list.length) {
     tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;color:#999;padding:24px">無資料</td></tr>`;
@@ -1058,7 +1132,9 @@ window.renderList = function () {
     const submitterCell = showSubmitter
       ? `<td style="font-size:12px">${esc(d.submitted_by_email || d.submitted_by_uid || '—')}</td>`
       : '';
+    const isSel = _selectedIds.has(d.id);
     return `<tr>
+      <td style="text-align:center"><input type="checkbox" class="row-sel-cb" ${isSel ? "checked" : ""} onchange="toggleSelectOne('${esc(d.id)}', this.checked)"></td>
       <td style="white-space:nowrap">${linkBadge}</td>
       <td>${esc(d.city || "—")}</td>
       <td>${esc(d.district || "—")}</td>
@@ -1075,6 +1151,17 @@ window.renderList = function () {
       </td>
     </tr>`;
   }).join("");
+
+  // 渲染後同步 header 全選 checkbox + 批次刪除按鈕狀態
+  const headCb = document.getElementById("sel-all");
+  if (headCb) {
+    const pageIds = list.map(d => d.id);
+    const allChecked = pageIds.length > 0 && pageIds.every(i => _selectedIds.has(i));
+    const someChecked = pageIds.some(i => _selectedIds.has(i));
+    headCb.checked = allChecked;
+    headCb.indeterminate = !allChecked && someChecked;
+  }
+  _refreshBatchDelBtn();
 };
 
 // 正在重新分析的 id 集合；轉畫為 loading 狀態
