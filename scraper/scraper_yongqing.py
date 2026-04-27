@@ -589,8 +589,20 @@ def scrape_yongqing(
             ok = _enrich_from_detail(item, headless=headless, max_retries=2)
             if not ok:
                 # 詳情頁整個 enrich 失敗 → 不寫進 DB，避免空殼物件
+                # 進「失敗重試佇列」10 分鐘後自動重抓（非 404 = 物件可能還活著只是暫時抓不到）
+                try:
+                    from database.retry_queue import enqueue as _retry_enqueue
+                    _retry_enqueue(
+                        source_id=item["source_id"],
+                        source="永慶",
+                        url=item["url"],
+                        error="enrich failed: detail page missing core fields after 2 retries",
+                        extra_context={"district": item.get("district"), "title": item.get("title")},
+                    )
+                except Exception as _eq:
+                    logger.warning(f"retry_queue enqueue 失敗 {item.get('source_id')}: {_eq}")
                 progress_callback(
-                    f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：詳情頁 enrich 失敗（重試 2 次都拿不到核心欄位）"
+                    f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：enrich 失敗，已加入重試佇列（10 分鐘後再試）"
                 )
                 _human_sleep()
                 continue

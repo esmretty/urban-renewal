@@ -405,6 +405,58 @@ def _compute_next_tick(interval_hr: int) -> datetime:
     return next_tw
 
 
+async def _retry_queue_loop():
+    """失敗重試 loop：每 60 秒掃 retry_queue，找 retry_at <= now 的 entry 重抓。
+    重抓成功 → dequeue；失敗 → enqueue() 內部會更新 attempts + 排下次 retry。"""
+    from database.retry_queue import list_due, dequeue, enqueue
+    while True:
+        try:
+            await asyncio.sleep(60)
+            try:
+                due = list_due(limit=10)   # 每 tick 最多處理 10 筆，避免一次塞太多
+            except Exception as e:
+                logger.warning(f"[retry-queue] list_due 失敗: {e}")
+                continue
+            if not due:
+                continue
+            logger.info(f"[retry-queue] 處理 {len(due)} 筆到期 entry")
+            for entry in due:
+                src_id = entry.get("source_id")
+                url = entry.get("url")
+                doc_id_in_queue = entry.get("_id")
+                if not (src_id and url):
+                    continue
+                try:
+                    # 用既有 _scrape_single_url 重抓（會自動分流 591/永慶）
+                    await asyncio.to_thread(_scrape_single_url, url, src_id, False)
+                    # 重抓完成 → 驗證是否真的有 doc + 有核心欄位
+                    from database.db import find_doc_by_source_id as _fd
+                    new_doc_id, doc_data = _fd(src_id)
+                    if new_doc_id and doc_data and doc_data.get("price_ntd") and doc_data.get("address"):
+                        dequeue(doc_id_in_queue)
+                        logger.info(f"[retry-queue] ✓ 重抓成功 {src_id}，從佇列移除")
+                    else:
+                        # 重抓還是抓不全 → 重新 enqueue（attempts +1）
+                        enqueue(src_id, entry.get("source") or "591", url,
+                                error="retry: still missing core fields")
+                        logger.warning(f"[retry-queue] ⚠ 重抓 {src_id} 仍失敗，已 re-enqueue")
+                except Exception as e:
+                    logger.warning(f"[retry-queue] 重抓 {src_id} 例外: {e}")
+                    try:
+                        enqueue(src_id, entry.get("source") or "591", url,
+                                error=f"retry exception: {str(e)[:200]}")
+                    except Exception:
+                        pass
+                # 兩個 retry entry 之間休息 5 秒
+                await asyncio.sleep(5)
+        except asyncio.CancelledError:
+            logger.info("[retry-queue] loop cancelled (server shutdown)")
+            break
+        except Exception as e:
+            logger.exception(f"[retry-queue] loop iteration 失敗: {e}")
+            await asyncio.sleep(30)
+
+
 async def _scheduled_scrape_loop():
     """每 tick 從 Firestore 讀最新 config；依序執行命令，命令間休息 30 秒。
     收到 _sched_wake_event（toggle 啟用時）→ 中斷當前 sleep，重算倒數（不觸發執行）。"""
@@ -547,16 +599,20 @@ async def lifespan(app: FastAPI):
     if os.getenv("DISABLE_SCHEDULER", "").lower() in ("1", "true", "yes"):
         logger.info("[scheduler] DISABLE_SCHEDULER=true，本次啟動不執行定時 batch（本機 debug 模式）")
         sched_task = None
+        retry_task = None
     else:
         sched_task = asyncio.create_task(_scheduled_scrape_loop())
         logger.info("[scheduler] 定時 batch loop 已啟動（設定全在 Firestore settings/scheduler）")
+        retry_task = asyncio.create_task(_retry_queue_loop())
+        logger.info("[retry-queue] 失敗重試 loop 已啟動（每 60 秒掃 due，10 分鐘後重抓）")
     try:
         yield
     finally:
-        if sched_task:
-            sched_task.cancel()
-            try: await sched_task
-            except asyncio.CancelledError: pass
+        for t in (sched_task, retry_task):
+            if t:
+                t.cancel()
+                try: await t
+                except asyncio.CancelledError: pass
 
 
 app = FastAPI(title="都更神探R", version="2.0.0", lifespan=lifespan)
@@ -1413,6 +1469,61 @@ async def set_maintenance(body: MaintenanceReq, admin: dict = Depends(require_ad
     logger.warning("[maintenance] %s 設定 enabled=%s message=%r (本機檔案)",
                    admin.get("email"), state["enabled"], state["message"])
     return {"status": "ok", **state}
+
+
+# ── 失敗重試佇列（admin） ───────────────────────────────────────────────────
+@app.get("/admin/retry_queue")
+async def get_retry_queue(admin: dict = Depends(require_admin)):
+    """列出所有重試佇列 entry（pending + abandoned）"""
+    from database.retry_queue import list_all_for_admin
+    items = list_all_for_admin(limit=200)
+    return {"count": len(items), "items": items}
+
+
+@app.post("/admin/retry_queue/{queue_id}/run-now")
+async def run_retry_now(queue_id: str, admin: dict = Depends(require_admin)):
+    """手動立刻重抓某筆 — admin 不想等 10 分鐘。"""
+    from database.retry_queue import dequeue, enqueue
+    from database.db import find_doc_by_source_id as _fd
+    db = get_firestore()
+    doc = db.collection("retry_queue").document(queue_id).get()
+    if not doc.exists:
+        raise HTTPException(404, "queue entry 不存在")
+    entry = doc.to_dict() or {}
+    src_id = entry.get("source_id")
+    url = entry.get("url")
+    if not (src_id and url):
+        raise HTTPException(400, "queue entry 缺 source_id / url")
+
+    async def _do():
+        try:
+            await asyncio.to_thread(_scrape_single_url, url, src_id, False)
+            new_doc_id, doc_data = _fd(src_id)
+            if new_doc_id and doc_data and doc_data.get("price_ntd"):
+                dequeue(queue_id)
+                logger.info(f"[retry-queue] admin {admin.get('email')} 手動重抓成功 {src_id}")
+            else:
+                enqueue(src_id, entry.get("source") or "591", url,
+                        error="admin manual retry: still missing core fields")
+        except Exception as e:
+            logger.warning(f"[retry-queue] admin 手動重抓 {src_id} 失敗: {e}")
+            try:
+                enqueue(src_id, entry.get("source") or "591", url,
+                        error=f"admin manual retry exception: {str(e)[:200]}")
+            except Exception:
+                pass
+
+    asyncio.create_task(_do())
+    return {"status": "started", "source_id": src_id}
+
+
+@app.delete("/admin/retry_queue/{queue_id}")
+async def delete_retry_queue_entry(queue_id: str, admin: dict = Depends(require_admin)):
+    """admin 從重試佇列移除（放棄不再重試）。"""
+    from database.retry_queue import dequeue
+    dequeue(queue_id)
+    logger.warning(f"[retry-queue] admin {admin.get('email')} 移除 queue entry {queue_id}")
+    return {"status": "ok"}
 
 
 # ── 物件列表 ──────────────────────────────────────────────────────────────────

@@ -92,6 +92,15 @@
       </section>
 
       <section class="panel">
+        <h2>失敗重試佇列 <span id="retry-queue-count" style="color:#c78a00; font-size:14px;"></span></h2>
+        <p style="font-size:13px; color:#555; margin:0 0 10px;">
+          591 / 永慶 / 信義 物件抓取失敗（enrich timeout 或 detail page 抓不到資料但物件存在）
+          → 自動加入此佇列，<b>每 10 分鐘自動重抓</b>，最多 4 次後放棄。
+        </p>
+        <div id="retry-queue-box" style="font-size:13px;">載入中…</div>
+      </section>
+
+      <section class="panel">
         <h2>地址路名一致性掃描</h2>
         <p style="font-size:13px; color:#555; margin:0 0 10px;">
           比對每筆物件的 DB 地址路名 vs 591 原生座標反查的路名，找出疑似誤讀 / 誤糾正的物件。

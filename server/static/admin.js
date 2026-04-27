@@ -127,6 +127,110 @@ window.loadAll = async function () {
   loadSchedulerHistory();
   loadWhitelist();
   loadMaintenance();
+  loadRetryQueue();
+};
+
+
+// ── 失敗重試佇列 ──────────────────────────────────────────────────────
+async function loadRetryQueue() {
+  const box = document.getElementById("retry-queue-box");
+  const countEl = document.getElementById("retry-queue-count");
+  if (!box) return;
+  try {
+    const r = await authedFetch("/admin/retry_queue");
+    if (!r.ok) { box.innerHTML = `<div style="color:#c0392b;">載入失敗 (${r.status})</div>`; return; }
+    const data = await r.json();
+    renderRetryQueue(data.items || []);
+    if (countEl) {
+      const pending = (data.items || []).filter(i => i.status === "pending").length;
+      const abandoned = (data.items || []).filter(i => i.status === "abandoned").length;
+      countEl.textContent = pending || abandoned ? `(待重試 ${pending} 筆${abandoned ? `, 已放棄 ${abandoned} 筆` : ''})` : "";
+    }
+  } catch (e) {
+    box.innerHTML = `<div style="color:#c0392b;">載入失敗：${esc(e.message)}</div>`;
+  }
+}
+
+function renderRetryQueue(items) {
+  const box = document.getElementById("retry-queue-box");
+  if (!items.length) {
+    box.innerHTML = '<div style="color:#27ae60; padding:8px;">✓ 重試佇列為空（沒有失敗物件待重抓）</div>';
+    return;
+  }
+  const fmt = iso => {
+    if (!iso) return "—";
+    try {
+      const d = new Date(iso);
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return `${m}/${dd} ${hh}:${mm}`;
+    } catch { return iso; }
+  };
+  const fmtRetryAt = iso => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    const diffMin = Math.round((d.getTime() - Date.now()) / 60000);
+    if (diffMin < -1) return `<span style="color:#c0392b">已過時 ${Math.abs(diffMin)} 分</span>`;
+    if (diffMin <= 0) return `<span style="color:#c78a00">即將執行</span>`;
+    if (diffMin < 60) return `<span style="color:#666">${diffMin} 分後</span>`;
+    return `<span style="color:#888">${Math.round(diffMin / 60)} 小時後</span>`;
+  };
+  const rows = items.map(it => {
+    const isAbandoned = it.status === "abandoned";
+    const statusBadge = isAbandoned
+      ? '<span style="background:#7f8c8d; color:#fff; padding:1px 6px; border-radius:3px; font-size:11px;">已放棄</span>'
+      : '<span style="background:#c78a00; color:#fff; padding:1px 6px; border-radius:3px; font-size:11px;">待重試</span>';
+    const srcBadge = `<span style="background:${it.source==='永慶'?'#00837f':'#ffa726'}; color:#fff; padding:1px 6px; border-radius:3px; font-size:11px;">${esc(it.source||'?')}</span>`;
+    return `<tr>
+      <td>${statusBadge}</td>
+      <td>${srcBadge}</td>
+      <td><a href="${esc(it.url||'')}" target="_blank" rel="noopener noreferrer" style="color:#2980b9; font-family:monospace; font-size:12px;">${esc(it.source_id||'?')}</a></td>
+      <td style="font-size:12px; color:#666;">第 ${esc(String(it.attempts||1))} 次</td>
+      <td style="font-size:12px;">${isAbandoned ? '—' : fmtRetryAt(it.retry_at)}</td>
+      <td style="font-size:12px; color:#666;">${esc(fmt(it.first_failed_at))}</td>
+      <td style="font-size:11px; color:#c0392b; max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(it.last_error||'')}">${esc((it.last_error||'').slice(0,60))}</td>
+      <td style="white-space:nowrap;">
+        ${!isAbandoned ? `<button onclick="retryQueueRunNow('${esc(it._id)}')" style="padding:2px 8px; font-size:12px;">立即重試</button>` : ''}
+        <button onclick="retryQueueRemove('${esc(it._id)}')" style="padding:2px 8px; font-size:12px; color:#c0392b;">移除</button>
+      </td>
+    </tr>`;
+  }).join("");
+  box.innerHTML = `<table style="width:100%; border-collapse:collapse;">
+    <thead>
+      <tr style="background:#f8f9fa; border-bottom:1px solid #ddd;">
+        <th style="padding:6px 8px; text-align:left; font-size:12px;">狀態</th>
+        <th style="padding:6px 8px; text-align:left; font-size:12px;">來源</th>
+        <th style="padding:6px 8px; text-align:left; font-size:12px;">物件 ID</th>
+        <th style="padding:6px 8px; text-align:left; font-size:12px;">嘗試</th>
+        <th style="padding:6px 8px; text-align:left; font-size:12px;">下次重試</th>
+        <th style="padding:6px 8px; text-align:left; font-size:12px;">首次失敗</th>
+        <th style="padding:6px 8px; text-align:left; font-size:12px;">錯誤</th>
+        <th style="padding:6px 8px; text-align:left; font-size:12px;">動作</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+window.retryQueueRunNow = async function (queueId) {
+  if (!confirm("立即重試？")) return;
+  try {
+    const r = await authedFetch(`/admin/retry_queue/${encodeURIComponent(queueId)}/run-now`, { method: "POST" });
+    if (!r.ok) { alert("觸發失敗 (" + r.status + ")"); return; }
+    alert("已啟動，10~30 秒後完成");
+    setTimeout(loadRetryQueue, 15000);
+  } catch (e) { alert("失敗：" + e.message); }
+};
+
+window.retryQueueRemove = async function (queueId) {
+  if (!confirm("從佇列移除（不再重試）？")) return;
+  try {
+    const r = await authedFetch(`/admin/retry_queue/${encodeURIComponent(queueId)}`, { method: "DELETE" });
+    if (!r.ok) { alert("移除失敗 (" + r.status + ")"); return; }
+    loadRetryQueue();
+  } catch (e) { alert("失敗：" + e.message); }
 };
 
 
