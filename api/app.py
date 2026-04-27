@@ -527,6 +527,7 @@ async def _run_verify_alive_command(progress=None, trigger_label: str = "verify_
     total = len(docs)
     archived_count = 0
     skipped = 0
+    pruned_count = 0   # 部分來源失效、被 prune 的 doc 數
     archived_items = []   # 最近 archive 的物件，給 UI live 顯示
     started = now_tw_iso()
     logger.info(f"[verify-alive] 開始掃 {total} 筆物件")
@@ -545,6 +546,7 @@ async def _run_verify_alive_command(progress=None, trigger_label: str = "verify_
                 "total": total,
                 "archived_count": archived_count,
                 "skipped": skipped,
+                "pruned_count": pruned_count,
                 "archived_items": archived_items[-30:],   # 最近 30 筆
                 "finished": finished,
                 "updated_at": now_tw_iso(),
@@ -566,26 +568,33 @@ async def _run_verify_alive_command(progress=None, trigger_label: str = "verify_
             sources = data.get("sources") or []
             if not sources and data.get("url"):
                 sources = [{"name": data.get("source"), "url": data.get("url")}]
-            if not sources:
+            # 也驗 url_alt 裡的 URL（沒在 sources 但保留的歷史 URL）
+            extra_urls = []
+            for u in (data.get("url_alt") or []):
+                if u and not any(s.get("url") == u for s in sources):
+                    extra_urls.append(u)
+            check_targets = list(sources) + [{"url": u, "name": "url_alt"} for u in extra_urls]
+            if not check_targets:
                 if (i + 1) % 5 == 0:
                     _write_progress(current=i + 1)
                 continue
 
-            # 驗活每個 source URL（用 _verify_source_alive helper）
-            all_dead = True
-            any_alive = False
-            for s in sources:
+            # 驗活每個 source URL（不要早 break — 全部驗完才能 prune）
+            alive_results = []   # list of (target_dict, alive_bool, reason)
+            for s in check_targets:
                 url = s.get("url")
                 if not url:
+                    alive_results.append((s, True, "no url"))   # 沒 URL 不刪
                     continue
-                alive, _reason = _verify_source_alive(url, timeout=8)
-                if alive:
-                    any_alive = True
-                    all_dead = False
-                    break   # 一個活著就夠，不用再驗
-                await asyncio.sleep(2)   # rate-limit 友善
+                alive, reason = _verify_source_alive(url, timeout=8)
+                alive_results.append((s, alive, reason))
+                await asyncio.sleep(2)   # rate-limit 友善（_verify_source_alive 內也有 cooldown）
 
-            if all_dead and not any_alive:
+            any_alive = any(a for _, a, _ in alive_results)
+            all_dead = not any_alive
+
+            if all_dead:
+                # 整 doc archive
                 col.document(d.id).update({
                     "archived": True,
                     "archived_at": now_tw_iso(),
@@ -603,22 +612,52 @@ async def _run_verify_alive_command(progress=None, trigger_label: str = "verify_
                            source_id=data.get("source_id"), doc_id=d.id,
                            message=f"archived（所有來源失效）",
                            details={"address": data.get("address")})
-                # archive 一發生就立刻寫進度，UI 馬上看得到
                 _write_progress(current=i + 1)
-            elif (i + 1) % 5 == 0:
-                _write_progress(current=i + 1)
+            else:
+                # 部分死亡 → prune dead sources / url_alt 但 doc 留著
+                dead_urls = {s.get("url") for s, alive, _ in alive_results if not alive and s.get("url")}
+                if dead_urls:
+                    new_sources = [s for s in sources if s.get("url") not in dead_urls]
+                    new_url_alt = [u for u in (data.get("url_alt") or []) if u not in dead_urls]
+                    # 若主 url 失效 → 用第一個 alive sources 升格（避免 url 指 dead）
+                    new_main_url = data.get("url")
+                    new_main_sid = data.get("source_id")
+                    if data.get("url") in dead_urls and new_sources:
+                        promoted = new_sources[0]
+                        new_main_url = promoted.get("url")
+                        new_main_sid = promoted.get("source_id") or new_main_sid
+                        # 升格的 entry 從 url_alt 移除
+                        new_url_alt = [u for u in new_url_alt if u != new_main_url]
+                    updates = {
+                        "sources": new_sources,
+                        "url_alt": new_url_alt,
+                    }
+                    if new_main_url != data.get("url"):
+                        updates["url"] = new_main_url
+                    if new_main_sid != data.get("source_id"):
+                        updates["source_id"] = new_main_sid
+                    col.document(d.id).update(updates)
+                    pruned_count += 1
+                    logger.info(f"[verify-alive] pruned {len(dead_urls)} dead url(s) from {d.id}")
+                    log_action(trigger_label, "verify_alive_prune",
+                               doc_id=d.id, source_id=data.get("source_id"),
+                               message=f"清掉 {len(dead_urls)} 個失效 URL，doc 留著",
+                               details={"dead_urls": list(dead_urls), "address": data.get("address")})
+                    _write_progress(current=i + 1)
+                elif (i + 1) % 5 == 0:
+                    _write_progress(current=i + 1)
 
             if (i + 1) % 20 == 0 and progress:
-                progress(f"已掃 {i+1}/{total}，archive {archived_count} 筆", 50.0 * (i+1) / total)
+                progress(f"已掃 {i+1}/{total}，archive {archived_count} 筆，prune {pruned_count}", 50.0 * (i+1) / total)
             # 動態 sleep：剛打過 yungching 的 doc → 等久一點避免 anti-bot
-            _has_yc = any("yungching.com.tw" in (s.get("url") or "") for s in sources)
+            _has_yc = any("yungching.com.tw" in (t.get("url") or "") for t in check_targets)
             await asyncio.sleep(3.0 if _has_yc else 0.5)
     except Exception as _e:
         logger.exception(f"[verify-alive] 掃描中斷：{_e}")
         _write_progress(current=i + 1 if 'i' in locals() else 0, finished=True, error=_e)
         raise
 
-    msg = f"完成偵測下架：掃 {total} / 跳過已 archived {skipped} / 新 archived {archived_count}"
+    msg = f"完成偵測下架：掃 {total} / 跳過 {skipped} / archived {archived_count} / pruned {pruned_count}"
     logger.info(f"[verify-alive] {msg}")
     if progress:
         progress(msg, 100)
@@ -628,10 +667,10 @@ async def _run_verify_alive_command(progress=None, trigger_label: str = "verify_
     )
     _write_progress(current=total, finished=True)
     log_action(trigger_label, "verify_alive_end",
-               message=f"完成：掃 {total} / 跳過 {skipped} / 新 archived {archived_count}",
-               details={"total": total, "skipped": skipped, "archived": archived_count})
+               message=f"完成：掃 {total} / 跳過 {skipped} / archived {archived_count} / pruned {pruned_count}",
+               details={"total": total, "skipped": skipped, "archived": archived_count, "pruned": pruned_count})
     return {"started": started, "finished": now_tw_iso(), "total": total,
-            "archived": archived_count, "skipped": skipped}
+            "archived": archived_count, "skipped": skipped, "pruned": pruned_count}
 
 
 async def _scheduled_scrape_loop():
