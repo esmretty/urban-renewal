@@ -2390,8 +2390,14 @@ async function triggerScrapeUrl() {
       alert("處理完成" + (data.message ? `：${data.message}` : ""));
     } else if (data.status === "busy") {
       alert("目前任務較多，請稍候再送：" + (data.message || ""));
+    } else if (data.status === "skipped_non_apartment") {
+      // 永慶 / 591 樓高 > 5 → 不分析（非公寓，目前只支援 5F 以下）
+      inp.value = "";
+      alert("⏭ 跳過：" + (data.message || "此物件超過 5 層樓，目前僅分析 5F 以下公寓"));
+    } else if (data.status === "error") {
+      alert(`分析失敗：${data.message || data.detail || "unknown"}`);
     } else {
-      alert(`失敗：${data.message || data.detail || "unknown"}`);
+      alert(`未預期回應 (${data.status})：${data.message || data.detail || "unknown"}`);
     }
   } catch (e) {
     _stopFakeProgress("失敗");
