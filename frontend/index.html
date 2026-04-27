@@ -42,8 +42,8 @@
 
 <!-- ── Tab 切換 ── -->
 <div class="tab-bar app-container">
-  <button class="tab-btn" data-tab="watchlist" onclick="switchTab('watchlist')">觀察清單 <span id="watchlist-count" class="tab-count"></span></button>
   <button class="tab-btn" data-tab="explore" onclick="switchTab('explore')">搜尋網上物件</button>
+  <button class="tab-btn" data-tab="watchlist" onclick="switchTab('watchlist')">觀察清單 <span id="watchlist-count" class="tab-count"></span></button>
 </div>
 
 <!-- ── 觀察清單專屬：新增物件（三欄固定高度） ── -->
@@ -248,6 +248,7 @@
       <label class="small text-muted">排序：</label>
       <select id="sort-by" class="form-select form-select-sm w-auto" onchange="applyClientOrder()">
         <option value="list_rank" selected>新進優先</option>
+        <option value="last_change_at">物件有變動</option>
         <option value="published_at">原網刊登時間</option>
         <option value="profit_multiple">獲利倍數</option>
         <option value="price_per_building_ping">建坪單價</option>

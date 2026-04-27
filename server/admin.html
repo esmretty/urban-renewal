@@ -37,167 +37,171 @@
     </div>
   </nav>
 
-  <!-- Stats -->
-  <section class="panel">
-    <h2>資料總覽</h2>
-    <div id="stats-box" class="stats-grid">載入中…</div>
-  </section>
+  <div class="admin-grid">
+    <!-- ── 左欄：管理操作 ─────────────────────────────────── -->
+    <div class="admin-col admin-col--left">
 
-  <!-- 批次抓取 -->
-  <section class="panel">
-    <h2>批次抓取（admin）</h2>
-    <div class="scrape-row">
-      <label>來源：
-        <select id="scrape-source" style="padding:4px 8px;">
-          <option value="591">591 房屋</option>
-          <option value="yongqing">永慶房屋（無電梯公寓）</option>
-        </select>
-      </label>
-    </div>
-    <div class="scrape-row">
-      <label>台北：</label>
-      <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="大安區" checked> 大安</label>
-      <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="信義區" checked> 信義</label>
-      <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="中山區" checked> 中山</label>
-      <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="中正區" checked> 中正</label>
-      <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="文山區" checked> 文山</label>
-      <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="松山區"> 松山</label>
-      <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="大同區"> 大同</label>
-      <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="萬華區"> 萬華</label>
-      <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="南港區"> 南港</label>
-    </div>
-    <div class="scrape-row">
-      <label>筆數：<input id="scrape-limit" type="number" min="1" max="200" value="30"></label>
-      <label>總樓層≥<input id="thresh-floors" type="number" min="1" max="20" value="6"> 不分析</label>
-      <button id="btn-admin-scrape" onclick="adminTriggerScrape()">開始抓取</button>
-    </div>
-    <div id="scrape-progress" class="scrape-progress hidden">
-      <div class="scrape-bar"><div id="scrape-bar-fill"></div></div>
-      <div id="scrape-msg">準備中…</div>
-      <pre id="scrape-log"></pre>
-    </div>
-  </section>
+      <section class="panel">
+        <h2>資料總覽</h2>
+        <div id="stats-box" class="stats-grid">載入中…</div>
+      </section>
 
-  <!-- 定時排程 -->
-  <section class="panel">
-    <h2>定時 batch 排程</h2>
-    <div id="scheduler-box" style="font-size:14px; line-height:1.8;">載入中…</div>
-  </section>
+      <section class="panel">
+        <h2>手動 batch 抓取</h2>
+        <div class="scrape-row">
+          <label>來源：
+            <select id="scrape-source" style="padding:4px 8px;">
+              <option value="591">591 房屋</option>
+              <option value="yongqing">永慶房屋（無電梯公寓）</option>
+            </select>
+          </label>
+        </div>
+        <div class="scrape-row">
+          <label>台北：</label>
+          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="大安區" checked> 大安</label>
+          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="信義區" checked> 信義</label>
+          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="中山區" checked> 中山</label>
+          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="中正區" checked> 中正</label>
+          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="文山區" checked> 文山</label>
+          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="松山區"> 松山</label>
+          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="大同區"> 大同</label>
+          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="萬華區"> 萬華</label>
+          <label><input type="checkbox" class="scrape-dist" data-city="台北市" value="南港區"> 南港</label>
+        </div>
+        <div class="scrape-row">
+          <label>筆數：<input id="scrape-limit" type="number" min="1" max="200" value="30"></label>
+          <label>總樓層≥<input id="thresh-floors" type="number" min="1" max="20" value="6"> 不分析</label>
+          <button id="btn-admin-scrape" onclick="adminTriggerScrape()">開始抓取</button>
+        </div>
+        <div id="scrape-progress" class="scrape-progress hidden">
+          <div class="scrape-bar"><div id="scrape-bar-fill"></div></div>
+          <div id="scrape-msg">準備中…</div>
+          <pre id="scrape-log"></pre>
+        </div>
+      </section>
 
-  <!-- 排程執行紀錄（近 7 天） -->
-  <section class="panel">
-    <h2>排程執行紀錄（近 7 天）</h2>
-    <div id="scheduler-history-box" style="font-size:13px;">載入中…</div>
-  </section>
+      <section class="panel">
+        <h2>定時 batch 排程</h2>
+        <div id="scheduler-box" style="font-size:14px; line-height:1.8;">載入中…</div>
+        <details style="margin-top:14px;">
+          <summary style="cursor:pointer; color:#c78a00; font-weight:600; font-size:14px;">
+            ▸ 顯示排程執行紀錄（近 7 天）
+          </summary>
+          <div id="scheduler-history-box" style="font-size:13px; margin-top:10px;">載入中…</div>
+        </details>
+      </section>
 
-  <!-- Properties list -->
-  <section class="panel">
-    <h2>物件列表</h2>
-    <div class="prop-tabs">
-      <button class="prop-tab active" data-tab="batch" onclick="switchPropTab('batch')">Batch（admin 批次）</button>
-      <button class="prop-tab" data-tab="user_url" onclick="switchPropTab('user_url')">用戶貼 URL</button>
-      <button class="prop-tab" data-tab="manual" onclick="switchPropTab('manual')">用戶輸入地址</button>
-    </div>
-    <div class="toolbar">
-      <input id="q" placeholder="搜尋 id / 地址 / 區…" oninput="debouncedRender()">
-      <select id="filter-city" onchange="renderList()">
-        <option value="">全部縣市</option>
-        <option value="台北市">台北市</option>
-        <option value="新北市">新北市</option>
-      </select>
-      <select id="filter-status" onchange="renderList()">
-        <option value="">全部狀態</option>
-        <option value="done">已完成</option>
-        <option value="pending">待分析</option>
-        <option value="error">錯誤</option>
-      </select>
-      <button onclick="loadAll()">重新整理</button>
-      <span id="count" class="count"></span>
-    </div>
-    <table id="tbl">
-      <thead id="thead"></thead>
-      <tbody id="tbody"><tr><td colspan="12">載入中…</td></tr></tbody>
-    </table>
-  </section>
+      <section class="panel">
+        <h2>地址路名一致性掃描</h2>
+        <p style="font-size:13px; color:#555; margin:0 0 10px;">
+          比對每筆物件的 DB 地址路名 vs 591 原生座標反查的路名，找出疑似誤讀 / 誤糾正的物件。
+          受害物件可按該筆「重新分析」重跑 OCR 修正。
+        </p>
+        <button onclick="runOcrScan()" style="padding:8px 18px; background:#2c3e50; color:#fff; border:none; border-radius:4px; cursor:pointer;">開始掃描</button>
+        <div id="ocr-scan-result" style="margin-top:12px;"></div>
+      </section>
 
-  <!-- Users panel -->
-  <section class="panel">
-    <h2>用戶列表</h2>
-    <div id="users-box">載入中…</div>
-  </section>
+      <section class="panel">
+        <h2>網站維護模式</h2>
+        <p style="font-size:13px; color:#555; margin:0 0 10px;">
+          啟用後，<b>所有用戶（含 admin）</b>訪問首頁都會被導向「系統維護中」頁面。
+          Admin 仍可正常進入<b>本後台</b>關閉維護模式（後台不受維護模式影響）。
+        </p>
+        <p style="font-size:12px; color:#c78a00; margin:0 0 10px; padding:6px 10px; background:#fdf6e0; border-left:3px solid #c78a00; border-radius:3px;">
+          ⚠️ 此設定為 <b>per-server</b>（存於本機 <code>data/maintenance.json</code>）。
+          在 localhost 切換只影響 localhost；在 production 切換只影響 production。
+        </p>
+        <div id="maint-status-row" style="margin-bottom:12px; font-size:14px;">
+          狀態：<span id="maint-status-badge" style="font-weight:600;">載入中…</span>
+          <span id="maint-status-meta" style="color:#888; margin-left:8px;"></span>
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:10px; align-items:flex-start;">
+          <textarea id="maint-message-input" placeholder="自訂訊息（可選）— 給用戶看的說明"
+            style="flex:1; min-height:60px; padding:8px 10px; font-family:inherit; resize:vertical;"></textarea>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button id="maint-toggle-btn" onclick="toggleMaintenance()"
+            style="padding:8px 18px; background:#c78a00; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:600;">
+            切換維護模式
+          </button>
+          <button onclick="saveMaintenanceMessage()"
+            style="padding:8px 14px; background:#777; color:#fff; border:none; border-radius:4px; cursor:pointer;">
+            只更新訊息
+          </button>
+        </div>
+      </section>
 
-  <!-- Email 白名單 -->
-  <section class="panel">
-    <h2>Email 白名單（新用戶才要）</h2>
-    <p style="font-size:13px; color:#555; margin:0 0 10px;">
-      只有白名單內的 email 可以首次登入並建立帳號。既有用戶不受影響。
-      新加入的會員一律以 <b>Level 1 會員</b> 建檔。
-    </p>
-    <div style="display:flex; gap:8px; margin-bottom:10px;">
-      <input id="whitelist-email-input" type="email" placeholder="user@example.com"
-             style="flex:1; max-width:320px; padding:6px 10px;">
-      <button onclick="addWhitelistEmail()" style="padding:6px 14px;">新增</button>
+      <section class="panel panel-danger">
+        <h2>危險區域</h2>
+        <p class="danger-note">以下操作會永久刪除資料，請謹慎使用。</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn-danger-lg" onclick="purgeNonApartments()">一鍵清除非公寓</button>
+          <button class="btn-danger-lg" onclick="clearCentralDb()">封存中央 DB（properties）</button>
+        </div>
+        <p class="danger-hint">
+          「一鍵清除非公寓」會刪除所有 building_type 含「大樓/透天/店面/華廈/辦公」或 total_floors ≥11 的中央 doc。<br>
+          「封存中央 DB」會把中央所有物件標為 archived（軟刪除），探索 tab 看不到，但用戶 watchlist 仍能看到。
+        </p>
+      </section>
     </div>
-    <div id="whitelist-box" style="font-size:13px;">載入中…</div>
-  </section>
 
-  <!-- OCR 誤讀掃描 -->
-  <section class="panel">
-    <h2>地址路名一致性掃描</h2>
-    <p style="font-size:13px; color:#555; margin:0 0 10px;">
-      比對每筆物件的 DB 地址路名 vs 591 原生座標反查的路名，找出疑似誤讀 / 誤糾正的物件。
-      受害物件可按該筆「重新分析」重跑 OCR 修正。
-    </p>
-    <button onclick="runOcrScan()" style="padding:8px 18px; background:#2c3e50; color:#fff; border:none; border-radius:4px; cursor:pointer;">開始掃描</button>
-    <div id="ocr-scan-result" style="margin-top:12px;"></div>
-  </section>
+    <!-- ── 右欄：資料瀏覽 ─────────────────────────────────── -->
+    <div class="admin-col admin-col--right">
 
-  <!-- 網站維護模式 -->
-  <section class="panel">
-    <h2>網站維護模式</h2>
-    <p style="font-size:13px; color:#555; margin:0 0 10px;">
-      啟用後，<b>所有用戶（含 admin）</b>訪問首頁都會被導向「系統維護中」頁面。
-      Admin 仍可正常進入<b>本後台</b>關閉維護模式（後台不受維護模式影響）。
-      可以選填一段訊息給用戶看（例：「預計 2 小時後恢復」）。
-    </p>
-    <p style="font-size:12px; color:#c78a00; margin:0 0 10px; padding:6px 10px; background:#fdf6e0; border-left:3px solid #c78a00; border-radius:3px;">
-      ⚠️ 此設定為 <b>per-server</b>（存於本機 <code>data/maintenance.json</code>）。
-      在 localhost 切換只影響 localhost；在 production 切換只影響 production。
-    </p>
-    <div id="maint-status-row" style="margin-bottom:12px; font-size:14px;">
-      狀態：<span id="maint-status-badge" style="font-weight:600;">載入中…</span>
-      <span id="maint-status-meta" style="color:#888; margin-left:8px;"></span>
-    </div>
-    <div style="display:flex; gap:8px; margin-bottom:10px; align-items:flex-start;">
-      <textarea id="maint-message-input" placeholder="自訂訊息（可選）— 給用戶看的說明"
-        style="flex:1; min-height:60px; padding:8px 10px; font-family:inherit; resize:vertical;"></textarea>
-    </div>
-    <div style="display:flex; gap:10px;">
-      <button id="maint-toggle-btn" onclick="toggleMaintenance()"
-        style="padding:8px 18px; background:#c78a00; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:600;">
-        切換維護模式
-      </button>
-      <button onclick="saveMaintenanceMessage()"
-        style="padding:8px 14px; background:#777; color:#fff; border:none; border-radius:4px; cursor:pointer;">
-        只更新訊息
-      </button>
-    </div>
-  </section>
+      <section class="panel">
+        <h2>物件列表</h2>
+        <div class="prop-tabs">
+          <button class="prop-tab active" data-tab="batch" onclick="switchPropTab('batch')">Batch（admin 批次）</button>
+          <button class="prop-tab" data-tab="user_url" onclick="switchPropTab('user_url')">用戶貼 URL</button>
+          <button class="prop-tab" data-tab="manual" onclick="switchPropTab('manual')">用戶輸入地址</button>
+        </div>
+        <div class="toolbar">
+          <input id="q" placeholder="搜尋 id / 地址 / 區…" oninput="debouncedRender()">
+          <select id="filter-city" onchange="renderList()">
+            <option value="">全部縣市</option>
+            <option value="台北市">台北市</option>
+            <option value="新北市">新北市</option>
+          </select>
+          <select id="filter-status" onchange="renderList()">
+            <option value="">全部狀態</option>
+            <option value="done">已完成</option>
+            <option value="pending">待分析</option>
+            <option value="error">錯誤</option>
+          </select>
+          <button onclick="loadAll()">重新整理</button>
+          <span id="count" class="count"></span>
+        </div>
+        <table id="tbl">
+          <thead id="thead"></thead>
+          <tbody id="tbody"><tr><td colspan="12">載入中…</td></tr></tbody>
+        </table>
+        <div id="prop-pager" class="prop-pager">
+          <button id="prop-pager-prev" onclick="propGoPage(-1)">‹ 上一頁</button>
+          <span id="prop-pager-info">—</span>
+          <button id="prop-pager-next" onclick="propGoPage(1)">下一頁 ›</button>
+        </div>
+      </section>
 
-  <!-- 危險區域 -->
-  <section class="panel panel-danger">
-    <h2>危險區域</h2>
-    <p class="danger-note">以下操作會永久刪除資料，請謹慎使用。</p>
-    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-      <button class="btn-danger-lg" onclick="purgeNonApartments()">一鍵清除非公寓</button>
-      <button class="btn-danger-lg" onclick="clearCentralDb()">封存中央 DB（properties）</button>
+      <section class="panel">
+        <h2>用戶列表</h2>
+        <div id="users-box">載入中…</div>
+      </section>
+
+      <section class="panel">
+        <h2>Email 白名單（新用戶才要）</h2>
+        <p style="font-size:13px; color:#555; margin:0 0 10px;">
+          只有白名單內的 email 可以首次登入並建立帳號。既有用戶不受影響。
+          新加入的會員一律以 <b>Level 1 會員</b> 建檔。
+        </p>
+        <div style="display:flex; gap:8px; margin-bottom:10px;">
+          <input id="whitelist-email-input" type="email" placeholder="user@example.com"
+                 style="flex:1; max-width:320px; padding:6px 10px;">
+          <button onclick="addWhitelistEmail()" style="padding:6px 14px;">新增</button>
+        </div>
+        <div id="whitelist-box" style="font-size:13px;">載入中…</div>
+      </section>
     </div>
-    <p class="danger-hint">
-      「一鍵清除非公寓」會刪除所有 building_type 含「大樓/透天/店面/華廈/辦公」或 total_floors ≥11 的中央 doc。<br>
-      「封存中央 DB」會把中央所有物件標為 archived（軟刪除），探索 tab 會看不到，
-      但用戶 watchlist 仍能看到（顯示「已封存」標籤），不會變孤兒。日後重抓到的物件會自動 unarchive。
-    </p>
-  </section>
+  </div>
 </div>
 
 <!-- Doc detail modal -->
@@ -210,6 +214,11 @@
     <pre id="modal-body">loading...</pre>
     <div class="modal-actions">
       <button class="btn-danger" id="btn-delete">真的刪除</button>
+      <label style="font-size:13px; color:#555;">重抓:
+        <select id="reanalyze-source-select" style="padding:3px 6px;">
+          <option value="all">全部來源</option>
+        </select>
+      </label>
       <button id="btn-reanalyze">重新分析</button>
       <button onclick="closeModal()">關閉</button>
     </div>

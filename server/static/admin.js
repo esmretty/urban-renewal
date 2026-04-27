@@ -405,13 +405,23 @@ function _countdown(iso) {
   return `${min} 分 ${sec} 秒後`;
 }
 
+function _normSources(cmd) {
+  // 回傳排序後的 sources 陣列（固定順序）；舊資料 cmd.source 一律轉成 [source]
+  const ORDER = ["591", "yongqing", "sinyi"];
+  let arr = Array.isArray(cmd.sources) ? cmd.sources.slice()
+           : (cmd.source ? [cmd.source] : ["591"]);
+  arr = arr.filter(s => ORDER.includes(s));
+  return ORDER.filter(s => arr.includes(s));
+}
+
 function _isCmdApplied(idx) {
   const d = _schedDraft.commands[idx];
   const s = _schedServer.commands[idx];
   if (!d && !s) return true;
   if (!d || !s) return false;
   return JSON.stringify(d.districts.slice().sort()) === JSON.stringify((s.districts || []).slice().sort())
-      && Number(d.limit) === Number(s.limit);
+      && Number(d.limit) === Number(s.limit)
+      && JSON.stringify(_normSources(d)) === JSON.stringify(_normSources(s));
 }
 
 function _isIntervalApplied() {
@@ -479,14 +489,38 @@ function renderScheduler(s) {
 function _renderCmdRow(cmd, i) {
   const applied = _isCmdApplied(i);
   const server = _schedServer.commands[i];
+  const srcLabelCN = { "591": "591", "yongqing": "永慶", "sinyi": "信義" };
+  const srcsLabel = (cmd) => _normSources(cmd).map(s => srcLabelCN[s] || s).join("+");
   const appliedText = applied
-    ? `<span style="color:#27ae60; font-size:12px;">✓ 已套用：${esc((server.districts || []).join("、"))} / ${Number(server.limit)} 筆</span>`
+    ? `<span style="color:#27ae60; font-size:12px;">✓ 已套用：${esc(srcsLabel(server))} / ${esc((server.districts || []).join("、"))} / ${Number(server.limit)} 筆</span>`
     : `<span style="color:#c0392b; font-size:12px;">⚠ 未套用（按下套用才生效）</span>`;
-  const chips = _schedMeta.allowed.map(d => {
+
+  // 跟手動 batch 同樣順序：大安 信義 中山 中正 文山 松山 大同 萬華 南港
+  // 顯示去掉「區」字（值仍是「X區」字串給後端）
+  const ORDER = ["大安區", "信義區", "中山區", "中正區", "文山區", "松山區", "大同區", "萬華區", "南港區"];
+  const ordered = ORDER.filter(d => _schedMeta.allowed.includes(d))
+    .concat(_schedMeta.allowed.filter(d => !ORDER.includes(d)));
+  const distChips = ordered.map(d => {
     const checked = cmd.districts.includes(d) ? "checked" : "";
+    const label = d.replace(/區$/, "");
     return `<label style="margin-right:8px;"><input type="checkbox" ${checked}
-       onchange="schedToggleDist(${i}, '${d}', this.checked)"> ${d}</label>`;
+       onchange="schedToggleDist(${i}, '${d}', this.checked)"> ${label}</label>`;
   }).join("");
+
+  // 來源 checkbox 多選（固定順序：591 永慶 信義；信義先註明 coming-soon）
+  const SOURCES = [
+    { key: "591",      name: "591" },
+    { key: "yongqing", name: "永慶" },
+    { key: "sinyi",    name: "信義 (尚未支援)", disabled: true },
+  ];
+  const curSources = new Set(_normSources(cmd));
+  const sourceChips = SOURCES.map(s => {
+    const checked = curSources.has(s.key) ? "checked" : "";
+    const dis = s.disabled ? "disabled" : "";
+    return `<label style="margin-right:10px; ${s.disabled?'color:#aaa':''};"><input type="checkbox" ${checked} ${dis}
+       onchange="schedToggleSource(${i}, '${s.key}', this.checked)"> ${esc(s.name)}</label>`;
+  }).join("");
+
   return `
     <div style="border:1px solid #e5e5e5; padding:10px 12px; border-radius:5px; margin-bottom:8px;">
       <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
@@ -494,7 +528,15 @@ function _renderCmdRow(cmd, i) {
         ${_schedDraft.commands.length > 1 ? `<button onclick="schedRemoveCmd(${i})" style="margin-left:auto; padding:2px 8px; color:#c0392b;">刪除</button>` : ""}
       </div>
       <div style="margin-bottom:6px;">
-        ${chips}
+        <span style="font-size:12px; color:#666; margin-right:4px;">來源：</span>
+        ${sourceChips}
+        <span style="color:#7f8c8d; font-size:11px; margin-left:4px;">
+          （依固定順序執行：591 → 永慶 → 信義）
+        </span>
+      </div>
+      <div style="margin-bottom:6px;">
+        <span style="font-size:12px; color:#666; margin-right:4px;">行政區：</span>
+        ${distChips}
         <span style="color:#7f8c8d; font-size:12px; margin-left:4px;">
           （已選 ${cmd.districts.length}/${_schedMeta.maxDistricts}）
         </span>
@@ -509,6 +551,21 @@ function _renderCmdRow(cmd, i) {
       </div>
     </div>`;
 }
+
+window.schedToggleSource = function (idx, src, on) {
+  const cmd = _schedDraft.commands[idx];
+  if (!cmd) return;
+  const cur = new Set(_normSources(cmd));
+  if (on) cur.add(src);
+  else cur.delete(src);
+  if (cur.size === 0) {
+    alert("至少要勾一個來源");
+    return _touchApplyBtns();   // 重畫讓勾回去
+  }
+  cmd.sources = _normSources({ sources: [...cur] });
+  delete cmd.source;            // 清掉舊欄位避免衝突
+  _touchApplyBtns();
+};
 
 // 每次 draft 改動只需更新「已套用/未套用」文字，不重畫整段（避免失去 input focus）
 function _touchApplyBtns() {
@@ -539,7 +596,8 @@ window.schedToggleDist = function (idx, d, on) {
 
 window.schedAddCmd = function () {
   if (_schedDraft.commands.length >= _schedMeta.maxCmds) return;
-  _schedDraft.commands.push({ districts: [], limit: 30 });
+  // 預設：所有目前支援的來源都勾（591 + 永慶；信義尚未支援不算）
+  _schedDraft.commands.push({ districts: [], limit: 30, sources: ["591", "yongqing"] });
   _touchApplyBtns();
 };
 
@@ -664,6 +722,19 @@ function renderStats(s) {
   ).join("");
 }
 
+// ── 物件列表分頁狀態 ─────────────────────────────────────
+const PROP_PAGE_SIZE = 100;
+let _propCurrentPage = 1;
+let _propLastFiltered = [];   // 上次過濾後的完整列表（給翻頁用）
+
+window.propGoPage = function (delta) {
+  const totalPages = Math.max(1, Math.ceil(_propLastFiltered.length / PROP_PAGE_SIZE));
+  const newPage = Math.min(totalPages, Math.max(1, _propCurrentPage + delta));
+  if (newPage === _propCurrentPage) return;
+  _propCurrentPage = newPage;
+  renderList();
+};
+
 window.renderList = function () {
   const q = (document.getElementById("q").value || "").toLowerCase().trim();
   const city = document.getElementById("filter-city").value;
@@ -677,10 +748,29 @@ window.renderList = function () {
     (d.district || "").toLowerCase().includes(q)
   );
 
-  document.getElementById("count").textContent = `顯示 ${list.length} / ${_allDocs.length}`;
+  // 篩選結果若改變（filter / search 變動），重置回第 1 頁
+  if (list.length !== _propLastFiltered.length) _propCurrentPage = 1;
+  _propLastFiltered = list;
+  const totalPages = Math.max(1, Math.ceil(list.length / PROP_PAGE_SIZE));
+  if (_propCurrentPage > totalPages) _propCurrentPage = totalPages;
+
+  // 翻頁切片
+  const startIdx = (_propCurrentPage - 1) * PROP_PAGE_SIZE;
+  const pagedList = list.slice(startIdx, startIdx + PROP_PAGE_SIZE);
+
+  document.getElementById("count").textContent = `顯示 ${list.length} 筆，共 ${_allDocs.length} 筆`;
+  const pagerInfo = document.getElementById("prop-pager-info");
+  if (pagerInfo) pagerInfo.textContent = `第 ${_propCurrentPage} / ${totalPages} 頁（每頁 ${PROP_PAGE_SIZE} 筆）`;
+  const prevBtn = document.getElementById("prop-pager-prev");
+  const nextBtn = document.getElementById("prop-pager-next");
+  if (prevBtn) prevBtn.disabled = _propCurrentPage <= 1;
+  if (nextBtn) nextBtn.disabled = _propCurrentPage >= totalPages;
+  // 把 list 替換成這頁的 slice，後面渲染就只跑這頁的資料
+  list = pagedList;
   // 動態 thead：非 batch tab 多顯示「送件人」欄
   const showSubmitter = (_propTab === "user_url" || _propTab === "manual");
-  const headCols = ["ID", "連結", "City", "District", "地址", "類型", "樓層", "總價", "分析狀態", "抓取時間"];
+  // 移除 ID 欄；簡化欄位
+  const headCols = ["連結", "City", "District", "地址", "類型", "樓層", "總價", "狀態", "抓取時間"];
   if (showSubmitter) headCols.push("送件人");
   headCols.push("動作");
   document.getElementById("thead").innerHTML =
@@ -691,17 +781,17 @@ window.renderList = function () {
     tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;color:#999;padding:24px">無資料</td></tr>`;
     return;
   }
+  // 抓取時間：不顯示「年」，只顯示 MM/DD HH:MM
   const fmtScrapeTime = iso => {
     if (!iso) return "—";
     try {
       const d = new Date(iso);
       if (isNaN(d.getTime())) return "—";
-      const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, "0");
       const dd = String(d.getDate()).padStart(2, "0");
       const hh = String(d.getHours()).padStart(2, "0");
       const mm = String(d.getMinutes()).padStart(2, "0");
-      return `${y}/${m}/${dd} ${hh}:${mm}`;
+      return `${m}/${dd} ${hh}:${mm}`;
     } catch { return "—"; }
   };
   tbody.innerHTML = list.map(d => {
@@ -718,34 +808,36 @@ window.renderList = function () {
       const elapsed = Math.floor((Date.now() - startMs) / 1000);
       const EST = 45;
       const pct = Math.min(95, Math.round((elapsed / EST) * 95));
-      statusCell = `<div class="mini-loading"><div class="mini-loading-bar" style="width:${pct}%"></div><span style="font-size:11px;color:#666">分析中… ${pct}% (${elapsed}s)</span></div>`;
+      statusCell = `<div class="mini-loading"><div class="mini-loading-bar" style="width:${pct}%"></div><span style="font-size:11px;color:#666">分析中… ${pct}%</span></div>`;
     } else {
       statusCell = `<span class="${stCls}">${esc(d.analysis_status || "—")}</span>`;
     }
-    // 591 連結：每一個 url 都給編號連結，格式「591: 1 2 3 ...」
+    // 連結：每一個 url 都給編號連結；前綴顯示來源（依 sources / source）
     const allUrls = [d.url, ...(d.url_alt || [])].filter(Boolean);
+    let srcLabel = d.source || "591";
+    if (Array.isArray(d.sources) && d.sources.length > 0) {
+      srcLabel = [...new Set(d.sources.map(s => s.name).filter(Boolean))].join("/") || srcLabel;
+    }
     const linkBadge = allUrls.length === 0
       ? '<span style="color:#999">—</span>'
-      : '591: ' + allUrls.map((u, i) =>
+      : `${esc(srcLabel)}: ` + allUrls.map((u, i) =>
           `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" style="color:#2980b9;margin-right:6px">${i+1}</a>`
         ).join("");
     const submitterCell = showSubmitter
       ? `<td style="font-size:12px">${esc(d.submitted_by_email || d.submitted_by_uid || '—')}</td>`
       : '';
     return `<tr>
-      <td><code>${esc(d.id)}</code></td>
       <td style="white-space:nowrap">${linkBadge}</td>
       <td>${esc(d.city || "—")}</td>
       <td>${esc(d.district || "—")}</td>
-      <td>${_cleanAddrDisplayHTML(d)}</td>
+      <td style="white-space:nowrap">${_cleanAddrDisplayHTML(d)}</td>
       <td>${esc(d.building_type || "—")}</td>
-      <td>${floors}</td>
-      <td>${price}</td>
+      <td style="white-space:nowrap">${floors}</td>
+      <td style="white-space:nowrap">${price}</td>
       <td>${statusCell}</td>
       <td style="white-space:nowrap;font-size:12px;color:#666">${esc(scrapedAt)}</td>
       ${submitterCell}
-      <td class="row-actions">
-        <button onclick="openDoc('${esc(d.id)}')">檢視</button>
+      <td class="row-actions" style="white-space:nowrap">
         <button onclick="quickReanalyze('${esc(d.id)}')" ${isReanalyzing ? "disabled" : ""}>重新分析</button>
         <button class="btn-del" onclick="quickDelete('${esc(d.id)}')">刪除</button>
       </td>
@@ -876,6 +968,21 @@ window.openDoc = async function (id) {
   document.getElementById("modal-body").textContent = JSON.stringify(d, null, 2);
   document.getElementById("btn-delete").onclick = () => deleteDoc(id);
   document.getElementById("btn-reanalyze").onclick = () => reanalyzeDoc(id);
+
+  // 重抓 source 下拉：依該 doc 的 sources 列出可選來源
+  const srcSelect = document.getElementById("reanalyze-source-select");
+  if (srcSelect) {
+    const sources = Array.isArray(d.sources) && d.sources.length
+      ? d.sources
+      : (d.source ? [{ name: d.source }] : []);
+    const names = [...new Set(sources.map(s => s.name).filter(Boolean))];
+    let html = '<option value="all">全部來源</option>';
+    names.forEach(n => {
+      html += `<option value="${esc(n)}">只重抓 ${esc(n)}</option>`;
+    });
+    srcSelect.innerHTML = html;
+    srcSelect.style.display = (names.length > 1) ? "" : "none";
+  }
 };
 
 window.closeModal = function () {
@@ -959,9 +1066,13 @@ window.quickReanalyze = async function (id) {
 };
 
 async function reanalyzeDoc(id) {
-  if (!confirm(`重新分析 ${id}？（會覆寫中央資料）`)) return;
-  const r = await authedFetch(`/admin/properties/${encodeURIComponent(id)}/reanalyze`, { method: "POST" });
-  if (r.ok) { alert("已啟動重新分析"); closeModal(); }
+  const srcSelect = document.getElementById("reanalyze-source-select");
+  const source = (srcSelect && srcSelect.value) || "all";
+  const verb = source === "all" ? "全部來源" : `只 ${source}`;
+  if (!confirm(`重新分析 ${id}（${verb}）？（會覆寫中央資料）`)) return;
+  const url = `/admin/properties/${encodeURIComponent(id)}/reanalyze?source=${encodeURIComponent(source)}`;
+  const r = await authedFetch(url, { method: "POST" });
+  if (r.ok) { alert(`已啟動重新分析（${verb}）`); closeModal(); }
   else { alert("啟動失敗"); }
 }
 

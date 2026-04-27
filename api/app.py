@@ -80,6 +80,113 @@ def _is_manual_id(property_id: str) -> bool:
     return property_id.startswith("manual_")
 
 
+def _extract_road_segment(addr: str) -> str:
+    """抽出地址的路段（如「台北市大安區雲和街三段」→「雲和街三段」）。"""
+    if not addr:
+        return ""
+    import re as _re
+    inner = _re.sub(r"^(台北市|臺北市|新北市|桃園市|台中市|臺中市|高雄市|台南市|臺南市|基隆市|新竹市|新竹縣)", "", addr)
+    inner = _re.sub(r"^[一-龥]{1,3}區", "", inner)
+    m = _re.search(r"([一-龥]{1,5}(?:路|街|大道)(?:[一二三四五六七八九十]段)?)", inner)
+    return m.group(1) if m else ""
+
+
+def _is_replacement_change(existing: dict, incoming: dict) -> bool:
+    """情況 B 偵測：同 source_id 但已變成另一物件。
+    判定標準（任一成立）：
+      - 路段不同（路名不一樣 OR 段不一樣）
+      - 建坪差 ≥ 0.5 坪
+    （屋齡不看，591 跟永慶對屋齡計算可能有小誤差）"""
+    old_road = _extract_road_segment(existing.get("address") or existing.get("title") or "")
+    new_road = _extract_road_segment(incoming.get("address") or incoming.get("title") or "")
+    if old_road and new_road and old_road != new_road:
+        return True
+    old_area = existing.get("building_area_ping")
+    new_area = incoming.get("building_area_ping")
+    if old_area and new_area and abs(float(old_area) - float(new_area)) >= 0.5:
+        return True
+    return False
+
+
+def _verify_source_alive(url: str, timeout: int = 8) -> tuple:
+    """情況 D：驗證一個來源 URL 是否還活著。
+    回傳 (is_alive: bool, reason: str)
+    保守原則：HTTP 錯誤 / timeout 一律當成「還活著」(回傳 True)，避免誤刪。
+    只有明確 404/410 + 「下架/已售出」字樣才判定 dead。"""
+    if not url:
+        return (False, "no url")
+    try:
+        import requests
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0"
+        r = requests.get(url, headers={"User-Agent": ua}, timeout=timeout,
+                         verify=False, allow_redirects=True)
+        if r.status_code in (404, 410):
+            return (False, f"HTTP {r.status_code}")
+        if r.status_code != 200:
+            return (True, f"HTTP {r.status_code} (uncertain - keep)")
+        # 591 / 永慶下架頁偵測
+        text = r.text[:8000]
+        if any(kw in text for kw in ["已下架", "已售出", "物件已不存在", "找不到此物件"]):
+            return (False, "頁面顯示已下架/售出")
+        return (True, "alive")
+    except Exception as e:
+        return (True, f"error (uncertain - keep): {str(e)[:80]}")
+
+
+def _verify_and_prune_sources(doc_id: str, doc_data: dict, skip_source_id: str = None) -> dict:
+    """情況 D：對 doc 的所有 sources 跑 _verify_source_alive，移除 dead 的。
+    skip_source_id：剛剛觸發事件的那個 source（不重複驗它）
+    回傳：updates dict（包含修改後的 sources / url_alt / 可能的 archived flag）；無變動回 {}
+    """
+    sources = list(doc_data.get("sources") or [])
+    if not sources:
+        return {}
+    survivors = []
+    pruned = []
+    for s in sources:
+        sid = s.get("source_id")
+        if sid == skip_source_id:
+            survivors.append(s)
+            continue
+        url = s.get("url")
+        if not url:
+            survivors.append(s)
+            continue
+        alive, reason = _verify_source_alive(url, timeout=8)
+        if alive:
+            survivors.append(s)
+        else:
+            pruned.append({"source_id": sid, "name": s.get("name"), "reason": reason})
+            logger.info(f"[verify-sources] {doc_id} 移除失效來源 {sid}: {reason}")
+    if not pruned:
+        return {}
+    updates = {"sources": survivors}
+    # 若主來源被移除 → 第一個倖存者升格主
+    main_sid = doc_data.get("source_id")
+    if any(p["source_id"] == main_sid for p in pruned):
+        if survivors:
+            first = survivors[0]
+            updates["source_id"] = first.get("source_id")
+            updates["url"] = first.get("url")
+            updates["source"] = first.get("name") or "591"
+        else:
+            # 全部 source 都死 → archive
+            updates["archived"] = True
+            updates["archived_at"] = now_tw_iso()
+            updates["archived_reason"] = f"所有來源連結已失效（{[p['source_id'] for p in pruned]}）"
+    # url_alt 也清掉失效的
+    pruned_urls = set()
+    for s in sources:
+        if s.get("source_id") in [p["source_id"] for p in pruned] and s.get("url"):
+            pruned_urls.add(s["url"])
+    if pruned_urls:
+        old_url_alt = list(doc_data.get("url_alt") or [])
+        updates["url_alt"] = [u for u in old_url_alt if u not in pruned_urls]
+    return updates
+
+
 class _NoopRef:
     """非觀察清單物件的寫入目標：靜默丟棄，避免污染中央或意外建立 watchlist。"""
     def set(self, *a, **k): pass
@@ -351,13 +458,34 @@ async def _scheduled_scrape_loop():
                     await asyncio.sleep(SCHEDULER_INTER_COMMAND_SLEEP_SEC)
                 dists = list(cmd.get("districts") or [])[:SCHEDULER_MAX_DISTRICTS_PER_CMD]
                 lim = int(cmd.get("limit") or 30)
-                cmd_source = (cmd.get("source") or "591").lower()
-                logger.info("[scheduler] 命令 %d/%d: %s 抓 %s × %d 筆", i + 1, len(cmds), cmd_source, dists, lim)
-                stats = await _run_scrape_task(
-                    headless=True, districts=dists, limit=lim,
-                    thresholds={}, triggered_by_uid=None,
-                    source=cmd_source,
-                )
+                # sources（新格式）優先；fallback 舊欄位 source（單一值）
+                cmd_sources = cmd.get("sources")
+                if not cmd_sources:
+                    cmd_sources = [cmd.get("source") or "591"]
+                # 固定執行順序 591 → yongqing → sinyi
+                ORDER = ["591", "yongqing", "sinyi"]
+                cmd_sources = [s for s in ORDER if s in cmd_sources]
+
+                # stats 累計用（以最後一個 source 的 stats 為準也 OK，但 history 紀錄會合併）
+                stats = {"new_count": 0, "enrich_count": 0, "skip_dup_count": 0,
+                         "price_update_count": 0, "error": None}
+                for src_idx, src in enumerate(cmd_sources):
+                    if src_idx > 0:
+                        logger.info("[scheduler] 同命令切換來源 %s → %s（休 %d 秒）",
+                                    cmd_sources[src_idx-1], src, SCHEDULER_INTER_COMMAND_SLEEP_SEC)
+                        await asyncio.sleep(SCHEDULER_INTER_COMMAND_SLEEP_SEC)
+                    logger.info("[scheduler] 命令 %d/%d source %d/%d: %s 抓 %s × %d 筆",
+                                i + 1, len(cmds), src_idx + 1, len(cmd_sources), src, dists, lim)
+                    src_stats = await _run_scrape_task(
+                        headless=True, districts=dists, limit=lim,
+                        thresholds={}, triggered_by_uid=None,
+                        source=src,
+                    )
+                    # 累加統計
+                    for k in ("new_count", "enrich_count", "skip_dup_count", "price_update_count"):
+                        stats[k] += int(src_stats.get(k) or 0)
+                    if src_stats.get("error"):
+                        stats["error"] = src_stats["error"]
                 cmd_err = stats.get("error")
                 cmd_record = {
                     "index": i,
@@ -704,6 +832,10 @@ async def scheduler_toggle(body: SchedulerToggleReq, admin: dict = Depends(requi
 class CommandSpec(BaseModel):
     districts: List[str]
     limit: int
+    # sources: 一個命令可以一次跑多個來源。預設 ["591"] 向下相容。
+    # 跑的時候依固定順序 591 → yongqing → sinyi（不照 admin 勾選的順序）
+    sources: Optional[List[str]] = None
+    source: Optional[str] = None        # 舊欄位 backward compat（讀到時轉成 sources=[source]）
 
 
 class SchedulerConfigReq(BaseModel):
@@ -732,7 +864,18 @@ async def scheduler_set_config(body: SchedulerConfigReq, admin: dict = Depends(r
                 raise HTTPException(400, f"命令 {idx+1}：「{d}」不是合法行政區")
         if c.limit < 1 or c.limit > 300:
             raise HTTPException(400, f"命令 {idx+1}：limit 必須 1~300（收到 {c.limit}）")
-        cleaned.append({"districts": list(c.districts), "limit": int(c.limit)})
+        # sources 處理：優先 sources（新欄位），舊資料用 source 轉換
+        raw_sources = c.sources if c.sources else ([c.source] if c.source else ["591"])
+        cmd_sources = [(s or "").lower() for s in raw_sources if s]
+        VALID_SOURCES = ("591", "yongqing", "sinyi")
+        for s in cmd_sources:
+            if s not in VALID_SOURCES:
+                raise HTTPException(400, f"命令 {idx+1}：source 必須是 {VALID_SOURCES} 之一（收到 {s!r}）")
+        if not cmd_sources:
+            raise HTTPException(400, f"命令 {idx+1}：至少要勾一個來源")
+        # 排序成固定順序：591 → yongqing → sinyi（執行時也照這個順序）
+        cmd_sources = [s for s in VALID_SOURCES if s in cmd_sources]
+        cleaned.append({"districts": list(c.districts), "limit": int(c.limit), "sources": cmd_sources})
     if not cleaned:
         raise HTTPException(400, "至少需要 1 個有效命令")
     get_firestore().collection("settings").document("scheduler").set({
@@ -750,27 +893,43 @@ async def scheduler_set_config(body: SchedulerConfigReq, admin: dict = Depends(r
 
 
 @app.post("/admin/properties/{property_id:path}/reanalyze")
-async def admin_reanalyze(property_id: str, admin: dict = Depends(require_admin)):
-    """完整重爬 + 重新分析：重抓 591 詳情頁、重跑 DOM/OCR 地址抽取、重跑整條 pipeline。
-    這跟 pending→done 的「舊分析重跑」不同，會**真的重新打開 591 詳情頁**，所以 DOM selector
-    或 OCR 邏輯有更新時，admin 按這顆按鈕才能把舊資料修正。"""
+async def admin_reanalyze(property_id: str, source: str = "all", admin: dict = Depends(require_admin)):
+    """完整重爬 + 重新分析。
+    source 參數：
+      - "all"（預設）：重抓該物件所有來源（依 sources array 順序）
+      - "591" / "永慶" / "信義"：只重抓指定來源"""
     col = get_col()
     doc = col.document(property_id).get()
     if not doc.exists:
         raise HTTPException(status_code=404, detail="物件不存在")
     p = doc.to_dict() or {}
-    url = p.get("url")
-    if not url:
-        raise HTTPException(status_code=400, detail="此物件沒有 URL，無法重爬")
-    # _scrape_single_url 期待 src_id 是 source_id（如 "591_12345678"），不是 doc_id (UUID)
-    # 因為截圖檔名、find_doc_by_source_id 都用 source_id 為基準
-    real_src_id = p.get("source_id") or property_id
+
+    # 收集要重抓的來源清單
+    sources_arr = p.get("sources") or []
+    if not sources_arr and p.get("url"):
+        # 舊 schema fallback
+        sources_arr = [{
+            "name": p.get("source") or "591",
+            "source_id": p.get("source_id") or property_id,
+            "url": p.get("url"),
+        }]
+    if source != "all":
+        sources_arr = [s for s in sources_arr if s.get("name") == source]
+    if not sources_arr:
+        raise HTTPException(status_code=400, detail=f"找不到來源 {source} 的可用 URL")
+
     col.document(property_id).update({"analysis_in_progress": True})
 
     async def _do():
         try:
-            await asyncio.to_thread(_scrape_single_url, url, real_src_id, True)
-            logger.warning("[admin] %s 完成重新分析 %s", admin.get("email"), property_id)
+            for s in sources_arr:
+                _src_id = s.get("source_id") or property_id
+                _url = s.get("url")
+                if not _url:
+                    continue
+                logger.warning("[admin] %s 重抓 %s (source=%s)", admin.get("email"), _src_id, s.get("name"))
+                await asyncio.to_thread(_scrape_single_url, _url, _src_id, True)
+            logger.warning("[admin] %s 完成重新分析 %s (sources=%s)", admin.get("email"), property_id, [s.get("name") for s in sources_arr])
         except Exception as e:
             logger.exception(f"[admin] 重新分析失敗 {property_id}: {e}")
         finally:
@@ -1326,6 +1485,12 @@ def list_properties(
     if sort_by in ("list_rank", "added_at"):
         # 預設：按 _added_at 降序（新加入的在前；manual 跟 watchlist 一起按加入時間排）
         items.sort(key=lambda x: x.get("_added_at") or "", reverse=True)
+    elif sort_by == "last_change_at":
+        # 「物件有變動」排序：按 last_change_at 降序，無變動的沉底
+        # last_change_at fallback 到 scrape_session_at（避免完全沒事件的物件全擠在底）
+        def _ev(x):
+            return x.get("last_change_at") or x.get("scrape_session_at") or x.get("scraped_at") or ""
+        items.sort(key=_ev, reverse=True)
     else:
         reverse = sort_dir == "desc"
         def _val(x):
@@ -1717,29 +1882,47 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
     progress_callback(f"爬取階段完成，抓到 {len(new_items)} 筆新物件", 50)
 
     # 處理價格變動
+    from database.db import find_doc_by_source_id as _find_dup
     for pu in price_updates:
-        ref = col.document(pu["source_id"])
-        doc = ref.get()
-        if doc.exists:
-            existing = doc.to_dict()
-            history = existing.get("price_history") or []
-            history.append({
-                "price": pu["old_price"],
-                "scraped_at": existing.get("scraped_at"),
-            })
-            ref.update({
-                "price_ntd": pu["new_price"],
-                "price_per_ping": pu.get("new_price_per_ping"),
-                "price_history": history,
-                "is_price_changed": True,
-                "scraped_at": now_tw_iso(),
-            })
-            old_wan = int(pu["old_price"] // 10000) if pu["old_price"] else "?"
-            new_wan = int(pu["new_price"] // 10000) if pu["new_price"] else "?"
-            progress_callback(
-                f"⚠️ 價格變動：{pu.get('district', '')} {pu.get('title', '')[:20]}"
-                f"  {old_wan}萬 → {new_wan}萬"
-            )
+        existing_doc_id, existing = _find_dup(pu["source_id"])
+        if not existing_doc_id:
+            continue
+        ref = col.document(existing_doc_id)
+        history = existing.get("price_history") or []
+        history.append({
+            "price": pu["old_price"],
+            "scraped_at": existing.get("scraped_at"),
+        })
+        # 漲跌方向（用於前端 badge）
+        old_p = pu["old_price"] or 0
+        new_p = pu["new_price"] or 0
+        change_direction = "down" if new_p < old_p else ("up" if new_p > old_p else "same")
+        now_iso = now_tw_iso()
+        ref.update({
+            "price_ntd": pu["new_price"],
+            "price_per_ping": pu.get("new_price_per_ping"),
+            "price_history": history,
+            "is_price_changed": True,
+            "scraped_at": now_iso,
+            # 物件變動事件
+            "last_change_at": now_iso,
+            "latest_event": {
+                "type": "price_change",
+                "direction": change_direction,
+                "from": old_p,
+                "to": new_p,
+                "at": now_iso,
+            },
+            # 重抓到 = 物件還活著，清 archived
+            "archived": False,
+        })
+        old_wan = int(pu["old_price"] // 10000) if pu["old_price"] else "?"
+        new_wan = int(pu["new_price"] // 10000) if pu["new_price"] else "?"
+        arrow = "↓" if change_direction == "down" else "↑"
+        progress_callback(
+            f"⚠️ 價格變動 {arrow}：{pu.get('district', '')} {pu.get('title', '')[:20]}"
+            f"  {old_wan}萬 → {new_wan}萬"
+        )
 
     # 分析並儲存新物件（50% → 100%）
     from analysis.claude_analyzer import extract_full_detail_from_screenshot
@@ -1869,6 +2052,80 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 if item.get("source") == "永慶":
                     page_coords = (item.get("latitude"), item.get("longitude")) if item.get("latitude") else None
                     progress_callback(f"  ✓ 永慶物件，座標 {page_coords}，跳過 591 OCR 流程", pct)
+
+                    # 跨來源去重：找有沒有既有 591 doc 是同物件
+                    # （地址路段 + 建坪 ±0.01 + 價格 完全 match）
+                    yc_dup_id = find_duplicate(item)
+                    if yc_dup_id:
+                        # 命中既有 doc → 不建新 doc，補欄位 + 加 url_alt + 觸發跨來源事件
+                        skip_dup_count += 1
+                        dup_doc = col.document(yc_dup_id).get()
+                        if dup_doc.exists:
+                            dd = dup_doc.to_dict() or {}
+                            updates = {}
+                            # 補空欄位 + 永慶可覆蓋的欄位（zoning / 座標 / 社區名）
+                            if not dd.get("land_area_ping") and item.get("land_area_ping"):
+                                updates["land_area_ping"] = item["land_area_ping"]
+                            if item.get("zoning_original"):
+                                updates["zoning_original"] = item["zoning_original"]
+                            if item.get("latitude") and item.get("longitude"):
+                                updates["source_latitude"] = item["latitude"]
+                                updates["source_longitude"] = item["longitude"]
+                            if item.get("community_name") and not dd.get("community_name"):
+                                updates["community_name"] = item["community_name"]
+
+                            # url_alt 加進永慶 URL
+                            url_alt = list(dd.get("url_alt") or [])
+                            if item["url"] not in url_alt and item["url"] != dd.get("url"):
+                                url_alt.append(item["url"])
+                                updates["url_alt"] = url_alt
+
+                            # sources array 加進永慶來源
+                            sources_arr = list(dd.get("sources") or [])
+                            already_has_yongqing = any(s.get("name") == "永慶" for s in sources_arr)
+                            if not already_has_yongqing:
+                                sources_arr.append({
+                                    "name": "永慶",
+                                    "source_id": item["source_id"],
+                                    "url": item["url"],
+                                    "added_at": now_tw_iso(),
+                                })
+                                updates["sources"] = sources_arr
+
+                            # 跨來源新上架事件
+                            updates["last_change_at"] = now_tw_iso()
+                            updates["latest_event"] = {
+                                "type": "cross_source",
+                                "source": "永慶",
+                                "at": now_tw_iso(),
+                            }
+
+                            if updates.get("archived") is True:
+                                updates["archived"] = False
+
+                            col.document(yc_dup_id).update(updates)
+                            progress_callback(
+                                f"  🔗 永慶物件併入既有 doc {yc_dup_id} "
+                                f"(補 {len([k for k in updates if k not in ('last_change_at','latest_event','sources','url_alt')])} 欄位 + 加 url_alt)",
+                                pct,
+                            )
+                            # 情況 D：跨來源新上架後，順便驗活該 doc 的其他來源連結
+                            try:
+                                refreshed = col.document(yc_dup_id).get().to_dict() or {}
+                                prune_updates = _verify_and_prune_sources(
+                                    yc_dup_id, refreshed, skip_source_id=src_id
+                                )
+                                if prune_updates:
+                                    col.document(yc_dup_id).update(prune_updates)
+                                    progress_callback(
+                                        f"  🧹 連結驗活：移除失效來源 → {prune_updates.get('source','?')}",
+                                        pct,
+                                    )
+                            except Exception as _ve:
+                                logger.warning(f"verify sources failed for {yc_dup_id}: {_ve}")
+                        continue   # 不建新 doc
+
+                    # 沒命中 → 建新 doc
                     import time as _time_yc
                     _t0_yc = _time_yc.time()
                     def _step_yc(msg):
@@ -1889,6 +2146,9 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                         from database.db import gen_dated_id as _gen_id
                         yc_doc_id = _gen_id()
                         yc_doc["id"] = yc_doc_id
+                    # 第一次入 DB 事件
+                    yc_doc["last_change_at"] = now_tw_iso()
+                    yc_doc["latest_event"] = {"type": "new", "source": "永慶", "at": now_tw_iso()}
                     col.document(yc_doc_id).set(_safe_doc(yc_doc))
                     new_count += 1
                     progress_callback(f"  ✓ 永慶物件已寫入 DB ({yc_doc_id})", pct)
@@ -2161,8 +2421,93 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     thresholds=None,
                 )
                 doc_data = result["doc_data"]
-                # 決定要寫入的 doc_id：
-                # - force_reanalyze 重用既有 doc 的 id
+
+                # ── 情況 B：換物件偵測 ────────────────────────────
+                # 同 source_id 重抓後，路段不同 OR 建坪 ±0.5 變化 → 視為「ID 換成另一物件」
+                # 處理：從原 doc 移除這個 source 連結；對新內容跑 find_duplicate
+                #       命中別 doc → 加進那 doc 並觸發 cross_source 事件
+                #       不命中 → 建新 doc（自然進列表頂端）
+                is_replacement = False
+                if is_force_reanalyze and item.get("_existing_doc"):
+                    is_replacement = _is_replacement_change(item["_existing_doc"], doc_data)
+
+                if is_replacement:
+                    old_doc = item["_existing_doc"]
+                    old_doc_id = old_doc.get("id")
+                    if not old_doc_id:
+                        from database.db import find_doc_by_source_id as _fd
+                        old_doc_id, _ = _fd(src_id)
+                    # 1. 從原 doc 移除這個 source（sources array 過濾、url_alt 過濾）
+                    if old_doc_id:
+                        old_sources = list(old_doc.get("sources") or [])
+                        new_sources = [s for s in old_sources if s.get("source_id") != src_id]
+                        old_url_alt = list(old_doc.get("url_alt") or [])
+                        # 該 source 對應的 URL 從 url_alt 移除
+                        old_main_url = old_doc.get("url")
+                        was_main = (old_doc.get("source_id") == src_id)
+                        updates = {"sources": new_sources}
+                        if was_main:
+                            # 主來源被換掉 → 第一個 alt 升格為新主
+                            if new_sources:
+                                first_remaining = new_sources[0]
+                                updates["url"] = first_remaining.get("url")
+                                updates["source_id"] = first_remaining.get("source_id")
+                                updates["source"] = first_remaining.get("name") or "591"
+                                updates["url_alt"] = [u for u in old_url_alt if u != first_remaining.get("url")]
+                            else:
+                                # 沒其他來源了 → archive 整個 doc（避免變孤兒指標）
+                                updates["archived"] = True
+                                updates["archived_at"] = now_tw_iso()
+                                updates["archived_reason"] = f"所有來源失效（{src_id} 換成另一物件且無其他來源）"
+                        col.document(old_doc_id).update(updates)
+                        progress_callback(
+                            f"  🔁 換物件：原 doc {old_doc_id[:8]}... 移除 {src_id}（{item.get('_change_reason','')}）",
+                            pct,
+                        )
+
+                    # 2. 對新內容跑 find_duplicate
+                    new_dup_id = find_duplicate(item)
+                    if new_dup_id:
+                        # 加進別的既有 doc + cross_source 事件
+                        target_dup_doc = col.document(new_dup_id).get()
+                        if target_dup_doc.exists:
+                            dd = target_dup_doc.to_dict() or {}
+                            sources_arr = list(dd.get("sources") or [])
+                            url_alt = list(dd.get("url_alt") or [])
+                            if not any(s.get("source_id") == src_id for s in sources_arr):
+                                sources_arr.append({
+                                    "name": item.get("source", "591"),
+                                    "source_id": src_id,
+                                    "url": item.get("url"),
+                                    "added_at": now_tw_iso(),
+                                })
+                            if item.get("url") and item["url"] not in url_alt and item["url"] != dd.get("url"):
+                                url_alt.append(item["url"])
+                            col.document(new_dup_id).update({
+                                "sources": sources_arr,
+                                "url_alt": url_alt,
+                                "last_change_at": now_tw_iso(),
+                                "latest_event": {
+                                    "type": "cross_source",
+                                    "source": item.get("source", "591"),
+                                    "at": now_tw_iso(),
+                                },
+                                "archived": False,
+                            })
+                            progress_callback(
+                                f"  🔗 換物件後內容併入既有 doc {new_dup_id[:8]}...",
+                                pct,
+                            )
+                        skip_dup_count += 1
+                        continue   # 不建新 doc
+
+                    # 沒命中 → 走全新建 doc 流程（fall through to 全新物件 set 區塊）
+                    # 把 _existing_doc 清掉，避免下面又被 merge
+                    item.pop("_existing_doc", None)
+                    is_force_reanalyze = False   # 局部覆寫，讓下面走「全新」路徑
+
+                # ── 決定要寫入的 doc_id ────────────────────────────
+                # - force_reanalyze（非換物件）重用既有 doc 的 id
                 # - 全新物件用 doc_data 自己生成的 id（make_property_doc 已產生）
                 if is_force_reanalyze and item.get("_existing_doc"):
                     target_doc_id = item["_existing_doc"].get("id")
@@ -2178,6 +2523,12 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
 
                 # 確保 doc_data 的 id 欄位跟實際寫入的 doc_id 一致
                 doc_data["id"] = target_doc_id
+
+                # 物件變動事件：第一次入 DB（換物件後也算新物件 → 這邊也會觸發）
+                _now_iso = now_tw_iso()
+                if not is_force_reanalyze:
+                    doc_data["last_change_at"] = _now_iso
+                    doc_data["latest_event"] = {"type": "new", "source": item.get("source", "591"), "at": _now_iso}
 
                 # force_reanalyze：用 merge 保留 price_history / url_alt / user overrides / scrape_session_at 等
                 if is_force_reanalyze and item.get("_existing_doc"):

@@ -39,20 +39,22 @@ document.addEventListener("DOMContentLoaded", () => {
   _initDistPicker();
   populateDistrictFilter();
   populateManualDistricts();
-  // 立刻把 UI 設成「觀察清單」焦點狀態：tab 高亮、body[data-tab]、explore-search 隱藏、
-  // 列表先畫 skeleton（等 auth 完成才真正 fetch；不能空白）
-  _activeTab = "watchlist";
-  document.body.dataset.tab = "watchlist";
+  // 預設打開「搜尋網上物件」tab，並依當前 filter 立刻跑一次搜尋
+  _activeTab = "explore";
+  document.body.dataset.tab = "explore";
   document.querySelectorAll(".tab-btn").forEach(btn => {
-    btn.classList.toggle("tab-btn--active", btn.dataset.tab === "watchlist");
+    btn.classList.toggle("tab-btn--active", btn.dataset.tab === "explore");
   });
   const exploreSearch = document.getElementById("explore-search");
-  if (exploreSearch) exploreSearch.classList.add("d-none");
-  renderSkeleton(6);   // 列表區先畫骨架，避免「載入中…」白畫面
-  // 等 auth_gate 準備好（fetch 已掛 token）才開始拉資料
+  if (exploreSearch) exploreSearch.classList.remove("d-none");
+  renderSkeleton(6);
   const _start = () => {
     _restoreExploreFilters();   // 用戶 filter 偏好還原（uid scoped）
-    switchTab("watchlist");
+    switchTab("explore");
+    // 自動跑一次搜尋（用戶不用按按鈕）
+    if (typeof window.runExploreSearch === "function") {
+      window.runExploreSearch();
+    }
     loadStats();
   };
   if (window.__authReady) _start();
@@ -470,8 +472,33 @@ function rowHTML(p) {
   const mrtHTML = p.nearest_mrt
     ? `<div class="mrt-name">${esc(p.nearest_mrt)}</div><div class="mrt-dist">${Math.round(p.nearest_mrt_dist_m || 0)}m</div>`
     : "—";
-  const priceChangedBadge = p.is_price_changed ? `<span class="price-changed-tag">降價</span>` : "";
-  const archivedBadge = p.archived ? `<span class="archived-tag" title="此物件已從中央資料庫封存（admin 清理過）">已封存</span>` : "";
+  // 變動 badge：根據 latest_event 顯示對應 badge（7 天內才顯示，避免歷史污染）
+  // 樣式跟 NEW badge 一致（小色塊圓角白字），位置會放到 NEW 旁
+  const ev = p.latest_event;
+  let evBadge = "";
+  if (ev && ev.at) {
+    const ageMs = Date.now() - new Date(ev.at).getTime();
+    const within7Days = ageMs < 7 * 24 * 3600 * 1000 && ageMs >= 0;
+    if (within7Days) {
+      if (ev.type === "price_change") {
+        if (ev.direction === "up") {
+          evBadge = `<span class="event-badge b-up" title="從 ${Math.round((ev.from||0)/10000)}萬 漲到 ${Math.round((ev.to||0)/10000)}萬">漲價</span>`;
+        } else if (ev.direction === "down") {
+          evBadge = `<span class="event-badge b-down" title="從 ${Math.round((ev.from||0)/10000)}萬 降到 ${Math.round((ev.to||0)/10000)}萬">降價</span>`;
+        } else {
+          evBadge = `<span class="event-badge b-down">改價</span>`;
+        }
+      } else if (ev.type === "cross_source") {
+        evBadge = `<span class="event-badge b-cross">${esc(ev.source || "")}新上架</span>`;
+      }
+      // type=new 不打 badge（既有 NEW badge 處理）
+    }
+  }
+  // 舊邏輯 fallback：如果沒 latest_event 但有 is_price_changed，仍顯示降價
+  if (!evBadge && p.is_price_changed) {
+    evBadge = `<span class="event-badge b-down">降價</span>`;
+  }
+  const archivedBadge = p.archived ? `<span class="event-badge b-archived" title="此物件已從中央資料庫封存（admin 清理過）">已封存</span>` : "";
 
   // 地址：優先顯示推測地址，fallback 到 591 原始地址
   const rawAddr = p.address_inferred || p.address || p.title || "";
@@ -524,7 +551,7 @@ function rowHTML(p) {
     <div class="c c-type" data-label="類型">${typeIcon} ${esc(typeLabel)}</div>
     <div class="c c-city" data-label="縣市">${esc(p.city || "—")}</div>
     <div class="c c-district" data-label="區">${esc(p.district || "—")}</div>
-    <div class="c c-addr" title="${esc(roadOnly)}" data-label="地址">${esc(roadOnly)}${p.address_inferred ? '<span class="inferred-tag">推測</span>' : ''}${p.is_foreclosure ? '<span class="fc-badge" title="法拍屋">法拍屋</span>' : ''}${priceChangedBadge}${archivedBadge}<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener noreferrer" class="map-link" onclick="event.stopPropagation()" title="Google Maps">📍</a>${newBadge}</div>
+    <div class="c c-addr" title="${esc(roadOnly)}" data-label="地址">${esc(roadOnly)}${p.address_inferred ? '<span class="inferred-tag">推測</span>' : ''}${p.is_foreclosure ? '<span class="fc-badge" title="法拍屋">法拍屋</span>' : ''}<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener noreferrer" class="map-link" onclick="event.stopPropagation()" title="Google Maps">📍</a>${evBadge}${archivedBadge}${newBadge}</div>
     <div class="c c-val c-total ${hotCls('price')}" data-label="總價">${priceStr}${(p.lvr_records && p.lvr_records.length) ? `<span class="lvr-icon" onclick="event.stopPropagation()" onmouseenter="showLvrPopup(event, '${p.id}')" onmouseleave="hideLvrPopup()">實</span>` : ""}</div>
     <div class="c c-val c-bld-combo" data-label="建坪/單價">
       <div class="${hotCls('bldA')}">${p.building_area_ping ?? "—"} 坪</div>
@@ -652,7 +679,7 @@ function cardHTML(p) {
     : "";
 
   const priceChangedBadge = p.is_price_changed
-    ? `<span class="price-changed-tag">降價</span>`
+    ? `<span class="event-badge b-down">降價</span>`
     : "";
 
   const imgStr = p.image_url
@@ -787,33 +814,34 @@ function showDetailModal(p) {
     fc.textContent = "法拍屋";
     titleEl.appendChild(fc);
   }
-  // 591 連結區：單一→直接按鈕；多個→hover 下拉含日期（跟 Home 列表相同行為）
+  // 多來源連結區：讀 p.sources（新 schema）為主，fallback 用 p.url + p.url_alt（舊 schema）
+  // 不同來源 (591 / 永慶 / 信義) 各自一顆按鈕並列
   const wrap = document.getElementById("modal-591-wrap");
   if (wrap) {
-    const rawUrls = [p.url, ...(p.url_alt || [])].filter(Boolean);
-    const mainDate = p.published_at || p.analysis_completed_at || p.scraped_at || null;
-    const rawDates = [mainDate, ...((p.published_at_alt || []))];
-    while (rawDates.length < rawUrls.length) rawDates.push(null);
-    const mainPair = rawUrls.length ? { url: rawUrls[0], date: rawDates[0] } : null;
-    const altPairs = rawUrls.slice(1).map((u, i) => ({ url: u, date: rawDates[i + 1] })).filter(x => x.date);
-    const shown = mainPair ? [mainPair, ...altPairs] : [];
-    if (!shown.length) {
-      wrap.innerHTML = "";
-    } else if (shown.length === 1) {
-      const d = _fmtPubDate(shown[0].date);
-      wrap.innerHTML = `<a href="${esc(clean591Url(shown[0].url))}" target="_blank" rel="noopener noreferrer" class="tb-btn tb-btn--ghost">591 頁面 ↗${d ? ` <span class="src-pubdate">${esc(d)}</span>` : ""}</a>`;
-    } else {
-      const links = shown.map((pair, i) => {
-        const d = _fmtPubDate(pair.date);
-        return `<a href="${esc(clean591Url(pair.url))}" target="_blank" rel="noopener noreferrer" class="src-num" onclick="event.stopPropagation()" title="#${i+1}">
-          <span>#${i+1}</span>${d ? `<span class="src-num-date">${esc(d)}</span>` : ""}
-        </a>`;
-      }).join("");
-      wrap.innerHTML = `<span class="src-hover-wrap" onclick="event.stopPropagation()">
-        <span class="tb-btn tb-btn--ghost" style="cursor:default">591 頁面 ×${shown.length} ▾</span>
-        <span class="src-hover-popup src-hover-popup--dated">${links}</span>
-      </span>`;
+    const buildSourceBtn = (name, url, date) => {
+      const cleanUrl = (name === "591") ? clean591Url(url) : url;
+      const dStr = date ? _fmtPubDate(date) : "";
+      return `<a href="${esc(cleanUrl)}" target="_blank" rel="noopener noreferrer" class="tb-btn tb-btn--ghost" style="margin-right:6px">${esc(name)} 頁面 ↗${dStr ? ` <span class="src-pubdate">${esc(dStr)}</span>` : ""}</a>`;
+    };
+    let html = "";
+    if (Array.isArray(p.sources) && p.sources.length > 0) {
+      // 新 schema：用 sources array
+      html = p.sources.map(s => buildSourceBtn(s.name || "?", s.url || p.url, s.added_at)).join("");
+    } else if (p.url) {
+      // 舊 schema fallback
+      const mainDate = p.published_at || p.analysis_completed_at || p.scraped_at || null;
+      html = buildSourceBtn(p.source || "591", p.url, mainDate);
+      // 老的 url_alt（可能來自不同來源）— 用 host 推
+      (p.url_alt || []).forEach((u, i) => {
+        let n = "其他";
+        if (u && u.includes("yungching")) n = "永慶";
+        else if (u && u.includes("sinyi")) n = "信義";
+        else if (u && u.includes("591")) n = "591";
+        const altDate = (p.published_at_alt || [])[i] || null;
+        html += buildSourceBtn(n, u, altDate);
+      });
     }
+    wrap.innerHTML = html;
   }
 
   // manual 物件顯示「重新分析」按鈕（591 物件不顯示，因為它們有 admin 後台管理）
@@ -1233,52 +1261,80 @@ function _fmtPubDate(iso) {
 }
 
 function srcLinksHTML(p) {
-  // 用戶輸入地址生成（manual，無 591 連結）→ 顯示「自行調查」+ 加入清單/分析時間（日期放第二行）
+  // 用戶輸入地址生成（manual，無外部連結）→ 顯示「自行調查」
   if (String(p.id || "").startsWith("manual_")) {
     const t = _fmtPubDate(p._added_at || p.analysis_completed_at || p.scraped_at || null);
     return `<span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px">
-      <span class="src-badge591">自行調查</span>
+      <span class="src-badge-manual">自行調查</span>
       ${t ? `<span class="src-num-date" style="margin-left:0">${t}</span>` : ""}
     </span>`;
   }
-  // 用戶貼 URL 送出（user_url）→ badge 寫「自行調查」，下拉的連結仍顯示「591」+ 日期
+
+  // 用戶貼 URL 送出 → 「自行調查」標籤 + 該來源連結
   if (p.source_origin === "user_url") {
     const t = _fmtPubDate(p.analysis_completed_at || p.scraped_at || p._added_at || null);
-    const link = p.url ? `<a href="${esc(clean591Url(p.url))}" target="_blank" rel="noopener noreferrer" class="src-num" onclick="event.stopPropagation()" title="591 頁面">
-      <span>591</span>${t ? `<span class="src-num-date">${esc(t)}</span>` : ""}
-    </a>` : `<span>591${t ? ` <span class="src-num-date">${esc(t)}</span>` : ""}</span>`;
+    const srcName = p.source || "591";
+    const cleanedUrl = (srcName === "591") ? clean591Url(p.url) : p.url;
+    const link = p.url ? `<a href="${esc(cleanedUrl)}" target="_blank" rel="noopener noreferrer" class="src-num" onclick="event.stopPropagation()" title="${esc(srcName)} 頁面">
+      <span>${esc(srcName)}</span>${t ? `<span class="src-num-date">${esc(t)}</span>` : ""}
+    </a>` : `<span>${esc(srcName)}${t ? ` <span class="src-num-date">${esc(t)}</span>` : ""}</span>`;
     return `<span class="src-hover-wrap" onclick="event.stopPropagation()">
-      <span class="src-badge591">自行調查</span>
+      <span class="src-badge-manual">自行調查</span>
       <span class="src-hover-popup src-hover-popup--dated">${link}</span>
     </span>`;
   }
-  if (!p.url) return "—";
-  const rawUrls = [p.url, ...(p.url_alt || [])];
-  // 主 url 沒 published_at 時（通常是 URL 送出分析的物件，591 詳情頁沒刊登日）
-  // 退回分析日期（analysis_completed_at → scraped_at），讓連結後面永遠有日期可看
-  const mainDate = p.published_at || p.analysis_completed_at || p.scraped_at || null;
-  const rawDates = [mainDate, ...((p.published_at_alt || []))];
-  while (rawDates.length < rawUrls.length) rawDates.push(null);
-  // 規則：沒有刊登時間的 591 連結視為壞掉（可能已下架）→ 從顯示中濾除；
-  // 但如果主 url 沒時間我們仍保留（它本來就是該物件主連結，靠它活著）
-  const pairs = rawUrls.map((u, i) => ({ url: u, date: rawDates[i] }));
-  const mainPair = pairs[0];
-  const altPairs = pairs.slice(1).filter(p => p.date);   // 濾掉沒時間的備用連結
-  const shown = [mainPair, ...altPairs];
 
-  // 所有情況（含單一連結）都用 hover popup 統一視覺
-  const badgeText = shown.length === 1 ? "591" : `591 ×${shown.length}`;
-  const links = shown.map((pair, i) => {
-    const d = _fmtPubDate(pair.date);
-    const label = shown.length === 1 ? "591 頁面" : `#${i+1}`;
-    return `<a href="${esc(clean591Url(pair.url))}" target="_blank" rel="noopener noreferrer" class="src-num" onclick="event.stopPropagation()" title="${esc(label)}">
-      <span>${esc(label)}</span>${d ? `<span class="src-num-date">${esc(d)}</span>` : ""}
-    </a>`;
-  }).join("");
-  return `<span class="src-hover-wrap" onclick="event.stopPropagation()">
-    <span class="src-badge591">${badgeText}</span>
-    <span class="src-hover-popup src-hover-popup--dated">${links}</span>
-  </span>`;
+  // 多來源：從 p.sources 拿（新 schema），fallback 用 p.url + p.url_alt（舊 schema）
+  let sourceList = [];   // [{name, url, date}]
+  if (Array.isArray(p.sources) && p.sources.length > 0) {
+    sourceList = p.sources.map(s => ({
+      name: s.name || "591",
+      url: s.url,
+      date: s.added_at || null,
+    })).filter(s => s.url);
+  } else if (p.url) {
+    const mainDate = p.published_at || p.analysis_completed_at || p.scraped_at || null;
+    sourceList = [{ name: p.source || "591", url: p.url, date: mainDate }];
+    (p.url_alt || []).forEach((u, i) => {
+      let n = "其他";
+      if (u && u.includes("yungching")) n = "永慶";
+      else if (u && u.includes("sinyi")) n = "信義";
+      else if (u && u.includes("591")) n = "591";
+      sourceList.push({ name: n, url: u, date: (p.published_at_alt || [])[i] || null });
+    });
+  }
+  if (!sourceList.length) return "—";
+
+  // 同來源多連結合併（591 列表可能回同物件多筆）
+  const grouped = {};
+  for (const s of sourceList) {
+    if (!grouped[s.name]) grouped[s.name] = [];
+    grouped[s.name].push(s);
+  }
+
+  // 為每個來源產出一個 badge（並列顯示）
+  // badge 是 app icon 圖檔；text-indent 把舊文字「591/永慶」隱藏，多筆用角標 ×N 顯示
+  const badgeFor = (name, items) => {
+    const bClass = name === "591" ? "src-badge591"
+                 : name === "永慶" ? "src-badge-yongqing"
+                 : name === "信義" ? "src-badge-sinyi"
+                 : "src-badge-other";
+    const countOverlay = items.length > 1
+      ? `<span class="src-badge-count">${items.length}</span>` : "";
+    const links = items.map((s, i) => {
+      const d = _fmtPubDate(s.date);
+      const cleanUrl = (name === "591") ? clean591Url(s.url) : s.url;
+      const label = items.length === 1 ? `${name} 頁面` : `#${i+1}`;
+      return `<a href="${esc(cleanUrl)}" target="_blank" rel="noopener noreferrer" class="src-num" onclick="event.stopPropagation()" title="${esc(label)}">
+        <span>${esc(label)}</span>${d ? `<span class="src-num-date">${esc(d)}</span>` : ""}
+      </a>`;
+    }).join("");
+    return `<span class="src-hover-wrap" onclick="event.stopPropagation()">
+      <span class="${bClass}" title="${esc(name)}">${esc(name)}${countOverlay}</span>
+      <span class="src-hover-popup src-hover-popup--dated">${links}</span>
+    </span>`;
+  };
+  return Object.entries(grouped).map(([name, items]) => badgeFor(name, items)).join('<span style="display:inline-block;width:6px"></span>');
 }
 
 function clean591Url(url) {
@@ -2169,6 +2225,7 @@ function filterAndSort() {
     }
     if (sortBy === "list_rank") return p.list_rank ?? 9999;
     if (sortBy === "published_at") return p.published_at || p.scraped_at || null;
+    if (sortBy === "last_change_at") return p.last_change_at || p.scrape_session_at || p.scraped_at || null;
     return p[sortBy] ?? null;
   };
   if (sortBy === "list_rank") {

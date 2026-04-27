@@ -1,4 +1,44 @@
 * { box-sizing: border-box; }
+
+/* ── Admin 雙欄 layout ─────────────────────────────────── */
+.admin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 16px;
+  align-items: start;
+  padding: 12px;
+}
+.admin-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+@media (max-width: 1100px) {
+  .admin-grid { grid-template-columns: 1fr; }
+}
+
+/* 物件列表 pager */
+.prop-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 14px;
+}
+.prop-pager button {
+  padding: 4px 10px;
+  background: #fff;
+  border: 1px solid #c8a04a;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.prop-pager button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
@@ -150,6 +190,15 @@ table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+}
+/* 物件列表 table：要橫向捲動避免文字截斷 */
+#tbl {
+  table-layout: auto;
+  width: max-content;
+  min-width: 100%;
+}
+.panel:has(#tbl) {
+  overflow-x: auto;   /* table 超寬時 panel 內橫向捲動，不會跑出右側 */
 }
 th, td {
   padding: 8px 10px;
@@ -342,3 +391,4 @@ tr:hover { background: #fafbfc; }
   background: #fff; padding: 8px; max-height: 240px; overflow: auto;
   font-size: 11px; margin: 0; border-radius: 3px; font-family: Consolas, monospace;
 }
+

@@ -582,14 +582,20 @@ input.tb-input[disabled] {
   gap: 0;
   align-items: center;
   padding: 8px 10px;
-  border: 1px solid #e3dfd2;
+  border: 1px solid #e8e4d8;
   border-left: 5px solid #c78a00;   /* 已分析：金色左邊條 */
   border-radius: 6px;
-  background: #fdf6e0;              /* 已分析：明顯米黃 */
+  background: #ffffff;              /* 預設白底（不再用米黃） */
   margin-bottom: 5px;
   cursor: pointer;
   font-size: 14px;
   transition: background 0.12s, box-shadow 0.12s;
+  /* 讓 hover popup（來源連結下拉）能浮在其他 row 之上 */
+  position: relative;
+  z-index: 1;
+}
+.property-row:hover {
+  z-index: 1000;     /* hover 時整列拉到最上層，popup 不會被下面 row 蓋 */
 }
 .property-row.is-pending {
   background: repeating-linear-gradient(
@@ -601,24 +607,33 @@ input.tb-input[disabled] {
 .property-row.is-pending .c { color: #6b6f80; }
 .property-row.is-pending:hover { opacity: 1; }
 .property-row.is-deprioritized {
-  background: #f3f1ec;
-  opacity: 0.55;
-  border-left: 5px solid #d6cfb9;
+  background: #ffffff;
+  border: 1px solid #e8e8e8;            /* 淡灰 border 取代米色 */
+  border-left: 5px solid #e0e0e0;       /* 淡灰左條取代米色 */
+  color: #b0b0b0;
 }
-.property-row.is-deprioritized .c { color: #6e6f76; }
-.property-row.is-deprioritized:hover { opacity: 0.95; }
-.property-row.is-high-value {
+.property-row.is-deprioritized .c { color: #b0b0b0; }
+.property-row.is-deprioritized:hover { background: #fcfcfc; }
+/* 高價值物件 (≥3.2 倍)：不再圈整列，只圈倍數欄位（c-multi）+ 數字加粗 */
+.property-row.is-high-value .multi-stack {
+  color: #b02a2a;
+  font-weight: 700;
+}
+.property-row.is-high-value .c-multi {
   border: 2px solid #d9534f;
-  border-left-width: 5px;
-  border-left-color: #d9534f;
-  font-size: 18px;
+  border-radius: 6px;
+  padding: 2px 6px;
   background: #ffe8e8;
-  box-shadow: 0 1px 6px rgba(217,83,79,0.18);
+  box-shadow: 0 1px 4px rgba(217,83,79,0.15);
 }
-.property-row.is-high-value .multi-stack { color: #b02a2a; font-weight: 700; }
-/* 搜尋 tab 非弱勢物件：淡紅底推薦色，但不加紅框 */
+/* 搜尋 tab 非弱勢物件：淡紅底推薦色（保留） */
 .property-row.is-recommended {
   background: #ffe8e8;
+}
+/* 5F+ deprioritized 永遠保持白底，即使同時是 is-high-value 或 is-recommended */
+.property-row.is-deprioritized.is-high-value,
+.property-row.is-deprioritized.is-recommended {
+  background: #ffffff !important;
 }
 .explore-hide-bad {
   display: inline-flex;
@@ -1027,18 +1042,42 @@ body[data-tab="explore"] .wl-only { display: none !important; }
   letter-spacing: 0.5px;
 }
 
-.archived-tag {
-  display: inline-flex;
-  font-size: 13px;
-  font-weight: 600;
-  color: #888;
-  background: #ececec;
-  border: 1px solid #c8c8c8;
-  padding: 0 6px;
-  border-radius: 3px;
-  margin-left: 6px;
-  letter-spacing: 0.5px;
+/* 統一 badge 樣式：跟 .badge-new 一致的小色塊（圓角 + 白字 + 不同底色） */
+.event-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: bold;
+  color: #fff;
+  border-radius: 8px;
+  vertical-align: middle;
 }
+.event-badge.b-down  { background: #27ae60; }   /* 降價：綠 (好消息) */
+.event-badge.b-up    { background: #d35400; }   /* 漲價：橘 */
+.event-badge.b-cross { background: #1e88e5; }   /* 跨來源新上架：藍 */
+.event-badge.b-archived { background: #888; }   /* 已封存：灰 */
+
+/* 來源 source icon - 列表卡片左側 */
+.source-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 4px;
+}
+.source-icons .src-pill {
+  display: inline-block;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  border-radius: 3px;
+  letter-spacing: 0.3px;
+}
+.source-icons .src-pill-591 { background: #e74c3c; }
+.source-icons .src-pill-永慶 { background: #00837f; }
+.source-icons .src-pill-信義 { background: #c8102e; }
+.source-icons .src-pill-manual { background: #888; }
 /* archived 物件整列灰化 */
 .property-row.archived,
 tr.archived {
@@ -1472,7 +1511,39 @@ tr.archived {
   margin-top: 4px;
 }
 .src-btn--alt { font-size: 12px; margin-left: 4px; }
-.src-badge591 {
+/* 來源 badge：用實際 app icon 圖檔 */
+.src-badge591,
+.src-badge-yongqing,
+.src-badge-sinyi,
+.src-badge-other {
+  position: relative;
+  display: inline-block;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  vertical-align: middle;
+  text-decoration: none;
+  cursor: pointer;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  font-size: 0;                /* 隱藏 badge 內的文字 (e.g. "591"、"永慶") */
+  /* 不用 overflow: hidden — 讓右上角的 count 圓圈能溢出顯示 */
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.src-badge591:hover, .src-badge-yongqing:hover, .src-badge-sinyi:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.src-badge591       { background-image: url("/static/icons/591.jpg"); }
+.src-badge-yongqing { background-image: url("/static/icons/yongqing.jpeg"); }
+.src-badge-sinyi    { background-color: #c8102e; }   /* 信義圖檔尚未提供，暫用色塊 */
+.src-badge-other    { background-color: #888; }
+
+/* manual / 自行調查 badge：保留原本文字樣式，不用 app icon */
+.src-badge-manual {
   display: inline-block;
   padding: 3px 8px;
   font-size: 12px;
@@ -1484,25 +1555,49 @@ tr.archived {
   text-decoration: none;
   cursor: pointer;
 }
-.src-badge591--link:hover { background: #b0790a; }
+
+/* iPhone 風格通知小圓圈：右上角紅圓內白色數字 */
+.src-badge-count {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: #ff3b30;          /* iOS 通知紅 */
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 9px;            /* 完美圓 */
+  border: 2px solid #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  text-indent: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  letter-spacing: 0;
+}
 
 .src-hover-wrap {
   position: relative;
   display: inline-block;
   cursor: default;
+  /* 防止父容器的 stacking context（opacity 等）把 popup 蓋住 */
+  z-index: 100;
   /* 擴大 hover 區讓 popup 下方空隙不會讓 hover 斷掉 */
   padding-bottom: 4px;
 }
 .src-hover-popup {
   position: absolute;
-  top: 100%;
+  top: 100%;                 /* 直接貼 icon 底部，沒有 dead zone */
   left: 50%;
   transform: translateX(-50%);
-  padding: 6px;
+  padding: 4px;
   background: #fff;
-  border: 1px solid #c78a00;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  border: 1px solid #e0d4a8;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(92, 74, 10, 0.18), 0 1px 4px rgba(0,0,0,0.08);
   display: none;
   white-space: nowrap;
   /* 避免父容器 opacity / z-index stacking context 影響 */
@@ -1530,17 +1625,29 @@ tr.archived {
 .src-num {
   display: inline-block;
   min-width: 22px;
-  padding: 3px 6px;
+  padding: 4px 10px;
   font-size: 12px;
   font-weight: 600;
-  color: #5c4a0a;
-  background: #fff8e5;
-  border: 1px solid #c78a00;
-  border-radius: 3px;
+  color: #3a3a3a;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
   text-align: center;
+  transition: background 0.12s, color 0.12s, transform 0.08s;
+  text-decoration: none;
   text-decoration: none;
 }
-.src-num:hover { background: #c78a00; color: #fff; }
+.src-num:hover {
+  background: #fdf6e0;
+  color: #5c4a0a;
+}
+.src-num:hover .src-num-date {
+  color: #8a7e58;
+}
+.src-num:active {
+  transform: scale(0.97);
+  background: #f4e8c4;
+}
 .src-select {
   font-size: 12px; font-weight: 600;
   padding: 4px 6px;
