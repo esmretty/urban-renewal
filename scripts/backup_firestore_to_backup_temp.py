@@ -20,7 +20,8 @@ TARGET_DB = "backup-temp"
 CRED_PATH = pathlib.Path(__file__).parent.parent / "firebase-credentials.json"
 
 # 要複製的 top-level collections
-TOP_LEVEL_COLLECTIONS = ["properties", "users", "settings", "scheduler_history"]
+TOP_LEVEL_COLLECTIONS = ["properties", "users", "settings", "scheduler_history",
+                          "run_logs", "retry_queue", "line_notifications"]
 # users 的 sub-collections
 USER_SUBCOLLECTIONS = ["watchlist", "manual", "bookmarks"]
 
