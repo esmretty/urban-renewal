@@ -3926,8 +3926,11 @@ async def scrape_url(req: ScrapeUrlRequest, user: dict = Depends(get_current_use
     from database.db import find_doc_by_source_id
     existing_doc_id, cdata = find_doc_by_source_id(src_id)
     if existing_doc_id and cdata:
-        # cache 路徑也檢查：non-apartment（預售/華廈/電梯大樓 + 樓層 > 5）→ 不該加用戶清單
-        # 因為當初可能是舊版 filter 沒擋到，doc 已存但實際非分析對象
+        # cache 路徑只擋兩種：
+        #   1. 預售屋（沒實際物件）
+        #   2. 樓層 max > 5（非公寓）
+        # 不擋「套房/華廈/電梯大樓」字面 — 那些只是 building_type 名稱差異，
+        # 1F 套房也是老建物，可分析
         _bld_type = cdata.get("building_type") or ""
         _tf = cdata.get("total_floors") or 0
         try: _tf = int(_tf)
@@ -3935,7 +3938,7 @@ async def scrape_url(req: ScrapeUrlRequest, user: dict = Depends(get_current_use
         try: _f = int(cdata.get("floor")) if cdata.get("floor") else 0
         except Exception: _f = 0
         eff = max(_tf, _f)
-        if eff > 5 or _bld_type in ("預售屋", "電梯大樓", "華廈", "套房"):
+        if eff > 5 or _bld_type == "預售屋":
             return {"status": "skipped_non_apartment", "source_id": src_id,
                     "message": f"此物件非分析對象（type={_bld_type or '?'}, 樓層={cdata.get('floor')}/{cdata.get('total_floors')}），跳過"}
         if cdata.get("analysis_status") == "done" and not cdata.get("analysis_error"):
