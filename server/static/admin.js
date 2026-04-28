@@ -1269,10 +1269,10 @@ window.schedAddCmd = function (type) {
   if (type === "verify_alive") {
     _schedDraft.commands.push({ type: "verify_alive", interval_hr: 24 });
   } else {
-    // scan: 預設所有目前支援的來源都勾（591 + 永慶；信義尚未支援不算）
+    // scan: 預設三個來源都勾（591 + 永慶 + 信義）
     _schedDraft.commands.push({
       type: "scan", districts: [], limit: 30,
-      sources: ["591", "yongqing"], interval_hr: 3,
+      sources: ["591", "yongqing", "sinyi"], interval_hr: 3,
     });
   }
   _touchApplyBtns();

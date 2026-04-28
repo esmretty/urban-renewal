@@ -2286,7 +2286,7 @@ class ScrapeRequest(BaseModel):
     headless: bool = True
     districts: list[str] = []
     limit: int = 0
-    source: str = "591"        # "591" 或 "yongqing"
+    source: str = "591"        # "591" / "yongqing" / "sinyi"
     # 分析門檻（超過則存 pending，不跑分析）
     max_floors: _Opt[int] = None
     max_total_price_wan: _Opt[int] = None
@@ -2389,7 +2389,7 @@ async def _run_scrape_task(headless: bool = True, districts: list = None, limit:
 
 def _scrape_and_analyze(headless: bool, progress_callback, districts: list = None, limit: int = 30, thresholds: dict = None, triggered_by_uid: Optional[str] = None, source: str = "591", trigger_label: str = "manual_batch"):
     """同步執行爬取 + 分析（在 asyncio.to_thread 中跑）。
-    source: "591" 或 "yongqing"。決定要爬哪個來源。"""
+    source: "591" / "yongqing" / "sinyi"。決定要爬哪個來源。"""
     from database.run_log import log_action
     districts = districts or []
     log_action(trigger_label, "batch_start", message=f"{source} / {','.join(districts) or 'all'} / limit={limit}",
@@ -2504,6 +2504,8 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
         try:
             if source == "yongqing":
                 from scraper import scraper_yongqing as _s
+            elif source == "sinyi":
+                from scraper import scraper_sinyi as _s
             else:
                 from scraper import scraper_591 as _s
             _reason = _s.LAST_FETCH_ERROR
