@@ -318,13 +318,13 @@ window.loadRunSessions = async function () {
       box.innerHTML = `<div style="color:#888; padding:8px;">尚無執行紀錄</div>`;
       return;
     }
-    box.innerHTML = `<table style="width:100%; border-collapse:collapse;">
+    box.innerHTML = `<table style="width:100%; border-collapse:collapse; table-layout:auto;">
       <thead><tr style="background:#f0ece0; text-align:left;">
-        <th style="padding:6px 8px; width:140px;">開始</th>
-        <th style="padding:6px 8px; width:60px;">耗時</th>
-        <th style="padding:6px 8px; width:200px;">類型 / 來源</th>
-        <th style="padding:6px 8px; width:160px;">範圍</th>
-        <th style="padding:6px 8px; width:70px;">狀態</th>
+        <th style="padding:6px 8px; white-space:nowrap;">開始</th>
+        <th style="padding:6px 8px; white-space:nowrap;">耗時</th>
+        <th style="padding:6px 8px; white-space:nowrap;">類型 / 來源</th>
+        <th style="padding:6px 8px;">範圍</th>
+        <th style="padding:6px 8px; white-space:nowrap;">狀態</th>
         <th style="padding:6px 8px;">結果（點 row 看明細）</th>
       </tr></thead>
       <tbody>${_runSessionsCache.map((sess, idx) => {
@@ -334,12 +334,12 @@ window.loadRunSessions = async function () {
                      : sess.status === "orphan_end" ? "⚠ 孤兒"
                      : "✓ 完成";
         return `<tr style="border-bottom:1px solid #eee; cursor:pointer;" onclick="showSessionModal(${idx})" onmouseover="this.style.background='#fffaed'" onmouseout="this.style.background=''">
-          <td style="padding:5px 8px; font-family:Consolas,monospace; font-size:11px; color:#555;">${esc(t)}</td>
-          <td style="padding:5px 8px; font-size:11px; color:#888;">${esc(_fmtSessionDuration(sess))}</td>
-          <td style="padding:5px 8px;">${esc(_triggerLabel(sess))}</td>
-          <td style="padding:5px 8px; font-size:12px; color:#555;">${esc(_sessionScope(sess))}</td>
-          <td style="padding:5px 8px; font-size:11px;">${status}</td>
-          <td style="padding:5px 8px; font-size:12px;">${_sessionSummary(sess)}</td>
+          <td style="padding:6px 10px; font-family:Consolas,monospace; font-size:12px; color:#555; white-space:nowrap;">${esc(t)}</td>
+          <td style="padding:6px 10px; font-size:12px; color:#888; white-space:nowrap;">${esc(_fmtSessionDuration(sess))}</td>
+          <td style="padding:6px 10px; white-space:nowrap;">${esc(_triggerLabel(sess))}</td>
+          <td style="padding:6px 10px; font-size:13px; color:#555;">${esc(_sessionScope(sess))}</td>
+          <td style="padding:6px 10px; font-size:12px; white-space:nowrap;">${status}</td>
+          <td style="padding:6px 10px; font-size:13px;">${_sessionSummary(sess)}</td>
         </tr>`;
       }).join("")}</tbody>
     </table>`;
