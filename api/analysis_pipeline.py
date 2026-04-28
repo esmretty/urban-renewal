@@ -651,10 +651,14 @@ def analyze_single_property(
     #      Vision 判斷只在「地址沒對上任何 GeoServer 路」時才跑，省 API 錢
     _inferred_pure = item.get("address_inferred")
     precise_addr = (f"{city}{district}{_inferred_pure}" if _inferred_pure else addr_for_geo)
-    if lat and city == "台北市":
+    if lat and city in ("台北市", "新北市"):
         try:
             _step("查臨路寬度（GeoServer）...")
-            rw = query_road_width_taipei(lat, lng, address_hint=precise_addr)
+            if city == "新北市":
+                from analysis.gov_gis import query_road_width_newtaipei
+                rw = query_road_width_newtaipei(lat, lng, address_hint=precise_addr)
+            else:
+                rw = query_road_width_taipei(lat, lng, address_hint=precise_addr)
             if rw:
                 doc_data["road_width_m"] = rw["road_width_m"]
                 doc_data["road_width_name"] = rw["road_name"]

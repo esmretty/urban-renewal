@@ -3123,7 +3123,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                         "floor": item.get("floor"),
                         "image_url": item.get("image_url"),
                     }
-                    if not existing.get("zoning_lookup_at") and existing.get("city") == "台北市":
+                    if not existing.get("zoning_lookup_at") and existing.get("city") in ("台北市", "新北市"):
                         try:
                             z = lookup_zoning(
                                 address=existing.get("address") or item.get("address"),

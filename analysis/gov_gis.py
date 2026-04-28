@@ -8,6 +8,7 @@
 未覆蓋（暫時手動輸入）：
   - 新北市
 """
+import json
 import math
 import logging
 import re
@@ -347,11 +348,187 @@ def query_road_width_taipei(lat: float, lng: float, address_hint: str = "") -> O
     return None
 
 
-# ── 新北市（待實作） ─────────────────────────────────────────────────────────
+# ── 新北市 ArcGIS（urban.planning.ntpc.gov.tw 政府服務） ──────────────────────
+#
+# Endpoint：https://arcgis.planning.ntpc.gov.tw/server/rest/services/NTPC_Urban
+# Token：從 https://urban.planning.ntpc.gov.tw/NtpcUrbArcgisToken/urban_planning_ntpc_gov_tw.js
+#       取得（網站 long-lived token）。如果失效需重抓。
+NTPC_ARCGIS_BASE = "https://arcgis.planning.ntpc.gov.tw/server/rest/services/NTPC_Urban"
+NTPC_TOKEN_URL = "https://urban.planning.ntpc.gov.tw/NtpcUrbArcgisToken/urban_planning_ntpc_gov_tw.js"
+_NTPC_TOKEN_CACHE = {"token": None, "fetched_at": 0}
+
+
+def _get_ntpc_token() -> str:
+    """取 NTPC ArcGIS token（cache 1 小時）。失敗回空字串。"""
+    import time as _t
+    if _NTPC_TOKEN_CACHE["token"] and (_t.time() - _NTPC_TOKEN_CACHE["fetched_at"]) < 3600:
+        return _NTPC_TOKEN_CACHE["token"]
+    try:
+        r = httpx.get(NTPC_TOKEN_URL, timeout=10, verify=False)
+        m = re.search(r'NtpcUrbToken="([^"]+)"', r.text)
+        if m:
+            _NTPC_TOKEN_CACHE["token"] = m.group(1)
+            _NTPC_TOKEN_CACHE["fetched_at"] = _t.time()
+            return m.group(1)
+    except Exception as e:
+        logger.warning(f"_get_ntpc_token error: {e}")
+    return ""
+
 
 def query_zoning_newtaipei(lat: float, lng: float) -> Optional[dict]:
-    """新北市目前無已知公開 ArcGIS/GeoServer endpoint，回 None。"""
-    return None
+    """新北市座標 → 都市計畫使用分區。
+    回 {"zone_name", "zone_label", "zone_code", "original_zone", "zone_list"} 或 None。
+
+    LandUse_WMS layer 0 欄位：
+      LZ3 = 分區（住宅區/商業區...） — 主要欄位
+      LZ4 = 細分（一/二/三...，如有）
+      LZ5/LZ6 = 建蔽率%, LZ7 = 容積率%
+      LZ1 = 都市計畫名稱（背景資訊）
+    """
+    token = _get_ntpc_token()
+    if not token:
+        return None
+    try:
+        r = httpx.get(
+            f"{NTPC_ARCGIS_BASE}/LandUse_WMS/MapServer/0/query",
+            params={
+                "geometry": json.dumps({"x": lng, "y": lat, "spatialReference": {"wkid": 4326}}),
+                "geometryType": "esriGeometryPoint",
+                "inSR": 4326,
+                "spatialRel": "esriSpatialRelIntersects",
+                "outFields": "LZ1,LZ3,LZ4,LZ5,LZ6,LZ7",
+                "returnGeometry": "false",
+                "f": "json",
+                "token": token,
+            },
+            timeout=15, verify=False,
+        )
+        data = r.json() or {}
+        feats = data.get("features") or []
+        if not feats:
+            return None
+        a = feats[0].get("attributes") or {}
+        # 組「第 X 種住宅區」格式：LZ3 是「住宅區」，LZ4 可能是「一/二/三/四」
+        lz3 = (a.get("LZ3") or "").strip()
+        lz4 = (a.get("LZ4") or "").strip()
+        if lz3 == "住宅區" and lz4:
+            zone_name = f"第{lz4}種住宅區"
+            zone_label = f"住{lz4}"
+            # 對應台北 R1~R4 編碼
+            _r_map = {"一": "R1", "二": "R2", "三": "R3", "四": "R4"}
+            zone_code = _r_map.get(lz4)
+        elif lz3 == "商業區" and lz4:
+            zone_name = f"第{lz4}種商業區"
+            zone_label = f"商{lz4}"
+            _c_map = {"一": "C1", "二": "C2", "三": "C3", "四": "C4"}
+            zone_code = _c_map.get(lz4)
+        else:
+            zone_name = lz3 or None
+            zone_label = lz3 or None
+            zone_code = None
+        return {
+            "zone_name": zone_name,
+            "zone_label": zone_label,
+            "zone_code": zone_code,
+            "original_zone": f"{lz3}{lz4}" if lz4 else lz3,
+            "zone_list": [zone_name] if zone_name else [],
+            "plan_name": a.get("LZ1"),
+            "coverage_rate": a.get("LZ5") or a.get("LZ6"),
+            "far_rate": a.get("LZ7"),
+        }
+    except Exception as e:
+        logger.warning(f"query_zoning_newtaipei error: {e}")
+        return None
+
+
+def query_road_width_newtaipei(lat: float, lng: float, address_hint: str = "") -> Optional[dict]:
+    """新北市座標 → 最近道路的路寬。
+    回 {"road_name", "road_width_m", "all_roads"} 或 None。
+
+    NtpcRoadWidth layer 0 (NtpcCenterLine) 欄位：
+      RoadName, RoadWidth (公尺), RoadKind, RoadNum
+    """
+    token = _get_ntpc_token()
+    if not token:
+        return None
+    try:
+        # ~80m envelope 找鄰近路 (lat 0.0007 ≈ 78m, lng 0.0008 ≈ 80m at TW lat)
+        delta = 0.0008
+        r = httpx.get(
+            f"{NTPC_ARCGIS_BASE}/NtpcRoadWidth/MapServer/0/query",
+            params={
+                "where": "1=1",
+                "geometry": json.dumps({
+                    "xmin": lng - delta, "ymin": lat - delta,
+                    "xmax": lng + delta, "ymax": lat + delta,
+                }),
+                "geometryType": "esriGeometryEnvelope",
+                "inSR": 4326,
+                "outSR": 4326,
+                "outFields": "RoadName,RoadWidth,RoadKind,RoadNum",
+                "returnGeometry": "true",
+                "f": "json",
+                "token": token,
+            },
+            timeout=15, verify=False,
+        )
+        data = r.json() or {}
+        feats = data.get("features") or []
+        if not feats:
+            return None
+        # 計算每條路距離：geometry 是 polyline (paths)
+        # 簡化：用 envelope/bbox center 跟我們的 lat/lng 差距估
+        all_roads = []
+        seen = set()
+        for f in feats:
+            attrs = f.get("attributes") or {}
+            name = (attrs.get("RoadName") or "").strip()
+            width = attrs.get("RoadWidth")
+            if not name or width is None:
+                continue
+            try: width = float(width)
+            except Exception: continue
+            key = (name, width)
+            if key in seen:
+                continue
+            seen.add(key)
+            # 距離估計（取 polyline 第一段中點）
+            geom = f.get("geometry") or {}
+            paths = geom.get("paths") or []
+            if paths and paths[0]:
+                pts = paths[0]
+                mid = pts[len(pts) // 2]
+                dx = (mid[0] - lng) * 101000   # ~1 lng° ≈ 101km at TW lat
+                dy = (mid[1] - lat) * 111000
+                dist = (dx * dx + dy * dy) ** 0.5
+            else:
+                dist = 9999.0
+            all_roads.append({
+                "road_name": name,
+                "road_width_m": width,
+                "distance_m": round(dist, 1),
+            })
+        if not all_roads:
+            return None
+        # 排序 + 套用 address_hint 優先（同台北邏輯）
+        all_roads.sort(key=lambda r: r.get("distance_m", 9999))
+        picked = all_roads[0]
+        if address_hint:
+            stripped = re.sub(r"^.*區", "", address_hint)
+            for r in all_roads:
+                rn = r.get("road_name") or ""
+                # 路+巷精確 match 優先
+                if rn and rn in stripped:
+                    picked = r
+                    break
+        return {
+            "road_name": picked["road_name"],
+            "road_width_m": picked["road_width_m"],
+            "all_roads": all_roads,
+        }
+    except Exception as e:
+        logger.warning(f"query_road_width_newtaipei error: {e}")
+        return None
 
 
 # ── NLSC：座標 → 段地號（輔助欄位，Phase 2 可用） ───────────────────────────
@@ -418,9 +595,22 @@ def lookup_zoning_by_coord(lat: float, lng: float, city: str) -> dict:
                 "zoning_source_url": TAIPEI_PORTAL_URL, "zone_label": None,
                 "zone_code": None, "error": "WFS 查詢無結果（座標可能在邊界）"}
     if city == "新北市":
-        return {"zoning": None, "zoning_source": "unsupported_city",
-                "zoning_source_url": None, "zone_label": None, "zone_code": None,
-                "error": "新北市暫無公開 GIS endpoint，請手動輸入"}
+        z = query_zoning_newtaipei(lat, lng)
+        if z:
+            return {
+                "zoning": z["zone_name"],
+                "zoning_source": "arcgis_newtaipei",
+                "zoning_source_url": "https://urban.planning.ntpc.gov.tw/NtpcURInfo/",
+                "zone_label": z["zone_label"],
+                "zone_code": z["zone_code"],
+                "original_zone": z.get("original_zone"),
+                "zone_list": z.get("zone_list"),
+                "error": None,
+            }
+        return {"zoning": None, "zoning_source": "not_found",
+                "zoning_source_url": "https://urban.planning.ntpc.gov.tw/NtpcURInfo/",
+                "zone_label": None, "zone_code": None,
+                "error": "新北 ArcGIS 查詢無結果（可能 token 失效或座標在邊界）"}
     return {"zoning": None, "zoning_source": "unsupported_city",
             "zoning_source_url": None, "zone_label": None, "zone_code": None,
             "error": f"未支援的城市：{city}"}
