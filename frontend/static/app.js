@@ -1095,7 +1095,7 @@ function renewalHTML(p) {
     ? formatWan(p.renewal_profit_ntd)
     : "—";
 
-  const roadWidthVal = p.road_width_m != null ? p.road_width_m : "";
+  const roadWidthVal = (p.road_width_m_override ?? p.road_width_m) ?? "";
   return `
   <table class="table table-sm renewal-table">
     <tbody>
@@ -1233,7 +1233,7 @@ async function saveDesiredPrice(id, val) {
 function computeRowMultiples(p) {
   const land = p.land_area_ping;
   const price = p.new_house_price_wan_override ?? DISTRICT_NEW_HOUSE_PRICE[p.district];
-  const effFar = effectiveFarPctWeighted(p, p.road_width_m);
+  const effFar = effectiveFarPctWeighted(p, p.road_width_m_override ?? p.road_width_m);
   if (!land || effFar == null || !price) return { w: null, d: null };
   const coeff = p.rebuild_coeff ?? 1.57;
   const [ratio, parking] = lookupShareRatio(price);
@@ -1376,7 +1376,7 @@ function zoneAbbr(z) {
 function renewalV2HTML(p) {
   const land = p.land_area_ping;
   const zoning = effectiveZoning(p);
-  const roadWidth = p.road_width_m;
+  const roadWidth = p.road_width_m_override ?? p.road_width_m;
   const multiZone = p.zoning_list && p.zoning_list.length > 1;
   // 多分區時顯示加權 baseFAR（未受路寬限縮）
   const baseFar = multiZone
@@ -1672,7 +1672,7 @@ function roadNameHint(p) {
 async function saveRoadWidth(propertyId, val) {
   const v = parseFloat(val);
   if (isNaN(v) || v <= 0) return;
-  if (_detailP) _detailP.road_width_m = v;
+  if (_detailP) _detailP.road_width_m_override = v;
   _rerenderRenewal();
   fetch(`/api/properties/${propertyId}/road_width`, {
     method: "POST",

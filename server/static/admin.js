@@ -198,6 +198,79 @@ window.loadLineStatus = async function () {
         已通知物件數：${s.notified_property_count} 筆 ｜ 最近通知：${esc(lastTxt)}
       </div>
     `;
+    // 同步 threshold input
+    const inp = document.getElementById("line-threshold-input");
+    if (inp && s.threshold_multiple != null) inp.value = s.threshold_multiple;
+    // 載入發送紀錄
+    if (typeof loadLineNotifications === "function") loadLineNotifications();
+  } catch (e) {
+    box.innerHTML = `<span style="color:#c0392b;">載入失敗：${esc(e.message)}</span>`;
+  }
+};
+
+window.saveLineThreshold = async function () {
+  const inp = document.getElementById("line-threshold-input");
+  const resEl = document.getElementById("line-threshold-result");
+  const v = parseFloat(inp.value);
+  if (isNaN(v) || v < 1 || v > 10) {
+    if (resEl) resEl.innerHTML = '<span style="color:#c0392b;">門檻必須 1.0~10.0</span>';
+    return;
+  }
+  if (resEl) resEl.textContent = "儲存中…";
+  try {
+    const r = await authedFetch("/admin/line/threshold", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ threshold: v }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      if (resEl) resEl.innerHTML = `<span style="color:#27ae60;">✓ 已儲存（${data.threshold_multiple} 倍）</span>`;
+      loadLineStatus();
+    } else {
+      if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(data.detail || "失敗")}</span>`;
+    }
+  } catch (e) {
+    if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(e.message)}</span>`;
+  }
+};
+
+window.loadLineNotifications = async function () {
+  const box = document.getElementById("line-notifications-box");
+  if (!box) return;
+  try {
+    const r = await authedFetch("/admin/line/notifications?limit=50");
+    if (!r.ok) {
+      box.innerHTML = `<span style="color:#c0392b;">載入失敗 HTTP ${r.status}</span>`;
+      return;
+    }
+    const data = await r.json();
+    if (!data.items.length) {
+      box.innerHTML = '<div style="color:#888; padding:8px;">尚無發送紀錄</div>';
+      return;
+    }
+    box.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
+      <thead><tr style="background:#f0ece0; text-align:left;">
+        <th style="padding:6px 8px;">時間</th>
+        <th style="padding:6px 8px;">物件</th>
+        <th style="padding:6px 8px;">情境 / 倍數</th>
+        <th style="padding:6px 8px;">送達</th>
+      </tr></thead>
+      <tbody>${data.items.map(it => {
+        const t = it.at ? new Date(it.at).toLocaleString("zh-TW", {hour12: false}) : "—";
+        const addr = `${it.city || ""}${it.district || ""}${it.address || ""}`;
+        const price = it.price_ntd ? `${Math.round(it.price_ntd / 10000)} 萬` : "—";
+        const ok = it.delivered_ok ? '<span style="color:#27ae60;">✓</span>' : '<span style="color:#c0392b;">✗</span>';
+        return `<tr style="border-bottom:1px solid #eee;">
+          <td style="padding:6px 8px; font-family:Consolas,monospace; font-size:11px; color:#555;">${esc(t)}</td>
+          <td style="padding:6px 8px;">
+            <div>${esc(addr)} <span style="color:#666;">${esc(price)}</span></div>
+            <div style="color:#888; font-size:11px; font-family:Consolas,monospace;">${esc(it.doc_id || "")} (${esc(it.source_id || "")})</div>
+          </td>
+          <td style="padding:6px 8px;">${esc(it.scenario || "")} <b style="color:#c0392b;">${(it.max_multiple || 0).toFixed(2)} 倍</b><span style="color:#888; font-size:11px;"> / 門檻 ${it.threshold_used || "?"}</span></td>
+          <td style="padding:6px 8px; text-align:center;">${ok}</td>
+        </tr>`;
+      }).join("")}</tbody></table>`;
   } catch (e) {
     box.innerHTML = `<span style="color:#c0392b;">載入失敗：${esc(e.message)}</span>`;
   }

@@ -1204,11 +1204,17 @@ async def admin_run_logs(limit: int = 200, trigger_prefix: Optional[str] = None,
 
 @app.get("/admin/line/status")
 async def admin_line_status(admin: dict = Depends(require_admin)):
-    """LINE 通知設定狀態：token / user_id 是否設定 + 最近通知統計。"""
+    """LINE 通知設定狀態：token / user_id 是否設定 + 倍數門檻 + 最近通知統計。"""
     import os as _os
     token = _os.getenv("LINE_CHANNEL_TOKEN", "").strip()
     user_id = _os.getenv("LINE_USER_ID", "").strip()
-    # 統計最近通知過的物件數（DB 內 line_notified_at 不為 None）
+    # 讀門檻（預設 2.8）
+    threshold = 2.8
+    try:
+        cfg = get_firestore().collection("settings").document("line_config").get()
+        if cfg.exists:
+            threshold = float((cfg.to_dict() or {}).get("threshold_multiple", 2.8))
+    except Exception: pass
     notified_count = 0
     last_notified = None
     try:
@@ -1225,10 +1231,42 @@ async def admin_line_status(admin: dict = Depends(require_admin)):
         "token_preview": (token[:6] + "..." + token[-4:]) if len(token) > 10 else "(empty)",
         "user_id_set": bool(user_id),
         "user_id_preview": (user_id[:6] + "...") if len(user_id) > 7 else "(empty)",
+        "threshold_multiple": threshold,
         "notified_property_count": notified_count,
         "last_notified_at": last_notified,
-        "trigger_threshold": "都更/危老/防災都更 任一情境 ≥ 3.0 倍",
+        "trigger_threshold": f"都更/危老/防災都更 任一情境 ≥ {threshold} 倍",
     }
+
+
+class LineThresholdReq(BaseModel):
+    threshold: float
+
+
+@app.post("/admin/line/threshold")
+async def admin_set_line_threshold(body: LineThresholdReq, admin: dict = Depends(require_admin)):
+    """Admin 設定 LINE 通知觸發倍數門檻。"""
+    if body.threshold < 1.0 or body.threshold > 10.0:
+        raise HTTPException(400, "threshold 必須介於 1.0~10.0")
+    get_firestore().collection("settings").document("line_config").set({
+        "threshold_multiple": float(body.threshold),
+        "updated_at": now_tw_iso(),
+        "updated_by_email": admin.get("email") or "",
+    }, merge=True)
+    logger.warning(f"[admin] {admin.get('email')} 設 LINE threshold = {body.threshold}")
+    return {"status": "ok", "threshold_multiple": float(body.threshold)}
+
+
+@app.get("/admin/line/notifications")
+async def admin_line_notifications(limit: int = 50, admin: dict = Depends(require_admin)):
+    """列出 LINE 通知發送紀錄（含每筆物件 id/地址/倍數/送達狀態）。"""
+    docs = list(get_firestore().collection("line_notifications")
+                .order_by("at", direction="DESCENDING").limit(min(int(limit), 200)).stream())
+    items = []
+    for d in docs:
+        x = d.to_dict() or {}
+        x["_id"] = d.id
+        items.append(x)
+    return {"count": len(items), "items": items}
 
 
 @app.post("/admin/line/test")

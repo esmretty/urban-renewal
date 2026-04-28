@@ -894,9 +894,10 @@ def analyze_single_property(
 
     doc_data["analysis_completed_at"] = now_tw_iso()
 
-    # ── 高價值物件 LINE 通知（≥3 倍）──
-    # 任何情境（危老/都更/防災都更）的 multiple ≥ 3.0 → 推 LINE 給 admin
-    # 若已通知過（doc 有 line_notified_at），不重複；除非倍數有顯著上升
+    # ── 高價值物件 LINE 通知 ──
+    # 門檻：admin 在 settings/line_config.threshold_multiple 可調，預設 2.8
+    # 任何情境（危老/都更/防災都更）的 multiple ≥ threshold → 推 LINE
+    # 若已通知過（doc 有 line_notified_at）+ 倍數沒漲過顯著程度 → skip
     try:
         rv2_check = doc_data.get("renewal_v2") or {}
         scenarios_check = rv2_check.get("scenarios") or {}
@@ -907,7 +908,14 @@ def analyze_single_property(
             if m is not None and m > max_mult:
                 max_mult = float(m)
                 max_scen = name
-        if max_mult >= 3.0:
+        # 從 Firestore 讀門檻（預設 2.8）
+        try:
+            from database.db import get_firestore as _gf2
+            _cfg = _gf2().collection("settings").document("line_config").get()
+            _threshold = float((_cfg.to_dict() or {}).get("threshold_multiple", 2.8)) if _cfg.exists else 2.8
+        except Exception:
+            _threshold = 2.8
+        if max_mult >= _threshold:
             # 跟既有 doc 比對：若已通知過 + 倍數差不多 → skip
             should_notify = True
             if item.get("_existing_doc"):
@@ -920,9 +928,27 @@ def analyze_single_property(
                         should_notify = False
             if should_notify:
                 from analysis.line_notify import notify_high_value_property
-                notify_high_value_property({**item, **doc_data}, max_mult, max_scen)
+                ok = notify_high_value_property({**item, **doc_data}, max_mult, max_scen)
                 doc_data["line_notified_at"] = now_tw_iso()
                 doc_data["line_notified_max_mult"] = max_mult
+                # 寫 LINE 通知紀錄到專屬 collection（含物件 id/地址，給 admin 看）
+                try:
+                    from database.db import get_firestore as _gf3
+                    _gf3().collection("line_notifications").add({
+                        "at": now_tw_iso(),
+                        "doc_id": doc_data.get("id"),
+                        "source_id": src_id,
+                        "address": doc_data.get("address_inferred") or doc_data.get("address"),
+                        "city": doc_data.get("city"),
+                        "district": doc_data.get("district"),
+                        "price_ntd": doc_data.get("price_ntd"),
+                        "max_multiple": max_mult,
+                        "scenario": max_scen,
+                        "threshold_used": _threshold,
+                        "delivered_ok": bool(ok),
+                    })
+                except Exception as _le2:
+                    logger.warning(f"[{src_id}] LINE 通知 log 寫入失敗: {_le2}")
     except Exception as _le:
         logger.warning(f"[{src_id}] LINE 通知 hook 失敗: {_le}")
 
