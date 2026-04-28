@@ -8,8 +8,8 @@
   python scripts/backfill_renewal_v2.py            # dry-run，列出影響筆數 + 倍數變化
   python scripts/backfill_renewal_v2.py --apply    # 實際寫回 DB
 """
-import sys, argparse
-sys.path.insert(0, r'd:\Coding\urban-renewal')
+import sys, os, argparse
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database.db import init_db, get_col
 from analysis.scorer import calculate_renewal_scenarios, resolve_effective_zoning
