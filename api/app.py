@@ -2959,9 +2959,19 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                             if v not in (None, "", 0) and vision_data.get(k) in (None, "", 0):
                                 vision_data[k] = v
                 # 不從 Vision 抓 building_type（591 filter 已保證是公寓；OCR 易把 5F 誤判華廈）
+                # land_area_ping 特別重要 — 加 log 追蹤每次 Vision 結果（之前 20109672 漏 bug）
+                _v_land = vision_data.get("land_area_ping")
+                _i_land = item.get("land_area_ping")
+                logger.info(f"[{src_id}] Vision land_area_ping={_v_land}, DOM regex land_area_ping={_i_land}, paths={[p for p in [shot_path, _house_crop] if p]}")
                 for k in ("land_area_ping", "zoning", "building_age", "total_floors", "floor"):
                     if vision_data.get(k) and not item.get(k):
                         item[k] = vision_data[k]
+                # land_area_ping 特殊處理：Vision 比 DOM regex 可信
+                # （DOM 591 詳情頁的數字常被 CSS 防爬打亂，regex 可能抓到亂值）
+                # 若 Vision 跟 DOM 都有但不同 → 信任 Vision
+                if _v_land and _i_land and abs(_v_land - _i_land) > 0.5:
+                    logger.warning(f"[{src_id}] DOM land={_i_land} vs Vision land={_v_land} 不一致，採用 Vision")
+                    item["land_area_ping"] = _v_land
                 # 源頭已 filter 公寓，直接標公寓（admin 重分析可保留舊 type）
                 if not item.get("building_type"):
                     item["building_type"] = "公寓"
