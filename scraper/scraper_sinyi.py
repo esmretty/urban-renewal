@@ -233,8 +233,10 @@ def scrape_sinyi(
     """主流程。回 {"new": [...items...], "price_updates": [...]}.
 
     headless 參數信義不需要 Playwright，僅為簽名相容。"""
+    from database.time_utils import now_tw_iso
     global LAST_FETCH_ERROR
     LAST_FETCH_ERROR = None
+    session_at = now_tw_iso()   # 跟 591/yongqing 一致：同 batch 共用一個 session timestamp
     new_items: list[dict] = []
     price_updates: list[dict] = []
     consecutive_complete = 0
@@ -279,6 +281,9 @@ def scrape_sinyi(
                 continue   # 預售屋等被 filter 掉
             if not item.get("price_ntd") or not item.get("address"):
                 continue
+            # 補 scrape_session_at + list_rank（讓前端「新進優先」排序能把信義新物件排到最上）
+            item["scrape_session_at"] = session_at
+            item["list_rank"] = len(new_items)
             # 過濾樓高 > 5（fallback 用 floor，因為信義 totalfloor 偶爾 None）
             tf_eff = item.get("total_floors") or 0
             try:
