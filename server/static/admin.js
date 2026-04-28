@@ -239,14 +239,44 @@ const _ACTION_COLOR = {
 
 let _runSessionsCache = [];
 
-function _triggerLabel(t) {
+function _triggerLabel(sess_or_trigger) {
+  // 接受字串 trigger 或整個 session 物件（拿 source 入 label）
+  const t = (typeof sess_or_trigger === "string") ? sess_or_trigger : (sess_or_trigger?.trigger || "");
+  const sess = (typeof sess_or_trigger === "object") ? sess_or_trigger : null;
+  // 從 start_log.details.source 抽來源（591 / yongqing / sinyi）
+  let srcLabel = "";
+  if (sess && sess.start_log && sess.start_log.details && sess.start_log.details.source) {
+    const src = sess.start_log.details.source;
+    srcLabel = src === "yongqing" ? "永慶" : src === "sinyi" ? "信義" : "591";
+  }
   if (!t) return "—";
-  if (t === "manual_batch") return "🖱 手動 batch";
-  if (t.startsWith("scheduler_scan_")) return `⏰ 排程 batch #${t.replace("scheduler_scan_", "")}`;
+  if (t === "manual_batch") return `🖱 手動 batch${srcLabel ? "（" + srcLabel + "）" : ""}`;
+  if (t.startsWith("scheduler_scan_")) {
+    const idx = t.replace("scheduler_scan_", "");
+    return `⏰ 排程 batch${srcLabel ? "（" + srcLabel + "）" : ""} #${idx}`;
+  }
   if (t === "verify_alive_manual") return "🖱 手動偵測下架";
   if (t === "verify_alive_scheduler") return "⏰ 排程偵測下架";
   if (t === "retry_queue") return "♻ 重試佇列";
   return t;
+}
+
+// 範圍欄：顯示 districts + limit + 觸發者（user）。verify-alive 顯示掃幾筆。
+function _sessionScope(sess) {
+  if (!sess || !sess.start_log) return "—";
+  const det = sess.start_log.details || {};
+  // batch_start details: {source, districts, limit, triggered_by_uid}
+  if (det.districts && Array.isArray(det.districts)) {
+    const dists = det.districts.length > 4
+      ? det.districts.slice(0, 3).map(d => d.replace(/區$/, "")).join("/") + "+" + (det.districts.length - 3)
+      : det.districts.map(d => d.replace(/區$/, "")).join("/");
+    const lim = det.limit ? ` × ${det.limit} 筆` : "";
+    return `${dists}${lim}`;
+  }
+  // verify_alive_start: 沒 details，從 message 抽「掃 X 筆」
+  const m = (sess.start_log.message || "").match(/(\d+)/);
+  if (m) return `掃 ${m[1]} 筆`;
+  return "—";
 }
 
 function _sessionSummary(sess) {
@@ -292,9 +322,10 @@ window.loadRunSessions = async function () {
       <thead><tr style="background:#f0ece0; text-align:left;">
         <th style="padding:6px 8px; width:140px;">開始</th>
         <th style="padding:6px 8px; width:60px;">耗時</th>
-        <th style="padding:6px 8px; width:170px;">類型</th>
+        <th style="padding:6px 8px; width:200px;">類型 / 來源</th>
+        <th style="padding:6px 8px; width:160px;">範圍</th>
         <th style="padding:6px 8px; width:70px;">狀態</th>
-        <th style="padding:6px 8px;">摘要（點 row 看明細）</th>
+        <th style="padding:6px 8px;">結果（點 row 看明細）</th>
       </tr></thead>
       <tbody>${_runSessionsCache.map((sess, idx) => {
         const t = sess.started_at ? new Date(sess.started_at).toLocaleString("zh-TW", {hour12:false}) : "—";
@@ -305,7 +336,8 @@ window.loadRunSessions = async function () {
         return `<tr style="border-bottom:1px solid #eee; cursor:pointer;" onclick="showSessionModal(${idx})" onmouseover="this.style.background='#fffaed'" onmouseout="this.style.background=''">
           <td style="padding:5px 8px; font-family:Consolas,monospace; font-size:11px; color:#555;">${esc(t)}</td>
           <td style="padding:5px 8px; font-size:11px; color:#888;">${esc(_fmtSessionDuration(sess))}</td>
-          <td style="padding:5px 8px;">${esc(_triggerLabel(sess.trigger))}</td>
+          <td style="padding:5px 8px;">${esc(_triggerLabel(sess))}</td>
+          <td style="padding:5px 8px; font-size:12px; color:#555;">${esc(_sessionScope(sess))}</td>
           <td style="padding:5px 8px; font-size:11px;">${status}</td>
           <td style="padding:5px 8px; font-size:12px;">${_sessionSummary(sess)}</td>
         </tr>`;
@@ -320,7 +352,7 @@ window.showSessionModal = function (idx) {
   const sess = _runSessionsCache[idx];
   if (!sess) return;
   document.getElementById("session-modal-title").textContent =
-    `${_triggerLabel(sess.trigger)} ｜ ${sess.started_at ? new Date(sess.started_at).toLocaleString("zh-TW", {hour12:false}) : "?"}`;
+    `${_triggerLabel(sess)} ｜ ${_sessionScope(sess)} ｜ ${sess.started_at ? new Date(sess.started_at).toLocaleString("zh-TW", {hour12:false}) : "?"}`;
   const body = document.getElementById("session-modal-body");
   let topInfo = `<div style="background:#f7f3ea; padding:10px 12px; border-radius:4px; margin-bottom:12px; font-size:12px;">
     <div><b>開始：</b>${esc(sess.start_log?.message || "?")}</div>`;
