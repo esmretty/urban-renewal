@@ -1908,6 +1908,24 @@ async function _watchScrapeSSE({ sourceLabel = "" } = {}) {
   loadAll();
 }
 
+window.adminKillScrape = async function () {
+  if (!confirm("中斷正在跑的 batch？\n會發送取消信號 + 重設 running flag + 把未完成 session 標記為完成。\n注意：背景執行緒可能還在等 HTTP 回應，但 admin 紀錄會立刻顯示完成。")) return;
+  try {
+    const r = await authedFetch("/admin/scrape/kill", { method: "POST" });
+    const data = await r.json();
+    if (r.ok) {
+      alert(`✓ ${data.message || "已發送中斷信號"}`);
+      // 重新整理執行紀錄 + scheduler 狀態
+      if (typeof loadRunSessions === "function") loadRunSessions();
+      if (typeof loadSchedulerStatus === "function") loadSchedulerStatus();
+    } else {
+      alert(`失敗: ${data.detail || r.status}`);
+    }
+  } catch (e) {
+    alert(`失敗: ${e.message}`);
+  }
+};
+
 window.adminTriggerScrape = async function () {
   const districts = [...document.querySelectorAll(".scrape-dist:checked")].map(c => c.value);
   if (!districts.length) { alert("請至少勾一個行政區"); return; }

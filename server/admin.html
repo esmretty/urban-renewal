@@ -97,6 +97,7 @@
                 <label>筆數：<input id="scrape-limit" type="number" min="1" max="200" value="30"></label>
                 <label>總樓層≥<input id="thresh-floors" type="number" min="1" max="20" value="6"> 不分析</label>
                 <button id="btn-admin-scrape" onclick="adminTriggerScrape()">開始抓取</button>
+                <button id="btn-admin-kill" onclick="adminKillScrape()" style="background:#c0392b; color:#fff; border:none; padding:6px 14px; border-radius:4px; cursor:pointer; margin-left:8px;">🛑 中斷正在跑的 batch</button>
               </div>
               <div id="scrape-progress" class="scrape-progress hidden">
                 <div class="scrape-bar"><div id="scrape-bar-fill"></div></div>

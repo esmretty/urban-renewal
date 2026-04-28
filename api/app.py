@@ -4072,6 +4072,43 @@ async def cancel_task():
     return {"status": "ok"}
 
 
+@app.post("/admin/scrape/kill")
+async def admin_kill_scrape(admin: dict = Depends(require_admin)):
+    """中斷正在跑的 batch（軟取消 + 補 batch_end log + 重設 running flag）。
+    後端執行緒可能因 HTTP 等待而沒立即停，但前端紀錄會立刻顯示完成。
+    下一次 scheduler tick 也能正常起新 batch（不被卡住）。"""
+    global _cancel_requested, _scrape_running
+    _cancel_requested = True
+    was_running = _scrape_running
+    _scrape_running = False   # 強制 reset 讓 scheduler 能起新 batch
+
+    # 找最近沒對應 batch_end 的 batch_start，補 batch_end log
+    closed_sessions = []
+    try:
+        from database.run_log import log_action, list_sessions
+        sessions = list_sessions(limit=20)
+        for sess in sessions:
+            if sess.get("status") == "running":
+                trigger = sess.get("trigger", "")
+                started = sess.get("started_at", "")
+                src = (sess.get("start_log", {}) or {}).get("details", {}).get("source", "?")
+                log_action(trigger, "batch_end",
+                           message=f"manual kill by admin {admin.get('email','?')}（原 {src} batch 從 {started[11:19]} 開始）",
+                           details={"closed_manually": True, "killed_by_admin": True,
+                                    "admin_email": admin.get("email"), "original_source": src})
+                closed_sessions.append({"trigger": trigger, "source": src, "started_at": started})
+    except Exception as e:
+        logger.warning(f"kill scrape: close sessions failed: {e}")
+
+    logger.warning(f"[admin] {admin.get('email')} 中斷 batch (was_running={was_running}, closed={len(closed_sessions)} sessions)")
+    return {
+        "status": "ok",
+        "was_running": was_running,
+        "closed_sessions": closed_sessions,
+        "message": f"已發送中斷信號 + 重設 running flag。關閉了 {len(closed_sessions)} 個未完成 session。",
+    }
+
+
 def _scrape_single_url_yongqing(url: str, src_id: str, is_reanalyze: bool = False):
     """單筆永慶 URL 分析。比 591 簡單很多：純 HTTP + Playwright（拿座標）+ pipeline。"""
     from scraper.scraper_yongqing import scrape_yongqing_single
