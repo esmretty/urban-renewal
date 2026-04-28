@@ -320,14 +320,17 @@ def scrape_sinyi(
 
 def scrape_sinyi_single(url: str) -> Optional[dict]:
     """給 /api/scrape_url 用：單一信義 URL 回 item dict。
-    策略：找 houseNo → 從列表頁能找到該物件就用、否則 fallback 嘗試 detail HTML（minimal）。"""
+    從 detail 頁 NEXT_DATA 兩個地方拼資料：
+      - buyReducer.contentData：main detail (price/address/area/age/floor 等，schema 跟列表 list 一樣)
+      - buyReducer.detailData：lat/lng + 物件描述 tags
+    若 contentData 沒抓到 → houseNo 不在當前頁面（罕見，可能下架）→ return None
+    """
     m = re.search(r"/buy/house/([A-Z0-9]{4,8})", url, re.IGNORECASE)
     if not m:
         return None
     house_no = m.group(1).upper()
     detail_url = f"https://www.sinyi.com.tw/buy/house/{house_no}"
 
-    # 直接打 detail 頁拿基本資料（lat/lng/houseNo + 列表 cache 可能也在 SSR）
     html = _fetch(detail_url)
     if not html:
         return None
@@ -335,38 +338,22 @@ def scrape_sinyi_single(url: str) -> Optional[dict]:
     if not nd:
         return None
     try:
-        dd = nd["props"]["initialReduxState"]["buyReducer"]["detailData"]
+        buy = nd["props"]["initialReduxState"]["buyReducer"]
     except KeyError:
-        dd = {}
+        return None
+    content = buy.get("contentData") or {}
+    detail = buy.get("detailData") or {}
 
-    # detailData 沒帶 price/address — fallback 從相關物件清單找同 houseNo
-    similar_list = []
-    try:
-        rs = nd["props"]["initialReduxState"]
-        for v in rs.values():
-            if not isinstance(v, dict): continue
-            for vv in v.values():
-                if isinstance(vv, list):
-                    similar_list.extend(vv)
-                elif isinstance(vv, dict):
-                    for vvv in vv.values():
-                        if isinstance(vvv, list):
-                            similar_list.extend(vvv)
-    except Exception:
-        pass
-    matched = next((it for it in similar_list
-                    if isinstance(it, dict) and it.get("houseNo") == house_no), None)
-    if matched:
-        item = _item_from_listing(matched)
+    # contentData 結構跟列表頁 list 的 item 一樣 → reuse _item_from_listing
+    if content.get("houseNo") == house_no:
+        item = _item_from_listing(content)
+        # 補 detailData 的精確座標（content 也有，但 detail 是 SSR render 階段拿的最新值）
+        if detail.get("latitude") and detail.get("longitude"):
+            item["latitude"] = detail["latitude"]
+            item["longitude"] = detail["longitude"]
+            item["source_latitude"] = detail["latitude"]
+            item["source_longitude"] = detail["longitude"]
         return item
-    # detailData fallback：只有 lat/lng
-    return {
-        "source": "信義",
-        "source_id": f"sinyi_{house_no}",
-        "url": detail_url,
-        "_sinyi_house_no": house_no,
-        "latitude": dd.get("latitude"),
-        "longitude": dd.get("longitude"),
-        "source_latitude": dd.get("latitude"),
-        "source_longitude": dd.get("longitude"),
-    }
+
+    # contentData 沒匹配 → 物件可能已下架
+    return None
