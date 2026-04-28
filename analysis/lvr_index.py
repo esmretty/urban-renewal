@@ -586,8 +586,10 @@ def triangulate_address(
             # (ii) 無 lane_hint + LVR 統計一致（地坪 std≤0.1 + 同年）→ 視同同批候選
             # (iii) 無 lane_hint + LVR 分散 → 仍列所有候選讓用戶挑，但標 land_area_inconsistent，
             #        預設選項改成「座標反查」（Google），地坪不填（用戶挑 LVR 時再填該筆地坪）
-            consistent = bool(lane_hint) or _stat_consistent(rows)
             cands = _build_candidates_detail(rows)
+            # consistent: 有 lane_hint / 統計一致 / 或 candidates 只有 1 筆（trivially unique）
+            # 之前漏「len==1」case → 1 筆 unique LVR 反而被當 inconsistent，地坪沒寫入
+            consistent = bool(lane_hint) or _stat_consistent(rows) or len(cands) == 1
 
             if consistent and cands:
                 default = cands[0]
