@@ -2684,6 +2684,25 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                 pub_alt.append(_pub_iso)
                                 update_payload["url_alt"] = url_alt
                                 update_payload["published_at_alt"] = pub_alt
+                            # sources array 也要加進新來源 — 不然 client 看不到信義/永慶 logo
+                            _new_src_name = item.get("source") or ""
+                            if _new_src_name and _new_src_name != "591":
+                                sources_arr = list(dd.get("sources") or [])
+                                if not any(s.get("name") == _new_src_name for s in sources_arr):
+                                    sources_arr.append({
+                                        "name": _new_src_name,
+                                        "source_id": src_id,
+                                        "url": item["url"],
+                                        "added_at": now_tw_iso(),
+                                    })
+                                    update_payload["sources"] = sources_arr
+                                    # 觸發跨來源事件給前端 badge
+                                    update_payload["last_change_at"] = now_tw_iso()
+                                    update_payload["latest_event"] = {
+                                        "type": "cross_source",
+                                        "source": _new_src_name,
+                                        "at": now_tw_iso(),
+                                    }
                             col.document(dup_sid).update(update_payload)
                         progress_callback(f"  ⏭ 重複物件（已合併網址）：{(item.get('title') or '')[:25]}", pct)
                         progress_callback(
