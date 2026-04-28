@@ -653,7 +653,7 @@ def analyze_single_property(
     precise_addr = (f"{city}{district}{_inferred_pure}" if _inferred_pure else addr_for_geo)
     if lat and city in ("台北市", "新北市"):
         try:
-            _step("查臨路寬度（GeoServer）...")
+            _step("查臨路寬度...")
             if city == "新北市":
                 from analysis.gov_gis import query_road_width_newtaipei
                 rw = query_road_width_newtaipei(lat, lng, address_hint=precise_addr)
@@ -870,9 +870,9 @@ def analyze_single_property(
             logger.warning(f"road width 失敗 {src_id}: {rwe}")
 
     # ── 11. 分區查詢 + renewal v2 重算 ──
-    if city == "台北市" and lat:
+    if city in ("台北市", "新北市") and lat:
         try:
-            _step("查土地分區（GeoServer）...")
+            _step("查土地分區...")
             z = lookup_zoning(
                 address=addr_for_geo, lat=lat, lng=lng,
                 building_area_ping=item.get("building_area_ping"),

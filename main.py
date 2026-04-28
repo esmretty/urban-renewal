@@ -168,8 +168,8 @@ def run_scrape_cli(district: str = "", headless: bool = False, limit: int = 0):
                 mrt_dist=mrt_dist, land_sqm=land_sqm,
             )
 
-            # 台北市：查土地分區（用推測地址座標更準確）
-            if item.get("city") == "台北市":
+            # 台北市/新北市：查土地分區（用推測地址座標更準確）
+            if item.get("city") in ("台北市", "新北市"):
                 try:
                     z_lat, z_lng = lat, lng
                     if doc_data.get("address_inferred"):
