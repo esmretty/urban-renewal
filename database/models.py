@@ -199,8 +199,7 @@ def make_property_doc(
         "renewal_new_area_ping": renewal.get("estimated_return_ping"),
         "renewal_value_ntd": renewal.get("estimated_return_value"),
         "renewal_profit_ntd": renewal.get("renewal_profit"),
-        # ── v2 計算（新公式 + 房價查表）─
-        "renewal_v2": renewal.get("v2"),                        # 完整 dict (含 scenarios)
+        # ── v2 計算結果不存 DB（CLAUDE.md 規則 8）：multiple/分回坪等動態結果由前端 + LINE hook 即時算
         "new_house_price_wan_override": None,                   # 用戶手動覆寫
         "ai_analysis": text_analysis.get("summary"),
         "ai_recommendation": final.get("recommendation"),
@@ -303,7 +302,7 @@ PREFER_NEW_FIELDS = {
     "score_road", "score_consolidation",
     "ai_analysis", "ai_recommendation", "ai_reason",
     "renewal_type", "renewal_bonus_rate", "renewal_new_area_ping",
-    "renewal_value_ntd", "renewal_profit_ntd", "renewal_v2",
+    "renewal_value_ntd", "renewal_profit_ntd",
     "zoning_lookup_at", "zoning_source", "zoning_source_url",
     "zoning_candidates", "zoning_error",
     "address", "address_inferred", "address_inferred_confidence",
@@ -475,7 +474,6 @@ def make_minimal_doc(
         # 分析相關欄位全 null，跳過的記錄不計算
         "score_total": None,
         "renewal_type": None,
-        "renewal_v2": None,
         "new_house_price_wan_override": None,
         "ai_analysis": None,
         "ai_recommendation": None,

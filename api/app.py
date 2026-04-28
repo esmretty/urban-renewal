@@ -3774,10 +3774,19 @@ async def reanalyze_recommendation(property_id: str):
             "renewal_path": p.get("ai_recommendation"),
             "summary": p.get("ai_analysis") or "",
         }
+        # 即時算 renewal v2（不從 DB 讀，因為 DB 不存 — CLAUDE.md 規則 8）
+        from analysis.scorer import calculate_renewal_scenarios as _calc_rv2, resolve_effective_zoning as _rez
+        _rv2 = _calc_rv2(
+            land_area_ping=p.get("land_area_ping"),
+            zoning=_rez(p.get("zoning"), p.get("zoning_original")),
+            district=p.get("district"),
+            price_ntd=p.get("price_ntd"),
+            road_width_m=p.get("road_width_m_override") or p.get("road_width_m"),
+        )
         final = generate_final_recommendation(
             property_data=p,
             score={},
-            renewal_calc={"v2": p.get("renewal_v2") or {}},
+            renewal_calc={"v2": _rv2},
             text_analysis=text_analysis,
         )
         col.document(property_id).update({
@@ -4733,11 +4742,15 @@ async def override_inferred_choice(property_id: str, body: InferredChoiceOverrid
 
 @app.post("/api/properties/{property_id:path}/new_house_price")
 async def override_new_house_price(property_id: str, body: NewHousePriceOverride, user: dict = Depends(get_current_user)):
-    """覆寫新成屋單價，並重算 renewal v2 兩情境（個人設定）。"""
+    """覆寫新成屋單價（個人設定）— renewal v2 結果由前端即時算，不存 DB（CLAUDE.md 規則 8）。"""
     from analysis.scorer import calculate_renewal_scenarios, resolve_effective_zoning
     p = _read_user_property(user, property_id)
     if p is None:
         raise HTTPException(status_code=404, detail="物件不存在")
+    # 只存「輸入欄位」（用戶覆寫的單價）；結果即時回給前端，不寫進 DB
+    _user_override_ref(user, property_id).set({
+        "new_house_price_wan_override": body.new_house_price_wan_per_ping,
+    }, merge=True)
     v2 = calculate_renewal_scenarios(
         land_area_ping=p.get("land_area_ping"),
         zoning=resolve_effective_zoning(p.get("zoning"), p.get("zoning_original")),
@@ -4746,10 +4759,6 @@ async def override_new_house_price(property_id: str, body: NewHousePriceOverride
         new_house_price_wan_per_ping=body.new_house_price_wan_per_ping,
         road_width_m=p.get("road_width_m_override") or p.get("road_width_m"),
     )
-    _user_override_ref(user, property_id).set({
-        "new_house_price_wan_override": body.new_house_price_wan_per_ping,
-        "renewal_v2_override": v2,    # 個人 v2 不蓋中央的
-    }, merge=True)
     return {"status": "ok", "renewal_v2": v2}
 
 

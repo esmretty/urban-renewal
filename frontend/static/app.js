@@ -1831,7 +1831,7 @@ function formatAiReason(text) {
     const m = section.match(/^【(.+?)】\s*([\s\S]*)/);
     if (m) {
       const title = m[1];
-      // 分回價值：動態渲染，從 _detailP.renewal_v2 即時計算
+      // 分回價值：動態渲染，從 _detailP 的輸入欄位（land_area_ping/zoning/road_width_m/...）即時計算
       if (title === "分回價值") {
         return `<div class="ai-section"><div class="ai-section-title">${esc(title)}</div><div class="ai-section-body" id="ai-bid-section">${renderBidSection()}</div></div>`;
       }

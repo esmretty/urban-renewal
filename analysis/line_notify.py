@@ -57,11 +57,13 @@ def push_line(message: str, user_id: Optional[str] = None) -> bool:
         return False
 
 
-def notify_high_value_property(doc: dict, multiple: float, scenario: str) -> bool:
-    """高價值物件通知 — 物件 ≥ 3 倍時呼叫一次。
+def notify_high_value_property(doc: dict, multiple: float, scenario: str,
+                                rv2: Optional[dict] = None) -> bool:
+    """高價值物件通知 — 物件 ≥ 門檻倍數時呼叫一次。
     doc: 物件 dict（要含 address / price_ntd / sources / id 等）
     multiple: 觸發的最大倍數
     scenario: 觸發的情境（危老 / 都更 / 防災都更）
+    rv2: 即時算出來的 renewal_v2 dict（含 scenarios）— 不從 doc 讀，因為 DB 不存
     """
     addr = doc.get("address_inferred") or doc.get("address") or doc.get("title") or "(地址未知)"
     city = doc.get("city") or ""
@@ -77,9 +79,8 @@ def notify_high_value_property(doc: dict, multiple: float, scenario: str) -> boo
         for s in sources_arr if s.get("url")
     ) or "  • (無連結)"
 
-    # 列出已算出的所有情境倍數
-    rv2 = doc.get("renewal_v2") or {}
-    scenarios = rv2.get("scenarios") or {}
+    # 列出已算出的所有情境倍數（從呼叫端傳入，不從 doc 讀；renewal_v2 不存 DB）
+    scenarios = (rv2 or {}).get("scenarios") or {}
     scen_lines = []
     for name, s in scenarios.items():
         m = s.get("multiple")

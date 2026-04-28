@@ -869,7 +869,10 @@ def analyze_single_property(
         except Exception as rwe:
             logger.warning(f"road width 失敗 {src_id}: {rwe}")
 
-    # ── 11. 分區查詢 + renewal v2 重算 ──
+    # ── 11. 分區查詢 + renewal v2 即時算（不寫進 DB）──
+    # CLAUDE.md 規則 8：renewal_v2 是動態計算結果，DB 只存輸入欄位（land/zoning/road_width/price），
+    # 倍數/分回坪/有效容積率 由前端 + LINE 通知 hook 即時呼叫 calculate_renewal_scenarios 取得。
+    rv2 = None
     if city in ("台北市", "新北市") and lat:
         try:
             _step("查土地分區...")
@@ -890,7 +893,7 @@ def analyze_single_property(
                 "zoning_list": zone_list,
                 "address_probable": z["address_probable"],
             })
-            # 有分區後重算 renewal v2 + 重新產生建議
+            # 有分區後即時算 renewal v2（local 變數，不存 DB）+ 重新產生建議
             final_land = item.get("land_area_ping") or doc_data.get("land_area_ping")
             if final_land:
                 from analysis.scorer import resolve_effective_zoning
@@ -902,7 +905,6 @@ def analyze_single_property(
                     price_ntd=item.get("price_ntd"),
                     road_width_m=doc_data.get("road_width_m"),
                 )
-                doc_data["renewal_v2"] = rv2
                 final2 = generate_final_recommendation(
                     property_data={**item, **doc_data},
                     score=scores,
@@ -921,7 +923,7 @@ def analyze_single_property(
     # 任何情境（危老/都更/防災都更）的 multiple ≥ threshold → 推 LINE
     # 若已通知過（doc 有 line_notified_at）+ 倍數沒漲過顯著程度 → skip
     try:
-        rv2_check = doc_data.get("renewal_v2") or {}
+        rv2_check = rv2 or {}
         scenarios_check = rv2_check.get("scenarios") or {}
         max_mult = 0.0
         max_scen = ""
@@ -950,7 +952,7 @@ def analyze_single_property(
                         should_notify = False
             if should_notify:
                 from analysis.line_notify import notify_high_value_property
-                ok = notify_high_value_property({**item, **doc_data}, max_mult, max_scen)
+                ok = notify_high_value_property({**item, **doc_data}, max_mult, max_scen, rv2=rv2)
                 doc_data["line_notified_at"] = now_tw_iso()
                 doc_data["line_notified_max_mult"] = max_mult
                 # 寫 LINE 通知紀錄到專屬 collection（含物件 id/地址，給 admin 看）

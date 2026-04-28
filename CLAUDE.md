@@ -49,6 +49,34 @@
    - 若 LVR 在同建坪 ±0.01 找不到 match → 代表 LVR 沒這戶的記錄（這戶可能從未交易過）→ 正確行為是 `address_inferred=None` 或跑 reverse_geo fallback
    - **禁止**以「±3 坪」「百分比 tolerance」等方式把其他戶的 LVR 記錄列成候選讓用戶選 — 會誤導用戶挑到不同戶的地址
 
+8. **動態計算的數字（倍數、分回坪、有效容積率…）不存 DB**
+   `renewal_v2.scenarios.*.multiple` 這類「由多個輸入欄位即時算出來的結果」**絕不可以存成 DB 定數**。
+   存定數會吃 4 種苦：
+   - 算式改了 → DB 全錯，要寫 backfill
+   - 用戶覆寫某輸入欄（例：路寬、欲出價、新成屋單價）→ DB 跟前端不同步
+   - 加新邏輯（例：路寬限縮容積率）→ 又要 backfill
+   - **LINE 通知讀 DB 的 multiple → 跟用戶在 app 看到的數字不一樣 → 用戶質疑「這 LINE 怎麼亂報？」**
+
+   **正解**：DB 只存「投入欄位」（`land_area_ping`、`zoning`、`road_width_m`、`price_ntd`、`district`、`building_age`、`zoning_original`…）。倍數/分回坪/有效容積率等「動態結果」一律前端從這些欄位即時算；後端要用（例：LINE 通知判斷門檻）也即時呼叫同一個算式。
+
+   **判斷標準（會不會該存 DB）**：
+   - 來源固定不變、抓一次就定（地址、坪數、屋齡、原始分區…）→ 存 DB
+   - 由多個欄位推導、輸入一變結果就變（容積率、倍數、分回坪、效益萬…）→ **不要存**
+
+   **算式單一來源**：前端 JS 跟後端 Python 各有一份算式 → 必然飄移。**改其中一邊一定要同步檢查另一邊**。理想做法是：
+   - 把算式抽成 single source of truth（後端 endpoint 暴露算結果，前端直接 fetch；或前端跟後端共用同一個算式 + CI 加 cross-test）
+   - 至少在 PR 描述列出「我這次改了 effective FAR / multiple / 分回比例 任何一條 → 已同步檢查 [前端 effectiveFarPct / 後端 calculate_renewal_scenarios / LINE notify hook] 三處」
+   - 違反檢查：grep `multiple\|share_ping\|effective_far` 超過一個檔案有實作 → 兩處邏輯一定要對得起來
+
+9. **你寫的所有 code / commit / 解釋都會被 Codex 做敵意審查**
+   每一個 PR 跟解釋都會經過第三方 AI（Codex）逐行挑刺，找漏掉的 edge case、不一致的邏輯、違反專案規則的地方。
+   這意味著：
+   - **不能省略偵錯**：寫完別只在 happy path 跑一次就交。grep 一遍受影響的檔案、確認所有 caller 都改完、想 2~3 個邊界 case（空值、極端值、跨城市差異、重抓、用戶覆寫）有沒有壞掉
+   - **不能拿模糊措詞掩飾不確定**：如果你不確定某條 path 還會不會被走到、某個欄位還在不在用，**直接 grep 確認**，不要寫「應該不會」「可能沒用了」打混
+   - **不能只說「修了 X」**：要寫清楚「修了 X，影響 [檔案 A 第 N 行 / 檔案 B 第 M 行]，已驗證 [具體輸入] → [具體輸出]」。Codex 會把你含糊的句子當靶
+   - **不能留半完工**：「等下再回來收尾」「這部分先這樣」就是給審查者送把柄。要嘛做完、要嘛不動，不要做一半
+   - 寫 commit message 也一樣 — 「修了 bug」這種無資訊量的訊息會被打槍。要寫根因、修法、影響範圍、驗證方式
+
 5. **用戶可見文字（reason / tooltip / 說明欄位）絕不出現開發用語**
    任何會被用戶看到的字串（`*_reason`、`*_note`、modal 裡的說明、toast 訊息、alert 文字等），**必須以「一般投資人視角」撰寫**，禁止以下內部實作術語：
    - 技術元件名：`Vision`、`OCR`、`regex`、`GeoServer`、`pipeline`、`fallback`、`CQL`、`bbox`、`Firestore`、`LVR`（可用「實價登錄」代替）
