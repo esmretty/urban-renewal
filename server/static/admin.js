@@ -328,22 +328,53 @@ window.loadRunSessions = async function () {
       </tr></thead>
       <tbody>${_runSessionsCache.map((sess, idx) => {
         const t = sess.started_at ? new Date(sess.started_at).toLocaleString("zh-TW", {hour12:false}) : "—";
-        const status = sess.status === "running" ? "🟢 進行中"
+        const isRunning = sess.status === "running";
+        const status = isRunning ? "🟢 進行中"
                      : sess.status === "interrupted" ? "⚠ 中斷"
                      : sess.status === "orphan_end" ? "⚠ 孤兒"
                      : "✓ 完成";
+        const killBtn = isRunning
+          ? `<button onclick="event.stopPropagation(); killSessionByIdx(${idx})" title="中斷此 session" style="margin-left:6px; padding:1px 6px; background:#c0392b; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px;">✕</button>`
+          : "";
         return `<tr style="border-bottom:1px solid #eee; cursor:pointer;" onclick="showSessionModal(${idx})" onmouseover="this.style.background='#fffaed'" onmouseout="this.style.background=''">
           <td style="padding:6px 10px; font-family:Consolas,monospace; font-size:12px; color:#555; white-space:nowrap;">${esc(t)}</td>
           <td style="padding:6px 10px; font-size:12px; color:#888; white-space:nowrap;">${esc(_fmtSessionDuration(sess))}</td>
           <td style="padding:6px 10px; white-space:nowrap;">${esc(_triggerLabel(sess))}</td>
           <td style="padding:6px 10px; font-size:13px; color:#555;">${esc(_sessionScope(sess))}</td>
-          <td style="padding:6px 10px; font-size:12px; white-space:nowrap;">${status}</td>
+          <td style="padding:6px 10px; font-size:12px; white-space:nowrap;">${status}${killBtn}</td>
           <td style="padding:6px 10px; font-size:13px;">${_sessionSummary(sess)}</td>
         </tr>`;
       }).join("")}</tbody>
     </table>`;
   } catch (e) {
     box.innerHTML = `<div style="color:#c0392b;">載入失敗：${esc(e.message)}</div>`;
+  }
+};
+
+window.killSessionByIdx = async function (idx) {
+  const sess = _runSessionsCache[idx];
+  if (!sess) return;
+  const src = (sess.start_log?.details?.source) || "?";
+  const startedShort = sess.started_at ? sess.started_at.slice(11, 19) : "?";
+  if (!confirm(`中斷此 session？\n${_triggerLabel(sess)} ｜ ${src} ｜ 從 ${startedShort} 開始\n\n（會補 batch_end log 標記完成；若仍有背景 process 在跑，會發 cancel 信號讓它停止）`)) return;
+  try {
+    const r = await authedFetch("/admin/scrape/kill_session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        trigger: sess.trigger,
+        started_at: sess.started_at,
+        source: src,
+      }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      if (typeof loadRunSessions === "function") loadRunSessions();
+    } else {
+      alert(`失敗: ${data.detail || data.message || r.status}`);
+    }
+  } catch (e) {
+    alert(`失敗: ${e.message}`);
   }
 };
 

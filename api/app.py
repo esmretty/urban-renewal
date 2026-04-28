@@ -4072,6 +4072,36 @@ async def cancel_task():
     return {"status": "ok"}
 
 
+class KillSessionReq(BaseModel):
+    trigger: str
+    started_at: str
+    source: Optional[str] = None
+
+
+@app.post("/admin/scrape/kill_session")
+async def admin_kill_session(body: KillSessionReq, admin: dict = Depends(require_admin)):
+    """中斷單一 session（標記完成、補 batch_end log）。
+    不真的殺背景 process（process 可能還在跑），只清理 admin UI 顯示的 zombie row。
+    若該 session 還在跑、且正是當前 _scrape_running 的那一個 → 也設 cancel flag。"""
+    global _cancel_requested, _scrape_running
+    src = body.source or "?"
+    try:
+        from database.run_log import log_action
+        log_action(body.trigger, "batch_end",
+                   message=f"manual kill by admin {admin.get('email','?')} ({src} batch from {body.started_at[11:19] if len(body.started_at) >= 19 else body.started_at})",
+                   details={"closed_manually": True, "killed_by_admin": True,
+                            "admin_email": admin.get("email"),
+                            "original_source": src, "original_started_at": body.started_at})
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    # 也發 cancel 信號（如果剛好是 currently running 那個會中斷）
+    if _scrape_running:
+        _cancel_requested = True
+        _scrape_running = False
+    logger.warning(f"[admin] {admin.get('email')} 中斷 session {body.trigger} {body.started_at}")
+    return {"status": "ok", "message": f"已標記 session 完成（{src}）"}
+
+
 @app.post("/admin/scrape/kill")
 async def admin_kill_scrape(admin: dict = Depends(require_admin)):
     """中斷正在跑的 batch（軟取消 + 補 batch_end log + 重設 running flag）。
