@@ -453,9 +453,11 @@ def calculate_renewal_scenarios(
         house_value_wan = share_ping * price
         # 假設分回 1 個平面車位
         total_value_wan = house_value_wan + (parking or 0)
-        price_wan = (price_ntd / 10000) if price_ntd else None
-        profit_wan = (total_value_wan - price_wan) if price_wan else None
-        multiple = (total_value_wan / price_wan) if price_wan and price_wan > 0 else None
+        # multiple 分母用「欲出價」(開價 × 0.9) — 跟前端 UI 一致（前端 desiredPriceWan = 開價×0.9）
+        list_price_wan = (price_ntd / 10000) if price_ntd else None
+        desired_price_wan = (list_price_wan * 0.9) if list_price_wan else None
+        profit_wan = (total_value_wan - desired_price_wan) if desired_price_wan else None
+        multiple = (total_value_wan / desired_price_wan) if desired_price_wan and desired_price_wan > 0 else None
         scenarios[name] = {
             "bonus": bonus,
             "new_built_ping": round(new_built_ping, 1),
@@ -465,6 +467,8 @@ def calculate_renewal_scenarios(
             "total_value_wan": round(total_value_wan, 1),
             "profit_wan": round(profit_wan, 1) if profit_wan is not None else None,
             "multiple": round(multiple, 2) if multiple else None,
+            "denominator_wan": round(desired_price_wan, 1) if desired_price_wan else None,
+            "denominator_basis": "desired_price_0.9x",
         }
     out["scenarios"] = scenarios
 
