@@ -2234,9 +2234,34 @@ async def add_to_watchlist(property_id: str, body: Optional[WatchlistAddReq] = N
 
 @app.delete("/api/watchlist/{property_id:path}")
 async def remove_from_watchlist(property_id: str, user: dict = Depends(get_current_user)):
-    """移出觀察清單（連同個人 overrides 一併刪除）。"""
+    """移出觀察清單（連同個人 overrides 一併刪除）。
+
+    特殊：若該物件來源是 user_url（用戶貼網址）或 manual（用戶輸入地址）
+    → 從中央 DB 也一併硬刪（因為這類物件只屬於送件人，不應該為他保留）。
+    Batch / scheduler 抓進來的中央物件不刪 — 別人可能也要看。"""
     uid = user["uid"]
     get_user_watchlist(uid).document(property_id).delete()
+
+    # manual：是 users/{uid}/manual/{id} 下的個人 doc，順手刪
+    if property_id.startswith("manual_"):
+        try:
+            get_user_manual(uid).document(property_id).delete()
+            logger.info(f"[delete] manual doc {property_id} hard-deleted (user={uid})")
+        except Exception as e:
+            logger.warning(f"manual delete failed {property_id}: {e}")
+        return {"status": "ok"}
+
+    # 中央物件：只有 source_origin=user_url 才硬刪
+    try:
+        doc_ref = get_col().document(property_id)
+        snap = doc_ref.get()
+        if snap.exists:
+            data = snap.to_dict() or {}
+            if data.get("source_origin") == "user_url" and data.get("submitted_by_uid") == uid:
+                doc_ref.delete()
+                logger.info(f"[delete] user_url doc {property_id} hard-deleted (送件人={uid})")
+    except Exception as e:
+        logger.warning(f"central doc delete check failed {property_id}: {e}")
     return {"status": "ok"}
 
 
