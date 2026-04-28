@@ -300,7 +300,7 @@ def scrape_sinyi(
             if check_exists:
                 existing = check_exists(src_id)
                 if existing:
-                    # 既有：簡單 price update 偵測（不做 enrich path，跟永慶相同）
+                    # 既有：簡單 price update 偵測
                     if existing.get("price_ntd") and item.get("price_ntd") \
                             and existing["price_ntd"] != item["price_ntd"]:
                         price_updates.append({
@@ -316,6 +316,20 @@ def scrape_sinyi(
                         progress_callback("  ↻ 信義 連續 5 筆已存在，停止")
                         break
                     continue
+            # 跨來源 dup：信義 src_id 在 DB 沒匹配，但同物件可能已存 591/永慶 doc
+            from database.db import find_cross_source_duplicate
+            cross_hit = find_cross_source_duplicate(item)
+            if cross_hit:
+                progress_callback(f"  ↻ 信義 {item.get('_sinyi_house_no')} 跨來源命中既有 doc {cross_hit[:8]}（{item['address'][:20]}），算已存在")
+                new_items.append(item)   # 仍 push 讓下游 dup_merge 寫 source_ids
+                consecutive_complete += 1
+                if consecutive_complete >= 5:
+                    progress_callback("  ↻ 信義連續 5 筆已存在（含跨來源），停止")
+                    break
+                if len(new_items) >= limit:
+                    break
+                time.sleep(0.5)
+                continue
             consecutive_complete = 0
             new_items.append(item)
             progress_callback(

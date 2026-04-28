@@ -614,7 +614,8 @@ def scrape_yongqing(
                 continue
 
             # 全新物件 → 兩階段 enrich
-            consecutive_complete = 0
+            # 注意：先別 reset consecutive_complete=0，等下面確認 enrich 成功 + 真要當新物件再 reset。
+            # 避免「夾在 existing 之間的 enrich-fail / 非公寓物件」打斷連續判定，導致 batch 跑到底。
 
             # 每筆 HTTP 之前 sleep（避免被永慶 anti-bot 偵測）
             time.sleep(2.5)
@@ -639,6 +640,12 @@ def scrape_yongqing(
                 progress_callback(
                     f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：HTTP enrich 失敗，已加入重試佇列"
                 )
+                # enrich-fail 物件不會入 DB，跟「已存在」效果一樣 → 累 consecutive 才能正常停
+                consecutive_complete += 1
+                if consecutive_complete >= 5:
+                    stop = True
+                    progress_callback("  ↻ 永慶連續 5 筆無新物件（含 enrich-fail），停止")
+                    break
                 continue
 
             # 過濾：只看樓高 — 5 樓含以下分析
@@ -647,14 +654,41 @@ def scrape_yongqing(
                 progress_callback(
                     f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：總樓層 {tf} 樓 > 5（型態={item.get('_yongqing_type_raw','-')}）"
                 )
-                # 確認是非公寓 → 把這 src_id 從 retry queue 清掉，不再重試
-                # （之前若曾失敗入 queue，retry worker 永遠不會建 doc 卻一直 re-enqueue）
+                # 非公寓 → 把這 src_id 從 retry queue 清掉
                 try:
                     from database.retry_queue import dequeue_by_source_id
                     dequeue_by_source_id(item.get("source_id"))
                 except Exception as _de:
                     logger.warning(f"dequeue_by_source_id 失敗 {item.get('source_id')}: {_de}")
+                # 永遠不會入 DB → 算 existing 一樣 ++
+                consecutive_complete += 1
+                if consecutive_complete >= 5:
+                    stop = True
+                    progress_callback("  ↻ 永慶連續 5 筆無新物件（含非公寓），停止")
+                    break
                 continue
+
+            # 跨來源 dup 早偵測：item 已有 address+area+price → 查 591/信義 既有 doc
+            # 命中就算 consecutive_complete，避免「永慶 src_id 從沒入過 DB → 永遠當新 → 跑到底」
+            from database.db import find_cross_source_duplicate
+            cross_hit = find_cross_source_duplicate(item)
+            if cross_hit:
+                progress_callback(f"  ↻ 永慶 {item.get('_yongqing_house_id')} 跨來源命中既有 doc {cross_hit[:8]}（{item.get('address','')[:20]}），算已存在")
+                consecutive_complete += 1
+                # 仍 push 進 new_items 讓下游 dup_merge 寫 source_ids，下次能直接命中 check_exists
+                new_items.append(item)
+                if consecutive_complete >= 5:
+                    stop = True
+                    progress_callback("  ↻ 永慶連續 5 筆已存在（含跨來源），停止")
+                    break
+                if len(new_items) >= limit:
+                    stop = True
+                    break
+                _human_sleep()
+                continue
+
+            # 真的是「新物件」要入 DB → reset consecutive
+            consecutive_complete = 0
 
             # Stage 2：通過樓高 filter 的才開 Playwright 拿座標（~7-10 秒/筆）
             progress_callback(f"  → 永慶 Playwright 拿座標: {item.get('address','')[:20]}")
