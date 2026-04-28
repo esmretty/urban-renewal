@@ -2361,13 +2361,14 @@ async function triggerScrapeUrl() {
   const inp = document.getElementById("scrape-url");
   const url = inp.value.trim();
   if (!url) { alert("請輸入網址"); return; }
-  // 接受 591 (sale.591.com.tw/...數字 ID) 與 永慶 (buy.yungching.com.tw/house/數字)
+  // 接受 591 / 永慶 / 信義 物件詳情頁 URL
   const okPatterns = [
     /sale\.591\.com\.tw\/.*\d{6,}/,
     /buy\.yungching\.com\.tw\/house\/\d{6,8}/,
+    /sinyi\.com\.tw\/buy\/house\/[A-Z0-9]{4,8}/i,
   ];
   if (!okPatterns.some(re => re.test(url))) {
-    alert("看起來不是 591 或永慶物件詳情頁網址，請確認");
+    alert("看起來不是 591、永慶或信義物件詳情頁網址，請確認");
     return;
   }
 

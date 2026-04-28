@@ -2290,7 +2290,7 @@ async def trigger_scrape(req: ScrapeRequest, user: dict = Depends(require_admin)
 
     _ensure_user_profile(user)
     source = (req.source or "591").lower()
-    if source not in ("591", "yongqing"):
+    if source not in ("591", "yongqing", "sinyi"):
         raise HTTPException(400, f"未知 source: {req.source}")
     asyncio.create_task(_run_scrape_task(
         headless=req.headless, districts=req.districts,
@@ -2300,7 +2300,7 @@ async def trigger_scrape(req: ScrapeRequest, user: dict = Depends(require_admin)
         trigger_label="manual_batch",
     ))
     label = "、".join(req.districts) if len(req.districts) <= 3 else f"{len(req.districts)} 區"
-    src_label = "永慶" if source == "yongqing" else "591"
+    src_label = {"yongqing": "永慶", "sinyi": "信義"}.get(source, "591")
     return {"status": "started", "message": f"開始爬取 {src_label} {label}（最多 {limit} 筆）", "limit": limit}
 
 
@@ -2453,6 +2453,16 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
             limit=limit,
         )
         source_label = "永慶"
+    elif source == "sinyi":
+        from scraper.scraper_sinyi import scrape_sinyi
+        result = scrape_sinyi(
+            headless=headless,
+            progress_callback=scrape_progress,
+            districts_filter=districts,
+            check_exists=check_exists,
+            limit=limit,
+        )
+        source_label = "信義"
     else:
         result = scrape_591(
             headless=headless,
@@ -2666,9 +2676,10 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 )
 
                 # 永慶：scraper 已抓齊所有欄位 + 座標準確，跳過 591 專屬 OCR 流程
-                if item.get("source") == "永慶":
+                if item.get("source") in ("永慶", "信義"):
+                    _src_name = item.get("source")   # "永慶" 或 "信義"
                     page_coords = (item.get("latitude"), item.get("longitude")) if item.get("latitude") else None
-                    progress_callback(f"  ✓ 永慶物件，座標 {page_coords}，跳過 591 OCR 流程", pct)
+                    progress_callback(f"  ✓ {_src_name}物件，座標 {page_coords}，跳過 591 OCR 流程", pct)
 
                     # 跨來源去重：找有沒有既有 591 doc 是同物件
                     # （地址路段 + 建坪 ±0.01 + 價格 完全 match）
@@ -2680,7 +2691,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                         if dup_doc.exists:
                             dd = dup_doc.to_dict() or {}
                             updates = {}
-                            # 補空欄位 + 永慶可覆蓋的欄位（zoning / 座標 / 社區名）
+                            # 補空欄位 + 永慶/信義可覆蓋的欄位（zoning / 座標 / 社區名）
                             if not dd.get("land_area_ping") and item.get("land_area_ping"):
                                 updates["land_area_ping"] = item["land_area_ping"]
                             if item.get("zoning_original"):
@@ -2691,29 +2702,37 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                             if item.get("community_name") and not dd.get("community_name"):
                                 updates["community_name"] = item["community_name"]
 
-                            # url_alt 加進永慶 URL
+                            # url_alt 加進新來源 URL
                             url_alt = list(dd.get("url_alt") or [])
                             if item["url"] not in url_alt and item["url"] != dd.get("url"):
                                 url_alt.append(item["url"])
                                 updates["url_alt"] = url_alt
 
-                            # sources array 加進永慶來源
+                            # sources array 加進該來源
                             sources_arr = list(dd.get("sources") or [])
-                            already_has_yongqing = any(s.get("name") == "永慶" for s in sources_arr)
-                            if not already_has_yongqing:
+                            already_has = any(s.get("name") == _src_name for s in sources_arr)
+                            if not already_has:
                                 sources_arr.append({
-                                    "name": "永慶",
+                                    "name": _src_name,
                                     "source_id": item["source_id"],
                                     "url": item["url"],
                                     "added_at": now_tw_iso(),
                                 })
                                 updates["sources"] = sources_arr
 
+                            # source_ids 平面索引（同 yongqing batch path 的修法）
+                            sid_arr = list(dd.get("source_ids") or [])
+                            if dd.get("source_id") and dd["source_id"] not in sid_arr:
+                                sid_arr.append(dd["source_id"])
+                            if src_id not in sid_arr:
+                                sid_arr.append(src_id)
+                            updates["source_ids"] = sid_arr
+
                             # 跨來源新上架事件
                             updates["last_change_at"] = now_tw_iso()
                             updates["latest_event"] = {
                                 "type": "cross_source",
-                                "source": "永慶",
+                                "source": _src_name,
                                 "at": now_tw_iso(),
                             }
 
@@ -2722,10 +2741,18 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
 
                             col.document(yc_dup_id).update(updates)
                             progress_callback(
-                                f"  🔗 永慶物件併入既有 doc {yc_dup_id} "
-                                f"(補 {len([k for k in updates if k not in ('last_change_at','latest_event','sources','url_alt')])} 欄位 + 加 url_alt)",
+                                f"  🔗 {_src_name}物件併入既有 doc {yc_dup_id} "
+                                f"(補 {len([k for k in updates if k not in ('last_change_at','latest_event','sources','url_alt','source_ids')])} 欄位 + 加 url_alt)",
                                 pct,
                             )
+                            # action log
+                            try:
+                                from database.run_log import log_action
+                                log_action(trigger_label, "cross_source",
+                                           source_id=src_id, doc_id=yc_dup_id,
+                                           message=f"{_src_name}併入既有 doc",
+                                           details={"merged_into": yc_dup_id, "source": _src_name})
+                            except Exception: pass
                             # 情況 D：跨來源新上架後，順便驗活該 doc 的其他來源連結
                             try:
                                 refreshed = col.document(yc_dup_id).get().to_dict() or {}
@@ -2765,10 +2792,17 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                         yc_doc["id"] = yc_doc_id
                     # 第一次入 DB 事件
                     yc_doc["last_change_at"] = now_tw_iso()
-                    yc_doc["latest_event"] = {"type": "new", "source": "永慶", "at": now_tw_iso()}
+                    yc_doc["latest_event"] = {"type": "new", "source": _src_name, "at": now_tw_iso()}
                     col.document(yc_doc_id).set(_safe_doc(yc_doc))
                     new_count += 1
-                    progress_callback(f"  ✓ 永慶物件已寫入 DB ({yc_doc_id})", pct)
+                    progress_callback(f"  ✓ {_src_name}物件已寫入 DB ({yc_doc_id})", pct)
+                    try:
+                        from database.run_log import log_action
+                        log_action(trigger_label, "new",
+                                   source_id=src_id, doc_id=yc_doc_id,
+                                   message=f"{_src_name} 新物件入庫：{yc_doc.get('address_inferred') or yc_doc.get('address') or ''}",
+                                   details={"source": _src_name, "address": yc_doc.get('address')})
+                    except Exception: pass
                     continue   # 不走下面 591 OCR 流程
 
                 # 591：詳情頁截圖 + Vision OCR
@@ -3870,6 +3904,12 @@ async def scrape_url(req: ScrapeUrlRequest, user: dict = Depends(get_current_use
             return {"status": "error", "message": "永慶 URL 找不到 /house/{ID} 格式"}
         src_id = f"yongqing_{m.group(1)}"
         url_source = "yongqing"
+    elif "sinyi.com.tw" in url_lower:
+        m = _re.search(r"/buy/house/([A-Z0-9]{4,8})", req.url, _re.IGNORECASE)
+        if not m:
+            return {"status": "error", "message": "信義 URL 找不到 /buy/house/{ID} 格式"}
+        src_id = f"sinyi_{m.group(1).upper()}"
+        url_source = "sinyi"
     elif "sale.591.com.tw" in url_lower or "591.com.tw" in url_lower:
         m = _re.search(r"/(\d{6,})", req.url)
         if not m:
@@ -3877,7 +3917,7 @@ async def scrape_url(req: ScrapeUrlRequest, user: dict = Depends(get_current_use
         src_id = f"591_{m.group(1)}"
         url_source = "591"
     else:
-        return {"status": "error", "message": "目前僅支援 591 (sale.591.com.tw) 與永慶 (buy.yungching.com.tw) 網址"}
+        return {"status": "error", "message": "目前僅支援 591 (sale.591.com.tw)、永慶 (buy.yungching.com.tw)、信義 (sinyi.com.tw) 網址"}
 
     _ensure_user_profile(user)
     uid = user["uid"]
@@ -4033,14 +4073,83 @@ def _scrape_single_url_yongqing(url: str, src_id: str, is_reanalyze: bool = Fals
     return {"status": "ok", "source_id": src_id, "id": new_doc_id, "message": "永慶物件分析完成（新增）"}
 
 
+def _scrape_single_url_sinyi(url: str, src_id: str, is_reanalyze: bool = False):
+    """單筆信義 URL 分析。
+    信義列表頁 SSR 已含完整資料（座標+價格+地址+建坪+地坪），
+    所以走輕量 path：scrape_sinyi_single（從 detail 頁的 NEXT_DATA 找該物件）→ pipeline。
+    若 detail 找不到該物件，會從相關物件 fallback。"""
+    from scraper.scraper_sinyi import scrape_sinyi_single
+    from scraper.browser_manager import get_browser_context
+    from api.analysis_pipeline import analyze_single_property
+    from database.models import merge_property_doc
+    from database.db import find_doc_by_source_id, gen_dated_id
+
+    item = scrape_sinyi_single(url)
+    if not item or not item.get("price_ntd") or not item.get("address"):
+        return {"status": "error",
+                "message": "信義詳情頁解析失敗（detail SSR 無 main data，且相關物件也找不到該 houseNo — 可能下架）"}
+
+    # 樓高 > 5 → 非公寓
+    _tf = item.get("total_floors")
+    if _tf and int(_tf) > 5:
+        try:
+            from database.retry_queue import dequeue_by_source_id
+            dequeue_by_source_id(src_id)
+        except Exception: pass
+        return {"status": "skipped_non_apartment", "source_id": src_id,
+                "message": f"樓高 {_tf} 樓 > 5，非公寓，跳過分析"}
+
+    item["scrape_session_at"] = now_tw_iso()
+    item["list_rank"] = 0
+
+    with get_browser_context(headless=True) as ctx:
+        initial_coords = (item.get("latitude"), item.get("longitude")) if item.get("latitude") else None
+        result = analyze_single_property(
+            item=item,
+            ocr_ctx=ctx,
+            initial_coords=initial_coords,
+            detail_text="",
+        )
+    doc = result["doc_data"]
+
+    existing_doc_id, old = find_doc_by_source_id(src_id)
+    col = get_col()
+
+    if existing_doc_id:
+        if is_reanalyze:
+            for _keep in ("scrape_session_at", "list_rank", "scraped_at"):
+                doc[_keep] = old.get(_keep)
+            doc["id"] = existing_doc_id
+            col.document(existing_doc_id).set(_safe_doc(doc))
+            return {"status": "ok", "source_id": src_id, "id": existing_doc_id, "message": "信義物件重新分析完成（完整替換）"}
+        merged, conflicts = merge_property_doc(old, doc)
+        merged["id"] = existing_doc_id
+        if merged.get("archived") is True:
+            merged["archived"] = False
+        col.document(existing_doc_id).set(_safe_doc(merged))
+        msg = "信義物件已存在中央 DB，已合併"
+        if conflicts:
+            msg += f"（衝突保留舊值：{', '.join(conflicts)}）"
+        return {"status": "ok", "source_id": src_id, "id": existing_doc_id, "message": msg}
+
+    new_doc_id = doc.get("id") or gen_dated_id()
+    doc["id"] = new_doc_id
+    if not is_reanalyze:
+        doc["source_origin"] = "user_url"
+    col.document(new_doc_id).set(_safe_doc(doc))
+    return {"status": "ok", "source_id": src_id, "id": new_doc_id, "message": "信義物件分析完成（新增）"}
+
+
 def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False):
     """同步：開瀏覽器 + 抓單一 URL + 跑分析。
     is_reanalyze=True：admin 重新分析路徑，跳過「公寓 only」「目標區域」等過濾，
                       強制更新既有 doc（admin 特權，用於修正舊資料）。
-    支援 591 / 永慶 兩種 URL（依 src_id prefix 分流）。"""
+    支援 591 / 永慶 / 信義 三種 URL（依 src_id prefix 分流）。"""
     # 永慶 URL → 走永慶單筆分析路徑（純 HTTP + Playwright，不需 Vision OCR）
     if src_id.startswith("yongqing_"):
         return _scrape_single_url_yongqing(url, src_id, is_reanalyze)
+    if src_id.startswith("sinyi_"):
+        return _scrape_single_url_sinyi(url, src_id, is_reanalyze)
 
     from scraper.browser_manager import get_browser_context
     from scraper.scraper_591 import _parse_card  # 既有 card 解析（不適用詳情頁）

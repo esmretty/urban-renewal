@@ -1714,7 +1714,7 @@ tr.archived {
 
 .src-badge591       { background-image: url("/static/icons/591.jpg"); }
 .src-badge-yongqing { background-image: url("/static/icons/yongqing.jpeg"); }
-.src-badge-sinyi    { background-color: #c8102e; }   /* 信義圖檔尚未提供，暫用色塊 */
+.src-badge-sinyi    { background-image: url("/static/icons/sinyi.png"); background-color: #fff; background-size: contain; }
 .src-badge-other    { background-color: #888; }
 
 /* manual / 自行調查 badge：保留原本文字樣式，不用 app icon */

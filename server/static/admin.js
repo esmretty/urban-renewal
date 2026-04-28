@@ -1108,7 +1108,7 @@ function _renderCmdRow(cmd, i, displayNum) {
   const SOURCES = [
     { key: "591", name: "591" },
     { key: "yongqing", name: "永慶" },
-    { key: "sinyi", name: "信義 (尚未支援)", disabled: true },
+    { key: "sinyi", name: "信義" },
   ];
   const curSources = new Set(_normSources(cmd));
   const sourceChips = SOURCES.map(s => {
