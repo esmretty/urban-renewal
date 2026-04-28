@@ -373,6 +373,7 @@ def calculate_renewal_scenarios(
     price_ntd: Optional[float],
     new_house_price_wan_per_ping: Optional[float] = None,
     is_qualified_for_fz_dugen: bool = False,
+    road_width_m: Optional[float] = None,
 ) -> dict:
     """
     用「重建坪數計算機」邏輯 + 房價→分回比例對照表，計算危老/都更/防災都更三情境。
@@ -406,12 +407,21 @@ def calculate_renewal_scenarios(
         out["note"] = "缺土地坪數，無法試算。"
         return out
 
-    # 1. 基準容積率
-    far_pct = TAIPEI_BASE_FAR_PCT.get(zoning) if zoning else None
-    if far_pct is None:
+    # 1. 基準容積率（路寬限縮：基準FAR×2(m) ≤ 路寬(m) → 上限 = 路寬 × 50%）
+    base_far_pct = TAIPEI_BASE_FAR_PCT.get(zoning) if zoning else None
+    if base_far_pct is None:
         out["note"] = f"未知分區 {zoning!r}，無法試算。"
         return out
-    out["base_far_pct"] = far_pct
+    out["base_far_pct"] = base_far_pct
+    if road_width_m and road_width_m > 0:
+        cap = road_width_m * 50
+        far_pct = min(base_far_pct, round(cap))
+        out["effective_far_pct"] = far_pct
+        out["road_width_capped"] = far_pct < base_far_pct
+    else:
+        far_pct = base_far_pct
+        out["effective_far_pct"] = far_pct
+        out["road_width_capped"] = False
 
     # 2. 新成屋單價（優先用 override，否則用該區預設）
     price = new_house_price_wan_per_ping

@@ -900,6 +900,7 @@ def analyze_single_property(
                     zoning=effective_zoning,
                     district=district,
                     price_ntd=item.get("price_ntd"),
+                    road_width_m=doc_data.get("road_width_m"),
                 )
                 doc_data["renewal_v2"] = rv2
                 final2 = generate_final_recommendation(

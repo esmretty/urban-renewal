@@ -4743,6 +4743,7 @@ async def override_new_house_price(property_id: str, body: NewHousePriceOverride
         district=p.get("district"),
         price_ntd=p.get("price_ntd"),
         new_house_price_wan_per_ping=body.new_house_price_wan_per_ping,
+        road_width_m=p.get("road_width_m_override") or p.get("road_width_m"),
     )
     _user_override_ref(user, property_id).set({
         "new_house_price_wan_override": body.new_house_price_wan_per_ping,
