@@ -3604,7 +3604,30 @@ def debug_manual_docs():
 
 @app.post("/api/properties/{property_id:path}/hide")
 async def hide_property(property_id: str, user: dict = Depends(get_current_user)):
-    """軟刪除：只標記使用者自己的清單中該筆 deleted=True（不影響中央）。"""
+    """刪除使用者清單中的物件。
+    - manual / 中央 user_url 物件：硬刪 DB（不留 archive，跟 DELETE /api/watchlist 一致）
+    - 其他中央物件（batch/scheduler）：軟刪（個人 deleted=True flag，不影響 DB）"""
+    uid = user["uid"]
+    if property_id.startswith("manual_"):
+        try:
+            get_user_manual(uid).document(property_id).delete()
+            logger.info(f"[hide] manual {property_id} hard-deleted (user={uid})")
+        except Exception as e:
+            logger.warning(f"hide manual delete failed {property_id}: {e}")
+        return {"status": "ok"}
+    # 中央 user_url 也硬刪
+    try:
+        doc_ref = get_col().document(property_id)
+        snap = doc_ref.get()
+        if snap.exists:
+            data = snap.to_dict() or {}
+            if data.get("source_origin") == "user_url" and data.get("submitted_by_uid") == uid:
+                doc_ref.delete()
+                logger.info(f"[hide] user_url doc {property_id} hard-deleted (送件人={uid})")
+                return {"status": "ok"}
+    except Exception as e:
+        logger.warning(f"hide central doc check failed {property_id}: {e}")
+    # 其他中央物件 → 軟刪
     _user_override_ref(user, property_id).set({"deleted": True}, merge=True)
     return {"status": "ok"}
 
