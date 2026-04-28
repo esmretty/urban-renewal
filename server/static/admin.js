@@ -267,9 +267,8 @@ function _sessionScope(sess) {
   const det = sess.start_log.details || {};
   // batch_start details: {source, districts, limit, triggered_by_uid}
   if (det.districts && Array.isArray(det.districts)) {
-    const dists = det.districts.length > 4
-      ? det.districts.slice(0, 3).map(d => d.replace(/區$/, "")).join("/") + "+" + (det.districts.length - 3)
-      : det.districts.map(d => d.replace(/區$/, "")).join("/");
+    // debug 用 → 完整列出所有 districts，不縮寫
+    const dists = det.districts.map(d => d.replace(/區$/, "")).join("/");
     const lim = det.limit ? ` × ${det.limit} 筆` : "";
     return `${dists}${lim}`;
   }
