@@ -509,9 +509,14 @@ def analyze_single_property(
                 logger.warning(f"[{src_id}] 地址 geocode 失敗: {_ge}")
 
     # ── 5.6 永慶 / 信義（地址只到路段、但有準確座標）→ Google reverse geocode 拿具體門牌 ──
-    # 條件：address 沒有「號」(代表只到路段) + 有 source_latitude/longitude (來源網站給的準確座標)
-    # 結果填 address_inferred，不蓋 address（保留原來源資料）
-    if not item.get("address_inferred") and not addr_has_number:
+    # 條件：
+    # 1. address 沒有「號」（只到路段或巷弄）
+    # 2. source 是永慶/信義（座標精度高，房仲後台維護過 ±10m）
+    # 591 座標常偏 50-150m → 不可信，不走 reverse geocode（保留原地址即可）
+    # CLAUDE.md 規則 6 提過 591 座標問題。
+    src_name = item.get("source") or "591"
+    trust_source_coords = src_name in ("永慶", "信義")
+    if not item.get("address_inferred") and not addr_has_number and trust_source_coords:
         src_lat = item.get("source_latitude") or item.get("latitude")
         src_lng = item.get("source_longitude") or item.get("longitude")
         if src_lat and src_lng and road_seg:
@@ -536,6 +541,18 @@ def analyze_single_property(
                 logger.info(f"[{src_id}] reverse geocode 拿到具體地址: {rev_addr}")
             else:
                 logger.info(f"[{src_id}] reverse geocode 無結果 (lat={src_lat}, lng={src_lng}, road={road_seg})")
+
+    # ── 5.7 591 LVR 空 + 原地址含巷弄 → 保留原模糊地址（不硬給門牌）──
+    # 591 座標不準 (±150m) 不該 reverse_geocode；但保留巷弄地址可讓路寬/分區查得到。
+    # 寧可顯示「松江路313巷」+ 標 confidence=lane_only，比硬給「松江路327號」誤導用戶好。
+    import re as _re_lane2
+    if not item.get("address_inferred") and src_name == "591" and item.get("address"):
+        _orig = item.get("address") or ""
+        if _re_lane2.search(r"[巷弄]", _orig):
+            from database.models import strip_region_prefix
+            item["address_inferred"] = strip_region_prefix(_orig, city or "", district or "")
+            item["address_inferred_confidence"] = "lane_only"
+            logger.info(f"[{src_id}] LVR 空 → 保留原巷弄地址當推測: {item['address_inferred']}")
 
     # ── 6. 精準座標覆蓋 ──
     if inferred_coord:
