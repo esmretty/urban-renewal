@@ -4019,15 +4019,21 @@ def _scrape_single_url_yongqing(url: str, src_id: str, is_reanalyze: bool = Fals
     if not item:
         return {"status": "error", "message": "永慶詳情頁解析失敗（可能下架或頁面結構變了）"}
 
-    # 樓高 > 5 → 非公寓，不分析。順手清掉 retry queue 避免無限重試
-    _tf = item.get("total_floors")
-    if _tf and int(_tf) > 5:
+    # 樓高 > 5 → 非公寓，不分析（fallback 用 floor 避免 total_floors=None 漏過濾）
+    _tf = item.get("total_floors") or 0
+    try: _f = int(item.get("floor")) if item.get("floor") else 0
+    except Exception: _f = 0
+    eff = max(_tf, _f)
+    if eff > 5:
         try:
             from database.retry_queue import dequeue_by_source_id
             dequeue_by_source_id(src_id)
         except Exception: pass
         return {"status": "skipped_non_apartment", "source_id": src_id,
-                "message": f"樓高 {_tf} 樓 > 5，非公寓，跳過分析"}
+                "message": f"樓層 {item.get('floor')}/{item.get('total_floors')} > 5，非公寓，跳過分析"}
+    # ≤5F 且非透天 → 一律標公寓（HOUSELANDTYPE 雜類在源頭就清掉）
+    if item.get("building_type") not in ("透天", "店面"):
+        item["building_type"] = "公寓"
 
     item["scrape_session_at"] = now_tw_iso()
     item["list_rank"] = 0
@@ -4085,19 +4091,25 @@ def _scrape_single_url_sinyi(url: str, src_id: str, is_reanalyze: bool = False):
     from database.db import find_doc_by_source_id, gen_dated_id
 
     item = scrape_sinyi_single(url)
-    if not item or not item.get("price_ntd") or not item.get("address"):
+    if not item:
+        return {"status": "skipped_non_apartment", "source_id": src_id,
+                "message": "此物件為預售屋或非分析對象，已跳過"}
+    if not item.get("price_ntd") or not item.get("address"):
         return {"status": "error",
-                "message": "信義詳情頁解析失敗（detail SSR 無 main data，且相關物件也找不到該 houseNo — 可能下架）"}
+                "message": "信義詳情頁解析失敗（contentData 不完整，可能已下架）"}
 
-    # 樓高 > 5 → 非公寓
-    _tf = item.get("total_floors")
-    if _tf and int(_tf) > 5:
+    # 樓高 > 5 → 非公寓（fallback 用 floor，避免 totalfloor=None 漏過濾）
+    _tf = item.get("total_floors") or 0
+    try: _f = int(item.get("floor")) if item.get("floor") else 0
+    except Exception: _f = 0
+    eff = max(_tf, _f)
+    if eff > 5:
         try:
             from database.retry_queue import dequeue_by_source_id
             dequeue_by_source_id(src_id)
         except Exception: pass
         return {"status": "skipped_non_apartment", "source_id": src_id,
-                "message": f"樓高 {_tf} 樓 > 5，非公寓，跳過分析"}
+                "message": f"樓層 {item.get('floor')}/{item.get('total_floors')} > 5，非公寓，跳過分析"}
 
     item["scrape_session_at"] = now_tw_iso()
     item["list_rank"] = 0
@@ -4391,9 +4403,17 @@ def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False):
             _tf = item.get("total_floors") or 0
             try: _tf = int(_tf)
             except Exception: _tf = 0
-            if _tf >= 6:
+            try: _f = int(item.get("floor")) if item.get("floor") else 0
+            except Exception: _f = 0
+            eff = max(_tf, _f)
+            if eff >= 6:
                 _cleanup_shots(src_id)
-                return {"status": "error", "message": f"此物件總樓層 {_tf}F（≥6），目前只收公寓（公寓定義：5F 以下）。"}
+                try:
+                    from database.retry_queue import dequeue_by_source_id
+                    dequeue_by_source_id(src_id)
+                except Exception: pass
+                return {"status": "skipped_non_apartment", "source_id": src_id,
+                        "message": f"樓層 {item.get('floor')}/{item.get('total_floors')} ≥6，非公寓（5F 以下），跳過。"}
         # 源頭已 filter 公寓，直接標公寓
         if not item.get("building_type"):
             item["building_type"] = "公寓"

@@ -131,8 +131,9 @@ def _parse_next_data(html: str) -> Optional[dict]:
         return None
 
 
-def _item_from_listing(it: dict) -> dict:
-    """把信義列表的單筆 dict 轉成我們系統的 item 格式。"""
+def _item_from_listing(it: dict) -> Optional[dict]:
+    """把信義列表的單筆 dict 轉成我們系統的 item 格式。
+    回 None 表示：該物件應 skip（預售屋等非分析對象）。"""
     from database.models import age_to_completed_year
     house_no = it.get("houseNo") or ""
     addr = it.get("address") or ""
@@ -152,20 +153,33 @@ def _item_from_listing(it: dict) -> dict:
     if am:
         try: age_num = float(am.group(1))
         except ValueError: pass
-    # 屋型
+    # 預售屋過濾：age 寫「預售」、houselandtype 含 'L'、或 kind/objectType 標記預售 → skip
     hl_codes = it.get("houselandtype") or []
-    bld_type = None
-    if hl_codes:
-        bld_type = HOUSELANDTYPE_MAP.get(hl_codes[0]) or "公寓"
+    if "預售" in str(age_raw) or "L" in hl_codes or it.get("kind") == 4 or it.get("objectType") == 4:
+        logger.info(f"信義 skip 預售屋 {house_no} age={age_raw} hl={hl_codes}")
+        return None
     # 樓層 "4-5" 取低樓 (主樓)
     floor_raw = it.get("floor") or ""
     floor_first = re.match(r"(\d+)", str(floor_raw))
     floor_str = floor_first.group(1) if floor_first else None
+    floor_num = int(floor_str) if floor_str else None
     total_floors = None
     try:
         total_floors = int(it.get("totalfloor"))
     except (TypeError, ValueError):
         pass
+    # totalfloor 缺漏時 fallback 用 floor（避免漏過濾高樓層）
+    eff_total = total_floors or floor_num or 0
+    # 屋型決定：5F 以下且非透天 → 強制標「公寓」或「店面」
+    # （HOUSELANDTYPE_MAP 的 華廈/電梯大樓/套房 都不該出現在分析池）
+    bld_type = "公寓"
+    if "D" in hl_codes:
+        bld_type = "透天"
+    elif "F" in hl_codes:
+        bld_type = "店面"
+    elif eff_total > 5:
+        # 高樓層 → 還是給原 mapping，讓上層 5F filter 拒收
+        bld_type = HOUSELANDTYPE_MAP.get(hl_codes[0]) if hl_codes else "電梯大樓"
     # price (信義單位「萬」)
     price_wan = it.get("totalPrice")
     price_ntd = int(price_wan) * 10000 if price_wan else None
@@ -261,13 +275,20 @@ def scrape_sinyi(
             except Exception as e:
                 logger.warning(f"信義 item parse 失敗: {e}")
                 continue
+            if item is None:
+                continue   # 預售屋等被 filter 掉
             if not item.get("price_ntd") or not item.get("address"):
                 continue
-            # 過濾樓高 > 5（同永慶邏輯，順手清 retry queue）
-            tf = item.get("total_floors")
-            if tf and int(tf) > 5:
+            # 過濾樓高 > 5（fallback 用 floor，因為信義 totalfloor 偶爾 None）
+            tf_eff = item.get("total_floors") or 0
+            try:
+                _f = int(item.get("floor")) if item.get("floor") else 0
+            except Exception:
+                _f = 0
+            tf_eff = max(tf_eff or 0, _f)
+            if tf_eff > 5:
                 progress_callback(
-                    f"  ⏭ 信義 跳過 {item['_sinyi_house_no']}：總樓層 {tf} 樓 > 5"
+                    f"  ⏭ 信義 跳過 {item['_sinyi_house_no']}：樓層 {item.get('floor')}/{item.get('total_floors')} > 5"
                 )
                 try:
                     from database.retry_queue import dequeue_by_source_id
@@ -347,6 +368,8 @@ def scrape_sinyi_single(url: str) -> Optional[dict]:
     # contentData 結構跟列表頁 list 的 item 一樣 → reuse _item_from_listing
     if content.get("houseNo") == house_no:
         item = _item_from_listing(content)
+        if item is None:
+            return None   # 預售屋等：直接拒
         # 補 detailData 的精確座標（content 也有，但 detail 是 SSR render 階段拿的最新值）
         if detail.get("latitude") and detail.get("longitude"):
             item["latitude"] = detail["latitude"]
