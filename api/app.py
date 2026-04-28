@@ -1099,7 +1099,7 @@ async def admin_delete_property(property_id: str, admin: dict = Depends(require_
 @app.get("/admin/scheduler/status")
 async def scheduler_status(admin: dict = Depends(require_admin)):
     """回傳定時 batch 目前狀態 + 設定，給 admin UI 顯示。"""
-    from config import TAIPEI_DISTRICTS
+    from config import TARGET_REGIONS
     cfg = _load_scheduler_config()
     # 讀 per-cmd 狀態 + last_verify_alive_at
     state_doc = get_firestore().collection("settings").document("scheduler_state").get()
@@ -1126,7 +1126,7 @@ async def scheduler_status(admin: dict = Depends(require_admin)):
         "last_verify_alive_at": state.get("last_verify_alive_at"),
         "last_verify_alive_archived": state.get("last_verify_alive_archived"),
         # UI 選項用
-        "allowed_districts": list(TAIPEI_DISTRICTS.keys()),
+        "allowed_districts": [d for r in TARGET_REGIONS.values() for d in (r.get("districts") or {}).keys()],
         "allowed_interval_hr": list(SCHEDULER_ALLOWED_INTERVAL_HR),
         "allowed_verify_interval_hr": list(SCHEDULER_VERIFY_INTERVAL_HR),
         "max_commands": SCHEDULER_MAX_COMMANDS,
@@ -1355,10 +1355,10 @@ SCHEDULER_VERIFY_INTERVAL_HR = (12, 24, 72, 360)   # 偵測下架可選的間隔
 @app.post("/admin/scheduler/config")
 async def scheduler_set_config(body: SchedulerConfigReq, admin: dict = Depends(require_admin)):
     """套用 admin UI 整份排程設定（commands list；每命令各自 interval）。"""
-    from config import TAIPEI_DISTRICTS
+    from config import TARGET_REGIONS
     if len(body.commands) > SCHEDULER_MAX_COMMANDS + 2:   # 多留 2 個 slot 給 verify_alive
         raise HTTPException(400, f"最多 {SCHEDULER_MAX_COMMANDS + 2} 個命令")
-    allowed = set(TAIPEI_DISTRICTS.keys())
+    allowed = {d for r in TARGET_REGIONS.values() for d in (r.get("districts") or {}).keys()}
     cleaned = []
     VALID_SOURCES = ("591", "yongqing", "sinyi")
     for idx, c in enumerate(body.commands):

@@ -60,7 +60,8 @@ NEW_TAIPEI_DISTRICTS = {
 
 # 排程定時 batch：每小時固定跑一次（lifespan 裡的 _scheduled_scrape_loop）
 # 範圍寫死，不跟 admin UI 的手動抓取混用；靠 env var + Firestore settings 控制啟停
-SCHEDULED_SCRAPE_DISTRICTS = ["大安區", "信義區", "中山區", "中正區", "文山區"]
+SCHEDULED_SCRAPE_DISTRICTS = ["大安區", "信義區", "中山區", "中正區", "文山區",
+                              "新店區", "永和區", "中和區", "板橋區"]
 SCHEDULED_SCRAPE_LIMIT = 100
 
 

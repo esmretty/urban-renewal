@@ -561,8 +561,20 @@ def scrape_yongqing(
         from config import SCHEDULED_SCRAPE_DISTRICTS
         districts_filter = SCHEDULED_SCRAPE_DISTRICTS
 
-    # 永慶 URL 要「台北市-大安區」格式
-    full_districts = [f"台北市-{d}" if not d.startswith("台北市") else d for d in districts_filter]
+    # 永慶 URL 要「{city}-{district}」格式（如「台北市-大安區」、「新北市-板橋區」）
+    # 用 TARGET_REGIONS 反查 district → city
+    from config import TARGET_REGIONS
+    _dist_to_city = {}
+    for _city, _v in TARGET_REGIONS.items():
+        for _dn in (_v.get("districts") or {}).keys():
+            _dist_to_city[_dn] = _city
+    def _prefix_city(d: str) -> str:
+        # 已含「市-」前綴的不動
+        if "-" in d and d.startswith(("台北市", "新北市")):
+            return d
+        city = _dist_to_city.get(d, "台北市")   # 找不到預設台北
+        return f"{city}-{d}"
+    full_districts = [_prefix_city(d) for d in districts_filter]
     building_types = ["無電梯公寓"]   # 第一階段只抓公寓
 
     new_items: list[dict] = []

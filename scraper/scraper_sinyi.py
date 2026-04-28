@@ -43,12 +43,28 @@ DEFAULT_HEADERS = {
     "Accept-Language": "zh-TW,zh;q=0.9",
 }
 
-# 行政區 → 信義 zipcode（台北市）
+# 行政區 → 信義 zipcode + 對應城市
+# 信義 URL slug：台北市 = "Taipei-city"，新北市 = "NewTaipei-city"
 DISTRICT_TO_ZIP = {
+    # 台北市
     "中正區": "100", "大同區": "103", "中山區": "104",
     "松山區": "105", "大安區": "106", "萬華區": "108",
     "信義區": "110", "士林區": "111", "北投區": "112",
     "內湖區": "114", "南港區": "115", "文山區": "116",
+    # 新北市（4 個目標區）
+    "板橋區": "220", "新店區": "231", "永和區": "234", "中和區": "235",
+}
+
+# 行政區 → 城市 slug（用 TARGET_REGIONS 反查的硬式表，避免每次 import config）
+DISTRICT_TO_CITY_SLUG = {
+    # 台北市
+    "中正區": "Taipei-city", "大同區": "Taipei-city", "中山區": "Taipei-city",
+    "松山區": "Taipei-city", "大安區": "Taipei-city", "萬華區": "Taipei-city",
+    "信義區": "Taipei-city", "士林區": "Taipei-city", "北投區": "Taipei-city",
+    "內湖區": "Taipei-city", "南港區": "Taipei-city", "文山區": "Taipei-city",
+    # 新北市
+    "板橋區": "NewTaipei-city", "新店區": "NewTaipei-city",
+    "永和區": "NewTaipei-city", "中和區": "NewTaipei-city",
 }
 
 # 我們系統用的「公寓」對應信義 URL slug
@@ -103,13 +119,22 @@ def _fetch(url: str, retries: int = 3) -> Optional[str]:
 
 
 def _build_list_url(districts: list[str], building_type: str = "公寓", page: int = 1) -> str:
-    """組信義列表 URL。districts 例：['大安區','信義區']；building_type 我們系統用語。"""
+    """組信義列表 URL。districts 例：['大安區','板橋區']（同 city 一次抓；
+    跨 city 需分兩次呼叫）。building_type 我們系統用語。"""
     type_slug = TYPE_TO_SLUG.get(building_type, "apartment")
-    zips = "-".join(DISTRICT_TO_ZIP[d] for d in districts if d in DISTRICT_TO_ZIP)
+    # 推 city slug — 從 districts 第一個能對到的找
+    city_slug = "Taipei-city"   # 預設
+    for d in districts:
+        if d in DISTRICT_TO_CITY_SLUG:
+            city_slug = DISTRICT_TO_CITY_SLUG[d]
+            break
+    # 過濾：只保留同 city 的 districts（避免新北+台北混在同 URL）
+    valid_dists = [d for d in districts if DISTRICT_TO_CITY_SLUG.get(d) == city_slug]
+    zips = "-".join(DISTRICT_TO_ZIP[d] for d in valid_dists if d in DISTRICT_TO_ZIP)
     if not zips:
-        zips = "100-104-106-110-116"   # 預設 5 區
+        zips = "100-104-106-110-116"   # 預設 5 區（台北）
     return (
-        f"https://www.sinyi.com.tw/buy/list/{type_slug}-type/Taipei-city/{zips}-zip"
+        f"https://www.sinyi.com.tw/buy/list/{type_slug}-type/{city_slug}/{zips}-zip"
         f"/publish-desc/{page}"
     )
 
@@ -248,109 +273,122 @@ def scrape_sinyi(
     if not use_districts:
         use_districts = ["中正區", "中山區", "大安區", "信義區", "文山區"]
 
-    progress_callback(f"信義 開始抓 {','.join(use_districts)} {building_type}")
-    while page <= max_pages and len(new_items) < limit:
-        url = _build_list_url(use_districts, building_type=building_type, page=page)
-        progress_callback(f"信義 列表頁 {page}: {url}")
-        html = _fetch(url)
-        if not html:
-            progress_callback(f"信義 列表頁 {page} 抓失敗，停止")
-            break
-        nd = _parse_next_data(html)
-        if not nd:
-            progress_callback("信義 列表頁無 __NEXT_DATA__，停止")
-            break
-        try:
-            buy = nd["props"]["initialReduxState"]["buyReducer"]
-        except KeyError:
-            progress_callback("信義 NEXT_DATA 結構未預期")
-            break
-        items = buy.get("list") or []
-        total_cnt = buy.get("totalCnt", 0)
-        if not items:
-            progress_callback(f"信義 列表頁 {page} 0 筆，已到底")
-            break
+    # 按 city 分組（同 city 一個 URL 一次抓；跨 city 分多輪）
+    by_city: dict[str, list[str]] = {}
+    for d in use_districts:
+        slug = DISTRICT_TO_CITY_SLUG.get(d, "Taipei-city")
+        by_city.setdefault(slug, []).append(d)
 
-        for raw in items:
+    progress_callback(f"信義 開始抓 {','.join(use_districts)} {building_type}（分 {len(by_city)} 城市）")
+    stop_all = False
+    for city_slug, city_dists in by_city.items():
+        if stop_all or len(new_items) >= limit:
+            break
+        progress_callback(f"  → 信義 {city_slug}: {','.join(city_dists)}")
+        consecutive_complete = 0   # 每 city reset
+        page = 1
+        while page <= max_pages and len(new_items) < limit:
+            url = _build_list_url(city_dists, building_type=building_type, page=page)
+            progress_callback(f"信義 列表頁 {page}: {url}")
+            html = _fetch(url)
+            if not html:
+                progress_callback(f"信義 列表頁 {page} 抓失敗，停止")
+                break
+            nd = _parse_next_data(html)
+            if not nd:
+                progress_callback("信義 列表頁無 __NEXT_DATA__，停止")
+                break
             try:
-                item = _item_from_listing(raw)
-            except Exception as e:
-                logger.warning(f"信義 item parse 失敗: {e}")
-                continue
-            if item is None:
-                continue   # 預售屋等被 filter 掉
-            if not item.get("price_ntd") or not item.get("address"):
-                continue
-            # 補 scrape_session_at + list_rank（讓前端「新進優先」排序能把信義新物件排到最上）
-            item["scrape_session_at"] = session_at
-            item["list_rank"] = len(new_items)
-            # 過濾樓高 > 5（fallback 用 floor，因為信義 totalfloor 偶爾 None）
-            tf_eff = item.get("total_floors") or 0
-            try:
-                _f = int(item.get("floor")) if item.get("floor") else 0
-            except Exception:
-                _f = 0
-            tf_eff = max(tf_eff or 0, _f)
-            if tf_eff > 5:
-                progress_callback(
-                    f"  ⏭ 信義 跳過 {item['_sinyi_house_no']}：樓層 {item.get('floor')}/{item.get('total_floors')} > 5"
-                )
+                buy = nd["props"]["initialReduxState"]["buyReducer"]
+            except KeyError:
+                progress_callback("信義 NEXT_DATA 結構未預期")
+                break
+            items = buy.get("list") or []
+            total_cnt = buy.get("totalCnt", 0)
+            if not items:
+                progress_callback(f"信義 列表頁 {page} 0 筆，已到底")
+                break
+
+            for raw in items:
                 try:
-                    from database.retry_queue import dequeue_by_source_id
-                    dequeue_by_source_id(item["source_id"])
-                except Exception: pass
-                continue
+                    item = _item_from_listing(raw)
+                except Exception as e:
+                    logger.warning(f"信義 item parse 失敗: {e}")
+                    continue
+                if item is None:
+                    continue   # 預售屋等被 filter 掉
+                if not item.get("price_ntd") or not item.get("address"):
+                    continue
+                # 補 scrape_session_at + list_rank（讓前端「新進優先」排序能把信義新物件排到最上）
+                item["scrape_session_at"] = session_at
+                item["list_rank"] = len(new_items)
+                # 過濾樓高 > 5（fallback 用 floor，因為信義 totalfloor 偶爾 None）
+                tf_eff = item.get("total_floors") or 0
+                try:
+                    _f = int(item.get("floor")) if item.get("floor") else 0
+                except Exception:
+                    _f = 0
+                tf_eff = max(tf_eff or 0, _f)
+                if tf_eff > 5:
+                    progress_callback(
+                        f"  ⏭ 信義 跳過 {item['_sinyi_house_no']}：樓層 {item.get('floor')}/{item.get('total_floors')} > 5"
+                    )
+                    try:
+                        from database.retry_queue import dequeue_by_source_id
+                        dequeue_by_source_id(item["source_id"])
+                    except Exception: pass
+                    continue
 
-            src_id = item["source_id"]
-            if check_exists:
-                existing = check_exists(src_id)
-                if existing:
-                    # 既有：簡單 price update 偵測
-                    if existing.get("price_ntd") and item.get("price_ntd") \
-                            and existing["price_ntd"] != item["price_ntd"]:
-                        price_updates.append({
-                            "source_id": src_id,
-                            "old_price": existing["price_ntd"],
-                            "new_price": item["price_ntd"],
-                        })
-                        progress_callback(
-                            f"  💰 信義 改價 {src_id}: {existing['price_ntd']/10000:.0f} → {item['price_ntd']/10000:.0f} 萬"
-                        )
+                src_id = item["source_id"]
+                if check_exists:
+                    existing = check_exists(src_id)
+                    if existing:
+                        # 既有：簡單 price update 偵測
+                        if existing.get("price_ntd") and item.get("price_ntd") \
+                                and existing["price_ntd"] != item["price_ntd"]:
+                            price_updates.append({
+                                "source_id": src_id,
+                                "old_price": existing["price_ntd"],
+                                "new_price": item["price_ntd"],
+                            })
+                            progress_callback(
+                                f"  💰 信義 改價 {src_id}: {existing['price_ntd']/10000:.0f} → {item['price_ntd']/10000:.0f} 萬"
+                            )
+                        consecutive_complete += 1
+                        if consecutive_complete >= 5:
+                            progress_callback("  ↻ 信義 連續 5 筆已存在，停止")
+                            break
+                        continue
+                # 跨來源 dup：信義 src_id 在 DB 沒匹配，但同物件可能已存 591/永慶 doc
+                from database.db import find_cross_source_duplicate
+                cross_hit = find_cross_source_duplicate(item)
+                if cross_hit:
+                    progress_callback(f"  ↻ 信義 {item.get('_sinyi_house_no')} 跨來源命中既有 doc {cross_hit[:8]}（{item['address'][:20]}），算已存在")
+                    new_items.append(item)   # 仍 push 讓下游 dup_merge 寫 source_ids
                     consecutive_complete += 1
                     if consecutive_complete >= 5:
-                        progress_callback("  ↻ 信義 連續 5 筆已存在，停止")
+                        progress_callback("  ↻ 信義連續 5 筆已存在（含跨來源），停止")
                         break
+                    if len(new_items) >= limit:
+                        break
+                    time.sleep(0.5)
                     continue
-            # 跨來源 dup：信義 src_id 在 DB 沒匹配，但同物件可能已存 591/永慶 doc
-            from database.db import find_cross_source_duplicate
-            cross_hit = find_cross_source_duplicate(item)
-            if cross_hit:
-                progress_callback(f"  ↻ 信義 {item.get('_sinyi_house_no')} 跨來源命中既有 doc {cross_hit[:8]}（{item['address'][:20]}），算已存在")
-                new_items.append(item)   # 仍 push 讓下游 dup_merge 寫 source_ids
-                consecutive_complete += 1
-                if consecutive_complete >= 5:
-                    progress_callback("  ↻ 信義連續 5 筆已存在（含跨來源），停止")
-                    break
+                consecutive_complete = 0
+                new_items.append(item)
+                progress_callback(
+                    f"  ✓ 信義 第 {len(new_items)} 筆: {item['address'][:25]} {item.get('totalfloor','?')}F"
+                )
                 if len(new_items) >= limit:
                     break
-                time.sleep(0.5)
-                continue
-            consecutive_complete = 0
-            new_items.append(item)
-            progress_callback(
-                f"  ✓ 信義 第 {len(new_items)} 筆: {item['address'][:25]} {item.get('totalfloor','?')}F"
-            )
-            if len(new_items) >= limit:
-                break
-            time.sleep(0.5)   # 列表內不打 detail，slight throttle 即可
+                time.sleep(0.5)   # 列表內不打 detail，slight throttle 即可
 
-        if consecutive_complete >= 5 or len(new_items) >= limit:
-            break
-        if page * 20 >= total_cnt:
-            progress_callback(f"信義 已抓完 totalCnt={total_cnt}")
-            break
-        page += 1
-        time.sleep(2.0)   # 換頁間 sleep 較久
+            if consecutive_complete >= 5 or len(new_items) >= limit:
+                break
+            if page * 20 >= total_cnt:
+                progress_callback(f"信義 已抓完 totalCnt={total_cnt}")
+                break
+            page += 1
+            time.sleep(2.0)   # 換頁間 sleep 較久
 
     progress_callback(
         f"信義 完成：新 {len(new_items)} 筆、改價 {len(price_updates)} 筆"

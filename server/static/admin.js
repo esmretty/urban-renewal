@@ -1199,7 +1199,8 @@ function _renderCmdRow(cmd, i, displayNum) {
   }
 
   // scan 類型
-  const ORDER = ["大安區", "信義區", "中山區", "中正區", "文山區", "松山區", "大同區", "萬華區", "南港區"];
+  const ORDER = ["大安區", "信義區", "中山區", "中正區", "文山區", "松山區", "大同區", "萬華區", "南港區",
+                 "新店區", "永和區", "中和區", "板橋區"];
   const ordered = ORDER.filter(d => _schedMeta.allowed.includes(d))
     .concat(_schedMeta.allowed.filter(d => !ORDER.includes(d)));
   const distChips = ordered.map(d => {
