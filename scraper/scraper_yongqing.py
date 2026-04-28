@@ -625,26 +625,39 @@ def scrape_yongqing(
             # Stage 1：HTTP 拿全部欄位（除座標）— 快（~1 秒/筆，有 rate-limit cooldown）
             ok_basic = _enrich_basic_via_http(item, max_retries=2)
             if not ok_basic:
-                # HTTP 都拿不到 → 進重試佇列（10 分鐘後再試）
-                try:
-                    from database.retry_queue import enqueue as _retry_enqueue
-                    _retry_enqueue(
-                        source_id=item["source_id"],
-                        source="永慶",
-                        url=item["url"],
-                        error="HTTP enrich failed: SSR HTML 不完整或 parse 失敗",
-                        extra_context={"district": item.get("district"), "title": item.get("title")},
+                # 即使 enrich 失敗，_parse_detail_html 也可能抓到 type_raw（華廈/大樓/別墅 etc）
+                # → 確認非公寓 → 不入 retry queue，直接 skip（這 src_id 永遠不會分析）
+                _type_raw = item.get("_yongqing_type_raw") or ""
+                _NON_APT = ("華廈", "電梯大廈", "電梯大樓", "住宅大樓", "別墅", "店面", "套房")
+                if _type_raw and any(t in _type_raw for t in _NON_APT):
+                    progress_callback(
+                        f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：型態={_type_raw}（非公寓），不入重試佇列"
                     )
-                except Exception as _eq:
-                    logger.warning(f"retry_queue enqueue 失敗 {item.get('source_id')}: {_eq}")
-                progress_callback(
-                    f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：HTTP enrich 失敗，已加入重試佇列"
-                )
+                    try:
+                        from database.retry_queue import dequeue_by_source_id
+                        dequeue_by_source_id(item.get("source_id"))
+                    except Exception: pass
+                else:
+                    # 真的是 enrich 失敗（HTML 不完整 / parse fail）→ 進 retry queue
+                    try:
+                        from database.retry_queue import enqueue as _retry_enqueue
+                        _retry_enqueue(
+                            source_id=item["source_id"],
+                            source="永慶",
+                            url=item["url"],
+                            error="HTTP enrich failed: SSR HTML 不完整或 parse 失敗",
+                            extra_context={"district": item.get("district"), "title": item.get("title")},
+                        )
+                    except Exception as _eq:
+                        logger.warning(f"retry_queue enqueue 失敗 {item.get('source_id')}: {_eq}")
+                    progress_callback(
+                        f"  ⏭ 永慶 跳過 {item.get('_yongqing_house_id')}：HTTP enrich 失敗，已加入重試佇列"
+                    )
                 # enrich-fail 物件不會入 DB，跟「已存在」效果一樣 → 累 consecutive 才能正常停
                 consecutive_complete += 1
                 if consecutive_complete >= 5:
                     stop = True
-                    progress_callback("  ↻ 永慶連續 5 筆無新物件（含 enrich-fail），停止")
+                    progress_callback("  ↻ 永慶連續 5 筆無新物件（含 enrich-fail / 非公寓），停止")
                     break
                 continue
 
