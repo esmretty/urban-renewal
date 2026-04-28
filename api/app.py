@@ -3331,6 +3331,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                            details={"address": doc_data.get('address_inferred') or doc_data.get('address'),
                                     "price_ntd": item.get("price_ntd")})
                 _existing_items.append({
+                    "id": target_doc_id,
                     "source_id": item.get("source_id"),
                     "price_ntd": item.get("price_ntd"),
                     "building_area_ping": item.get("building_area_ping"),
@@ -3344,7 +3345,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 progress_callback(status_msg, pct, new_item=(result["status"] == "done"))
 
             except Exception as e:
-                logger.error(f"分析失敗 {item.get('source_id')}: {e}")
+                logger.exception(f"分析失敗 {item.get('source_id')}: {e}")
 
     progress_callback(
         f"完成：新增 {new_count} 筆，補資料 {enrich_count} 筆，重複捨棄 {skip_dup_count} 筆，價格變動 {len(price_updates)} 筆",
