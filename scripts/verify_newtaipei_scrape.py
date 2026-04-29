@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database.db import init_db
 from scraper.scraper_591 import _fetch_listing_page_api
-from scraper.browser import get_browser_context
+from scraper.browser_manager import get_browser_context
 from api.analysis_pipeline import analyze_single_property
 
 
