@@ -2648,12 +2648,11 @@ async function triggerManualAnalyze(useSource = "auto", overrideAddress = null) 
 
   if (!address) { alert("請輸入地址"); return; }
 
-  // 目前僅支援台北市（其他縣市 GeoServer / LVR / 路寬資料源不齊）
-  // 前端 city 下拉已鎖台北市，但用戶可能在 address 欄位打其他縣市地址繞過 → 用地址前綴擋
-  // 地址含明確「非台北市」前綴字樣 → 拒絕
-  const nonTpeCityPattern = /^(新北|臺?新北|桃園|基隆|新竹|苗栗|台中|臺中|彰化|南投|雲林|嘉義|台南|臺南|高雄|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江)/;
-  if (city !== "台北市" || nonTpeCityPattern.test(address)) {
-    alert("目前僅支援台北市地址分析。");
+  // 目前支援台北市 + 新北市（板橋/新店/永和/中和）
+  // 用戶可能在 address 欄位打非目標縣市地址繞過 → 用地址前綴擋
+  const nonTargetCityPattern = /^(桃園|基隆|新竹|苗栗|台中|臺中|彰化|南投|雲林|嘉義|台南|臺南|高雄|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江)/;
+  if (!["台北市", "新北市"].includes(city) || nonTargetCityPattern.test(address)) {
+    alert("目前僅支援台北市與新北市地址分析。");
     return;
   }
 

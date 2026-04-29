@@ -399,18 +399,20 @@ def validate_manual_input(
         # 過濾出 city+district 都對得上的候選
         matched = [g for g in geo_candidates if g.get("city") == city and g.get("district") == district]
         if not matched:
-            # 若所有候選都「非台北市」→ 目前不支援，直接拒絕（不列選單）
+            # 若所有候選 city 都不在 TARGET_REGIONS（如桃園/基隆等）→ 直接拒絕
             all_cities = {g.get("city") for g in geo_candidates if g.get("city")}
-            if all_cities and "台北市" not in all_cities:
+            target_cities = set(TARGET_REGIONS.keys())
+            if all_cities and not (all_cities & target_cities):
                 _city_txt = "、".join(sorted(all_cities))
+                _allowed_txt = "、".join(sorted(target_cities))
                 return {
                     "status": "error",
-                    "error": f"「{addr}」位於 {_city_txt}，目前僅支援台北市分析。",
+                    "error": f"「{addr}」位於 {_city_txt}，目前僅支援 {_allowed_txt} 分析。",
                 }
             # district 對不上 → 提供修正建議（含正確的 city/district/address）
             # 用原始輸入地址（含樓層）給前端，用戶選修正後重送時樓層才不會被丟掉
             addr_with_floor = addr + (f"{floor_num}樓" if floor_num else "")
-            # 只保留台北市候選（新北市候選濾掉，不給用戶選）
+            # 只保留目標區域內的候選（city 在 TARGET_REGIONS + district 該 city 收錄）
             structured = [
                 {
                     "city": g.get("city") or "",
@@ -419,12 +421,13 @@ def validate_manual_input(
                     "formatted": f"{g.get('city') or ''}{g.get('district') or ''}{addr_with_floor}",
                 }
                 for g in geo_candidates
-                if g.get("city") == "台北市" and g.get("district")
+                if g.get("district") and is_target_region(g.get("city") or "", g.get("district") or "")
             ]
             if not structured:
+                _allowed_txt = "、".join(sorted(target_cities))
                 return {
                     "status": "error",
-                    "error": f"「{addr}」地址可定位，但不在台北市範圍內（目前僅支援台北市），請檢查地址或重新輸入。",
+                    "error": f"「{addr}」地址可定位，但不在目標分析範圍內（目前僅支援 {_allowed_txt}），請檢查地址或重新輸入。",
                 }
             return {
                 "status": "district_mismatch",
