@@ -50,8 +50,6 @@ document.addEventListener("DOMContentLoaded", () => {
   _initDistPicker();
   populateDistrictFilter();
   populateManualDistricts();
-  // 從 server 拉 LVR 預售屋中位數覆寫 DISTRICT_NEW_HOUSE_PRICE（啟動後一次）
-  fetchDistrictPrices();
   // 預設打開「搜尋網上物件」tab，並依當前 filter 立刻跑一次搜尋
   _activeTab = "explore";
   document.body.dataset.tab = "explore";
@@ -70,6 +68,8 @@ document.addEventListener("DOMContentLoaded", () => {
       window.runExploreSearch();
     }
     loadStats();
+    // 從 server 拉 LVR 預售屋中位數覆寫 DISTRICT_NEW_HOUSE_PRICE（auth ready 後）
+    fetchDistrictPrices();
   };
   if (window.__authReady) _start();
   else document.addEventListener("auth:ready", _start, { once: true });
