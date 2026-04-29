@@ -1068,12 +1068,17 @@ function _renderSchedulerByType(s, filterType, box) {
     ? filteredCmds.map(({ cmd, origIdx }, dispIdx) => _renderCmdRow(cmd, origIdx, dispIdx + 1)).join("")
     : `<div style="color:#888; padding:8px; text-align:center;">尚無此類型命令</div>`;
 
+  // verify_alive / update_prices 限制 1 個 → 已有就不顯示「+ 新增」按鈕
+  const singletonTypes = new Set(["verify_alive", "update_prices"]);
+  const showAddBtn = !(singletonTypes.has(filterType) && filteredCmds.length >= 1);
   const addLabel = filterType === "scan" ? "+ 新增掃描命令"
                 : filterType === "verify_alive" ? "+ 新增偵測下架命令"
                 : "+ 新增更新單價命令";
-  const addBtn = `<button onclick="schedAddCmd('${filterType}')" style="padding:4px 12px;">${addLabel}</button>`;
+  const addBtnHtml = showAddBtn
+    ? `<div style="margin-top:8px;"><button onclick="schedAddCmd('${filterType}')" style="padding:4px 12px;">${addLabel}</button></div>`
+    : "";
 
-  box.innerHTML = headerRow + cmdHtml + `<div style="margin-top:8px;">${addBtn}</div>`;
+  box.innerHTML = headerRow + cmdHtml + addBtnHtml;
 }
 
 // poll verify-alive 進度（live）
@@ -1450,8 +1455,14 @@ window.schedToggleDist = function (idx, d, on) {
 
 window.schedAddCmd = function (type) {
   type = type || "scan";
-  if (_schedDraft.commands.length >= _schedMeta.maxCmds) {
-    alert(`命令數已達上限 ${_schedMeta.maxCmds}`);
+  // 容量限制：scan = maxCmds 個；verify_alive / update_prices 各 1 個
+  const sameType = _schedDraft.commands.filter(c => (c.type || "scan") === type).length;
+  if (type === "scan" && sameType >= _schedMeta.maxCmds) {
+    alert(`掃描命令數已達上限 ${_schedMeta.maxCmds}`);
+    return;
+  }
+  if ((type === "verify_alive" || type === "update_prices") && sameType >= 1) {
+    alert(`此類型最多只能有 1 個命令`);
     return;
   }
   if (type === "verify_alive") {
