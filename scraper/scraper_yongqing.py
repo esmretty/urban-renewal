@@ -617,9 +617,13 @@ def scrape_yongqing(
 
     progress_callback(f"開始爬永慶（{len(districts_filter)} 區公寓，最多 {limit} 筆）", 0)
 
+    from scraper.cancel_state import is_cancelled as _is_cancelled
     page_no = 1
     stop = False
     while not stop and len(new_items) < limit and page_no <= 30:
+        if _is_cancelled():
+            progress_callback("⛔ 永慶 scraper 收到中斷信號，停止")
+            break
         url = _build_list_url(full_districts, building_types, page=page_no)
         progress_callback(f"  永慶列表 第 {page_no} 頁", min(45.0, page_no * 5))
         html = _fetch(url)
@@ -645,6 +649,10 @@ def scrape_yongqing(
             break
 
         for item in page_items:
+            if _is_cancelled():
+                progress_callback("⛔ 永慶 scraper 收到中斷信號，停止")
+                stop = True
+                break
             item["scrape_session_at"] = session_at
             item["list_rank"] = len(new_items)
             src_id = item["source_id"]

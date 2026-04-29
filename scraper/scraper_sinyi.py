@@ -279,15 +279,23 @@ def scrape_sinyi(
         slug = DISTRICT_TO_CITY_SLUG.get(d, "Taipei-city")
         by_city.setdefault(slug, []).append(d)
 
+    from scraper.cancel_state import is_cancelled as _is_cancelled
     progress_callback(f"信義 開始抓 {','.join(use_districts)} {building_type}（分 {len(by_city)} 城市）")
     stop_all = False
     for city_slug, city_dists in by_city.items():
         if stop_all or len(new_items) >= limit:
             break
+        if _is_cancelled():
+            progress_callback("⛔ 信義 scraper 收到中斷信號，停止")
+            break
         progress_callback(f"  → 信義 {city_slug}: {','.join(city_dists)}")
         consecutive_complete = 0   # 每 city reset
         page = 1
         while page <= max_pages and len(new_items) < limit:
+            if _is_cancelled():
+                progress_callback("⛔ 信義 scraper 收到中斷信號，停止")
+                stop_all = True
+                break
             url = _build_list_url(city_dists, building_type=building_type, page=page)
             progress_callback(f"信義 列表頁 {page}: {url}")
             html = _fetch(url)

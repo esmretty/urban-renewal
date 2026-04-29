@@ -420,14 +420,22 @@ def _scrape_district(
     stop = False
     consecutive_complete = 0  # 連續多少筆是完整舊資料
 
+    from scraper.cancel_state import is_cancelled as _is_cancelled
     try:
         for first_row in range(0, page_size * 82, page_size):  # 591 最多 82 頁
+            if _is_cancelled():
+                if progress_cb: progress_cb("⛔ 591 scraper 收到中斷信號，停止")
+                break
             items = _fetch_listing_page_api(region_id, section_id, type_code, first_row, city, target_districts, progress_cb=progress_cb)
             if not items:
                 logger.debug(f"  {district}/{building_type} firstRow={first_row}: 0 筆，停止")
                 break
 
             for item in items:
+                if _is_cancelled():
+                    if progress_cb: progress_cb("⛔ 591 scraper 收到中斷信號，停止")
+                    stop = True
+                    break
                 src_id = item.get("source_id")
                 if not src_id:
                     continue

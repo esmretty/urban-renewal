@@ -2426,6 +2426,9 @@ async def _run_scrape_task(headless: bool = True, districts: list = None, limit:
     global _scrape_running, _cancel_requested
     _scrape_running = True
     _cancel_requested = False
+    # 重設共享 cancel flag — 讓 scraper inner loops 也能 check
+    from scraper.cancel_state import reset as _cancel_reset
+    _cancel_reset()
     import json
 
     loop = asyncio.get_running_loop()
@@ -4232,6 +4235,9 @@ async def admin_kill_scrape(admin: dict = Depends(require_admin)):
     下一次 scheduler tick 也能正常起新 batch（不被卡住）。"""
     global _cancel_requested, _scrape_running
     _cancel_requested = True
+    # 設共享 cancel flag — scraper inner loops 立刻看得到
+    from scraper.cancel_state import set_cancelled as _cancel_set
+    _cancel_set(True)
     was_running = _scrape_running
     _scrape_running = False   # 強制 reset 讓 scheduler 能起新 batch
 
