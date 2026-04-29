@@ -560,7 +560,7 @@ def analyze_single_property(
                 logger.info(f"[{src_id}] reverse geocode 無結果 (lat={src_lat}, lng={src_lng}, road={road_seg})")
 
     # ── 5.7 591 LVR 空 + 原地址含巷弄 → 保留原模糊地址（不硬給門牌）──
-    # 591 座標不準 (±150m) 不該 reverse_geocode；但保留巷弄地址可讓路寬/分區查得到。
+    # 591 座標不準 (±150m) 不該用 591 原座標 reverse_geocode；但保留巷弄地址可讓路寬/分區查得到。
     # 寧可顯示「松江路313巷」+ 標 confidence=lane_only，比硬給「松江路327號」誤導用戶好。
     import re as _re_lane2
     if not item.get("address_inferred") and src_name == "591" and item.get("address"):
@@ -570,6 +570,26 @@ def analyze_single_property(
             item["address_inferred"] = strip_region_prefix(_orig, city or "", district or "")
             item["address_inferred_confidence"] = "lane_only"
             logger.info(f"[{src_id}] LVR 空 → 保留原巷弄地址當推測: {item['address_inferred']}")
+
+    # ── 5.8 591 LVR 空 + 沒巷弄（只到路名）→ 用街級 geocode + reverse_geocode 拿近似號 ──
+    # 注意：591 source_latitude 不可信（±150m），但 geocode_address(街級地址) 結果是 Google 級
+    # 街中段座標，準度跟永慶 fallback 同源。reverse_geocode loose 拿一個 nearby 號當推測，
+    # 標 confidence=geocode_reverse_loose 提示用戶誤差較大（前端 fallback 顯示「≈推測」）。
+    if not item.get("address_inferred") and src_name == "591" and addr_for_geo and road_seg:
+        try:
+            _c_for_rev = geocode_address(addr_for_geo)
+            if _c_for_rev:
+                from analysis.lvr_index import _reverse_geocode_loose
+                _rev = _reverse_geocode_loose(_c_for_rev[0], _c_for_rev[1], road_seg)
+                if _rev:
+                    from analysis.claude_analyzer import _clean_address_garbage
+                    from database.models import strip_region_prefix
+                    _cleaned = _clean_address_garbage(_rev)
+                    item["address_inferred"] = strip_region_prefix(_cleaned, city or "", district or "")
+                    item["address_inferred_confidence"] = "geocode_reverse_loose"
+                    logger.info(f"[{src_id}] 591 街級 reverse 拿到推測地址: {_rev}")
+        except Exception as _re591:
+            logger.warning(f"[{src_id}] 591 街級 reverse fallback 失敗: {_re591}")
 
     # ── 6. 精準座標覆蓋 ──
     if inferred_coord:
