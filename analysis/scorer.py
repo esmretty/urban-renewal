@@ -423,13 +423,22 @@ def calculate_renewal_scenarios(
         out["effective_far_pct"] = far_pct
         out["road_width_capped"] = False
 
-    # 2. 新成屋單價（優先用 override，否則用該區預設）
+    # 2. 新成屋單價（優先序：用戶覆寫 > Firestore 預售屋中位數 > config 寫死常數）
     price = new_house_price_wan_per_ping
     if price:
         out["new_house_price_source"] = "override"
     else:
-        price = DISTRICT_NEW_HOUSE_PRICE_WAN.get(district)
-        out["new_house_price_source"] = "default_district" if price else "missing"
+        # 先試 Firestore（settings/district_new_house_price，由 LVR 預售屋自動更新）
+        try:
+            from analysis.presale_price import get_district_new_house_price
+            price = get_district_new_house_price(district)
+        except Exception:
+            price = None
+        if price:
+            out["new_house_price_source"] = "lvr_presale_median"
+        else:
+            price = DISTRICT_NEW_HOUSE_PRICE_WAN.get(district)
+            out["new_house_price_source"] = "default_district" if price else "missing"
     if not price:
         out["note"] = f"沒有 {district!r} 的新成屋單價預設值，無法試算。"
         return out

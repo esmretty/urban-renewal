@@ -929,6 +929,32 @@ def api_target_regions():
     return target_regions_for_frontend()
 
 
+@app.get("/api/district_new_house_price")
+def api_district_new_house_price():
+    """前端用：取各行政區新成屋預設單價（萬/坪）。
+    優先序：Firestore (LVR 預售屋自動更新中位數) → config.py 寫死常數。
+    1 小時 cache 在 server 端，前端不必擔心打太頻繁。"""
+    from analysis.presale_price import get_all_district_prices
+    return get_all_district_prices()
+
+
+@app.post("/admin/update_district_prices")
+async def admin_update_district_prices(admin: dict = Depends(require_admin)):
+    """admin 觸發：parse 既有 LVR 預售屋 CSV 重算各區單價中位數寫 Firestore。
+    後續可以由 scheduler 每月跑一次。"""
+    from analysis.presale_price import update_district_prices
+    def _do():
+        try:
+            payload = update_district_prices(max_seasons=5)
+            logger.warning(f"[admin] {admin.get('email')} 觸發 district_new_house_price update：{len(payload['by_district'])} 區")
+            return payload
+        except Exception as e:
+            logger.exception(f"[admin] update_district_prices 失敗: {e}")
+            raise
+    payload = await asyncio.to_thread(_do)
+    return {"status": "ok", **payload}
+
+
 @app.get("/api/firebase_config")
 def api_firebase_config():
     """前端用的 Firebase client config。apiKey 不是機密，可暴露。"""
