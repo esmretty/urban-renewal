@@ -462,8 +462,14 @@ def _enrich_basic_via_http(item: dict, max_retries: int = 2) -> bool:
     return False
 
 
-def _enrich_coords_via_playwright_inner(url: str, headless: bool = True, timeout_sec: int = 18) -> Optional[tuple]:
-    """實際跑 Playwright — 給 watchdog 包起來呼叫。失敗回 None。"""
+def _enrich_coords_via_playwright_inner(url: str, headless: bool = True, timeout_sec: int = 30) -> Optional[tuple]:
+    """實際跑 Playwright — 給 watchdog 包起來呼叫。失敗回 None。
+
+    策略：
+    1. goto + 滾到地圖區
+    2. wait_for_selector 等 Google Maps anchor 真的出現（最多 timeout_sec 秒）— 比硬等 sleep 可靠
+    3. anchor 出現 → 直接抓 href q=lat,lng
+    """
     from playwright.sync_api import sync_playwright
     try:
         with sync_playwright() as p:
@@ -479,11 +485,19 @@ def _enrich_coords_via_playwright_inner(url: str, headless: bool = True, timeout
                 # 滾到地圖區強制 lazy-load
                 try:
                     page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.5)")
-                    page.wait_for_timeout(1500)
-                    page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.7)")
-                    page.wait_for_timeout(1500)
+                    page.wait_for_timeout(800)
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.75)")
                 except Exception:
                     pass
+                # 等 anchor 真正出現（比硬 sleep 可靠）— timeout 給 timeout_sec 秒
+                try:
+                    page.wait_for_selector(
+                        'a[href*="google.com/maps"]',
+                        timeout=timeout_sec * 1000,
+                        state="attached",
+                    )
+                except Exception as _we:
+                    logger.debug(f"yongqing wait_for_selector 超時/失敗: {_we}")
                 gmap_href = page.evaluate(
                     "() => document.querySelector('a[href*=\"google.com/maps\"]')?.href"
                 )
@@ -499,34 +513,42 @@ def _enrich_coords_via_playwright_inner(url: str, headless: bool = True, timeout
     return None
 
 
-def _enrich_coords_via_playwright(item: dict, headless: bool = True, timeout_sec: int = 25) -> bool:
+def _enrich_coords_via_playwright(item: dict, headless: bool = True, timeout_sec: int = 30) -> bool:
     """Stage 2：Playwright 開頁面拿座標。
     用 ThreadPoolExecutor 加 hard timeout，超時直接放棄、loop 繼續下一筆。
-    座標拿不到仍可繼續 ingest（pipeline 會 fallback geocoding）。"""
+    第一次失敗會自動 retry 1 次。座標拿不到仍可繼續 ingest（pipeline 會 fallback geocoding）。"""
     import concurrent.futures
     house_id = item.get("_yongqing_house_id")
     url = item["url"]
-    HARD_TIMEOUT = timeout_sec + 10   # 內部 18s timeout + 10s buffer = 28s outer
+    HARD_TIMEOUT = timeout_sec + 15   # 內部 30s + 15s buffer = 45s outer
 
-    try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-            fut = ex.submit(_enrich_coords_via_playwright_inner, url, headless, timeout_sec)
-            try:
-                coords = fut.result(timeout=HARD_TIMEOUT)
-            except concurrent.futures.TimeoutError:
-                logger.warning(
-                    f"yongqing Playwright HARD-TIMEOUT {HARD_TIMEOUT}s for {house_id}，"
-                    f"放棄座標繼續 ingest（內部 thread 會自然消亡）"
-                )
-                return False
-        if coords:
-            item["latitude"] = coords[0]
-            item["longitude"] = coords[1]
-            item["source_latitude"] = coords[0]
-            item["source_longitude"] = coords[1]
-            return True
-    except Exception as e:
-        logger.warning(f"yongqing Playwright outer 失敗 {house_id}: {e}")
+    for attempt in (1, 2):
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                fut = ex.submit(_enrich_coords_via_playwright_inner, url, headless, timeout_sec)
+                try:
+                    coords = fut.result(timeout=HARD_TIMEOUT)
+                except concurrent.futures.TimeoutError:
+                    logger.warning(
+                        f"yongqing Playwright HARD-TIMEOUT {HARD_TIMEOUT}s for {house_id} "
+                        f"(attempt {attempt}/2)"
+                    )
+                    coords = None
+            if coords:
+                item["latitude"] = coords[0]
+                item["longitude"] = coords[1]
+                item["source_latitude"] = coords[0]
+                item["source_longitude"] = coords[1]
+                if attempt > 1:
+                    logger.info(f"yongqing {house_id} 第 {attempt} 次重試成功")
+                return True
+            if attempt == 1:
+                logger.info(f"yongqing {house_id} 第 1 次拿座標失敗，5 秒後重試")
+                time.sleep(5)
+        except Exception as e:
+            logger.warning(f"yongqing Playwright outer 失敗 {house_id} (attempt {attempt}): {e}")
+            if attempt == 1:
+                time.sleep(5)
     return False
 
 
