@@ -37,6 +37,39 @@ def extract_district(s: str) -> str:
     return m.group(1) if m else ""
 
 
+# 真實門牌地址必須含的「路名 token」（路/街/大道/巷/弄）
+# 用於擋掉 591 詳情頁 community-name 屋主亂填的廣告詞（如「近後山埤1號出口」含「號」但無路名）
+_ADDRESS_ROAD_TOKEN_RE = re.compile(r"(?:路|街|大道|巷|弄)")
+
+
+def looks_like_real_address(text: str, *, require_number: bool = False) -> bool:
+    """是否為「真實門牌地址」— 必須含「路/街/大道/巷/弄」之一。
+
+    背景：591 詳情頁有 <community-name> 自訂欄位，是屋主自由填寫的「社區名」。
+    很多屋主拿來填廣告詞（例：「近後山埤1號出口」、「捷運站旁」），這類字串常含「號」字
+    但其實不是門牌地址。如果只用「含號」當條件採用，會把廣告詞當地址存進 DB。
+
+    Args:
+        text: 待檢驗字串
+        require_number: True → 也必須含「號」字（要求門牌完整到號）
+
+    Returns:
+        True = 看起來是真實地址；False = 應拒收（空字串、廣告詞、站名、過於模糊）
+
+    範例：
+        looks_like_real_address("松江路313巷")              → True
+        looks_like_real_address("景新街418巷11弄16號")     → True
+        looks_like_real_address("近後山埤1號出口")          → False（無路名 token）
+        looks_like_real_address("捷運站旁")                → False
+        looks_like_real_address("松江路313巷", require_number=True) → False（無「號」）
+    """
+    if not text:
+        return False
+    if require_number and "號" not in text:
+        return False
+    return bool(_ADDRESS_ROAD_TOKEN_RE.search(text))
+
+
 def strip_region_prefix(addr: str, city: str = "", district: str = "") -> str:
     """從地址字串去除所有 city / district 開頭前綴（處理舊資料重複前綴）。
     e.g. 「台北市中正區中正區羅斯福路...」→「羅斯福路...」

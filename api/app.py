@@ -2916,11 +2916,9 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 if _pub_txt_detail and not item.get("_published_text"):
                     item["_published_text"] = _pub_txt_detail
                 # 社區地址（DOM 純文字）優先於卡片地址
-                # 必要條件：含「號」+「路/街/大道/巷」結構才算真實地址（非廣告詞）
-                # 反例：屋主把社區名填成「近後山埤1號出口」（591 community-name 欄位），含「號」但無路名
-                import re as _re_caddr
-                _has_road_token = bool(_re_caddr.search(r"(?:路|街|大道|巷)", community_addr or ""))
-                if community_addr and "號" in community_addr and _has_road_token:
+                # looks_like_real_address 擋廣告詞（屋主自填「近XX1號出口」這類無路名字串）
+                from database.models import looks_like_real_address
+                if looks_like_real_address(community_addr, require_number=True):
                     # 0) 若 DOM 地址含「XX區」且跟 card 的 district 不同 → 以 DOM 為準
                     #    （591 列表 query 用 section=X 搜出來有時會跨區，卡片 district 不可靠）
                     from database.models import extract_district as _extract_dist
@@ -4493,11 +4491,10 @@ def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False):
                         vision[k] = v
 
         # 若 screenshot_detail_page 的進階 DOM selector 抓到更完整地址，覆蓋簡陋的 inline 結果
-        # 必要條件：含「號」+「路/街/大道/巷」結構（避免屋主把 community-name 填成「近XX1號出口」廣告詞）
-        import re as _re_caddr2
-        _has_road_token2 = bool(_re_caddr2.search(r"(?:路|街|大道|巷)", _community_addr_from_screenshot or ""))
-        if _community_addr_from_screenshot and "號" in _community_addr_from_screenshot and _has_road_token2:
-            if not data.get("community_address") or "號" not in data.get("community_address", ""):
+        # looks_like_real_address 擋廣告詞（屋主自填「近XX1號出口」這類無路名字串）
+        from database.models import looks_like_real_address as _lkra_reanalyze
+        if _lkra_reanalyze(_community_addr_from_screenshot, require_number=True):
+            if not data.get("community_address") or not _lkra_reanalyze(data.get("community_address"), require_number=True):
                 data["community_address"] = _community_addr_from_screenshot
 
         # DOM 完全抓不到地址（591 用 <wc-ir-obfuscate-address-1> 防爬）→ 走窄裁切 OCR consensus
