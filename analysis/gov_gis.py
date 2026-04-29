@@ -588,12 +588,13 @@ def _wgs84_to_3857(lat: float, lng: float) -> tuple:
 def fetch_zoning_map_image_newtaipei(
     lat: float, lng: float, output_path: str, half_radius_m: int = 150,
 ) -> bool:
-    """新北市：取得分區地圖 PNG，疊加路名/路寬標籤 + 物件位置紅點。
+    """新北市：取得**4 層合成圖** PNG。
 
-    流程：
-    1. ArcGIS LandUse_WMS export → 分區色塊底圖（PNG）
-    2. ArcGIS NtpcRoadWidth query → 周邊道路 polyline + 寬度
-    3. PIL 在底圖上畫：每條路的「路名 寬度m」標籤 + 中心紅點
+    層次（由下往上）：
+    1. NLSC EMAP WMS 底圖（含路名 + 街道格網）
+    2. NTPC ArcGIS LandUse_WMS export（透明 + 隱藏標籤）alpha 0.5 半透明色塊
+    3. NTPC ArcGIS NtpcRoadWidth query → PIL 畫每條路「路名 寬度m」白底黑字標籤
+    4. PIL 中心紅點（物件位置，含黑色描邊）
 
     Args:
         lat, lng: WGS84 座標
@@ -601,56 +602,93 @@ def fetch_zoning_map_image_newtaipei(
         half_radius_m: bbox 半徑（預設 150m）
 
     Returns:
-        True = 成功；False = 失敗
+        True = 成功（至少底圖寫入）；False = 全失敗
     """
+    import io as _io
+    from pathlib import Path
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        logger.warning("PIL 未安裝，無法合成新北地籍圖")
+        return False
+
     token = _get_ntpc_token()
     if not token:
         logger.warning("NTPC token 取得失敗，無法 export 地圖")
         return False
     cx, cy = _wgs84_to_3857(lat, lng)
     img_size = 800
-    bbox_xmin, bbox_ymin = cx - half_radius_m, cy - half_radius_m
-    bbox_xmax, bbox_ymax = cx + half_radius_m, cy + half_radius_m
-    bbox = f"{bbox_xmin},{bbox_ymin},{bbox_xmax},{bbox_ymax}"
+    xmin, ymin = cx - half_radius_m, cy - half_radius_m
+    xmax, ymax = cx + half_radius_m, cy + half_radius_m
 
-    # 公尺座標 → 圖片像素（圖左上 = bbox 左上 = (xmin, ymax)）
     def to_px(mx, my):
-        px = (mx - bbox_xmin) / (2 * half_radius_m) * img_size
-        py = (bbox_ymax - my) / (2 * half_radius_m) * img_size
-        return (px, py)
+        return (
+            (mx - xmin) / (2 * half_radius_m) * img_size,
+            (ymax - my) / (2 * half_radius_m) * img_size,
+        )
 
-    # 1. 抓分區底圖
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+    # ── 層 1：NLSC EMAP 底圖 ─────────────────────────────────────────────
     try:
+        r = httpx.get(
+            "https://wms.nlsc.gov.tw/wms",
+            params={
+                "REQUEST": "GetMap", "VERSION": "1.1.1",
+                "LAYERS": "EMAP", "STYLES": "",
+                "FORMAT": "image/png", "SRS": "EPSG:3857",
+                "BBOX": f"{xmin},{ymin},{xmax},{ymax}",
+                "WIDTH": img_size, "HEIGHT": img_size,
+            },
+            timeout=20, verify=False,
+        )
+        if r.status_code != 200 or len(r.content) < 1000:
+            logger.warning(f"NLSC EMAP 底圖失敗 http={r.status_code} size={len(r.content)}")
+            return False
+        base = Image.open(_io.BytesIO(r.content)).convert("RGBA")
+    except Exception as e:
+        logger.warning(f"NLSC EMAP 底圖例外: {e}")
+        return False
+
+    # ── 層 2：NTPC LandUse 透明 + 無 label ──────────────────────────────
+    landuse_img = None
+    try:
+        dyn = json.dumps([{
+            "id": 0,
+            "source": {"type": "mapLayer", "mapLayerId": 0},
+            "drawingInfo": {"showLabels": False},
+        }])
         r = httpx.get(
             f"{NTPC_ARCGIS_BASE}/LandUse_WMS/MapServer/export",
             params={
-                "bbox": bbox,
+                "bbox": f"{xmin},{ymin},{xmax},{ymax}",
                 "bboxSR": 3857, "imageSR": 3857,
                 "size": f"{img_size},{img_size}", "format": "png", "dpi": 96,
+                "transparent": "true", "dynamicLayers": dyn,
                 "f": "image", "token": token,
             },
             timeout=15, verify=False,
         )
-        if r.status_code != 200 or len(r.content) < 1000:
-            logger.warning(f"NTPC LandUse export 失敗: http={r.status_code}, size={len(r.content)}")
-            return False
-        from pathlib import Path
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        Path(output_path).write_bytes(r.content)
+        if r.status_code == 200 and len(r.content) > 500:
+            ld = Image.open(_io.BytesIO(r.content)).convert("RGBA")
+            ld_a = ld.split()[3].point(lambda v: int(v * 0.5))
+            ld.putalpha(ld_a)
+            landuse_img = ld
     except Exception as e:
-        logger.warning(f"NTPC LandUse export 例外: {e}")
-        return False
+        logger.warning(f"NTPC LandUse export 例外（不影響底圖）: {e}")
 
-    # 2. 抓 bbox 內路寬資料（含 polyline 幾何）
+    composed = (
+        Image.alpha_composite(base, landuse_img) if landuse_img else base
+    )
+
+    # ── 層 3：路名+路寬標籤 ─────────────────────────────────────────────
     roads = []
     try:
-        # NtpcRoadWidth 似乎只用 4326；先用 envelope 4326 query
-        # 換 bbox 為 WGS84
         from math import atan, exp, pi
-        lat_min = (atan(exp(bbox_ymin / 6378137.0)) * 360 / pi) - 90
-        lat_max = (atan(exp(bbox_ymax / 6378137.0)) * 360 / pi) - 90
-        lng_min = bbox_xmin / 20037508.34 * 180
-        lng_max = bbox_xmax / 20037508.34 * 180
+        lat_min = (atan(exp(ymin / 6378137.0)) * 360 / pi) - 90
+        lat_max = (atan(exp(ymax / 6378137.0)) * 360 / pi) - 90
+        lng_min = xmin / 20037508.34 * 180
+        lng_max = xmax / 20037508.34 * 180
         envelope = json.dumps({
             "xmin": lng_min, "ymin": lat_min,
             "xmax": lng_max, "ymax": lat_max,
@@ -670,8 +708,7 @@ def fetch_zoning_map_image_newtaipei(
         )
         for f in (rr.json() or {}).get("features", []):
             attrs = f.get("attributes") or {}
-            geom = f.get("geometry") or {}
-            paths = geom.get("paths") or []
+            paths = (f.get("geometry") or {}).get("paths") or []
             if not paths:
                 continue
             roads.append({
@@ -680,74 +717,62 @@ def fetch_zoning_map_image_newtaipei(
                 "paths": paths,
             })
     except Exception as e:
-        logger.warning(f"NTPC RoadWidth query 例外（不影響底圖）: {e}")
+        logger.warning(f"NTPC RoadWidth query 例外: {e}")
 
-    # 3. PIL 疊加：路名標籤 + 中心紅點
-    try:
-        from PIL import Image, ImageDraw, ImageFont
-        img = Image.open(output_path).convert("RGBA")
-        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
+    draw = ImageDraw.Draw(composed)
+    font = None
+    for fp in (
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "C:/Windows/Fonts/msjh.ttc",
+    ):
+        try:
+            font = ImageFont.truetype(fp, 14)
+            break
+        except (OSError, IOError):
+            continue
+    if font is None:
+        font = ImageFont.load_default()
 
-        # 找中文字型（VM Linux 預設可能無中文字）
-        font = None
-        for fp in (
-            "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
-            "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-            "C:/Windows/Fonts/msjh.ttc",
-        ):
-            try:
-                font = ImageFont.truetype(fp, 16)
-                break
-            except (OSError, IOError):
+    seen_label = set()
+    for road in roads:
+        if not road["name"] or road["width"] is None:
+            continue
+        label = f"{road['name']} {road['width']}m"
+        for path_pts in road["paths"]:
+            if len(path_pts) < 2:
                 continue
-        if font is None:
-            font = ImageFont.load_default()
-
-        # 路名標籤：對每條路在中段寫「路名 寬度m」
-        seen_label = set()
-        for road in roads:
-            if not road["name"] or road["width"] is None:
+            mid_idx = len(path_pts) // 2
+            mx, my = path_pts[mid_idx]
+            px, py = to_px(mx, my)
+            if not (0 <= px < img_size and 0 <= py < img_size):
                 continue
-            label = f"{road['name']} {road['width']}m"
-            for path_pts in road["paths"]:
-                if len(path_pts) < 2:
-                    continue
-                # 取折線中段點
-                mid_idx = len(path_pts) // 2
-                mx, my = path_pts[mid_idx]
-                px, py = to_px(mx, my)
-                # 圖外的不畫
-                if not (0 <= px < img_size and 0 <= py < img_size):
-                    continue
-                # 同 label 在小區域內只畫一次
-                key = (label, int(px // 80), int(py // 80))
-                if key in seen_label:
-                    continue
-                seen_label.add(key)
-                # 文字 + 白底
-                bbox_t = draw.textbbox((px, py), label, font=font)
-                draw.rectangle(
-                    (bbox_t[0] - 3, bbox_t[1] - 2, bbox_t[2] + 3, bbox_t[3] + 2),
-                    fill=(255, 255, 255, 220),
-                )
-                draw.text((px, py), label, fill=(20, 20, 20, 255), font=font)
-
-        # 中心紅點（物件位置）+ 描黑邊
-        cpx, cpy = img_size / 2, img_size / 2
-        for r_pin, color in ((14, (0, 0, 0, 255)), (10, (220, 30, 30, 255))):
-            draw.ellipse(
-                (cpx - r_pin, cpy - r_pin, cpx + r_pin, cpy + r_pin),
-                fill=color,
+            key = (label, int(px // 80), int(py // 80))
+            if key in seen_label:
+                continue
+            seen_label.add(key)
+            bbox_t = draw.textbbox((px, py), label, font=font)
+            draw.rectangle(
+                (bbox_t[0] - 3, bbox_t[1] - 2, bbox_t[2] + 3, bbox_t[3] + 2),
+                fill=(255, 255, 255, 235),
             )
+            draw.text((px, py), label, fill=(20, 20, 20, 255), font=font)
 
-        composed = Image.alpha_composite(img, overlay).convert("RGB")
-        composed.save(output_path, format="PNG")
+    # ── 層 4：中心紅點 ─────────────────────────────────────────────────
+    cpx, cpy = img_size / 2, img_size / 2
+    for r_pin, color in ((14, (0, 0, 0, 255)), (10, (220, 30, 30, 255))):
+        draw.ellipse(
+            (cpx - r_pin, cpy - r_pin, cpx + r_pin, cpy + r_pin),
+            fill=color,
+        )
+
+    try:
+        composed.convert("RGB").save(output_path, format="PNG")
         return True
     except Exception as e:
-        logger.warning(f"PIL 疊加標籤失敗（保留原底圖）: {e}")
-        return True   # 底圖已寫入 output_path，視為成功
+        logger.warning(f"composed 寫檔失敗: {e}")
+        return False
 
 
 def query_section_parcel(lat: float, lng: float) -> Optional[dict]:
