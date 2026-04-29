@@ -27,3 +27,7 @@ TODO.txt
 block_result.json
 debug_*.py
 debug_*.png
+
+# 開發過程的 debug 預覽圖（preview_*.png / zonemap_yh_preview.png）
+preview_*.png
+zonemap_yh_preview.png
