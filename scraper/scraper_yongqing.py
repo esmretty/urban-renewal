@@ -361,14 +361,25 @@ def _parse_detail_html(item: dict, detail_html: str) -> None:
             pass
 
     # 使用分區（過濾含糊回答）
+    # 永慶詳情頁可能寫單分區「住宅區」或多分區「住宅區、商業區」 — text 已經 strip HTML tag
+    # 抓「使用分區」後一段含中文+常見符號的 30 字 → findall 分區
     zoning_m = re.search(
-        r"使用分區[\s:：]*([^，,。\s]+(?:住宅區|商業區|工業區|農業區|文教區|風景區|保護區))",
+        r"使用分區[\s:：]{0,3}([一-龥、,，()（）一二三四五六七八九十第種]{2,30})",
         text,
     )
-    if zoning_m:
-        zoning_raw = zoning_m.group(1)
-        if not any(bad in zoning_raw for bad in ["謄本", "複雜", "不明", "未知"]):
-            item["zoning_original"] = zoning_raw
+    if zoning_m and not any(bad in zoning_m.group(1) for bad in ["謄本", "複雜", "不明", "未知"]):
+        zone_findings = re.findall(
+            r"((?:第[一二三四五六七八九十]+種)?(?:住宅|商業|工業|農業|文教|風景|保護)區(?:\([一-龥]+\))?)",
+            zoning_m.group(1),
+        )
+        if zone_findings:
+            seen = []
+            for z in zone_findings:
+                if z not in seen:
+                    seen.append(z)
+            item["zoning_original"] = "、".join(seen)
+            if len(seen) > 1:
+                item["_yongqing_zoning_multi"] = seen   # 多分區給下游 cross-check 用
 
     # 型態（建物類型）：從「型態 X」字樣抓
     # 永慶 type 詞彙：公寓 / 無電梯公寓 / 電梯大廈 / 華廈 / 透天 / 店面 / 套房 等

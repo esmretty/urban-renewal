@@ -903,6 +903,16 @@ def analyze_single_property(
                 "zoning_list": zone_list,
                 "address_probable": z["address_probable"],
             })
+            # 永慶詳情頁若標多分區（如「住宅區、商業區」表示基地跨分區）→ 取代 NTPC 點查單一分區
+            # NTPC 點查只能拿到中心點所在 1 塊，但實際物件跨分區時用永慶版才精確
+            yc_multi = item.get("_yongqing_zoning_multi")
+            yc_orig = item.get("zoning_original")
+            if yc_multi and len(yc_multi) > 1:
+                doc_data["zoning"] = "、".join(yc_multi)
+                doc_data["zoning_list"] = list(yc_multi)
+                doc_data["zoning_original"] = yc_orig
+                doc_data["zoning_source"] = "yongqing_detail_multi"
+                logger.info(f"[{src_id}] 永慶 zoning 多分區（{yc_multi}）取代 NTPC 點查 ({z.get('zoning')})")
             # 有分區後即時算 renewal v2（local 變數，不存 DB）+ 重新產生建議
             final_land = item.get("land_area_ping") or doc_data.get("land_area_ping")
             if final_land:
