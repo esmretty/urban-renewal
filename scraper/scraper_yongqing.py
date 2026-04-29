@@ -594,6 +594,20 @@ def scrape_yongqing(
             break
 
         page_items = _parse_listing_page(html)
+        # ⚠ Anti-bot 偵測：永慶偶發給「200 OK 但無 ld+json item list 的精簡殼 HTML」
+        # 跟「真的 0 筆物件」不容易分辨。對 page 1 做 retry：等 12s + 重抓一次。
+        # 真 0 筆 retry 後仍 0 筆 → break；anti-bot transient → retry 後通常會回真實 listing
+        if not page_items and page_no == 1:
+            progress_callback(
+                f"  ⚠ 永慶列表頁解析 0 筆（HTML {len(html)} bytes，可能為 anti-bot 精簡殼），等 12 秒後重試..."
+            )
+            time.sleep(12)
+            html = _fetch(url, retries=2)
+            page_items = _parse_listing_page(html) if html else []
+            if page_items:
+                progress_callback(f"  ✓ 永慶 retry 後拿到 {len(page_items)} 筆 listing")
+            else:
+                progress_callback(f"  ⚠ 永慶 retry 後仍 0 筆，視為無物件")
         if not page_items:
             break
 
