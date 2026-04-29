@@ -578,51 +578,176 @@ def query_road_width_newtaipei(lat: float, lng: float, address_hint: str = "") -
 
 # ── NLSC：座標 → 段地號（輔助欄位，Phase 2 可用） ───────────────────────────
 
+def _wgs84_to_3857(lat: float, lng: float) -> tuple:
+    """WGS84 (EPSG:4326) → Web Mercator (EPSG:3857) 公尺座標。"""
+    x = lng * 20037508.34 / 180.0
+    y = math.log(math.tan(math.radians(90 + lat) / 2)) * 6378137.0
+    return x, y
+
+
 def fetch_zoning_map_image_newtaipei(
     lat: float, lng: float, output_path: str, half_radius_m: int = 150,
 ) -> bool:
-    """新北市：直接 GET ArcGIS REST `LandUse_WMS/MapServer/export` 取得分區地圖 PNG。
+    """新北市：取得分區地圖 PNG，疊加路名/路寬標籤 + 物件位置紅點。
 
-    比 Playwright 截圖快很多（單次 HTTP GET ~1s vs Playwright open page ~10s+）。
-    用 EPSG:3857 (Web Mercator) bbox。輸出彩色分區圖（含中心點周邊地塊）。
+    流程：
+    1. ArcGIS LandUse_WMS export → 分區色塊底圖（PNG）
+    2. ArcGIS NtpcRoadWidth query → 周邊道路 polyline + 寬度
+    3. PIL 在底圖上畫：每條路的「路名 寬度m」標籤 + 中心紅點
 
     Args:
         lat, lng: WGS84 座標
-        output_path: 存圖檔的絕對路徑
-        half_radius_m: bbox 半徑（公尺，預設 150m → 看見鄰近 4-5 塊地）
+        output_path: 存圖檔絕對路徑
+        half_radius_m: bbox 半徑（預設 150m）
 
     Returns:
-        True = 成功寫圖；False = 失敗（缺 token / HTTP 錯 / 圖太小）
+        True = 成功；False = 失敗
     """
     token = _get_ntpc_token()
     if not token:
         logger.warning("NTPC token 取得失敗，無法 export 地圖")
         return False
-    # WGS84 → Web Mercator (EPSG:3857)
-    x = lng * 20037508.34 / 180.0
-    y = math.log(math.tan(math.radians(90 + lat) / 2)) * 6378137.0
-    bbox = f"{x - half_radius_m},{y - half_radius_m},{x + half_radius_m},{y + half_radius_m}"
+    cx, cy = _wgs84_to_3857(lat, lng)
+    img_size = 800
+    bbox_xmin, bbox_ymin = cx - half_radius_m, cy - half_radius_m
+    bbox_xmax, bbox_ymax = cx + half_radius_m, cy + half_radius_m
+    bbox = f"{bbox_xmin},{bbox_ymin},{bbox_xmax},{bbox_ymax}"
+
+    # 公尺座標 → 圖片像素（圖左上 = bbox 左上 = (xmin, ymax)）
+    def to_px(mx, my):
+        px = (mx - bbox_xmin) / (2 * half_radius_m) * img_size
+        py = (bbox_ymax - my) / (2 * half_radius_m) * img_size
+        return (px, py)
+
+    # 1. 抓分區底圖
     try:
         r = httpx.get(
             f"{NTPC_ARCGIS_BASE}/LandUse_WMS/MapServer/export",
             params={
                 "bbox": bbox,
                 "bboxSR": 3857, "imageSR": 3857,
-                "size": "800,800", "format": "png", "dpi": 96,
+                "size": f"{img_size},{img_size}", "format": "png", "dpi": 96,
                 "f": "image", "token": token,
             },
             timeout=15, verify=False,
         )
         if r.status_code != 200 or len(r.content) < 1000:
-            logger.warning(f"NTPC export 失敗: http={r.status_code}, size={len(r.content)}")
+            logger.warning(f"NTPC LandUse export 失敗: http={r.status_code}, size={len(r.content)}")
             return False
         from pathlib import Path
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         Path(output_path).write_bytes(r.content)
+    except Exception as e:
+        logger.warning(f"NTPC LandUse export 例外: {e}")
+        return False
+
+    # 2. 抓 bbox 內路寬資料（含 polyline 幾何）
+    roads = []
+    try:
+        # NtpcRoadWidth 似乎只用 4326；先用 envelope 4326 query
+        # 換 bbox 為 WGS84
+        from math import atan, exp, pi
+        lat_min = (atan(exp(bbox_ymin / 6378137.0)) * 360 / pi) - 90
+        lat_max = (atan(exp(bbox_ymax / 6378137.0)) * 360 / pi) - 90
+        lng_min = bbox_xmin / 20037508.34 * 180
+        lng_max = bbox_xmax / 20037508.34 * 180
+        envelope = json.dumps({
+            "xmin": lng_min, "ymin": lat_min,
+            "xmax": lng_max, "ymax": lat_max,
+        })
+        rr = httpx.get(
+            f"{NTPC_ARCGIS_BASE}/NtpcRoadWidth/MapServer/0/query",
+            params={
+                "where": "1=1",
+                "geometry": envelope,
+                "geometryType": "esriGeometryEnvelope",
+                "inSR": 4326, "outSR": 3857,
+                "outFields": "RoadName,RoadWidth",
+                "returnGeometry": "true",
+                "f": "json", "token": token,
+            },
+            timeout=15, verify=False,
+        )
+        for f in (rr.json() or {}).get("features", []):
+            attrs = f.get("attributes") or {}
+            geom = f.get("geometry") or {}
+            paths = geom.get("paths") or []
+            if not paths:
+                continue
+            roads.append({
+                "name": (attrs.get("RoadName") or "").strip(),
+                "width": attrs.get("RoadWidth"),
+                "paths": paths,
+            })
+    except Exception as e:
+        logger.warning(f"NTPC RoadWidth query 例外（不影響底圖）: {e}")
+
+    # 3. PIL 疊加：路名標籤 + 中心紅點
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        img = Image.open(output_path).convert("RGBA")
+        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+
+        # 找中文字型（VM Linux 預設可能無中文字）
+        font = None
+        for fp in (
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "C:/Windows/Fonts/msjh.ttc",
+        ):
+            try:
+                font = ImageFont.truetype(fp, 16)
+                break
+            except (OSError, IOError):
+                continue
+        if font is None:
+            font = ImageFont.load_default()
+
+        # 路名標籤：對每條路在中段寫「路名 寬度m」
+        seen_label = set()
+        for road in roads:
+            if not road["name"] or road["width"] is None:
+                continue
+            label = f"{road['name']} {road['width']}m"
+            for path_pts in road["paths"]:
+                if len(path_pts) < 2:
+                    continue
+                # 取折線中段點
+                mid_idx = len(path_pts) // 2
+                mx, my = path_pts[mid_idx]
+                px, py = to_px(mx, my)
+                # 圖外的不畫
+                if not (0 <= px < img_size and 0 <= py < img_size):
+                    continue
+                # 同 label 在小區域內只畫一次
+                key = (label, int(px // 80), int(py // 80))
+                if key in seen_label:
+                    continue
+                seen_label.add(key)
+                # 文字 + 白底
+                bbox_t = draw.textbbox((px, py), label, font=font)
+                draw.rectangle(
+                    (bbox_t[0] - 3, bbox_t[1] - 2, bbox_t[2] + 3, bbox_t[3] + 2),
+                    fill=(255, 255, 255, 220),
+                )
+                draw.text((px, py), label, fill=(20, 20, 20, 255), font=font)
+
+        # 中心紅點（物件位置）+ 描黑邊
+        cpx, cpy = img_size / 2, img_size / 2
+        for r_pin, color in ((14, (0, 0, 0, 255)), (10, (220, 30, 30, 255))):
+            draw.ellipse(
+                (cpx - r_pin, cpy - r_pin, cpx + r_pin, cpy + r_pin),
+                fill=color,
+            )
+
+        composed = Image.alpha_composite(img, overlay).convert("RGB")
+        composed.save(output_path, format="PNG")
         return True
     except Exception as e:
-        logger.warning(f"NTPC export 例外: {e}")
-        return False
+        logger.warning(f"PIL 疊加標籤失敗（保留原底圖）: {e}")
+        return True   # 底圖已寫入 output_path，視為成功
 
 
 def query_section_parcel(lat: float, lng: float) -> Optional[dict]:
