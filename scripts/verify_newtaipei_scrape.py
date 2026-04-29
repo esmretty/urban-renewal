@@ -92,13 +92,20 @@ def main():
         for it in samples:
             print()
             print("=" * 80)
-            sid = it["source_id"]
-            print(f"[{sid}] {it['district']} | {it['title'][:40]}")
-            print(f"  url: {it['url']}")
-            print(f"  --- listing API 欄位 ---")
+            sid = it.get("source_id", "?")
+            src = it.get("source", "?")
+            print(f"[{sid}] source={src} {it.get('district') or '(district 待 enrich)'} | {(it.get('title') or '')[:40]}")
+            print(f"  url: {it.get('url')}")
+            print(f"  --- listing 階段欄位 ---")
             for k in ("district", "address", "total_floors", "floor",
                       "building_age", "building_area_ping", "price_ntd"):
                 print(f"    {k}: {it.get(k)}")
+            # 永慶/信義 listing 不含 district/floor/age 等欄位，要走詳情 enrich，跟批次 pipeline 不同
+            # 這個 verify script 只驗 591 的 detail OCR + zoning + LVR
+            # 永慶/信義 listing-level 已驗能抓到 4 區，不用再跑詳情
+            if src != "591":
+                print(f"  [skip] 此 source 的 detail enrich 流程不在 verify scope 內（listing-level 已驗）")
+                continue
             try:
                 result = analyze_single_property(
                     item=dict(it),
