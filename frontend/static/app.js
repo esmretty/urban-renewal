@@ -50,6 +50,8 @@ document.addEventListener("DOMContentLoaded", () => {
   _initDistPicker();
   populateDistrictFilter();
   populateManualDistricts();
+  // 從 server 拉 LVR 預售屋中位數覆寫 DISTRICT_NEW_HOUSE_PRICE（啟動後一次）
+  fetchDistrictPrices();
   // 預設打開「搜尋網上物件」tab，並依當前 filter 立刻跑一次搜尋
   _activeTab = "explore";
   document.body.dataset.tab = "explore";
@@ -1138,11 +1140,35 @@ const TAIPEI_FAR_PCT = {
   // 新北市
   "住宅區":300,"商業區":440,"商業區(板橋)":460,
 };
+// fallback 預設值（萬/坪）— 當 API 還沒回 / 失敗時用
+// 啟動後 fetchDistrictPrices() 會從 /api/district_new_house_price 拿 LVR 預售屋中位數覆寫
 const DISTRICT_NEW_HOUSE_PRICE = {
   "中正區":110,"大同區":95,"中山區":110,"松山區":130,"大安區":150,
   "萬華區":80,"信義區":145,"內湖區":110,"南港區":110,"文山區":90,
   "板橋區":75,"新莊區":65,"新店區":75,"中和區":70,"永和區":75,
 };
+
+async function fetchDistrictPrices() {
+  // 從 server 拉「LVR 預售屋中位數」覆寫前端常數，讓 modal 顯示的單價跟 backend 試算一致
+  try {
+    const r = await authedFetch("/api/district_new_house_price");
+    if (!r.ok) return;
+    const data = await r.json();
+    const by = data.by_district || {};
+    let updated = 0;
+    for (const [dist, price] of Object.entries(by)) {
+      if (typeof price === "number" && price > 0) {
+        DISTRICT_NEW_HOUSE_PRICE[dist] = price;
+        updated++;
+      }
+    }
+    if (updated) {
+      console.log(`[district price] 套用 ${updated} 區 LVR 預售屋中位數 (${data.updated_at || "?"})`);
+    }
+  } catch (e) {
+    console.warn("fetchDistrictPrices failed:", e);
+  }
+}
 
 function lookupShareRatio(priceWan) {
   if (!priceWan) return [null, null];
