@@ -2978,14 +2978,25 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 if not item.get("building_type"):
                     item["building_type"] = "公寓"
 
-                # 地址：若 DOM 已抓到「含號」的完整地址 → 跳過 OCR（省 API 錢 + 避免 OCR 誤覆蓋）
+                # 地址：若 DOM 已抓到「含號 + 含路名」的完整地址 → 跳過 OCR（省 API 錢 + 避免 OCR 誤覆蓋）
                 # 否則用「物件基本資料」窄裁切圖跑 consensus OCR
-                _dom_has_full = item.get("address") and "號" in (item.get("address") or "")
+                # 注意：用 helper 過濾「廣告詞含號但無路名」的 dirty 卡片地址（屋主把 community-name 填廣告詞）
+                from database.models import looks_like_real_address as _lkra_dom
+                _dom_has_full = _lkra_dom(item.get("address"), require_number=True)
                 if _dom_has_full:
                     logger.info(f"  DOM 已有完整地址，跳過 OCR address: {item.get('address')!r}")
+                elif item.get("address") and "號" in (item.get("address") or ""):
+                    # 卡片 address 含號但無路名 → 廣告詞 → 清掉再走 OCR
+                    logger.info(f"  卡片 address {item.get('address')!r} 看似廣告詞（無路名）→ 清掉走 OCR")
+                    item["address"] = ""
                 elif _addr_crop and item.get("city") and item.get("district"):
                     from analysis.claude_analyzer import extract_address_consensus, _clean_address_garbage
+                    from database.models import looks_like_real_address as _lkra_batch_ocr
                     ocr_addr = extract_address_consensus(_addr_crop, item["city"], item["district"])
+                    # OCR 看詳情頁可能讀到屋主自填的廣告詞（如「近XX1號出口」）→ 過 helper 才採用
+                    if ocr_addr and not _lkra_batch_ocr(ocr_addr, require_number=False):
+                        logger.info(f"  OCR 抓到 {ocr_addr!r} 但沒路名結構 → 拒收 ({src_id})")
+                        ocr_addr = None
                     if ocr_addr:
                         # OCR 地址若含「XX區」→ **信 OCR 的 district** 覆蓋 card district。
                         # 591 card 多區混查有時會 mislabel section（e.g. 物件在中山區卻標大安區）
@@ -4500,16 +4511,19 @@ def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False):
         # DOM 完全抓不到地址（591 用 <wc-ir-obfuscate-address-1> 防爬）→ 走窄裁切 OCR consensus
         # 這裡必須在 city/district 判斷之前先抓城市/行政區（從 body 或卡片）
         if not data.get("community_address"):
-            from database.models import extract_district as _extract_dist
+            from database.models import extract_district as _extract_dist, looks_like_real_address as _lkra_ocr
             _city_guess = next((c for c in ("台北市", "新北市") if c in (data.get("bodyText") or "")), None)
             _dist_guess = _extract_dist(data.get("bodyText") or "") or None
             _addr_crop = getattr(detail_ret, "addr_path", None) if detail_ret else None
             if _addr_crop and _city_guess and _dist_guess:
                 from analysis.claude_analyzer import extract_address_consensus
                 _ocr_addr = extract_address_consensus(_addr_crop, _city_guess, _dist_guess)
-                if _ocr_addr:
+                # OCR 看詳情頁可能讀到屋主自填的「近XX1號出口」廣告詞 → 也要過 helper filter
+                if _ocr_addr and _lkra_ocr(_ocr_addr, require_number=False):
                     data["community_address"] = _ocr_addr
                     logger.info(f"  OCR consensus 抓到地址: {_ocr_addr!r}")
+                elif _ocr_addr:
+                    logger.info(f"  OCR consensus 抓到 {_ocr_addr!r} 但沒路名結構 → 拒收")
 
         # Vision OCR 是主要資料來源（591 詳情頁防爬，regex 不可靠）
         # body text 只用來補 city/district/address 那種沒被防爬的欄位
@@ -4537,6 +4551,13 @@ def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False):
             m = _re.search(r"([\u4e00-\u9fa5]+(?:路|街|大道))", a or "")
             return m.group(1) if m else ""
 
+        # community_addr / v_addr 都已經各自被 helper filter 擋過（line 4495 + OCR fallback），
+        # 但 vision.get("address") 來自 extract_full_detail_from_screenshot 沒過 filter → 這邊再擋一次
+        from database.models import looks_like_real_address as _lkra_final
+        _v_addr_ok = _lkra_final(v_addr, require_number=False) if v_addr else False
+        if not _v_addr_ok and v_addr:
+            logger.info(f"  Vision 整頁 OCR 抓到 {v_addr!r} 但沒路名結構 → 拒收")
+            v_addr = ""
         if community_addr:
             best_addr = community_addr
             # 若 Vision 跟 DOM 路名不同 → 記 log 提醒

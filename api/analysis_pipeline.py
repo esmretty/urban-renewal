@@ -765,17 +765,27 @@ def analyze_single_property(
                 # → 留給 Vision 處理（不硬 fallback 到岔巷，避免「詔安街24號」被錯標成「詔安街26巷」）
 
             # 無論規則命中與否，都截 zonemap 圖給肉眼驗證
+            # 台北市：用 zonemap.udd.gov.taipei + Playwright（既有邏輯）
+            # 新北市：用 NTPC ArcGIS export（直接 HTTP GET 拿 PNG，快很多）
             try:
                 _step("截圖 zonemap 供驗證...")
-                scan_result = _scan_road_width_vision(
-                    lat=lat, lng=lng, addr=precise_addr,
-                    district=district, src_id=src_id,
-                    all_roads=rw["all_roads"][:6] if rw else [],
-                    browser_ctx=ocr_ctx,
-                    skip_vision=bool(matched_main_road),   # 規則命中 → 只截圖不跑 Vision
-                )
-                if scan_result and scan_result.get("screenshot"):
-                    doc_data["screenshot_roadwidth"] = scan_result["screenshot"]
+                if city == "新北市":
+                    from analysis.gov_gis import fetch_zoning_map_image_newtaipei
+                    from config import BASE_DIR
+                    out_path = BASE_DIR / "data" / "screenshots" / f"{src_id}_roadwidth.png"
+                    if fetch_zoning_map_image_newtaipei(lat, lng, str(out_path)):
+                        doc_data["screenshot_roadwidth"] = f"/data/screenshots/{src_id}_roadwidth.png"
+                    scan_result = None   # 新北版不跑 Vision road-width OCR（已用 NTPC ArcGIS API 拿到精確值）
+                else:
+                    scan_result = _scan_road_width_vision(
+                        lat=lat, lng=lng, addr=precise_addr,
+                        district=district, src_id=src_id,
+                        all_roads=rw["all_roads"][:6] if rw else [],
+                        browser_ctx=ocr_ctx,
+                        skip_vision=bool(matched_main_road),   # 規則命中 → 只截圖不跑 Vision
+                    )
+                    if scan_result and scan_result.get("screenshot"):
+                        doc_data["screenshot_roadwidth"] = scan_result["screenshot"]
                 # 地址在巷弄但 all_roads + CQL 都查不到 → 寬度不明（不 fallback 到主道）
                 if lane_missing_unknown:
                     doc_data["road_width_name"] = addr_lane_full

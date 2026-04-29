@@ -578,6 +578,53 @@ def query_road_width_newtaipei(lat: float, lng: float, address_hint: str = "") -
 
 # ── NLSC：座標 → 段地號（輔助欄位，Phase 2 可用） ───────────────────────────
 
+def fetch_zoning_map_image_newtaipei(
+    lat: float, lng: float, output_path: str, half_radius_m: int = 150,
+) -> bool:
+    """新北市：直接 GET ArcGIS REST `LandUse_WMS/MapServer/export` 取得分區地圖 PNG。
+
+    比 Playwright 截圖快很多（單次 HTTP GET ~1s vs Playwright open page ~10s+）。
+    用 EPSG:3857 (Web Mercator) bbox。輸出彩色分區圖（含中心點周邊地塊）。
+
+    Args:
+        lat, lng: WGS84 座標
+        output_path: 存圖檔的絕對路徑
+        half_radius_m: bbox 半徑（公尺，預設 150m → 看見鄰近 4-5 塊地）
+
+    Returns:
+        True = 成功寫圖；False = 失敗（缺 token / HTTP 錯 / 圖太小）
+    """
+    token = _get_ntpc_token()
+    if not token:
+        logger.warning("NTPC token 取得失敗，無法 export 地圖")
+        return False
+    # WGS84 → Web Mercator (EPSG:3857)
+    x = lng * 20037508.34 / 180.0
+    y = math.log(math.tan(math.radians(90 + lat) / 2)) * 6378137.0
+    bbox = f"{x - half_radius_m},{y - half_radius_m},{x + half_radius_m},{y + half_radius_m}"
+    try:
+        r = httpx.get(
+            f"{NTPC_ARCGIS_BASE}/LandUse_WMS/MapServer/export",
+            params={
+                "bbox": bbox,
+                "bboxSR": 3857, "imageSR": 3857,
+                "size": "800,800", "format": "png", "dpi": 96,
+                "f": "image", "token": token,
+            },
+            timeout=15, verify=False,
+        )
+        if r.status_code != 200 or len(r.content) < 1000:
+            logger.warning(f"NTPC export 失敗: http={r.status_code}, size={len(r.content)}")
+            return False
+        from pathlib import Path
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(output_path).write_bytes(r.content)
+        return True
+    except Exception as e:
+        logger.warning(f"NTPC export 例外: {e}")
+        return False
+
+
 def query_section_parcel(lat: float, lng: float) -> Optional[dict]:
     """NLSC TownVillagePointQuery → 鄉鎮市區/段名/村里。"""
     try:

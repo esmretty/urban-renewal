@@ -364,6 +364,9 @@ def _parse_api_items(house_list: list, city: str, target_districts: Optional[set
         except Exception: price_ntd = None
         try: age = int(it.get("houseage")) if it.get("houseage") is not None else None
         except Exception: age = None
+        # 591 listing 屋齡=0 通常是屋主沒填（不會真的是「全新成屋」— 591 list 已過濾預售屋）→ 視為未知
+        if age == 0:
+            age = None
         # address
         street = it.get("address") or it.get("street_name") or ""
         full_address = f"{city}{sect_name}{street}".strip() or f"{city}{sect_name}"

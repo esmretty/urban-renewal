@@ -81,7 +81,7 @@ def main():
             issues.append(f"zoning 異常: {z!r}（可能落在非實質分區）")
 
         # 7. 推址 confidence
-        if addr_inf and not x.get("address_inference_confidence"):
+        if addr_inf and not x.get("address_inferred_confidence"):
             issues.append("address_inferred 沒 confidence 標籤")
 
         issues_by_doc[doc_id] = (sources, x, issues)
