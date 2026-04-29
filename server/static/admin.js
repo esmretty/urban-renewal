@@ -938,7 +938,7 @@ let _schedulerTimer = null;
 // UI 編輯中的 draft（還沒套用的）。每欄位標記 "已套用 / 未套用"
 let _schedDraft = { interval_hr: 1, commands: [] };
 let _schedServer = { interval_hr: 1, commands: [] };   // server 當前真實值（套用對照）
-let _schedMeta = { allowed: [], maxCmds: 5, maxDistricts: 5, interSleep: 30, intervalOpts: [1,3,6,12,24], verifyIntervalOpts: [12,24,72,360] };
+let _schedMeta = { allowed: [], maxCmds: 5, maxDistricts: 5, interSleep: 30, intervalOpts: [1,3,6,12,24], verifyIntervalOpts: [12,24,72,360], updatePricesIntervalOpts: [24,168,720] };
 let _lastVerifyAliveAt = null;
 
 async function loadSchedulerStatus() {
@@ -954,6 +954,7 @@ async function loadSchedulerStatus() {
       interSleep: s.inter_command_sleep_sec || 30,
       intervalOpts: s.allowed_interval_hr || [1, 3, 6, 12, 24],
       verifyIntervalOpts: s.allowed_verify_interval_hr || [12, 24, 72, 360],
+      updatePricesIntervalOpts: s.allowed_update_prices_interval_hr || [24, 168, 720],
     };
     _lastVerifyAliveAt = s.last_verify_alive_at || null;
     // 觸發 dashboard 警告檢查
@@ -1015,6 +1016,7 @@ function _isCmdAppliedNew(draft, server) {
   if (dType !== sType) return false;
   if (Number(draft.interval_hr || 0) !== Number(server.interval_hr || 0)) return false;
   if (dType === "verify_alive") return true;
+  if (dType === "update_prices") return true;
   // scan 比對 districts / limit / sources
   return JSON.stringify((draft.districts||[]).slice().sort()) === JSON.stringify((server.districts || []).slice().sort())
       && Number(draft.limit) === Number(server.limit)
@@ -1026,18 +1028,21 @@ function _isIntervalApplied() {
 }
 
 function renderScheduler(s) {
-  // 兩個 tab 各自 render 自己的 cmds
+  // 三個 tab 各自 render 自己的 cmds
   _renderSchedulerByType(s, "scan", document.getElementById("scheduler-box-scan"));
   _renderSchedulerByType(s, "verify_alive", document.getElementById("scheduler-box-verify"));
+  _renderSchedulerByType(s, "update_prices", document.getElementById("scheduler-box-update-prices"));
 }
 
 function _renderSchedulerByType(s, filterType, box) {
   if (!box) return;
   const running = s.currently_running;
   // per-type enabled（後端回；舊 client 也仍能看 s.enabled）
-  const enabled = filterType === "scan"
-    ? (s.scan_enabled !== undefined ? s.scan_enabled : s.enabled)
-    : (s.verify_alive_enabled !== undefined ? s.verify_alive_enabled : s.enabled);
+  let enabled;
+  if (filterType === "scan") enabled = (s.scan_enabled !== undefined ? s.scan_enabled : s.enabled);
+  else if (filterType === "verify_alive") enabled = (s.verify_alive_enabled !== undefined ? s.verify_alive_enabled : s.enabled);
+  else if (filterType === "update_prices") enabled = (s.update_prices_enabled !== undefined ? s.update_prices_enabled : s.enabled);
+  else enabled = s.enabled;
   const stateText = running ? "🟢 進行中"
                   : (enabled ? "🟦 待機中" : "⚪ 已停用");
   const stateColor = running ? "#27ae60" : (enabled ? "#2980b9" : "#95a5a6");
@@ -1063,7 +1068,9 @@ function _renderSchedulerByType(s, filterType, box) {
     ? filteredCmds.map(({ cmd, origIdx }, dispIdx) => _renderCmdRow(cmd, origIdx, dispIdx + 1)).join("")
     : `<div style="color:#888; padding:8px; text-align:center;">尚無此類型命令</div>`;
 
-  const addLabel = filterType === "scan" ? "+ 新增掃描命令" : "+ 新增偵測下架命令";
+  const addLabel = filterType === "scan" ? "+ 新增掃描命令"
+                : filterType === "verify_alive" ? "+ 新增偵測下架命令"
+                : "+ 新增更新單價命令";
   const addBtn = `<button onclick="schedAddCmd('${filterType}')" style="padding:4px 12px;">${addLabel}</button>`;
 
   box.innerHTML = headerRow + cmdHtml + `<div style="margin-top:8px;">${addBtn}</div>`;
@@ -1145,6 +1152,30 @@ window.switchCmdTab = function (tab) {
   });
 };
 
+window.runUpdatePricesNow = async function () {
+  const statusEl = document.getElementById("update-prices-status");
+  if (!confirm("立即執行更新預售屋單價？\n會下載最新 LVR CSV + 重算各區中位數寫進 Firestore（約 30 秒）。")) return;
+  if (statusEl) statusEl.textContent = "⏳ 啟動中…";
+  try {
+    const r = await authedFetch("/admin/update_district_prices/run-now", { method: "POST" });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      if (statusEl) statusEl.textContent = `❌ 失敗 (${r.status})：${data.detail || ""}`;
+      return;
+    }
+    if (statusEl) {
+      const cnt = data.district_count || 0;
+      const samples = data.total_samples || 0;
+      const at = data.updated_at ? new Date(data.updated_at).toLocaleString("zh-TW", { hour12: false }) : "?";
+      statusEl.innerHTML = `✓ 更新完成：${cnt} 區 / ${samples} 筆樣本（${at}）<br><span style="color:#888; font-size:12px;">前端下次重新整理會自動套用新單價</span>`;
+    }
+    // 重畫 scheduler card
+    if (typeof loadSchedulerStatus === "function") loadSchedulerStatus();
+  } catch (e) {
+    if (statusEl) statusEl.textContent = `❌ 失敗：${e.message}`;
+  }
+};
+
 function _renderCmdRow(cmd, i, displayNum) {
   // i = origIdx（全域 index，用於 onchange / 刪除）
   // displayNum = 該 tab 內的顯示編號，從 1 開始
@@ -1190,6 +1221,41 @@ function _renderCmdRow(cmd, i, displayNum) {
             跑一次
           </label>
           <button onclick="applySchedulerConfig()" class="sched-apply">套用</button>
+        </div>
+        <div class="sched-cmd-footer">
+          ${nextDueStr}
+          <span class="sched-applied-detail">${appliedDetail}</span>
+        </div>
+      </div>`;
+  }
+
+  if (cmdType === "update_prices") {
+    // 更新預售屋單價命令：只選 interval
+    const intervalOpts = (_schedMeta.updatePricesIntervalOpts || [24, 168, 720]).map(h => {
+      const sel = Number(cmd.interval_hr) === h ? "selected" : "";
+      const lbl = h === 24 ? "1 天" : h === 168 ? "1 週" : h === 720 ? "1 個月" : `${h} 小時`;
+      return `<option value="${h}" ${sel}>${lbl}</option>`;
+    }).join("");
+    const appliedDetail = (server && _isCmdAppliedNew(cmd, server))
+      ? `<span style="color:#27ae60; font-size:12px;">✓ 已套用：更新單價 / 每 ${Number(server.interval_hr||720)} 小時</span>`
+      : `<span style="color:#c0392b; font-size:12px;">⚠ 未套用（按下套用才生效）</span>`;
+    return `
+      <div class="sched-cmd sched-cmd--verify" style="border-color:#16a085; background:#f0fbf8;">
+        <div class="sched-cmd-head">
+          <b>命令 ${displayNum}</b>
+          <span class="sched-type-badge verify" style="background:#16a085;">更新單價</span>
+          ${appliedBadge}
+          ${removeBtn}
+        </div>
+        <div class="sched-cmd-desc">下載最新 LVR 預售屋 CSV，重算各區單價中位數寫進 Firestore。</div>
+        <div class="sched-cmd-controls">
+          <label>每
+            <select onchange="schedSetInterval(${i}, this.value, 720)">
+              ${intervalOpts}
+            </select>
+            跑一次
+          </label>
+          <button onclick="applySchedulerConfig()" class="sched-apply" style="background:#16a085;">套用</button>
         </div>
         <div class="sched-cmd-footer">
           ${nextDueStr}
@@ -1390,6 +1456,8 @@ window.schedAddCmd = function (type) {
   }
   if (type === "verify_alive") {
     _schedDraft.commands.push({ type: "verify_alive", interval_hr: 24 });
+  } else if (type === "update_prices") {
+    _schedDraft.commands.push({ type: "update_prices", interval_hr: 720 });
   } else {
     // scan: 預設三個來源都勾（591 + 永慶 + 信義）
     _schedDraft.commands.push({

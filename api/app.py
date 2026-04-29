@@ -523,6 +523,45 @@ def _cmd_state_set(cmd_idx: int, **kwargs):
         logger.warning(f"[scheduler] _cmd_state_set fail: {e}")
 
 
+async def _run_update_prices_command(trigger_label: str = "update_prices_scheduler") -> dict:
+    """自動更新預售屋單價命令：下載最新 LVR CSV + 重算各區中位數寫 Firestore。
+    回傳 {'district_count': N, 'total_samples': N}。失敗會 raise。"""
+    from database.run_log import log_action
+    started = now_tw_iso()
+    logger.info(f"[update-prices] 開始下載最新 LVR + 重算各區中位數")
+    log_action(trigger_label, "verify_alive_start", message="開始更新預售屋單價")
+
+    def _do():
+        from scraper.download_lvr import download_recent
+        from analysis.presale_price import update_district_prices
+        try:
+            download_recent(4)   # 下載最近 4 季 + current（既有的不會 redownload）
+        except Exception as e:
+            logger.warning(f"[update-prices] download_recent 部分失敗（仍試重算既有 CSV）: {e}")
+        return update_district_prices(max_seasons=5)
+
+    payload = await asyncio.to_thread(_do)
+    by_district = payload.get("by_district") or {}
+    samples = payload.get("samples") or {}
+    total_samples = sum(samples.values()) if samples else 0
+    logger.info(
+        f"[update-prices] 完成：{len(by_district)} 區 / 共 {total_samples} 筆樣本 "
+        f"updated_at={payload.get('updated_at')}"
+    )
+    log_action(
+        trigger_label, "verify_alive_end",
+        message=f"更新 {len(by_district)} 區單價",
+        details={"district_count": len(by_district), "total_samples": total_samples,
+                 "updated_at": payload.get("updated_at")},
+    )
+    return {
+        "district_count": len(by_district),
+        "total_samples": total_samples,
+        "by_district": by_district,
+        "updated_at": payload.get("updated_at"),
+    }
+
+
 async def _run_verify_alive_command(progress=None, trigger_label: str = "verify_alive_scheduler"):
     """偵測下架命令：掃所有非 archived properties，HTTP 驗活每個 source URL。
     全部 sources 都失效 → archive doc。
@@ -701,8 +740,9 @@ async def _scheduled_scrape_loop():
             legacy_en = bool(cfg.get("enabled"))
             scan_en = bool(cfg.get("scan_enabled", legacy_en))
             verify_en = bool(cfg.get("verify_alive_enabled", legacy_en))
-            if not (scan_en or verify_en):
-                continue   # 兩個 type 都關，沒事做
+            update_prices_en = bool(cfg.get("update_prices_enabled", legacy_en))
+            if not (scan_en or verify_en or update_prices_en):
+                continue   # 三個 type 都關，沒事做
             if _scrape_running:
                 continue   # 上次還沒跑完，等下個 tick
             cmds = cfg.get("commands") or []
@@ -718,6 +758,7 @@ async def _scheduled_scrape_loop():
                 cmd_type = (cmd.get("type") or "scan").lower()
                 if cmd_type == "scan" and not scan_en: continue
                 if cmd_type == "verify_alive" and not verify_en: continue
+                if cmd_type == "update_prices" and not update_prices_en: continue
                 interval_hr = int(cmd.get("interval_hr") or cfg.get("interval_hr") or 24)
                 state = _cmd_state_get(idx)
                 nxt = state.get("next_due_at")
@@ -756,6 +797,24 @@ async def _scheduled_scrape_loop():
                     last_run_at=now_tw_iso(),
                     last_status=_scheduler_last_status,
                     next_due_at=_next_interval_boundary(now_tw(), _v_interval).isoformat(),
+                )
+                continue
+
+            if cmd_type == "update_prices":
+                logger.info(f"[scheduler] 命令 {due_idx} 觸發：自動更新預售屋單價")
+                try:
+                    result = await _run_update_prices_command()
+                    _scheduler_last_status = (
+                        f"更新單價：{result.get('district_count', 0)} 區（共 {result.get('total_samples', 0)} 筆樣本）"
+                    )
+                except Exception as e:
+                    logger.exception(f"[scheduler] update_prices 失敗: {e}")
+                    _scheduler_last_status = f"更新單價失敗: {e}"
+                _u_interval = int(due_cmd.get("interval_hr") or 720)
+                _cmd_state_set(due_idx,
+                    last_run_at=now_tw_iso(),
+                    last_status=_scheduler_last_status,
+                    next_due_at=_next_interval_boundary(now_tw(), _u_interval).isoformat(),
                 )
                 continue
 
@@ -941,20 +1000,23 @@ def api_district_new_house_price():
 
 
 @app.post("/admin/update_district_prices")
+@app.post("/admin/update_district_prices/run-now")
 async def admin_update_district_prices(admin: dict = Depends(require_admin)):
-    """admin 觸發：parse 既有 LVR 預售屋 CSV 重算各區單價中位數寫 Firestore。
-    後續可以由 scheduler 每月跑一次。"""
-    from analysis.presale_price import update_district_prices
-    def _do():
-        try:
-            payload = update_district_prices(max_seasons=5)
-            logger.warning(f"[admin] {admin.get('email')} 觸發 district_new_house_price update：{len(payload['by_district'])} 區")
-            return payload
-        except Exception as e:
-            logger.exception(f"[admin] update_district_prices 失敗: {e}")
-            raise
-    payload = await asyncio.to_thread(_do)
-    return {"status": "ok", **payload}
+    """admin 觸發：下載最新 LVR + parse 預售屋 CSV 重算各區單價中位數寫 Firestore。
+    支援兩個路徑：
+      - POST /admin/update_district_prices （legacy）
+      - POST /admin/update_district_prices/run-now （admin UI 立即執行按鈕）
+    """
+    try:
+        result = await _run_update_prices_command(trigger_label="update_prices_manual")
+        logger.warning(
+            f"[admin] {admin.get('email')} 觸發 update_district_prices/run-now："
+            f"{result['district_count']} 區 / {result['total_samples']} 筆樣本"
+        )
+        return {"status": "ok", **result}
+    except Exception as e:
+        logger.exception(f"[admin] update_district_prices 失敗: {e}")
+        raise HTTPException(500, f"更新失敗：{e}")
 
 
 @app.get("/api/firebase_config")
@@ -1142,6 +1204,7 @@ async def scheduler_status(admin: dict = Depends(require_admin)):
         "enabled": legacy_en,                                            # 舊欄位保留
         "scan_enabled": bool(cfg.get("scan_enabled", legacy_en)),        # per-type
         "verify_alive_enabled": bool(cfg.get("verify_alive_enabled", legacy_en)),
+        "update_prices_enabled": bool(cfg.get("update_prices_enabled", legacy_en)),
         "interval_hr": int(cfg.get("interval_hr") or 1),
         "commands": cmds_with_state,
         "last_run_at": _scheduler_last_run_at,
@@ -1154,6 +1217,7 @@ async def scheduler_status(admin: dict = Depends(require_admin)):
         "allowed_districts": [d for r in TARGET_REGIONS.values() for d in (r.get("districts") or {}).keys()],
         "allowed_interval_hr": list(SCHEDULER_ALLOWED_INTERVAL_HR),
         "allowed_verify_interval_hr": list(SCHEDULER_VERIFY_INTERVAL_HR),
+        "allowed_update_prices_interval_hr": list(SCHEDULER_UPDATE_PRICES_INTERVAL_HR),
         "max_commands": SCHEDULER_MAX_COMMANDS,
         "max_districts_per_command": SCHEDULER_MAX_DISTRICTS_PER_CMD,
         "inter_command_sleep_sec": SCHEDULER_INTER_COMMAND_SLEEP_SEC,
@@ -1345,11 +1409,14 @@ async def scheduler_toggle(body: SchedulerToggleReq, admin: dict = Depends(requi
         update["scan_enabled"] = body.enabled
     elif t == "verify_alive":
         update["verify_alive_enabled"] = body.enabled
+    elif t == "update_prices":
+        update["update_prices_enabled"] = body.enabled
     else:
-        # legacy：兩個都 toggle，並維持舊 enabled 欄位
+        # legacy：三個都 toggle，並維持舊 enabled 欄位
         update["enabled"] = body.enabled
         update["scan_enabled"] = body.enabled
         update["verify_alive_enabled"] = body.enabled
+        update["update_prices_enabled"] = body.enabled
     get_firestore().collection("settings").document("scheduler").set(update, merge=True)
     logger.warning("[scheduler] %s 設定 type=%s enabled=%s", admin.get("email"), t or "all", body.enabled)
     if body.enabled and _sched_wake_event is not None:
@@ -1375,6 +1442,7 @@ class SchedulerConfigReq(BaseModel):
 
 
 SCHEDULER_VERIFY_INTERVAL_HR = (12, 24, 72, 360)   # 偵測下架可選的間隔
+SCHEDULER_UPDATE_PRICES_INTERVAL_HR = (24, 168, 720)   # 更新單價可選間隔（每天/週/月）
 
 
 @app.post("/admin/scheduler/config")
@@ -1388,8 +1456,8 @@ async def scheduler_set_config(body: SchedulerConfigReq, admin: dict = Depends(r
     VALID_SOURCES = ("591", "yongqing", "sinyi")
     for idx, c in enumerate(body.commands):
         cmd_type = (c.type or "scan").lower()
-        if cmd_type not in ("scan", "verify_alive"):
-            raise HTTPException(400, f"命令 {idx+1}：type 必須是 scan / verify_alive（收到 {c.type!r}）")
+        if cmd_type not in ("scan", "verify_alive", "update_prices"):
+            raise HTTPException(400, f"命令 {idx+1}：type 必須是 scan / verify_alive / update_prices（收到 {c.type!r}）")
 
         if cmd_type == "scan":
             # 掃描新物件：要 districts + limit + sources
@@ -1431,6 +1499,18 @@ async def scheduler_set_config(body: SchedulerConfigReq, admin: dict = Depends(r
                 "districts": list(districts),
                 "limit": limit,
                 "sources": cmd_sources,
+            })
+        elif cmd_type == "update_prices":
+            # 自動更新預售屋單價：只要 interval_hr
+            interval_hr = int(c.interval_hr or 720)
+            if interval_hr not in SCHEDULER_UPDATE_PRICES_INTERVAL_HR:
+                raise HTTPException(
+                    400,
+                    f"命令 {idx+1}（更新單價）：interval_hr 必須為 {list(SCHEDULER_UPDATE_PRICES_INTERVAL_HR)}",
+                )
+            cleaned.append({
+                "type": "update_prices",
+                "interval_hr": interval_hr,
             })
         else:
             # verify_alive：只要 interval_hr

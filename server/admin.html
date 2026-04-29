@@ -64,6 +64,7 @@
         <div class="cmd-tabs">
           <button class="cmd-tab active" data-tab="batch" onclick="switchCmdTab('batch')">📥 Batch 抓資料</button>
           <button class="cmd-tab" data-tab="verify" onclick="switchCmdTab('verify')">🔍 偵測下架</button>
+          <button class="cmd-tab" data-tab="update_prices" onclick="switchCmdTab('update_prices')">💰 更新預售屋單價</button>
           <button class="cmd-tab" data-tab="other" onclick="switchCmdTab('other')">🔧 其他</button>
         </div>
 
@@ -142,6 +143,27 @@
             <div class="cmd-pane-right">
               <h4>定時 scheduler</h4>
               <div id="scheduler-box-verify" style="font-size:14px; line-height:1.6;">載入中…</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: 更新預售屋單價 -->
+        <div class="cmd-pane hidden" data-pane="update_prices">
+          <div class="cmd-pane-grid">
+            <div class="cmd-pane-left">
+              <h4>立即執行</h4>
+              <p style="font-size:13px; color:#555; margin:0 0 10px;">
+                從內政部實價登錄下載最新預售屋 CSV，重算各區單價中位數寫進 Firestore。
+                前端載入後會自動套用新單價。
+              </p>
+              <button onclick="runUpdatePricesNow()" style="padding:8px 18px; background:#16a085; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:600;">
+                💰 立即更新預售屋單價
+              </button>
+              <div id="update-prices-status" style="margin-top:12px; font-size:13px; color:#666;"></div>
+            </div>
+            <div class="cmd-pane-right">
+              <h4>定時 scheduler</h4>
+              <div id="scheduler-box-update-prices" style="font-size:14px; line-height:1.6;">載入中…</div>
             </div>
           </div>
         </div>
