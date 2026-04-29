@@ -375,6 +375,39 @@ def _get_ntpc_token() -> str:
     return ""
 
 
+def _build_ntpc_zone_entry(a: dict) -> Optional[dict]:
+    """把 NTPC LandUse_WMS 一筆 feature attributes 轉成標準 zone dict。
+    回 None 表 LZ3 為空無法判斷。"""
+    lz3 = (a.get("LZ3") or "").strip()
+    lz4 = (a.get("LZ4") or "").strip()
+    if not lz3:
+        return None
+    if lz3 == "住宅區" and lz4:
+        zone_name = f"第{lz4}種住宅區"
+        zone_label = f"住{lz4}"
+        _r_map = {"一": "R1", "二": "R2", "三": "R3", "四": "R4"}
+        zone_code = _r_map.get(lz4)
+    elif lz3 == "商業區" and lz4:
+        zone_name = f"第{lz4}種商業區"
+        zone_label = f"商{lz4}"
+        _c_map = {"一": "C1", "二": "C2", "三": "C3", "四": "C4"}
+        zone_code = _c_map.get(lz4)
+    else:
+        zone_name = lz3
+        zone_label = lz3
+        zone_code = None
+    return {
+        "zone_name": zone_name,
+        "zone_label": zone_label,
+        "zone_code": zone_code,
+        "original_zone": f"{lz3}{lz4}" if lz4 else lz3,
+        "zone_list": [zone_name] if zone_name else [],
+        "plan_name": a.get("LZ1"),
+        "coverage_rate": a.get("LZ5") or a.get("LZ6"),
+        "far_rate": a.get("LZ7"),
+    }
+
+
 def query_zoning_newtaipei(lat: float, lng: float) -> Optional[dict]:
     """新北市座標 → 都市計畫使用分區。
     回 {"zone_name", "zone_label", "zone_code", "original_zone", "zone_list"} 或 None。
@@ -384,61 +417,73 @@ def query_zoning_newtaipei(lat: float, lng: float) -> Optional[dict]:
       LZ4 = 細分（一/二/三...，如有）
       LZ5/LZ6 = 建蔽率%, LZ7 = 容積率%
       LZ1 = 都市計畫名稱（背景資訊）
+
+    策略：座標可能落在「道路 / 公園 / 公設」等非可建分區（geocode 不準，591 給的點偏到馬路上）。
+    用 envelope 多半徑試查（10m → 30m → 60m），優先回實質分區（住/商/工/...）。
+    全找不到實質分區才回非實質（道路/公設）。
     """
     token = _get_ntpc_token()
     if not token:
         return None
-    try:
-        r = httpx.get(
-            f"{NTPC_ARCGIS_BASE}/LandUse_WMS/MapServer/0/query",
-            params={
-                "geometry": json.dumps({"x": lng, "y": lat, "spatialReference": {"wkid": 4326}}),
-                "geometryType": "esriGeometryPoint",
-                "inSR": 4326,
-                "spatialRel": "esriSpatialRelIntersects",
-                "outFields": "LZ1,LZ3,LZ4,LZ5,LZ6,LZ7",
-                "returnGeometry": "false",
-                "f": "json",
-                "token": token,
-            },
-            timeout=15, verify=False,
-        )
-        data = r.json() or {}
-        feats = data.get("features") or []
-        if not feats:
-            return None
-        a = feats[0].get("attributes") or {}
-        # 組「第 X 種住宅區」格式：LZ3 是「住宅區」，LZ4 可能是「一/二/三/四」
-        lz3 = (a.get("LZ3") or "").strip()
-        lz4 = (a.get("LZ4") or "").strip()
-        if lz3 == "住宅區" and lz4:
-            zone_name = f"第{lz4}種住宅區"
-            zone_label = f"住{lz4}"
-            # 對應台北 R1~R4 編碼
-            _r_map = {"一": "R1", "二": "R2", "三": "R3", "四": "R4"}
-            zone_code = _r_map.get(lz4)
-        elif lz3 == "商業區" and lz4:
-            zone_name = f"第{lz4}種商業區"
-            zone_label = f"商{lz4}"
-            _c_map = {"一": "C1", "二": "C2", "三": "C3", "四": "C4"}
-            zone_code = _c_map.get(lz4)
-        else:
-            zone_name = lz3 or None
-            zone_label = lz3 or None
-            zone_code = None
-        return {
-            "zone_name": zone_name,
-            "zone_label": zone_label,
-            "zone_code": zone_code,
-            "original_zone": f"{lz3}{lz4}" if lz4 else lz3,
-            "zone_list": [zone_name] if zone_name else [],
-            "plan_name": a.get("LZ1"),
-            "coverage_rate": a.get("LZ5") or a.get("LZ6"),
-            "far_rate": a.get("LZ7"),
+    # WGS84 約略換算：1° 緯度 ~111000m；經度需 cos(lat) 修正
+    deg_per_m_lat = 1 / 111000
+    import math as _m
+    deg_per_m_lng = 1 / (111000 * max(_m.cos(_m.radians(lat)), 0.1))
+    real_zones = []
+    non_real = []
+    seen_keys = set()
+    for half_m in (10, 30, 60):
+        dlat = half_m * deg_per_m_lat
+        dlng = half_m * deg_per_m_lng
+        envelope = {
+            "xmin": lng - dlng, "ymin": lat - dlat,
+            "xmax": lng + dlng, "ymax": lat + dlat,
+            "spatialReference": {"wkid": 4326},
         }
-    except Exception as e:
-        logger.warning(f"query_zoning_newtaipei error: {e}")
-        return None
+        try:
+            r = httpx.get(
+                f"{NTPC_ARCGIS_BASE}/LandUse_WMS/MapServer/0/query",
+                params={
+                    "geometry": json.dumps(envelope),
+                    "geometryType": "esriGeometryEnvelope",
+                    "inSR": 4326,
+                    "spatialRel": "esriSpatialRelIntersects",
+                    "outFields": "LZ1,LZ3,LZ4,LZ5,LZ6,LZ7",
+                    "returnGeometry": "false",
+                    "f": "json",
+                    "token": token,
+                },
+                timeout=15, verify=False,
+            )
+            data = r.json() or {}
+            feats = data.get("features") or []
+        except Exception as e:
+            logger.warning(f"query_zoning_newtaipei error (half_m={half_m}): {e}")
+            continue
+        for f in feats:
+            a = f.get("attributes") or {}
+            entry = _build_ntpc_zone_entry(a)
+            if not entry:
+                continue
+            # 去重 — 同 zone_label 不重複加
+            key = entry.get("original_zone") or entry.get("zone_label")
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            if is_real_zone(entry["zone_label"]):
+                real_zones.append(entry)
+            else:
+                non_real.append(entry)
+        if real_zones:
+            break  # 找到實質分區即停止擴大
+    if real_zones:
+        result = dict(real_zones[0])
+        if len(real_zones) > 1:
+            result["zone_list"] = [z["zone_name"] for z in real_zones]
+        return result
+    if non_real:
+        return non_real[0]
+    return None
 
 
 def query_road_width_newtaipei(lat: float, lng: float, address_hint: str = "") -> Optional[dict]:
