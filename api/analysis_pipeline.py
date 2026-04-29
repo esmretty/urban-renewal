@@ -519,6 +519,20 @@ def analyze_single_property(
     if not item.get("address_inferred") and not addr_has_number and trust_source_coords:
         src_lat = item.get("source_latitude") or item.get("latitude")
         src_lng = item.get("source_longitude") or item.get("longitude")
+        had_real_source_coord = bool(src_lat and src_lng)
+        # 永慶 Playwright 偶會 timeout 拿不到 page 座標 → 此時 src_lat 都是 None
+        # fallback：用 geocode_address(街級地址) 拿一個近似源點，再用此源點 reverse_geocode
+        # 比「整個 reverse_geocode 不跑、address_inferred=None」好（街級 reverse 有 confidence 標）
+        if not had_real_source_coord and addr_for_geo:
+            try:
+                _c = geocode_address(addr_for_geo)
+                if _c:
+                    src_lat, src_lng = _c
+                    logger.info(
+                        f"[{src_id}] {src_name} 無 page 座標 → 街級 geocode 當源點: {_c}"
+                    )
+            except Exception as _ce:
+                logger.warning(f"[{src_id}] 街級 geocode fallback 失敗: {_ce}")
         if src_lat and src_lng and road_seg:
             rev_addr = None
             try:
@@ -537,8 +551,11 @@ def analyze_single_property(
                 from database.models import strip_region_prefix
                 _cleaned = _clean_address_garbage(rev_addr)
                 item["address_inferred"] = strip_region_prefix(_cleaned, city or "", district or "")
-                item["address_inferred_confidence"] = "geocode_reverse"
-                logger.info(f"[{src_id}] reverse geocode 拿到具體地址: {rev_addr}")
+                # 區分 confidence：page 座標 reverse vs 街級 geocode fallback reverse（後者誤差較大）
+                item["address_inferred_confidence"] = (
+                    "geocode_reverse" if had_real_source_coord else "geocode_reverse_loose"
+                )
+                logger.info(f"[{src_id}] reverse geocode 拿到具體地址: {rev_addr} (confidence={item['address_inferred_confidence']})")
             else:
                 logger.info(f"[{src_id}] reverse geocode 無結果 (lat={src_lat}, lng={src_lng}, road={road_seg})")
 
