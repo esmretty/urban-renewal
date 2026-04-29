@@ -4419,11 +4419,12 @@ def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False):
                 break;
               }
               // 社區欄位的地址（純文字，不受 CSS 位移防爬影響）
+              // 必要條件：含「號」+「路/街/大道/巷」結構（避免屋主把社區欄位填成「近XX1號出口」廣告詞）
               let communityAddr = '';
               const addrEls = document.querySelectorAll('.info-addr-value');
               for (const el of addrEls) {
                 const t = (el.innerText || '').trim();
-                if (t && /\d+號/.test(t)) { communityAddr = t; break; }
+                if (t && /\d+號/.test(t) && /路|街|大道|巷|弄/.test(t)) { communityAddr = t; break; }
               }
               // 591 原生座標（從地圖 iframe URL 抓）
               let pageLat = null, pageLng = null;
@@ -4492,7 +4493,10 @@ def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False):
                         vision[k] = v
 
         # 若 screenshot_detail_page 的進階 DOM selector 抓到更完整地址，覆蓋簡陋的 inline 結果
-        if _community_addr_from_screenshot and "號" in _community_addr_from_screenshot:
+        # 必要條件：含「號」+「路/街/大道/巷」結構（避免屋主把 community-name 填成「近XX1號出口」廣告詞）
+        import re as _re_caddr2
+        _has_road_token2 = bool(_re_caddr2.search(r"(?:路|街|大道|巷)", _community_addr_from_screenshot or ""))
+        if _community_addr_from_screenshot and "號" in _community_addr_from_screenshot and _has_road_token2:
             if not data.get("community_address") or "號" not in data.get("community_address", ""):
                 data["community_address"] = _community_addr_from_screenshot
 

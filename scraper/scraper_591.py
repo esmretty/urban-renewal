@@ -1056,12 +1056,17 @@ def screenshot_detail_page(ctx: BrowserContext, url: str, source_id: str):
         addr_candidates = detail_data.get("addr_candidates") or []
         # 優先序：社區 label（通常含完整號之 X）> 地址 label（可能只到巷）
         # 同時要求含「號」最優，無則含「巷/弄」
+        # 必要條件：含「路/街/大道/巷」路名結構（避免屋主把社區欄位填成「近XX1號出口」廣告詞）
+        import re as _re_pick
+        _ROAD_RE = _re_pick.compile(r"(?:路|街|大道|巷|弄)")
         def _pick(src_filter, need_num=True):
             for c in addr_candidates:
-                if not c.get("text"): continue
+                text = c.get("text") or ""
+                if not text: continue
                 if src_filter and not any(s in c.get("src", "") for s in src_filter): continue
-                if need_num and "號" not in c["text"]: continue
-                return c["text"]
+                if need_num and "號" not in text: continue
+                if not _ROAD_RE.search(text): continue   # 沒路名結構 → 不採用（廣告詞 / 站名）
+                return text
             return None
         community_addr = (
             _pick(["社區"], need_num=True)          # 社區 + 含號
