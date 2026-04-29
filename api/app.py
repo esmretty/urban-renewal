@@ -525,11 +525,15 @@ def _cmd_state_set(cmd_idx: int, **kwargs):
 
 async def _run_update_prices_command(trigger_label: str = "update_prices_scheduler") -> dict:
     """自動更新預售屋單價命令：下載最新 LVR CSV + 重算各區中位數寫 Firestore。
-    回傳 {'district_count': N, 'total_samples': N}。失敗會 raise。"""
+    log 詳細紀錄：舊 LVR 期次 / 新 LVR 期次 / 樣本筆數 / 各區單價變化。
+    回傳 dict 含 district_count / total_samples / diff / latest_season。失敗 raise。"""
     from database.run_log import log_action
-    started = now_tw_iso()
+    started_ts = now_tw_iso()
+    # 用 batch_start / batch_end 沿用既有 list_sessions 框架（admin 執行紀錄看得到）
+    log_action(trigger_label, "batch_start",
+               message="開始更新預售屋單價",
+               details={"source": "update_prices"})
     logger.info(f"[update-prices] 開始下載最新 LVR + 重算各區中位數")
-    log_action(trigger_label, "verify_alive_start", message="開始更新預售屋單價")
 
     def _do():
         from scraper.download_lvr import download_recent
@@ -540,23 +544,80 @@ async def _run_update_prices_command(trigger_label: str = "update_prices_schedul
             logger.warning(f"[update-prices] download_recent 部分失敗（仍試重算既有 CSV）: {e}")
         return update_district_prices(max_seasons=5)
 
-    payload = await asyncio.to_thread(_do)
+    try:
+        payload = await asyncio.to_thread(_do)
+    except Exception as e:
+        logger.exception(f"[update-prices] 失敗: {e}")
+        log_action(trigger_label, "batch_end",
+                   message=f"更新失敗：{e}",
+                   details={"error": str(e)[:300]})
+        raise
+
     by_district = payload.get("by_district") or {}
     samples = payload.get("samples") or {}
+    diff = payload.get("diff") or {}
     total_samples = sum(samples.values()) if samples else 0
-    logger.info(
-        f"[update-prices] 完成：{len(by_district)} 區 / 共 {total_samples} 筆樣本 "
-        f"updated_at={payload.get('updated_at')}"
+    prev_season = payload.get("previous_latest_season")
+    new_season = payload.get("latest_season")
+    row_count = payload.get("row_count", 0)
+
+    # 各區變化的人類可讀摘要
+    diff_lines = []
+    changed_count = 0
+    for d in sorted(diff.keys()):
+        e = diff[d]
+        old_v = e.get("old")
+        new_v = e.get("new")
+        delta = e.get("delta")
+        if old_v is None:
+            diff_lines.append(f"  + {d}: 新增 {new_v} 萬/坪 (樣本 {e.get('new_samples') or 0})")
+            changed_count += 1
+        elif new_v is None:
+            diff_lines.append(f"  - {d}: 移除（原 {old_v} 萬/坪）")
+            changed_count += 1
+        elif delta and abs(delta) >= 0.1:
+            sign = "+" if delta > 0 else ""
+            diff_lines.append(
+                f"  ◆ {d}: {old_v} → {new_v} 萬/坪 ({sign}{delta:.1f}, "
+                f"樣本 {e.get('old_samples') or 0} → {e.get('new_samples') or 0})"
+            )
+            changed_count += 1
+        else:
+            diff_lines.append(f"  · {d}: {new_v} 萬/坪 (無變化, 樣本 {e.get('new_samples') or 0})")
+
+    summary = (
+        f"完成：LVR 期次 {prev_season or '(無紀錄)'} → {new_season}，"
+        f"{len(by_district)} 區 / {total_samples} 筆樣本 / 變動 {changed_count} 區"
     )
+    logger.info(f"[update-prices] {summary}")
+    for line in diff_lines:
+        logger.info(f"[update-prices] {line}")
+
     log_action(
-        trigger_label, "verify_alive_end",
-        message=f"更新 {len(by_district)} 區單價",
-        details={"district_count": len(by_district), "total_samples": total_samples,
-                 "updated_at": payload.get("updated_at")},
+        trigger_label, "batch_end",
+        message=summary,
+        details={
+            "district_count": len(by_district),
+            "total_samples": total_samples,
+            "row_count": row_count,
+            "previous_latest_season": prev_season,
+            "latest_season": new_season,
+            "previous_updated_at": payload.get("previous_updated_at"),
+            "updated_at": payload.get("updated_at"),
+            "changed_count": changed_count,
+            "diff": diff,                       # 各區詳細 old/new/delta（用於 admin UI 詳情）
+            "diff_summary": diff_lines,         # 人類可讀字串（log / UI 直接 render）
+        },
     )
     return {
         "district_count": len(by_district),
         "total_samples": total_samples,
+        "row_count": row_count,
+        "previous_latest_season": prev_season,
+        "latest_season": new_season,
+        "changed_count": changed_count,
+        "diff": diff,
+        "diff_summary": diff_lines,
         "by_district": by_district,
         "updated_at": payload.get("updated_at"),
     }

@@ -126,15 +126,54 @@ def collect_recent_seasons(base_dir: Path, max_seasons: int = 5) -> list[dict]:
     return all_rows
 
 
+def _detect_latest_season(base_dir: Path) -> Optional[str]:
+    """掃 data/lvr/ 找最新季資料夾名（如 '115S1'，或若 current 較新則 'current'）。"""
+    lvr_root = base_dir / "data" / "lvr"
+    if not lvr_root.exists():
+        return None
+    season_dirs = []
+    has_current = False
+    for d in lvr_root.iterdir():
+        if not d.is_dir():
+            continue
+        if d.name == "current":
+            has_current = True
+        else:
+            season_dirs.append(d.name)
+    season_dirs.sort(reverse=True)
+    latest = season_dirs[0] if season_dirs else None
+    # 若 current 存在，回傳「最新季 + current」字樣讓 caller 看
+    if has_current and latest:
+        return f"{latest}+current"
+    return latest
+
+
 def update_district_prices(*, max_seasons: int = 5, base_dir: Optional[Path] = None) -> dict:
     """主流程：parse 既有 LVR CSV → 算中位數 → 寫 Firestore。
+    回傳含 diff 的 payload（含 previous_by_district / previous_updated_at / previous_season /
+    latest_season / 各區舊值新值對照）。
     base_dir: 可選，預設用 BASE_DIR；測試時可指定。
-    回傳：寫入 Firestore 的 payload。
     """
     if base_dir is None:
         from config import BASE_DIR
         base_dir = BASE_DIR
 
+    # 1. 寫前先讀舊值（給 diff log）
+    previous: dict = {}
+    try:
+        from database.db import get_firestore
+        old_doc = get_firestore().collection("settings").document("district_new_house_price").get()
+        if old_doc.exists:
+            previous = old_doc.to_dict() or {}
+    except Exception as e:
+        logger.warning(f"讀舊 district_new_house_price 失敗（diff 不會包含舊值）: {e}")
+
+    old_by_district = previous.get("by_district") or {}
+    old_samples = previous.get("samples") or {}
+    old_updated_at = previous.get("updated_at")
+    old_latest_season = previous.get("latest_season")
+
+    # 2. 算新值
     rows = collect_recent_seasons(base_dir, max_seasons=max_seasons)
     logger.info(f"預售屋 LVR 總筆數: {len(rows)}")
     medians = compute_district_medians(rows)
@@ -143,16 +182,40 @@ def update_district_prices(*, max_seasons: int = 5, base_dir: Optional[Path] = N
 
     by_district = {d: v["median"] for d, v in sorted(medians.items())}
     samples = {d: v["n"] for d, v in sorted(medians.items())}
+    new_latest_season = _detect_latest_season(base_dir)
+
+    # 3. 算 diff
+    all_districts = sorted(set(old_by_district.keys()) | set(by_district.keys()))
+    diff = {}
+    for d in all_districts:
+        old_v = old_by_district.get(d)
+        new_v = by_district.get(d)
+        diff[d] = {
+            "old": old_v,
+            "new": new_v,
+            "old_samples": old_samples.get(d),
+            "new_samples": samples.get(d),
+            "delta": (round(new_v - old_v, 1) if (isinstance(old_v, (int, float)) and isinstance(new_v, (int, float))) else None),
+        }
+
     payload = {
         "updated_at": datetime.now().astimezone().isoformat(),
         "source": f"內政部不動產交易實價登錄 預售屋（最近 {max_seasons} 季+current）",
         "by_district": by_district,
         "samples": samples,
+        "latest_season": new_latest_season,
+        "previous_latest_season": old_latest_season,
+        "previous_updated_at": old_updated_at,
+        "row_count": len(rows),
+        "diff": diff,
     }
     try:
         from database.db import get_firestore
         get_firestore().collection("settings").document("district_new_house_price").set(payload)
-        logger.info(f"寫 Firestore settings/district_new_house_price OK，{len(by_district)} 區")
+        logger.info(
+            f"寫 Firestore settings/district_new_house_price OK，{len(by_district)} 區"
+            f"（LVR 期：{old_latest_season} → {new_latest_season}，{len(rows)} 筆樣本）"
+        )
     except Exception as e:
         logger.warning(f"寫 Firestore 失敗（payload 仍回傳給 caller）: {e}")
     return payload
