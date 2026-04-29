@@ -1171,8 +1171,27 @@ window.runUpdatePricesNow = async function () {
     if (statusEl) {
       const cnt = data.district_count || 0;
       const samples = data.total_samples || 0;
+      const rows = data.row_count || 0;
+      const changed = data.changed_count || 0;
       const at = data.updated_at ? new Date(data.updated_at).toLocaleString("zh-TW", { hour12: false }) : "?";
-      statusEl.innerHTML = `✓ 更新完成：${cnt} 區 / ${samples} 筆樣本（${at}）<br><span style="color:#888; font-size:12px;">前端下次重新整理會自動套用新單價</span>`;
+      const prevSeason = data.previous_latest_season || "(初次)";
+      const newSeason = data.latest_season || "?";
+      const diffLines = (data.diff_summary || []).map(l => esc(l)).join("\n");
+      const detailHtml = diffLines
+        ? `<details style="margin-top:6px;"><summary style="cursor:pointer; color:#16a085;">展開各區單價變化（${cnt} 區，變動 ${changed} 區）</summary>
+             <pre style="background:#f7f9f8; padding:8px; border-radius:4px; font-size:12px; line-height:1.6; max-height:400px; overflow-y:auto; margin:6px 0 0;">${diffLines}</pre>
+           </details>`
+        : "";
+      statusEl.innerHTML = `
+        ✓ 更新完成（${at}）<br>
+        <span style="font-size:12px; color:#555;">
+          LVR 期次：${esc(prevSeason)} → <b>${esc(newSeason)}</b><br>
+          原始 LVR ${rows} 筆 → 有效樣本 ${samples} 筆（過濾後）<br>
+          ${cnt} 區，本次變動 <b style="color:${changed > 0 ? '#c0392b' : '#888'}">${changed}</b> 區
+        </span>
+        ${detailHtml}
+        <div style="margin-top:6px; font-size:12px; color:#888;">前端下次重新整理會自動套用新單價</div>
+      `;
     }
     // 重畫 scheduler card
     if (typeof loadSchedulerStatus === "function") loadSchedulerStatus();
