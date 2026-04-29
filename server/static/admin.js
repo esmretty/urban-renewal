@@ -1344,6 +1344,12 @@ function _touchApplyBtns() {
   loadSchedulerStatus();
 }
 
+// 行政區 → 城市對應（跟 config.py NEW_TAIPEI_DISTRICTS / TAIPEI_DISTRICTS 同步）
+const _DIST_CITY = {
+  "新店區": "新北市", "永和區": "新北市", "中和區": "新北市", "板橋區": "新北市",
+};
+function _cityOf(d) { return _DIST_CITY[d] || "台北市"; }
+
 window.schedToggleDist = function (idx, d, on) {
   const cmd = _schedDraft.commands[idx];
   if (!cmd) return;
@@ -1351,7 +1357,18 @@ window.schedToggleDist = function (idx, d, on) {
   if (on) {
     if (set.size >= _schedMeta.maxDistricts) {
       alert(`每個命令最多選 ${_schedMeta.maxDistricts} 區`);
-      // rollback checkbox
+      renderScheduler({ enabled: document.querySelector("#scheduler-box button")?.textContent?.includes("已啟用"),
+                        currently_running: false, next_tick_at: null, last_run_at: null, last_status: "" });
+      loadSchedulerStatus();
+      return;
+    }
+    // 跨城市檢查：同一命令裡 districts 必須屬於同一城市
+    // （台北/新北 配額演算法不同，混搭會有先抓滿的城市佔光配額的問題）
+    const newCity = _cityOf(d);
+    const existingCities = new Set([...set].map(_cityOf));
+    if (existingCities.size > 0 && !existingCities.has(newCity)) {
+      const otherCity = [...existingCities][0];
+      alert(`同一命令不能跨城市勾選。\n此命令已含 ${otherCity} 行政區，要加 ${newCity} 請另外開一個命令（按「+ 新增掃描命令」）。`);
       renderScheduler({ enabled: document.querySelector("#scheduler-box button")?.textContent?.includes("已啟用"),
                         currently_running: false, next_tick_at: null, last_run_at: null, last_status: "" });
       loadSchedulerStatus();

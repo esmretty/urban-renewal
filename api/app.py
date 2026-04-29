@@ -1373,6 +1373,16 @@ async def scheduler_set_config(body: SchedulerConfigReq, admin: dict = Depends(r
             for d in districts:
                 if d not in allowed:
                     raise HTTPException(400, f"命令 {idx+1}：「{d}」不是合法行政區")
+            # 跨城市檢查：同一命令裡 districts 必須屬於同一城市
+            # （台北/新北 配額演算法不同，混搭先抓滿的城市會佔光配額）
+            from config import TARGET_REGIONS as _TR
+            _dist_to_city = {d: c for c, info in _TR.items() for d in (info.get("districts") or {}).keys()}
+            cmd_cities = {_dist_to_city.get(d) for d in districts if _dist_to_city.get(d)}
+            if len(cmd_cities) > 1:
+                raise HTTPException(
+                    400,
+                    f"命令 {idx+1} 不能跨城市（{'、'.join(sorted(cmd_cities))}），請拆成多個命令"
+                )
             limit = int(c.limit or 30)
             if limit < 1 or limit > 300:
                 raise HTTPException(400, f"命令 {idx+1}：limit 必須 1~300")
