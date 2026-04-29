@@ -478,7 +478,10 @@ def analyze_single_property(
             item["address_inferred"] = strip_region_prefix(_cleaned, city or "", district or "")
             item["address_inferred_confidence"] = "unique_override"
             item["address_inferred_candidates"] = t["candidates"][:10] if t["candidates"] else None
-            inferred_coord = geocode_address(lvr_address)
+            # ⚠ LVR triangulate 回的 address 沒帶 city/district 前綴（例：「信義路82號1樓」）
+            # 直接 geocode 會被 Google 解到全台同名路（永和信義路 → 高雄信義路）→ 必須拼前綴
+            _lvr_full = f"{city or ''}{district or ''}{lvr_address}" if not lvr_address.startswith(("台北市","新北市")) else lvr_address
+            inferred_coord = geocode_address(_lvr_full)
         elif addr_has_number:
             # OCR 已有號 + LVR 沒強烈反對 → 信任 OCR
             inferred_coord = geocode_address(addr_for_geo)
@@ -490,7 +493,8 @@ def analyze_single_property(
             item["address_inferred"] = strip_region_prefix(_cleaned, city or "", district or "")
             item["address_inferred_confidence"] = t["confidence"]
             item["address_inferred_candidates"] = t["candidates"][:10] if t["candidates"] else None
-            inferred_coord = geocode_address(lvr_address)
+            _lvr_full = f"{city or ''}{district or ''}{lvr_address}" if not lvr_address.startswith(("台北市","新北市")) else lvr_address
+            inferred_coord = geocode_address(_lvr_full)
     except Exception as te:
         logger.warning(f"LVR 失敗 {src_id}: {te}")
 
