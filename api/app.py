@@ -452,7 +452,9 @@ async def _retry_queue_loop():
                     continue
                 try:
                     # 用既有 _scrape_single_url 重抓（會自動分流 591/永慶）
-                    res = await asyncio.to_thread(_scrape_single_url, url, src_id, False)
+                    # mark_user_url=False：retry queue 補抓的物件原本是 batch 失敗來的，
+                    # 不該標 user_url（標了 admin 物件列表會看不到）
+                    res = await asyncio.to_thread(_scrape_single_url, url, src_id, False, mark_user_url=False)
                     # 「合法 skip」(非公寓樓層 > 5)：scraper 已知這 src_id 永遠不該建 doc
                     # → dequeue 且不再重試，避免無限循環
                     if isinstance(res, dict) and res.get("status") == "skipped_non_apartment":
@@ -4268,7 +4270,7 @@ async def admin_kill_scrape(admin: dict = Depends(require_admin)):
     }
 
 
-def _scrape_single_url_yongqing(url: str, src_id: str, is_reanalyze: bool = False):
+def _scrape_single_url_yongqing(url: str, src_id: str, is_reanalyze: bool = False, *, mark_user_url: bool = True):
     """單筆永慶 URL 分析。比 591 簡單很多：純 HTTP + Playwright（拿座標）+ pipeline。"""
     from scraper.scraper_yongqing import scrape_yongqing_single
     from scraper.browser_manager import get_browser_context
@@ -4334,13 +4336,13 @@ def _scrape_single_url_yongqing(url: str, src_id: str, is_reanalyze: bool = Fals
     # 新物件
     new_doc_id = doc.get("id") or gen_dated_id()
     doc["id"] = new_doc_id
-    if not is_reanalyze:
+    if not is_reanalyze and mark_user_url:
         doc["source_origin"] = "user_url"
     col.document(new_doc_id).set(_safe_doc(doc))
     return {"status": "ok", "source_id": src_id, "id": new_doc_id, "message": "永慶物件分析完成（新增）"}
 
 
-def _scrape_single_url_sinyi(url: str, src_id: str, is_reanalyze: bool = False):
+def _scrape_single_url_sinyi(url: str, src_id: str, is_reanalyze: bool = False, *, mark_user_url: bool = True):
     """單筆信義 URL 分析。
     信義列表頁 SSR 已含完整資料（座標+價格+地址+建坪+地坪），
     所以走輕量 path：scrape_sinyi_single（從 detail 頁的 NEXT_DATA 找該物件）→ pipeline。
@@ -4407,22 +4409,22 @@ def _scrape_single_url_sinyi(url: str, src_id: str, is_reanalyze: bool = False):
 
     new_doc_id = doc.get("id") or gen_dated_id()
     doc["id"] = new_doc_id
-    if not is_reanalyze:
+    if not is_reanalyze and mark_user_url:
         doc["source_origin"] = "user_url"
     col.document(new_doc_id).set(_safe_doc(doc))
     return {"status": "ok", "source_id": src_id, "id": new_doc_id, "message": "信義物件分析完成（新增）"}
 
 
-def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False):
+def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False, *, mark_user_url: bool = True):
     """同步：開瀏覽器 + 抓單一 URL + 跑分析。
     is_reanalyze=True：admin 重新分析路徑，跳過「公寓 only」「目標區域」等過濾，
                       強制更新既有 doc（admin 特權，用於修正舊資料）。
     支援 591 / 永慶 / 信義 三種 URL（依 src_id prefix 分流）。"""
     # 永慶 URL → 走永慶單筆分析路徑（純 HTTP + Playwright，不需 Vision OCR）
     if src_id.startswith("yongqing_"):
-        return _scrape_single_url_yongqing(url, src_id, is_reanalyze)
+        return _scrape_single_url_yongqing(url, src_id, is_reanalyze, mark_user_url=mark_user_url)
     if src_id.startswith("sinyi_"):
-        return _scrape_single_url_sinyi(url, src_id, is_reanalyze)
+        return _scrape_single_url_sinyi(url, src_id, is_reanalyze, mark_user_url=mark_user_url)
 
     from scraper.browser_manager import get_browser_context
     from scraper.scraper_591 import _parse_card  # 既有 card 解析（不適用詳情頁）
@@ -4764,7 +4766,8 @@ def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False):
         else:
             # 首次進中央的「用戶貼 URL 送出」物件 → 標 source_origin=user_url，
             # 讓搜尋 tab 過濾掉（搜尋 tab 只顯示 admin batch 抓進來的）
-            if not is_reanalyze:
+            # mark_user_url=False 時不標（例：retry queue 補抓 batch 失敗物件，那是 batch 來源）
+            if not is_reanalyze and mark_user_url:
                 doc["source_origin"] = "user_url"
             new_doc_id = doc.get("id")    # make_property_doc 已生成
             if not new_doc_id:
