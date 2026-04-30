@@ -2759,6 +2759,24 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
 
     new_items = result["new"]
     price_updates = result["price_updates"]
+    filtered_out = result.get("filtered_out") or []   # listing 階段被過濾掉的（總層數>5、商辦等）
+
+    # log 每一筆 listing 階段被過濾的物件 — 讓 admin 從 session 詳情頁看得到「為什麼 limit=10 但結果只 8 筆」
+    for fo in filtered_out:
+        try:
+            log_action(trigger_label, "skip_filter",
+                       source_id=fo.get("source_id"),
+                       message=f"列表過濾：{fo.get('reason') or '不符目標類型'}（{(fo.get('title') or '')[:25]}）",
+                       details={
+                           "url": fo.get("url"),
+                           "title": fo.get("title"),
+                           "district": fo.get("district"),
+                           "city": fo.get("city"),
+                           "reason": fo.get("reason"),
+                           "filter_stage": fo.get("filter_stage"),
+                       })
+        except Exception: pass
+
     if not new_items and not price_updates:
         try:
             if source == "yongqing":
@@ -2954,10 +2972,11 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                             f"    └ 新 ID {item.get('source_id')} → 併入 {dup_sid}",
                             pct,
                         )
+                        from database.run_log import build_doc_log_details
                         log_action(trigger_label, "dup_merge",
                                    source_id=src_id, doc_id=dup_sid,
                                    message=f"併入 {dup_sid}（{item.get('title','')[:25]}）",
-                                   details={"merged_into": dup_sid})
+                                   details=build_doc_log_details(item, None, merged_into=dup_sid))
                         continue
 
                 action = "補資料" if is_enrich else "分析"
@@ -3019,11 +3038,11 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                             )
                             # action log
                             try:
-                                from database.run_log import log_action
+                                from database.run_log import log_action, build_doc_log_details
                                 log_action(trigger_label, "cross_source",
                                            source_id=src_id, doc_id=yc_dup_id,
                                            message=f"{_src_name}併入既有 doc",
-                                           details={"merged_into": yc_dup_id, "source": _src_name})
+                                           details=build_doc_log_details(item, dd, merged_into=yc_dup_id, source=_src_name))
                             except Exception: pass
                             # 情況 D：跨來源新上架後，順便驗活該 doc 的其他來源連結
                             try:
@@ -3088,6 +3107,11 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     except Exception as _de:
                         logger.warning(f"移除下架物件失敗 {src_id}: {_de}")
                     progress_callback(f"  ⚠️ 物件已下架，跳過", pct)
+                    log_action(trigger_label, "skip_delisted",
+                               source_id=src_id,
+                               message=f"物件已下架（591 詳情頁回 404）：{(item.get('title') or '')[:25]}",
+                               details={"url": item.get("url"), "title": item.get("title"),
+                                        "district": item.get("district")})
                     continue
                 shot_path, community_addr, page_coords = _detail_ret[:3]
                 _addr_crop = getattr(_detail_ret, "addr_path", None)
@@ -3207,6 +3231,16 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                         f"  ⛔ 跳過 scrape 失敗（缺價格或行政區）：{src_id} {(item.get('title') or '')[:25]}",
                         pct,
                     )
+                    log_action(trigger_label, "skip_scrape_failed",
+                               source_id=src_id,
+                               message=f"詳情頁 scrape 失敗（缺價格或行政區）：{(item.get('title') or '')[:25]}",
+                               details={"url": item.get("url"), "title": item.get("title"),
+                                        "district": item.get("district"),
+                                        "price_ntd": item.get("price_ntd"),
+                                        "missing": [
+                                            f for f, v in (("price_ntd", item.get("price_ntd")),
+                                                            ("district", item.get("district"))) if not v
+                                        ]})
                     continue
 
                 # ─ 只用總樓層過濾（591 filter 已選公寓；OCR 建物類型不可靠，易誤判）──
@@ -3219,6 +3253,12 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                         f"  ⛔ 跳過非公寓（{_total_f}F≥6）：{(item.get('title') or '')[:25]}",
                         pct,
                     )
+                    log_action(trigger_label, "skip_non_apartment",
+                               source_id=src_id,
+                               message=f"非公寓（總樓層 {_total_f}F ≥ 6）：{(item.get('title') or '')[:25]}",
+                               details={"url": item.get("url"), "title": item.get("title"),
+                                        "district": item.get("district"),
+                                        "total_floors": _total_f})
                     continue
 
                 # ─ 重複物件偵測：同 district + road + 建坪 + 價格 ─
@@ -3276,10 +3316,11 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                 f"    └ 新 ID {item.get('source_id')} → 併入 {best_old['_id']}",
                                 pct,
                             )
+                            from database.run_log import build_doc_log_details as _bld_log
                             log_action(trigger_label, "dup_merge",
                                        source_id=src_id, doc_id=best_old['_id'],
                                        message=f"併入 {best_old['_id']} 並補欄位",
-                                       details={"merged_into": best_old['_id']})
+                                       details=_bld_log(item, best_old, merged_into=best_old['_id']))
                             continue
                         else:
                             if url_updates:
@@ -3295,10 +3336,11 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                 f"    └ 新 ID {item.get('source_id')} → 併入 {best_old['_id']}",
                                 pct,
                             )
+                            from database.run_log import build_doc_log_details as _bld_log
                             log_action(trigger_label, "dup_merge",
                                        source_id=src_id, doc_id=best_old['_id'],
                                        message=f"併入 {best_old['_id']}（捨棄）",
-                                       details={"merged_into": best_old['_id'], "discarded": True})
+                                       details=_bld_log(item, best_old, merged_into=best_old['_id'], discarded=True))
                             continue
 
                 # ─ enrich 模式：用 merge 規則合併（用戶覆寫不動、衝突欄位 log）─
@@ -3355,14 +3397,16 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                         enrich_count += 1
                         if conflicts:
                             progress_callback(f"  ⚠ {src_id} 欄位衝突保留舊值：{','.join(conflicts)}", pct)
+                        from database.run_log import build_doc_log_details as _bld_log
                         log_action(trigger_label, "enrich",
                                    source_id=src_id, doc_id=existing_doc_id,
                                    message=f"補欄位{('（衝突: '+ ','.join(conflicts) + '）') if conflicts else ''}",
-                                   details={"conflicts": conflicts, "address": existing.get("address")})
+                                   details=_bld_log(item, merged, conflicts=conflicts))
                     else:
                         logger.error(f"enrich 找不到 doc id for source_id={src_id}，跳過")
                         log_action(trigger_label, "error", source_id=src_id,
-                                   message="enrich 找不到 doc")
+                                   message="enrich 找不到 doc",
+                                   details={"url": item.get("url"), "title": item.get("title")})
                     continue
 
                 # ─ 全新物件：呼叫共用 pipeline ─
@@ -4488,12 +4532,18 @@ def _scrape_single_url_yongqing(url: str, src_id: str, is_reanalyze: bool = Fals
     existing_doc_id, old = find_doc_by_source_id(src_id)
     col = get_col()
 
+    from database.run_log import log_action as _la, build_doc_log_details as _bld
+    _trig = "manual_reanalyze" if is_reanalyze else ("manual_url" if mark_user_url else "manual_url")
     if existing_doc_id:
         if is_reanalyze:
             for _keep in ("scrape_session_at", "list_rank", "scraped_at"):
                 doc[_keep] = old.get(_keep)
             doc["id"] = existing_doc_id
             col.document(existing_doc_id).set(_safe_doc(doc))
+            try: _la(_trig, "reanalyze", source_id=src_id, doc_id=existing_doc_id,
+                    message="永慶物件重新分析完成（完整替換）",
+                    details=_bld({"source": "永慶", "url": url, "title": item.get("title")}, doc))
+            except Exception: pass
             return {"status": "ok", "source_id": src_id, "id": existing_doc_id, "message": "永慶物件重新分析完成（完整替換）"}
         merged, conflicts = merge_property_doc(old, doc)
         merged["id"] = existing_doc_id
@@ -4503,6 +4553,10 @@ def _scrape_single_url_yongqing(url: str, src_id: str, is_reanalyze: bool = Fals
         msg = "永慶物件已存在中央 DB，已合併"
         if conflicts:
             msg += f"（衝突保留舊值：{', '.join(conflicts)}）"
+        try: _la(_trig, "enrich", source_id=src_id, doc_id=existing_doc_id,
+                message=msg,
+                details=_bld({"source": "永慶", "url": url, "title": item.get("title")}, merged, conflicts=conflicts))
+        except Exception: pass
         return {"status": "ok", "source_id": src_id, "id": existing_doc_id, "message": msg}
 
     # 新物件
@@ -4511,6 +4565,10 @@ def _scrape_single_url_yongqing(url: str, src_id: str, is_reanalyze: bool = Fals
     if not is_reanalyze and mark_user_url:
         doc["source_origin"] = "user_url"
     col.document(new_doc_id).set(_safe_doc(doc))
+    try: _la(_trig, "new", source_id=src_id, doc_id=new_doc_id,
+            message="永慶物件分析完成（新增）",
+            details=_bld({"source": "永慶", "url": url, "title": item.get("title")}, doc))
+    except Exception: pass
     return {"status": "ok", "source_id": src_id, "id": new_doc_id, "message": "永慶物件分析完成（新增）"}
 
 
@@ -4562,12 +4620,18 @@ def _scrape_single_url_sinyi(url: str, src_id: str, is_reanalyze: bool = False, 
     existing_doc_id, old = find_doc_by_source_id(src_id)
     col = get_col()
 
+    from database.run_log import log_action as _la, build_doc_log_details as _bld
+    _trig = "manual_reanalyze" if is_reanalyze else "manual_url"
     if existing_doc_id:
         if is_reanalyze:
             for _keep in ("scrape_session_at", "list_rank", "scraped_at"):
                 doc[_keep] = old.get(_keep)
             doc["id"] = existing_doc_id
             col.document(existing_doc_id).set(_safe_doc(doc))
+            try: _la(_trig, "reanalyze", source_id=src_id, doc_id=existing_doc_id,
+                    message="信義物件重新分析完成（完整替換）",
+                    details=_bld({"source": "信義", "url": url, "title": item.get("title")}, doc))
+            except Exception: pass
             return {"status": "ok", "source_id": src_id, "id": existing_doc_id, "message": "信義物件重新分析完成（完整替換）"}
         merged, conflicts = merge_property_doc(old, doc)
         merged["id"] = existing_doc_id
@@ -4577,6 +4641,10 @@ def _scrape_single_url_sinyi(url: str, src_id: str, is_reanalyze: bool = False, 
         msg = "信義物件已存在中央 DB，已合併"
         if conflicts:
             msg += f"（衝突保留舊值：{', '.join(conflicts)}）"
+        try: _la(_trig, "enrich", source_id=src_id, doc_id=existing_doc_id,
+                message=msg,
+                details=_bld({"source": "信義", "url": url, "title": item.get("title")}, merged, conflicts=conflicts))
+        except Exception: pass
         return {"status": "ok", "source_id": src_id, "id": existing_doc_id, "message": msg}
 
     new_doc_id = doc.get("id") or gen_dated_id()
@@ -4584,6 +4652,10 @@ def _scrape_single_url_sinyi(url: str, src_id: str, is_reanalyze: bool = False, 
     if not is_reanalyze and mark_user_url:
         doc["source_origin"] = "user_url"
     col.document(new_doc_id).set(_safe_doc(doc))
+    try: _la(_trig, "new", source_id=src_id, doc_id=new_doc_id,
+            message="信義物件分析完成（新增）",
+            details=_bld({"source": "信義", "url": url, "title": item.get("title")}, doc))
+    except Exception: pass
     return {"status": "ok", "source_id": src_id, "id": new_doc_id, "message": "信義物件分析完成（新增）"}
 
 

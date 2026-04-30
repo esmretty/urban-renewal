@@ -244,14 +244,26 @@ def scrape_591(
     # 公寓額外過濾樓層（URL type=2 已限定公寓，但仍需排除 5 層以上）
     before = len(all_new)
     kept = []
+    filtered_out = []
     for r in all_new:
         ok, reason = _is_target_type(r)
         if ok:
             kept.append(r)
-        elif progress_callback:
-            progress_callback(
-                f"  ⏭ 跳過 {r.get('source_id')}：{reason} — {(r.get('title') or '')[:20]}"
-            )
+        else:
+            # 連同 reason / url / title 一起回給 caller，讓 admin log 看得到「為什麼這筆消失」
+            filtered_out.append({
+                "source_id": r.get("source_id"),
+                "url": r.get("url"),
+                "title": r.get("title"),
+                "district": r.get("district"),
+                "city": r.get("city"),
+                "reason": reason,
+                "filter_stage": "listing_target_type",
+            })
+            if progress_callback:
+                progress_callback(
+                    f"  ⏭ 跳過 {r.get('source_id')}：{reason} — {(r.get('title') or '')[:20]}"
+                )
     all_new = kept
 
     # 標記 591 上的位置（0 = 最新，在 591 上排最前面）
@@ -260,9 +272,9 @@ def scrape_591(
         item["list_rank"] = rank
         item["scrape_session_at"] = session_iso
 
-    logger.info(f"591 爬取完成：{before} 筆原始 → {len(all_new)} 筆符合條件，{len(all_price_updates)} 筆價格變動")
+    logger.info(f"591 爬取完成：{before} 筆原始 → {len(all_new)} 筆符合條件，{len(filtered_out)} 筆被過濾，{len(all_price_updates)} 筆價格變動")
 
-    return {"new": all_new, "price_updates": all_price_updates}
+    return {"new": all_new, "price_updates": all_price_updates, "filtered_out": filtered_out}
 
 
 LAST_FETCH_ERROR: Optional[str] = None   # module-level 狀態，外層可讀
