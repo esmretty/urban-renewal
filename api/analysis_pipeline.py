@@ -397,6 +397,8 @@ def analyze_single_property(
     _alley_m = re.search(r"\d+弄", addr_for_geo or "")
     if _alley_m:
         alley_hint = _alley_m.group(0)
+    # src_name 提前讀（LVR try block 內 elif lvr_address 路徑要 reference，不能等到 line 530 才 set）
+    src_name = item.get("source") or "591"
     try:
         t = triangulate_address(
             city=city, district=district, road_seg=road_seg,
@@ -527,7 +529,7 @@ def analyze_single_property(
     # 2. source 是永慶/信義（座標精度高，房仲後台維護過 ±10m）
     # 591 座標常偏 50-150m → 不可信，不走 reverse geocode（保留原地址即可）
     # CLAUDE.md 規則 6 提過 591 座標問題。
-    src_name = item.get("source") or "591"
+    # src_name 已在 LVR try block 之前 set（避免 LVR 段內 reference 到未定義變數）
     trust_source_coords = src_name in ("永慶", "信義")
     if not item.get("address_inferred") and not addr_has_number and trust_source_coords:
         src_lat = item.get("source_latitude") or item.get("latitude")
