@@ -2654,6 +2654,8 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
             "price_ntd": _d.get("price_ntd"),
             "building_area_ping": _d.get("building_area_ping"),
             "address": _d.get("address") or "",
+            "floor": _d.get("floor"),                 # 樓層 — 同棟不同戶建坪可能一樣，必須用樓層區分
+            "total_floors": _d.get("total_floors"),
         })
 
     def _extract_road_name(addr):
@@ -2666,21 +2668,30 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
         return m.group(1) if m else ""
 
     def find_duplicate(item):
-        """價格一樣 + 建物坪數±0.01 + 地址到路一樣 → 回傳重複物件的 doc id (UUID)，沒有回 None"""
+        """價格 + 建坪 ±0.01 + 地址路名 + 樓層 全部一樣 → 同物件，回 doc id；否則 None。
+        加 floor 是為了區分同棟不同戶（建坪可能相同但 floor 不同 = 不同戶，例如 2樓 vs 3樓）"""
         from database.models import make_source_key
         price = item.get("price_ntd")
         area = item.get("building_area_ping")
         road = _extract_road_name(item.get("address") or item.get("title") or "")
+        floor = item.get("floor")
         if not price or not area or not road:
             return None
         my_key = make_source_key(item.get("source") or "591", item.get("source_id") or "")
         for ex in _existing_items:
             if my_key in (ex.get("source_keys") or []):
                 continue   # 自己 — 跳過
-            if ex["price_ntd"] and abs(ex["price_ntd"] - price) < 1:
-                if ex["building_area_ping"] and abs(ex["building_area_ping"] - area) <= 0.01:
-                    if _extract_road_name(ex["address"]) == road:
-                        return ex["id"]   # 回傳 UUID 給呼叫端用 col.document(id)
+            if not (ex["price_ntd"] and abs(ex["price_ntd"] - price) < 1):
+                continue
+            if not (ex["building_area_ping"] and abs(ex["building_area_ping"] - area) <= 0.01):
+                continue
+            if _extract_road_name(ex["address"]) != road:
+                continue
+            # 樓層比對：兩邊都有值且不等 → 不同戶；單邊空或都空 → 信其他條件當同
+            if floor is not None and ex.get("floor") is not None:
+                if str(floor).strip() != str(ex["floor"]).strip():
+                    continue
+            return ex["id"]   # 回傳 UUID 給呼叫端用 col.document(id)
         return None
 
     label = "、".join(districts) if districts else "全部地區"
@@ -2830,7 +2841,9 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
         road = m.group(1) if m else ""
         bld = round((d.get("building_area_ping") or 0) * 10) / 10  # 0.1 坪精度
         price_wan = round((d.get("price_ntd") or 0) / 10000)
-        return (d.get("district") or "", road, bld, price_wan)
+        # floor 加入 key — 同棟不同戶建坪可能一樣，用樓層區分
+        floor = str(d.get("floor") or "").strip()
+        return (d.get("district") or "", road, bld, price_wan, floor)
     for _doc in col.get():
         _d = _doc.to_dict() or {}
         _d["_id"] = _doc.id

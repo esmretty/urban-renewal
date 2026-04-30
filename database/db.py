@@ -76,14 +76,16 @@ def gen_dated_id(when_iso: Optional[str] = None) -> str:
 
 def find_cross_source_duplicate(item: dict):
     """跨來源 dup 偵測：給 scraper 在 enrich 完成後用。
-    用 (district, road_seg, building_area_ping ±0.01, price_ntd 完全 match)
+    用 (district, road_seg, building_area_ping ±0.01, price_ntd 完全 match, floor 一樣)
     在 properties collection 找既有 doc。回傳 doc_id 或 None。
-    跟 api/app.py 的 find_duplicate 同邏輯，但獨立函式可被 scraper import。"""
+    跟 api/app.py 的 find_duplicate 同邏輯，但獨立函式可被 scraper import。
+    floor 條件：兩邊都有值且不等 → 不同戶（同棟不同樓層建坪可能一樣）"""
     try:
         addr = item.get("address") or ""
         district = item.get("district") or ""
         bld = item.get("building_area_ping")
         price = item.get("price_ntd")
+        floor = item.get("floor")
         if not (addr and district and bld and price):
             return None
         import re as _re
@@ -107,8 +109,14 @@ def find_cross_source_duplicate(item: dict):
             if item_key in (dd.get("source_keys") or []):
                 continue
             da = dd.get("address") or ""
-            if road in da and abs((dd.get("building_area_ping") or 0) - bld) < 0.01:
-                return d.id
+            if not (road in da and abs((dd.get("building_area_ping") or 0) - bld) < 0.01):
+                continue
+            # 樓層比對：兩邊都有值且不等 → 不同戶
+            ex_floor = dd.get("floor")
+            if floor is not None and ex_floor is not None:
+                if str(floor).strip() != str(ex_floor).strip():
+                    continue
+            return d.id
         return None
     except Exception:
         return None

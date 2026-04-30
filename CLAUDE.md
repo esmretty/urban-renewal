@@ -48,6 +48,9 @@
    - LVR triangulate 的 `area_tolerance_ping=0.01` 是正確的，**絕對不可以為了「多撈一些候選」去放寬**
    - 若 LVR 在同建坪 ±0.01 找不到 match → 代表 LVR 沒這戶的記錄（這戶可能從未交易過）→ 正確行為是 `address_inferred=None` 或跑 reverse_geo fallback
    - **禁止**以「±3 坪」「百分比 tolerance」等方式把其他戶的 LVR 記錄列成候選讓用戶選 — 會誤導用戶挑到不同戶的地址
+   - **建坪相同不代表同戶：必須再比 floor**：同棟不同樓層常常是相同建坪（同 layout），差別只在樓層。dedup（`find_duplicate` / `find_cross_source_duplicate` / 同 batch 的 `_dup_key`）一定要把 `floor` 列入比對；只有「價格 + 建坪±0.01 + 路名 + 樓層」全部一致才算同戶。
+   - 已實作位置：[api/app.py](api/app.py) `find_duplicate`、`_dup_key`；[database/db.py](database/db.py) `find_cross_source_duplicate`
+   - 過去踩雷：虎林街 591_20114607（3F）跟 591_20114614（2F）同價同建坪同路名，因為沒比 floor 被誤合併成 1 doc
 
 8. **動態計算的數字（倍數、分回坪、有效容積率…）不存 DB**
    `renewal_v2.scenarios.*.multiple` 這類「由多個輸入欄位即時算出來的結果」**絕不可以存成 DB 定數**。
