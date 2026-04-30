@@ -91,6 +91,28 @@ def _extract_road_segment(addr: str) -> str:
     return m.group(1) if m else ""
 
 
+def _check_batch_remote_skip(item: dict) -> Optional[str]:
+    """Batch 模式偏遠地段預檢：若 item 的 source 座標落入 REMOTE_POLYGONS_NEW_TAIPEI 的
+    某個 polygon → 回傳一段中文說明（呼叫端用此跳過分析、不寫 DB）。
+    不在偏遠範圍 / 沒座標 / 沒 district 一律回 None。
+    Manual 單筆 / URL 分析路徑不走 _scrape_and_analyze，所以不會踩到此檢查。
+    """
+    district = item.get("district")
+    if not district:
+        return None
+    lat = item.get("source_latitude") or item.get("latitude")
+    lng = item.get("source_longitude") or item.get("longitude")
+    if not (lat and lng):
+        return None
+    try:
+        from analysis.geocoder import is_remote_area_new_taipei
+        if is_remote_area_new_taipei(lat, lng, district):
+            return f"{district}偏遠地段（依政府河道/天險範圍判定）"
+    except Exception:
+        return None
+    return None
+
+
 def _is_replacement_change(existing: dict, incoming: dict) -> bool:
     """情況 B 偵測：同 source_id 但已變成另一物件。
     判定標準（任一成立）：
@@ -2961,6 +2983,20 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     page_coords = (item.get("latitude"), item.get("longitude")) if item.get("latitude") else None
                     progress_callback(f"  ✓ {_src_name}物件，座標 {page_coords}，跳過 591 OCR 流程", pct)
 
+                    # 偏遠地段預檢：座標落入新北市偏遠 polygon → 不分析、不寫 DB
+                    _remote_reason = _check_batch_remote_skip(item)
+                    if _remote_reason:
+                        progress_callback(f"  ⏭ 跳過：{_remote_reason}", pct)
+                        try:
+                            log_action(trigger_label, "skip_remote",
+                                       source_id=src_id,
+                                       message=f"批次跳過偏遠地段：{_remote_reason}",
+                                       details={"source": _src_name, "lat": page_coords[0] if page_coords else None,
+                                                "lng": page_coords[1] if page_coords else None,
+                                                "district": item.get("district")})
+                        except Exception: pass
+                        continue
+
                     # 跨來源去重：找有沒有既有 591 doc 是同物件
                     # （地址路段 + 建坪 ±0.01 + 價格 完全 match）
                     yc_dup_id = find_duplicate(item)
@@ -3085,6 +3121,21 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 if page_coords and page_coords[0] and page_coords[1]:
                     item["source_latitude"] = page_coords[0]
                     item["source_longitude"] = page_coords[1]
+                # 偏遠地段預檢：座標落入新北市偏遠 polygon → 不跑 AI 分析、不寫 DB
+                # 591 截圖已花，但能省掉後續最貴的 Vision OCR + Claude 分析
+                _remote_reason = _check_batch_remote_skip(item)
+                if _remote_reason:
+                    progress_callback(f"  ⏭ 跳過：{_remote_reason}", pct)
+                    try:
+                        log_action(trigger_label, "skip_remote",
+                                   source_id=src_id,
+                                   message=f"批次跳過偏遠地段：{_remote_reason}",
+                                   details={"source": "591",
+                                            "lat": item.get("source_latitude"),
+                                            "lng": item.get("source_longitude"),
+                                            "district": item.get("district")})
+                    except Exception: pass
+                    continue
                 # 詳情頁抓到的更新時間 → 寫進 item 讓 make_property_doc 轉 updated_at
                 _upd_txt = getattr(_detail_ret, "updated_text", None)
                 _pub_txt_detail = getattr(_detail_ret, "published_text", None)
