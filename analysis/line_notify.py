@@ -69,6 +69,17 @@ def notify_high_value_property(doc: dict, multiple: float, scenario: str,
     city = doc.get("city") or ""
     district = doc.get("district") or ""
     price_wan = round((doc.get("price_ntd") or 0) / 10000)
+    # 樓層資訊（前端列表會顯示，LINE 也要列，避免誤判同棟不同戶）
+    _fl = doc.get("floor")
+    _tf = doc.get("total_floors")
+    if _fl and _tf:
+        floor_str = f"{_fl}/{_tf}F"
+    elif _tf:
+        floor_str = f"{_tf}F（總樓層）"
+    elif _fl:
+        floor_str = f"{_fl}F"
+    else:
+        floor_str = ""
 
     # 列出所有來源連結（只列 alive=True 的，無 alive flag 的視為 alive）
     sources_arr = doc.get("sources") or []
@@ -87,11 +98,12 @@ def notify_high_value_property(doc: dict, multiple: float, scenario: str,
             scen_lines.append(f"  • {name}: {m:.2f} 倍")
     scen_text = "\n".join(scen_lines) or "  • (無試算)"
 
+    addr_with_floor = f"{addr}（{floor_str}）" if floor_str else addr
     msg = (
         f"🏠您好，發現高價值物件：\n"
         f"\n"
         f"📍 {city}{district}\n"
-        f"   {addr}\n"
+        f"   {addr_with_floor}\n"
         f"💰 總價：{price_wan:,} 萬\n"
         f"\n"
         f"📊 都更試算倍數：\n"

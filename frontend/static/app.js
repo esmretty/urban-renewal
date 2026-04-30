@@ -559,8 +559,8 @@ function rowHTML(p) {
   // 獲利倍數 > 3.2 → 高亮整列（紅框 + 字體放大）
   const _maxMult = Math.max(mults.w ?? 0, mults.d ?? 0);
   const highValue = _maxMult > 3.2 ? "is-high-value" : "";
-  // 搜尋 tab 非弱勢物件（沒 skip reasons）→ 紅底推薦色，無紅框
-  const recommended = (_activeTab === "explore" && skipReasons.length === 0 && !highValue) ? "is-recommended" : "";
+  // 搜尋 tab 非弱勢物件（沒 skip reasons）→ 紅底推薦色（高價值物件同時拿到紅框加碼）
+  const recommended = (_activeTab === "explore" && skipReasons.length === 0) ? "is-recommended" : "";
 
   const analyzing = !!p.analysis_in_progress;
   return `

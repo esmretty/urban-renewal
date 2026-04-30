@@ -680,7 +680,15 @@ def analyze_single_property(
     # LVR 資料
     doc_data["lvr_records"] = item.get("lvr_records", [])
     if item.get("address_inferred"):
-        doc_data["address_inferred"] = item["address_inferred"]
+        _addr_inf = item["address_inferred"]
+        _floor_for_addr = item.get("floor") or doc_data.get("floor")
+        # 末尾補樓層（讓地址帶樓層，前端列表 + LINE 通知就能分辨同棟不同戶）
+        # 已末尾含 {floor}F 或 {floor}樓 就不重複附加
+        if _floor_for_addr and _addr_inf:
+            _f_str = str(_floor_for_addr).strip()
+            if _f_str and not re.search(rf"{re.escape(_f_str)}\s*[Ff樓]\s*$", _addr_inf):
+                _addr_inf = f"{_addr_inf} {_f_str}F"
+        doc_data["address_inferred"] = _addr_inf
         doc_data["address_inferred_confidence"] = item.get("address_inferred_confidence")
         doc_data["address_inferred_candidates"] = item.get("address_inferred_candidates")
     if item.get("land_area_source"):
@@ -1003,12 +1011,25 @@ def analyze_single_property(
             if final_land:
                 from analysis.scorer import resolve_effective_zoning
                 effective_zoning = resolve_effective_zoning(z["zoning"], z.get("original_zone"))
+                # 防災都更資格：1974 前的台北市建物（屋齡 ≥ 當年 - 1974）
+                # 跟前端 isFangzai 判定對齊（app.js: city==="台北市" && (now - currentAge) <= 1974）
+                _is_fz_dugen = False
+                _city_for_fz = item.get("city") or doc_data.get("city")
+                _age_for_fz = doc_data.get("building_age") or item.get("building_age")
+                if _city_for_fz == "台北市" and _age_for_fz:
+                    try:
+                        from datetime import datetime as _dt
+                        _built_year = _dt.now().year - int(_age_for_fz)
+                        _is_fz_dugen = _built_year <= 1974
+                    except (TypeError, ValueError):
+                        pass
                 rv2 = calculate_renewal_scenarios(
                     land_area_ping=final_land,
                     zoning=effective_zoning,
                     district=district,
                     price_ntd=item.get("price_ntd"),
                     road_width_m=doc_data.get("road_width_m"),
+                    is_qualified_for_fz_dugen=_is_fz_dugen,
                 )
                 final2 = generate_final_recommendation(
                     property_data={**item, **doc_data},
