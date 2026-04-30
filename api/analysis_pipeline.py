@@ -575,15 +575,22 @@ def analyze_single_property(
             item["address_inferred_confidence"] = "lane_only"
             logger.info(f"[{src_id}] LVR 空 → 保留原巷弄地址當推測: {item['address_inferred']}")
 
-    # ── 5.8 591 LVR 空 + 沒巷弄（只到路名）→ 用街級 geocode + reverse_geocode 拿近似號 ──
-    # 注意：591 source_latitude 不可信（±150m），但 geocode_address(街級地址) 結果是 Google 級
-    # 街中段座標，準度跟永慶 fallback 同源。reverse_geocode loose 拿一個 nearby 號當推測，
-    # 標 confidence=geocode_reverse_loose 提示用戶誤差較大（前端 fallback 顯示「≈推測」）。
+    # ── 5.8 591 LVR 空 + 沒巷弄（只到路名）→ 優先用 591 source_lat reverse；fallback 街級 geocode ──
+    # 重要：591 source_latitude 對「號碼級」精準 ±150m，對「整條街」reverse 來說已夠準
+    #   （永吉路長 ~3km，591 座標差 150m vs geocode 街中段差 600m+ 完全不同量級）
+    # 過去誤把 591 座標排除走街級 geocode → 結果跟真實位置差 600m（如永吉路 230 vs 499）
+    # 修法：對「只到路段」的 591 物件，用 source_lat 反推；street geocode 只當 source_lat 缺值的 fallback
     if not item.get("address_inferred") and src_name == "591" and addr_for_geo and road_seg:
         try:
-            _c_for_rev = geocode_address(addr_for_geo)
+            from analysis.lvr_index import _reverse_geocode_loose
+            # 優先用 591 source_lat/lng (比 geocode 街中段精準很多)
+            _src_lat = item.get("source_latitude") or item.get("latitude")
+            _src_lng = item.get("source_longitude") or item.get("longitude")
+            _c_for_rev = (_src_lat, _src_lng) if (_src_lat and _src_lng) else None
+            if not _c_for_rev:
+                # fallback: 街級 geocode (591 沒給 source 座標時)
+                _c_for_rev = geocode_address(addr_for_geo)
             if _c_for_rev:
-                from analysis.lvr_index import _reverse_geocode_loose
                 _rev = _reverse_geocode_loose(_c_for_rev[0], _c_for_rev[1], road_seg)
                 if _rev:
                     from analysis.claude_analyzer import _clean_address_garbage
@@ -591,9 +598,9 @@ def analyze_single_property(
                     _cleaned = _clean_address_garbage(_rev)
                     item["address_inferred"] = strip_region_prefix(_cleaned, city or "", district or "")
                     item["address_inferred_confidence"] = "geocode_reverse_loose"
-                    logger.info(f"[{src_id}] 591 街級 reverse 拿到推測地址: {_rev}")
+                    logger.info(f"[{src_id}] 591 reverse 拿到推測地址: {_rev} (源點 {_c_for_rev})")
         except Exception as _re591:
-            logger.warning(f"[{src_id}] 591 街級 reverse fallback 失敗: {_re591}")
+            logger.warning(f"[{src_id}] 591 reverse fallback 失敗: {_re591}")
 
     # ── 6. 精準座標覆蓋 ──
     if inferred_coord:
