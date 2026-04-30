@@ -116,7 +116,7 @@ def _card_fields_changed(item: dict, existing: dict) -> str:
     被任一條件觸發 → 應強制重抓 pipeline（card 資訊不足以分辨「資料補齊」vs「ID 重用」）。
 
     門檻（吸收 OCR/API 雜訊，但抓得到真實變動）：
-      - 建坪差 > 0.5 坪
+      - 建坪差 > 1.5 坪（拉高吸收 Vision OCR 雜訊；真換物件通常差 ≥ 5 坪）
       - 總樓層不等（exact）
       - 所在樓層不等（exact，字串比）
       - 價格差 > max(10 萬, 舊值 1%)
@@ -126,7 +126,7 @@ def _card_fields_changed(item: dict, existing: dict) -> str:
 
     new_ar = item.get("building_area_ping")
     old_ar = existing.get("building_area_ping")
-    if new_ar and old_ar and abs(float(new_ar) - float(old_ar)) > 0.5:
+    if new_ar and old_ar and abs(float(new_ar) - float(old_ar)) > 1.5:
         reasons.append(f"建坪 {old_ar:.2f}→{new_ar:.2f}")
 
     new_tf = item.get("total_floors")

@@ -1794,17 +1794,20 @@ window.renderList = function () {
     } else {
       statusCell = `<span class="${stCls}">${esc(d.analysis_status || "—")}</span>`;
     }
-    // 連結：每一個 url 都給編號連結；前綴顯示來源（依 sources / source）
-    const allUrls = [d.url, ...(d.url_alt || [])].filter(Boolean);
-    let srcLabel = d.source || "591";
-    if (Array.isArray(d.sources) && d.sources.length > 0) {
-      srcLabel = [...new Set(d.sources.map(s => s.name).filter(Boolean))].join("/") || srcLabel;
-    }
-    const linkBadge = allUrls.length === 0
+    // 連結：sources[] 是唯一真相；只顯示 alive=true 的（dead 灰底列出但用 abbr）
+    const sources = Array.isArray(d.sources) ? d.sources : [];
+    const aliveSources = sources.filter(s => s.url && s.alive !== false);
+    const deadSources  = sources.filter(s => s.url && s.alive === false);
+    const srcNames = [...new Set(aliveSources.map(s => s.name).filter(Boolean))].join("/") || "—";
+    const aliveLinks = aliveSources.map((s, i) =>
+      `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" style="color:#2980b9;margin-right:6px">${i+1}</a>`
+    ).join("");
+    const deadLinks = deadSources.map((s, i) =>
+      `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" style="color:#bbb;margin-right:6px;text-decoration:line-through" title="已失效">${aliveSources.length+i+1}</a>`
+    ).join("");
+    const linkBadge = (aliveSources.length === 0 && deadSources.length === 0)
       ? '<span style="color:#999">—</span>'
-      : `${esc(srcLabel)}: ` + allUrls.map((u, i) =>
-          `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" style="color:#2980b9;margin-right:6px">${i+1}</a>`
-        ).join("");
+      : `${esc(srcNames)}: ${aliveLinks}${deadLinks}`;
     const submitterCell = showSubmitter
       ? `<td style="font-size:12px">${esc(d.submitted_by_email || d.submitted_by_uid || '—')}</td>`
       : '';

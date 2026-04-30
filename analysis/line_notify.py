@@ -70,13 +70,12 @@ def notify_high_value_property(doc: dict, multiple: float, scenario: str,
     district = doc.get("district") or ""
     price_wan = round((doc.get("price_ntd") or 0) / 10000)
 
-    # 列出所有來源連結
+    # 列出所有來源連結（只列 alive=True 的，無 alive flag 的視為 alive）
     sources_arr = doc.get("sources") or []
-    if not sources_arr and doc.get("url"):
-        sources_arr = [{"name": doc.get("source") or "591", "url": doc.get("url")}]
     src_lines = "\n".join(
         f"  • {s.get('name', '?')}: {s.get('url', '')}"
-        for s in sources_arr if s.get("url")
+        for s in sources_arr
+        if s.get("url") and s.get("alive") is not False
     ) or "  • (無連結)"
 
     # 列出已算出的所有情境倍數（從呼叫端傳入，不從 doc 讀；renewal_v2 不存 DB）

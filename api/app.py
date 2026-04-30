@@ -160,54 +160,52 @@ def _verify_source_alive(url: str, timeout: int = 8) -> tuple:
 
 
 def _verify_and_prune_sources(doc_id: str, doc_data: dict, skip_source_id: str = None) -> dict:
-    """情況 D：對 doc 的所有 sources 跑 _verify_source_alive，移除 dead 的。
+    """情況 D：對 doc 的所有 sources 跑 _verify_source_alive，**toggle alive flag**（不刪 source）。
     skip_source_id：剛剛觸發事件的那個 source（不重複驗它）
-    回傳：updates dict（包含修改後的 sources / url_alt / 可能的 archived flag）；無變動回 {}
+    回傳：updates dict（含修改後的 sources / 全死則 archived flag）；無變動回 {}
+    新邏輯：dead source 仍保留在 sources[] 中（alive=false），全部 dead 才 archive 整 doc。
     """
+    from database.models import compute_source_keys, all_sources_dead, make_source_key
     sources = list(doc_data.get("sources") or [])
     if not sources:
         return {}
-    survivors = []
-    pruned = []
+    changed = False
+    new_sources = []
     for s in sources:
-        sid = s.get("source_id")
-        if sid == skip_source_id:
-            survivors.append(s)
+        s = dict(s)
+        sid_with_prefix = s.get("source_id") or ""
+        # skip_source_id 可能是「591_X」或純 site_id；都試
+        skip_keys = set()
+        if skip_source_id:
+            skip_keys.add(skip_source_id)
+            if "_" in skip_source_id:
+                skip_keys.add(skip_source_id.split("_", 1)[1])
+        if sid_with_prefix in skip_keys:
+            new_sources.append(s)
             continue
         url = s.get("url")
         if not url:
-            survivors.append(s)
+            new_sources.append(s)
             continue
         alive, reason = _verify_source_alive(url, timeout=8)
-        if alive:
-            survivors.append(s)
-        else:
-            pruned.append({"source_id": sid, "name": s.get("name"), "reason": reason})
-            logger.info(f"[verify-sources] {doc_id} 移除失效來源 {sid}: {reason}")
-    if not pruned:
+        if s.get("alive") is not False and not alive:
+            s["alive"] = False
+            changed = True
+            logger.info(f"[verify-sources] {doc_id} 標 dead 來源 {make_source_key(s.get('name'), sid_with_prefix)}: {reason}")
+        elif s.get("alive") is False and alive:
+            # 死而復活（罕見：591 重新上架）
+            s["alive"] = True
+            changed = True
+            logger.info(f"[verify-sources] {doc_id} 復活來源 {make_source_key(s.get('name'), sid_with_prefix)}")
+        new_sources.append(s)
+    if not changed:
         return {}
-    updates = {"sources": survivors}
-    # 若主來源被移除 → 第一個倖存者升格主
-    main_sid = doc_data.get("source_id")
-    if any(p["source_id"] == main_sid for p in pruned):
-        if survivors:
-            first = survivors[0]
-            updates["source_id"] = first.get("source_id")
-            updates["url"] = first.get("url")
-            updates["source"] = first.get("name") or "591"
-        else:
-            # 全部 source 都死 → archive
-            updates["archived"] = True
-            updates["archived_at"] = now_tw_iso()
-            updates["archived_reason"] = f"所有來源連結已失效（{[p['source_id'] for p in pruned]}）"
-    # url_alt 也清掉失效的
-    pruned_urls = set()
-    for s in sources:
-        if s.get("source_id") in [p["source_id"] for p in pruned] and s.get("url"):
-            pruned_urls.add(s["url"])
-    if pruned_urls:
-        old_url_alt = list(doc_data.get("url_alt") or [])
-        updates["url_alt"] = [u for u in old_url_alt if u not in pruned_urls]
+    updates = {"sources": new_sources, "source_keys": compute_source_keys(new_sources)}
+    # 全部 sources 都 dead → archive 整 doc（之後重抓會 unarchive）
+    if all_sources_dead({"sources": new_sources}):
+        updates["archived"] = True
+        updates["archived_at"] = now_tw_iso()
+        updates["archived_reason"] = "所有來源連結已失效"
     return updates
 
 
@@ -673,92 +671,87 @@ async def _run_verify_alive_command(progress=None, trigger_label: str = "verify_
                 if (i + 1) % 5 == 0:
                     _write_progress(current=i + 1)
                 continue
-            sources = data.get("sources") or []
-            if not sources and data.get("url"):
-                sources = [{"name": data.get("source"), "url": data.get("url")}]
-            # 也驗 url_alt 裡的 URL（沒在 sources 但保留的歷史 URL）
-            extra_urls = []
-            for u in (data.get("url_alt") or []):
-                if u and not any(s.get("url") == u for s in sources):
-                    extra_urls.append(u)
-            check_targets = list(sources) + [{"url": u, "name": "url_alt"} for u in extra_urls]
-            if not check_targets:
+            from database.models import primary_source_id, primary_url, compute_source_keys, all_sources_dead
+            sources = list(data.get("sources") or [])
+            if not sources:
                 if (i + 1) % 5 == 0:
                     _write_progress(current=i + 1)
                 continue
 
-            # 驗活每個 source URL（不要早 break — 全部驗完才能 prune）
-            alive_results = []   # list of (target_dict, alive_bool, reason)
-            for s in check_targets:
+            # 驗活每個 source URL（不要早 break — 全部驗完才能 toggle alive）
+            alive_results = []   # list of (source_dict, alive_bool, reason)
+            for s in sources:
                 url = s.get("url")
                 if not url:
-                    alive_results.append((s, True, "no url"))   # 沒 URL 不刪
+                    alive_results.append((s, True, "no url"))
                     continue
                 alive, reason = _verify_source_alive(url, timeout=8)
                 alive_results.append((s, alive, reason))
-                await asyncio.sleep(2)   # rate-limit 友善（_verify_source_alive 內也有 cooldown）
+                await asyncio.sleep(2)
 
-            any_alive = any(a for _, a, _ in alive_results)
-            all_dead = not any_alive
+            # 更新 sources[].alive；不刪除 source（保留歷史，alive=False 即代表失效）
+            new_sources = []
+            any_change = False
+            for s, is_alive, _r in alive_results:
+                s2 = dict(s)
+                old_alive = s2.get("alive")
+                if is_alive:
+                    if old_alive is False:
+                        s2["alive"] = True   # 死而復活
+                        any_change = True
+                    elif old_alive is None:
+                        s2["alive"] = True
+                else:
+                    if old_alive is not False:
+                        s2["alive"] = False
+                        any_change = True
+                new_sources.append(s2)
 
-            if all_dead:
+            now_all_dead = all_sources_dead({"sources": new_sources})
+
+            if now_all_dead and not data.get("archived"):
                 # 整 doc archive
                 col.document(d.id).update({
                     "archived": True,
                     "archived_at": now_tw_iso(),
                     "archived_reason": "verify-alive: 所有來源 URL 都失效（404/410/已下架字樣）",
+                    "sources": new_sources,
+                    "source_keys": compute_source_keys(new_sources),
                 })
                 archived_count += 1
                 archived_items.append({
                     "doc_id": d.id,
-                    "source_id": data.get("source_id"),
+                    "source_id": primary_source_id(data),
                     "address": data.get("address") or data.get("address_inferred") or "",
                     "at": now_tw_iso(),
                 })
                 logger.info(f"[verify-alive] archived {d.id}")
                 log_action(trigger_label, "verify_alive_archive",
-                           source_id=data.get("source_id"), doc_id=d.id,
+                           source_id=primary_source_id(data), doc_id=d.id,
                            message=f"archived（所有來源失效）",
                            details={"address": data.get("address")})
                 _write_progress(current=i + 1)
-            else:
-                # 部分死亡 → prune dead sources / url_alt 但 doc 留著
-                dead_urls = {s.get("url") for s, alive, _ in alive_results if not alive and s.get("url")}
-                if dead_urls:
-                    new_sources = [s for s in sources if s.get("url") not in dead_urls]
-                    new_url_alt = [u for u in (data.get("url_alt") or []) if u not in dead_urls]
-                    # 若主 url 失效 → 用第一個 alive sources 升格（避免 url 指 dead）
-                    new_main_url = data.get("url")
-                    new_main_sid = data.get("source_id")
-                    if data.get("url") in dead_urls and new_sources:
-                        promoted = new_sources[0]
-                        new_main_url = promoted.get("url")
-                        new_main_sid = promoted.get("source_id") or new_main_sid
-                        # 升格的 entry 從 url_alt 移除
-                        new_url_alt = [u for u in new_url_alt if u != new_main_url]
-                    updates = {
-                        "sources": new_sources,
-                        "url_alt": new_url_alt,
-                    }
-                    if new_main_url != data.get("url"):
-                        updates["url"] = new_main_url
-                    if new_main_sid != data.get("source_id"):
-                        updates["source_id"] = new_main_sid
-                    col.document(d.id).update(updates)
-                    pruned_count += 1
-                    logger.info(f"[verify-alive] pruned {len(dead_urls)} dead url(s) from {d.id}")
-                    log_action(trigger_label, "verify_alive_prune",
-                               doc_id=d.id, source_id=data.get("source_id"),
-                               message=f"清掉 {len(dead_urls)} 個失效 URL，doc 留著",
-                               details={"dead_urls": list(dead_urls), "address": data.get("address")})
-                    _write_progress(current=i + 1)
-                elif (i + 1) % 5 == 0:
-                    _write_progress(current=i + 1)
+            elif any_change:
+                # 部分死亡（或復活）→ 只更新 sources，doc 留著
+                dead_count = sum(1 for s in new_sources if s.get("alive") is False)
+                col.document(d.id).update({
+                    "sources": new_sources,
+                    "source_keys": compute_source_keys(new_sources),
+                })
+                pruned_count += 1
+                logger.info(f"[verify-alive] toggled alive in {d.id} (dead={dead_count})")
+                log_action(trigger_label, "verify_alive_prune",
+                           doc_id=d.id, source_id=primary_source_id(data),
+                           message=f"標 {dead_count} 個失效來源 (alive=False)",
+                           details={"dead_count": dead_count, "address": data.get("address")})
+                _write_progress(current=i + 1)
+            elif (i + 1) % 5 == 0:
+                _write_progress(current=i + 1)
 
             if (i + 1) % 20 == 0 and progress:
                 progress(f"已掃 {i+1}/{total}，archive {archived_count} 筆，prune {pruned_count}", 50.0 * (i+1) / total)
             # 動態 sleep：剛打過 yungching 的 doc → 等久一點避免 anti-bot
-            _has_yc = any("yungching.com.tw" in (t.get("url") or "") for t in check_targets)
+            _has_yc = any("yungching.com.tw" in (s.get("url") or "") for s in sources)
             await asyncio.sleep(3.0 if _has_yc else 0.5)
     except Exception as _e:
         logger.exception(f"[verify-alive] 掃描中斷：{_e}")
@@ -1896,6 +1889,7 @@ async def admin_dedupe_scan(admin: dict = Depends(require_admin)):
     out = []
     for g in groups:
         docs = sorted(g["docs"], key=_doc_richness, reverse=True)
+        from database.models import primary_url, primary_source_id
         out.append({
             "key": g["key"],
             "count": len(docs),
@@ -1903,8 +1897,8 @@ async def admin_dedupe_scan(admin: dict = Depends(require_admin)):
             "docs": [
                 {
                     "id": d["_id"],
-                    "source_id": d.get("source_id"),
-                    "url": d.get("url"),
+                    "source_id": primary_source_id(d),
+                    "url": primary_url(d),
                     "address": d.get("address"),
                     "address_inferred": d.get("address_inferred"),
                     "title": (d.get("title") or "")[:50],
@@ -1928,8 +1922,8 @@ class DedupeMergeReq(BaseModel):
 async def admin_dedupe_merge(body: DedupeMergeReq, admin: dict = Depends(require_admin)):
     """
     把每組重複物件合併到「最豐富的 keeper」：
-      - keeper 保留（含 url / source_id 不動）
-      - 其他 doc 的 url 累進 keeper 的 url_alt 陣列
+      - keeper 保留
+      - 其他 doc 的 sources[] 累進 keeper 的 sources[]
       - 其他 doc 的欄位若 keeper 還沒填 → 補到 keeper（地址/坪數等）
       - 其他 doc 刪除
     必須帶 {"confirm": true} 才真的動。
@@ -1937,6 +1931,7 @@ async def admin_dedupe_merge(body: DedupeMergeReq, admin: dict = Depends(require
     if not body.confirm:
         return {"status": "noop", "message": "confirm=false，未執行合併。請用 /admin/dedupe_scan 檢視後再送 confirm=true。"}
 
+    from database.models import add_source_to_doc, compute_source_keys
     col = get_col()
     groups = _dedup_compute_groups()
     merged_count = 0
@@ -1945,11 +1940,11 @@ async def admin_dedupe_merge(body: DedupeMergeReq, admin: dict = Depends(require
         docs = sorted(g["docs"], key=_doc_richness, reverse=True)
         keeper = docs[0]
         keeper_id = keeper["_id"]
-        # 準備 keeper 要補的欄位 + url_alt
-        url_alt = list(keeper.get("url_alt") or [])
+        # 把其他 docs 的 sources[] 累進 keeper.sources[]
+        keeper_clone = {"sources": list(keeper.get("sources") or [])}
         published_at_alt = list(keeper.get("published_at_alt") or [])
         keeper_updates = {}
-        # PREFER_NEW + 基本資料欄位：若 keeper 空就補
+        sources_changed = False
         fill_fields = ("address", "address_inferred", "address_inferred_confidence",
                        "address_inferred_candidates", "address_inferred_candidates_detail",
                        "latitude", "longitude", "land_area_ping", "land_area_source",
@@ -1960,9 +1955,11 @@ async def admin_dedupe_merge(body: DedupeMergeReq, admin: dict = Depends(require
                        "nearest_mrt_exit", "nearby_mrts", "ai_analysis", "ai_recommendation",
                        "ai_reason", "image_url")
         for other in docs[1:]:
-            # 累進 url_alt
-            if other.get("url") and other["url"] not in url_alt and other["url"] != keeper.get("url"):
-                url_alt.append(other["url"])
+            # 累進 sources[]
+            for s in (other.get("sources") or []):
+                if add_source_to_doc(keeper_clone, s.get("name") or "591", s.get("source_id") or "",
+                                     s.get("url"), s.get("added_at")):
+                    sources_changed = True
             for p in (other.get("published_at_alt") or []):
                 if p and p not in published_at_alt:
                     published_at_alt.append(p)
@@ -1973,8 +1970,9 @@ async def admin_dedupe_merge(body: DedupeMergeReq, admin: dict = Depends(require
                 if (keeper.get(f) in (None, "", [], {}) and keeper_updates.get(f) in (None, "", [], {})
                         and other.get(f) not in (None, "", [], {})):
                     keeper_updates[f] = other[f]
-        if url_alt != (keeper.get("url_alt") or []):
-            keeper_updates["url_alt"] = url_alt
+        if sources_changed:
+            keeper_updates["sources"] = keeper_clone["sources"]
+            keeper_updates["source_keys"] = compute_source_keys(keeper_clone["sources"])
         if published_at_alt != (keeper.get("published_at_alt") or []):
             keeper_updates["published_at_alt"] = published_at_alt
         if keeper_updates:
@@ -2287,7 +2285,8 @@ def list_properties(
 
     # 手動輸入物件永遠不被 server-side filter 隱藏（資料通常不完整會被誤殺）
     def _is_manual(it):
-        return it.get("source") == "manual"
+        srcs = it.get("sources") or []
+        return any(s.get("name") == "manual" for s in srcs)
     if city:
         items = [i for i in items if _is_manual(i) or i.get("city") == city]
     if district:
@@ -2651,7 +2650,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
         _d = _doc.to_dict()
         _existing_items.append({
             "id": _d.get("id") or _doc.id,           # 物件唯一 ID（UUID 格式）
-            "source_id": _d.get("source_id"),
+            "source_keys": list(_d.get("source_keys") or []),  # 用於跳過自己
             "price_ntd": _d.get("price_ntd"),
             "building_area_ping": _d.get("building_area_ping"),
             "address": _d.get("address") or "",
@@ -2668,14 +2667,16 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
 
     def find_duplicate(item):
         """價格一樣 + 建物坪數±0.01 + 地址到路一樣 → 回傳重複物件的 doc id (UUID)，沒有回 None"""
+        from database.models import make_source_key
         price = item.get("price_ntd")
         area = item.get("building_area_ping")
         road = _extract_road_name(item.get("address") or item.get("title") or "")
         if not price or not area or not road:
             return None
+        my_key = make_source_key(item.get("source") or "591", item.get("source_id") or "")
         for ex in _existing_items:
-            if ex["source_id"] == item.get("source_id"):
-                continue
+            if my_key in (ex.get("source_keys") or []):
+                continue   # 自己 — 跳過
             if ex["price_ntd"] and abs(ex["price_ntd"] - price) < 1:
                 if ex["building_area_ping"] and abs(ex["building_area_ping"] - area) <= 0.01:
                     if _extract_road_name(ex["address"]) == road:
@@ -2889,48 +2890,32 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                 except Exception as _de:
                                     logger.warning(f"dup enrich OCR 失敗 {src_id}: {_de}")
 
-                            new_url = item.get("url")
-                            url_alt = dd.get("url_alt") or []
-                            pub_alt = list(dd.get("published_at_alt") or [])
-                            existing_url = dd.get("url") or ""
-                            # source_ids 平面索引：把這個 src_id 加進去 → 下次 find_doc_by_source_id 找得到
-                            source_ids_arr = list(dd.get("source_ids") or [])
-                            if dd.get("source_id") and dd["source_id"] not in source_ids_arr:
-                                source_ids_arr.append(dd["source_id"])
-                            if src_id not in source_ids_arr:
-                                source_ids_arr.append(src_id)
-                            update_payload = {"source_ids": source_ids_arr}
-                            if new_url and new_url != existing_url and new_url not in url_alt:
-                                url_alt.append(new_url)
-                                from database.models import _parse_published_at
-                                _pub_iso = (
-                                    _parse_published_at(item.get("_published_text"))
-                                    or item.get("scrape_session_at")
-                                    or now_tw_iso()
-                                )
-                                pub_alt.append(_pub_iso)
-                                update_payload["url_alt"] = url_alt
-                                update_payload["published_at_alt"] = pub_alt
-                            # sources array 也要加進新來源 — 不然 client 看不到信義/永慶 logo
-                            _new_src_name = item.get("source") or ""
-                            if _new_src_name and _new_src_name != "591":
-                                sources_arr = list(dd.get("sources") or [])
-                                if not any(s.get("name") == _new_src_name for s in sources_arr):
-                                    sources_arr.append({
-                                        "name": _new_src_name,
-                                        "source_id": src_id,
-                                        "url": item["url"],
-                                        "added_at": now_tw_iso(),
-                                    })
-                                    update_payload["sources"] = sources_arr
-                                    # 觸發跨來源事件給前端 badge
+                            # 唯一真相：sources[] + source_keys[]。把新 src 加進 sources（如果還不在）
+                            from database.models import add_source_to_doc, compute_source_keys, _parse_published_at
+                            _new_src_name = item.get("source") or "591"
+                            _pub_iso = (
+                                _parse_published_at(item.get("_published_text"))
+                                or item.get("scrape_session_at")
+                                or now_tw_iso()
+                            )
+                            dd_clone = {"sources": list(dd.get("sources") or [])}
+                            added = add_source_to_doc(dd_clone, _new_src_name, src_id, item.get("url"), _pub_iso)
+                            update_payload = {}
+                            if added:
+                                update_payload["sources"] = dd_clone["sources"]
+                                update_payload["source_keys"] = compute_source_keys(dd_clone["sources"])
+                                # 跨來源新 source（非 591 加入到 591 doc 等）→ 觸發前端 badge
+                                if _new_src_name != "591" and not any(
+                                    s.get("name") == _new_src_name for s in (dd.get("sources") or [])
+                                ):
                                     update_payload["last_change_at"] = now_tw_iso()
                                     update_payload["latest_event"] = {
                                         "type": "cross_source",
                                         "source": _new_src_name,
                                         "at": now_tw_iso(),
                                     }
-                            col.document(dup_sid).update(update_payload)
+                            if update_payload:
+                                col.document(dup_sid).update(update_payload)
                         progress_callback(f"  ⏭ 重複物件（已合併網址）：{(item.get('title') or '')[:25]}", pct)
                         progress_callback(
                             f"    └ 新 ID {item.get('source_id')} → 併入 {dup_sid}",
@@ -2975,31 +2960,12 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                             if item.get("community_name") and not dd.get("community_name"):
                                 updates["community_name"] = item["community_name"]
 
-                            # url_alt 加進新來源 URL
-                            url_alt = list(dd.get("url_alt") or [])
-                            if item["url"] not in url_alt and item["url"] != dd.get("url"):
-                                url_alt.append(item["url"])
-                                updates["url_alt"] = url_alt
-
-                            # sources array 加進該來源
-                            sources_arr = list(dd.get("sources") or [])
-                            already_has = any(s.get("name") == _src_name for s in sources_arr)
-                            if not already_has:
-                                sources_arr.append({
-                                    "name": _src_name,
-                                    "source_id": item["source_id"],
-                                    "url": item["url"],
-                                    "added_at": now_tw_iso(),
-                                })
-                                updates["sources"] = sources_arr
-
-                            # source_ids 平面索引（同 yongqing batch path 的修法）
-                            sid_arr = list(dd.get("source_ids") or [])
-                            if dd.get("source_id") and dd["source_id"] not in sid_arr:
-                                sid_arr.append(dd["source_id"])
-                            if src_id not in sid_arr:
-                                sid_arr.append(src_id)
-                            updates["source_ids"] = sid_arr
+                            # 把新 source 加進 sources[]（唯一真相）
+                            from database.models import add_source_to_doc, compute_source_keys
+                            dd_clone = {"sources": list(dd.get("sources") or [])}
+                            if add_source_to_doc(dd_clone, _src_name, item["source_id"], item["url"]):
+                                updates["sources"] = dd_clone["sources"]
+                                updates["source_keys"] = compute_source_keys(dd_clone["sources"])
 
                             # 跨來源新上架事件
                             updates["last_change_at"] = now_tw_iso()
@@ -3015,7 +2981,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                             col.document(yc_dup_id).update(updates)
                             progress_callback(
                                 f"  🔗 {_src_name}物件併入既有 doc {yc_dup_id} "
-                                f"(補 {len([k for k in updates if k not in ('last_change_at','latest_event','sources','url_alt','source_ids')])} 欄位 + 加 url_alt)",
+                                f"(補 {len([k for k in updates if k not in ('last_change_at','latest_event','sources','source_keys')])} 欄位 + 加來源連結)",
                                 pct,
                             )
                             # action log
@@ -3035,7 +3001,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                 if prune_updates:
                                     col.document(yc_dup_id).update(prune_updates)
                                     progress_callback(
-                                        f"  🧹 連結驗活：移除失效來源 → {prune_updates.get('source','?')}",
+                                        f"  🧹 連結驗活：標記失效來源",
                                         pct,
                                     )
                             except Exception as _ve:
@@ -3225,45 +3191,35 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 # ─ 重複物件偵測：同 district + road + 建坪 + 價格 ─
                 # force_reanalyze 跳過：我們是明確對同一個 source_id 重抓，不該再被 dup 收到別的 doc 去
                 if not is_enrich and not is_force_reanalyze:
+                    from database.models import make_source_key
                     k = _dup_key(item)
-                    same_id = item["source_id"]
-                    candidates = [d for d in _dup_index.get(k, []) if d["_id"] != same_id]
+                    my_src_key = make_source_key(item.get("source") or "591", item.get("source_id") or "")
+                    candidates = [d for d in _dup_index.get(k, [])
+                                  if my_src_key not in (d.get("source_keys") or [])]
                     if candidates:
                         best_old = max(candidates, key=doc_richness)
                         new_richness = doc_richness(item)
                         old_richness = doc_richness(best_old)
 
-                        # 合併 URL + 把新 src_id 寫進 keeper 的 source_ids 平面索引
-                        # → 下次 find_doc_by_source_id 找得到，不會再被當「新」處理
+                        # 合併 URL：把新 source 加進 keeper 的 sources[]（如果還不在）
+                        # → 下次 find_doc_by_source_key 找得到，不會再被當「新」處理
                         def _merge_url_to_keeper(keeper_doc, new_item):
+                            from database.models import add_source_to_doc, compute_source_keys, _parse_published_at as _pp
                             out = {}
                             new_url = new_item.get("url")
                             new_sid = new_item.get("source_id")
-                            # source_ids 索引（一定要更新，避免下次又跑 dup_merge）
-                            sid_arr = list(keeper_doc.get("source_ids") or [])
-                            if keeper_doc.get("source_id") and keeper_doc["source_id"] not in sid_arr:
-                                sid_arr.append(keeper_doc["source_id"])
-                            if new_sid and new_sid not in sid_arr:
-                                sid_arr.append(new_sid)
-                            out["source_ids"] = sid_arr
-                            # url_alt（新 url 才加）
-                            if not new_url or new_url == keeper_doc.get("url"):
+                            new_name = new_item.get("source") or "591"
+                            if not (new_url and new_sid):
                                 return out
-                            url_alt = list(keeper_doc.get("url_alt") or [])
-                            if new_url in url_alt:
-                                return out
-                            url_alt.append(new_url)
-                            pub_alt = list(keeper_doc.get("published_at_alt") or [])
-                            from database.models import _parse_published_at as _pp
+                            keeper_clone = {"sources": list(keeper_doc.get("sources") or [])}
                             _pub_iso = (
                                 _pp(new_item.get("_published_text"))
                                 or new_item.get("scrape_session_at")
                                 or now_tw_iso()
                             )
-                            if _pub_iso and _pub_iso not in pub_alt:
-                                pub_alt.append(_pub_iso)
-                            out["url_alt"] = url_alt
-                            out["published_at_alt"] = pub_alt
+                            if add_source_to_doc(keeper_clone, new_name, new_sid, new_url, _pub_iso):
+                                out["sources"] = keeper_clone["sources"]
+                                out["source_keys"] = compute_source_keys(keeper_clone["sources"])
                             return out
 
                         url_updates = _merge_url_to_keeper(best_old, item)
@@ -3405,33 +3361,29 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     is_replacement = _is_replacement_change(item["_existing_doc"], doc_data)
 
                 if is_replacement:
+                    from database.models import (
+                        remove_source_from_doc, add_source_to_doc, compute_source_keys,
+                        all_sources_dead,
+                    )
                     old_doc = item["_existing_doc"]
                     old_doc_id = old_doc.get("id")
                     if not old_doc_id:
                         from database.db import find_doc_by_source_id as _fd
                         old_doc_id, _ = _fd(src_id)
-                    # 1. 從原 doc 移除這個 source（sources array 過濾、url_alt 過濾）
+                    # 1. 從原 doc 移除這個 source
                     if old_doc_id:
-                        old_sources = list(old_doc.get("sources") or [])
-                        new_sources = [s for s in old_sources if s.get("source_id") != src_id]
-                        old_url_alt = list(old_doc.get("url_alt") or [])
-                        # 該 source 對應的 URL 從 url_alt 移除
-                        old_main_url = old_doc.get("url")
-                        was_main = (old_doc.get("source_id") == src_id)
-                        updates = {"sources": new_sources}
-                        if was_main:
-                            # 主來源被換掉 → 第一個 alt 升格為新主
-                            if new_sources:
-                                first_remaining = new_sources[0]
-                                updates["url"] = first_remaining.get("url")
-                                updates["source_id"] = first_remaining.get("source_id")
-                                updates["source"] = first_remaining.get("name") or "591"
-                                updates["url_alt"] = [u for u in old_url_alt if u != first_remaining.get("url")]
-                            else:
-                                # 沒其他來源了 → archive 整個 doc（避免變孤兒指標）
-                                updates["archived"] = True
-                                updates["archived_at"] = now_tw_iso()
-                                updates["archived_reason"] = f"所有來源失效（{src_id} 換成另一物件且無其他來源）"
+                        old_clone = {"sources": list(old_doc.get("sources") or [])}
+                        src_name = item.get("source") or "591"
+                        remove_source_from_doc(old_clone, src_name, src_id)
+                        updates = {
+                            "sources": old_clone["sources"],
+                            "source_keys": compute_source_keys(old_clone["sources"]),
+                        }
+                        if not old_clone["sources"]:
+                            # 沒其他來源 → archive 整 doc（之後重抓會 unarchive）
+                            updates["archived"] = True
+                            updates["archived_at"] = now_tw_iso()
+                            updates["archived_reason"] = f"所有來源失效（{src_id} 換成另一物件且無其他來源）"
                         col.document(old_doc_id).update(updates)
                         progress_callback(
                             f"  🔁 換物件：原 doc {old_doc_id[:8]}... 移除 {src_id}（{item.get('_change_reason','')}）",
@@ -3445,24 +3397,16 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                         target_dup_doc = col.document(new_dup_id).get()
                         if target_dup_doc.exists:
                             dd = target_dup_doc.to_dict() or {}
-                            sources_arr = list(dd.get("sources") or [])
-                            url_alt = list(dd.get("url_alt") or [])
-                            if not any(s.get("source_id") == src_id for s in sources_arr):
-                                sources_arr.append({
-                                    "name": item.get("source", "591"),
-                                    "source_id": src_id,
-                                    "url": item.get("url"),
-                                    "added_at": now_tw_iso(),
-                                })
-                            if item.get("url") and item["url"] not in url_alt and item["url"] != dd.get("url"):
-                                url_alt.append(item["url"])
+                            dd_clone = {"sources": list(dd.get("sources") or [])}
+                            src_name = item.get("source") or "591"
+                            add_source_to_doc(dd_clone, src_name, src_id, item.get("url"))
                             col.document(new_dup_id).update({
-                                "sources": sources_arr,
-                                "url_alt": url_alt,
+                                "sources": dd_clone["sources"],
+                                "source_keys": compute_source_keys(dd_clone["sources"]),
                                 "last_change_at": now_tw_iso(),
                                 "latest_event": {
                                     "type": "cross_source",
-                                    "source": item.get("source", "591"),
+                                    "source": src_name,
                                     "at": now_tw_iso(),
                                 },
                                 "archived": False,
@@ -3503,38 +3447,52 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     doc_data["last_change_at"] = _now_iso
                     doc_data["latest_event"] = {"type": "new", "source": item.get("source", "591"), "at": _now_iso}
 
-                # force_reanalyze：用 merge 保留 price_history / url_alt / user overrides / scrape_session_at 等
-                if is_force_reanalyze and item.get("_existing_doc"):
-                    from database.models import merge_property_doc
+                # force_reanalyze：用 merge 保留 price_history / sources / user overrides / scrape_session_at 等
+                # （merge_property_doc 會跳過 sources/source_keys，由 caller 端明確處理）
+                is_reanalyze = bool(is_force_reanalyze and item.get("_existing_doc"))
+                if is_reanalyze:
+                    from database.models import merge_property_doc, compute_source_keys
                     merged, conflicts = merge_property_doc(item["_existing_doc"], doc_data)
-                    merged["id"] = target_doc_id   # merge 後 id 仍以新值為準
+                    merged["id"] = target_doc_id
+                    # sources：保留既有 sources（不被 doc_data 的單筆 sources_arr overwrite）
+                    # source_keys 同步 rebuild
+                    merged["sources"] = list(item["_existing_doc"].get("sources") or [])
+                    merged["source_keys"] = compute_source_keys(merged["sources"])
                     col.document(target_doc_id).set(_safe_doc(merged))
                     if conflicts:
                         progress_callback(
                             f"  ⚠ 重抓後欄位衝突保留舊值：{','.join(conflicts)}",
                             pct,
                         )
-                    doc_data = merged   # 下方 log 用
+                    doc_data = merged
                 else:
                     col.document(target_doc_id).set(_safe_doc(doc_data))
-                # 批次爬取由 admin 觸發，不自動加入 admin 的觀察清單；
-                # 用戶想追蹤得自己在前端按 ★（單筆 URL 送出的流程另在 scrape_url 處理）
-                # 將剛寫入的 doc 加進 _dup_index，讓同 session 內後續 item 能比對到（防 591 列表回同物件多筆）
+                # 將剛寫入的 doc 加進 _dup_index，讓同 session 內後續 item 能比對到
                 try:
                     _new_d = dict(doc_data)
                     _new_d["_id"] = target_doc_id
                     _dup_index.setdefault(_dup_key(_new_d), []).append(_new_d)
                 except Exception as _die:
                     logger.debug(f"dup_index 更新失敗 {src_id}: {_die}")
-                new_count += 1
-                log_action(trigger_label, "new",
-                           source_id=src_id, doc_id=target_doc_id,
-                           message=f"新物件入庫：{(doc_data.get('address_inferred') or doc_data.get('address') or '')[:40]}",
-                           details={"address": doc_data.get('address_inferred') or doc_data.get('address'),
-                                    "price_ntd": item.get("price_ntd")})
+
+                # log_action：reanalyze 跟 new 區分（修 user 說的「同物件被誤標 new」）
+                if is_reanalyze:
+                    log_action(trigger_label, "reanalyze",
+                               source_id=src_id, doc_id=target_doc_id,
+                               message=f"重新分析（{item.get('_change_reason','')}）：{(doc_data.get('address_inferred') or doc_data.get('address') or '')[:40]}",
+                               details={"address": doc_data.get('address_inferred') or doc_data.get('address'),
+                                        "change_reason": item.get('_change_reason'),
+                                        "price_ntd": item.get("price_ntd")})
+                else:
+                    new_count += 1
+                    log_action(trigger_label, "new",
+                               source_id=src_id, doc_id=target_doc_id,
+                               message=f"新物件入庫：{(doc_data.get('address_inferred') or doc_data.get('address') or '')[:40]}",
+                               details={"address": doc_data.get('address_inferred') or doc_data.get('address'),
+                                        "price_ntd": item.get("price_ntd")})
                 _existing_items.append({
                     "id": target_doc_id,
-                    "source_id": item.get("source_id"),
+                    "source_keys": list(doc_data.get("source_keys") or []),
                     "price_ntd": item.get("price_ntd"),
                     "building_area_ping": item.get("building_area_ping"),
                     "address": item.get("address") or "",
@@ -3864,7 +3822,7 @@ def debug_manual_docs():
                 "analysis_in_progress": d.get("analysis_in_progress"),
                 "deleted": d.get("deleted"),
                 "scrape_session_at": d.get("scrape_session_at"),
-                "source": d.get("source"),
+                "sources": d.get("sources"),
                 "analysis_error": d.get("analysis_error"),
             })
     return {

@@ -47,6 +47,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (_detailP) _detailP._ephemeral_edit_made = false;
   });
   restoreThresholds();
+  // 「包含偏遠地段」chip 跨 tab 共用，從獨立 localStorage 還原（不綁 explore filter set）
+  try {
+    const ir = document.getElementById("include-remote");
+    if (ir) ir.checked = (localStorage.getItem("include-remote") === "1");
+  } catch {}
   _initDistPicker();
   populateDistrictFilter();
   populateManualDistricts();
@@ -98,6 +103,7 @@ function _saveExploreFilters() {
     sortBy: document.getElementById("sort-by")?.value || "list_rank",
     sortDir: sortDir,
     hideBad: !!document.getElementById("explore-hide-bad")?.checked,
+    includeRemote: !!document.getElementById("include-remote")?.checked,
   };
   try { localStorage.setItem(_exploreFilterKey(), JSON.stringify(obj)); } catch {}
 }
@@ -155,6 +161,8 @@ function _restoreExploreFilters() {
   }
   const hb = document.getElementById("explore-hide-bad");
   if (hb && typeof obj.hideBad === "boolean") hb.checked = obj.hideBad;
+  const ir = document.getElementById("include-remote");
+  if (ir && typeof obj.includeRemote === "boolean") ir.checked = obj.includeRemote;
 }
 
 // ── Tab 切換 ──────────────────────────────────────────────────────────────
@@ -566,7 +574,7 @@ function rowHTML(p) {
     <div class="c c-type" data-label="類型">${typeIcon} ${esc(typeLabel)}</div>
     <div class="c c-city" data-label="縣市">${esc(p.city || "—")}</div>
     <div class="c c-district" data-label="區">${esc(p.district || "—")}</div>
-    <div class="c c-addr" title="${esc(roadOnly)}" data-label="地址"><span class="addr-text">${esc(roadOnly)}${p.address_inferred ? '<span class="inferred-tag">推測</span>' : ''}${p.is_foreclosure ? '<span class="fc-badge" title="法拍屋">法拍屋</span>' : ''}<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener noreferrer" class="map-link" onclick="event.stopPropagation()" title="Google Maps">📍</a></span>${(evBadge || archivedBadge || newBadge) ? `<span class="addr-badges">${evBadge}${archivedBadge}${newBadge}</span>` : ''}</div>
+    <div class="c c-addr" title="${esc(roadOnly)}" data-label="地址"><span class="addr-text">${esc(roadOnly)}${p.address_inferred ? '<span class="inferred-tag">推測</span>' : ''}${p.is_foreclosure ? '<span class="fc-badge" title="法拍屋">法拍屋</span>' : ''}${p.unsuitable_for_renewal ? `<span class="fc-badge" style="background:#9aa0a6" title="${esc(p.unsuitable_reason || '不適合都更')}">不適合都更</span>` : ''}<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener noreferrer" class="map-link" onclick="event.stopPropagation()" title="Google Maps">📍</a></span>${(evBadge || archivedBadge || newBadge) ? `<span class="addr-badges">${evBadge}${archivedBadge}${newBadge}</span>` : ''}</div>
     <div class="c c-val c-total ${hotCls('price')}" data-label="總價">${priceStr}${(p.lvr_records && p.lvr_records.length) ? `<span class="lvr-icon" onclick="event.stopPropagation()" onmouseenter="showLvrPopup(event, '${p.id}')" onmouseleave="hideLvrPopup()">實</span>` : ""}</div>
     <div class="c c-val c-bld-combo" data-label="建坪/單價">
       <div class="${hotCls('bldA')}">${p.building_area_ping ?? "—"} 坪</div>
@@ -829,6 +837,24 @@ function showDetailModal(p) {
     fc.textContent = "法拍屋";
     titleEl.appendChild(fc);
   }
+  if (p.is_remote_area) {
+    const r = document.createElement("span");
+    r.className = "fc-badge";
+    r.style.marginLeft = "8px";
+    r.style.background = "#9aa0a6";
+    r.textContent = "偏遠地段";
+    r.title = "天險（河、山）隔開的偏遠位置";
+    titleEl.appendChild(r);
+  }
+  if (p.unsuitable_for_renewal) {
+    const u = document.createElement("span");
+    u.className = "fc-badge";
+    u.style.marginLeft = "8px";
+    u.style.background = "#9aa0a6";
+    u.textContent = "不適合都更";
+    u.title = p.unsuitable_reason || "土地分區非住宅用地";
+    titleEl.appendChild(u);
+  }
   // 多來源連結區：讀 p.sources（新 schema）為主，fallback 用 p.url + p.url_alt（舊 schema）
   // 不同來源 (591 / 永慶 / 信義) 各自一顆按鈕並列
   const wrap = document.getElementById("modal-591-wrap");
@@ -839,22 +865,16 @@ function showDetailModal(p) {
       return `<a href="${esc(cleanUrl)}" target="_blank" rel="noopener noreferrer" class="tb-btn tb-btn--ghost" style="margin-right:6px">${esc(name)} 頁面 ↗${dStr ? ` <span class="src-pubdate">${esc(dStr)}</span>` : ""}</a>`;
     };
     let html = "";
+    // sources[] 是唯一真相；alive=false 的也顯示但灰底（用戶可知歷史來源）
     if (Array.isArray(p.sources) && p.sources.length > 0) {
-      // 新 schema：用 sources array
-      html = p.sources.map(s => buildSourceBtn(s.name || "?", s.url || p.url, s.added_at)).join("");
-    } else if (p.url) {
-      // 舊 schema fallback
-      const mainDate = p.published_at || p.analysis_completed_at || p.scraped_at || null;
-      html = buildSourceBtn(p.source || "591", p.url, mainDate);
-      // 老的 url_alt（可能來自不同來源）— 用 host 推
-      (p.url_alt || []).forEach((u, i) => {
-        let n = "其他";
-        if (u && u.includes("yungching")) n = "永慶";
-        else if (u && u.includes("sinyi")) n = "信義";
-        else if (u && u.includes("591")) n = "591";
-        const altDate = (p.published_at_alt || [])[i] || null;
-        html += buildSourceBtn(n, u, altDate);
+      // 排序：alive 先，dead 後；同類別按 added_at（早→晚）
+      const sorted = [...p.sources].sort((a, b) => {
+        const aliveA = a.alive !== false ? 1 : 0;
+        const aliveB = b.alive !== false ? 1 : 0;
+        if (aliveA !== aliveB) return aliveB - aliveA;
+        return (a.added_at || "").localeCompare(b.added_at || "");
       });
+      html = sorted.map(s => buildSourceBtn(s.name || "?", s.url, s.added_at)).join("");
     }
     wrap.innerHTML = html;
   }
@@ -1035,7 +1055,8 @@ function zoningCellHTML(p) {
     // ratio (%) → ping
     const toPing = (r) => totalLand > 0 ? (totalLand * (Number(r) || 0) / 100) : 0;
     badge = zoneList.map((zl, i) => {
-      const eff = zl.original_zone || zl.zone_name;
+      // zoning_list 可能是 string list（ArcGIS 點查回傳）或 object list（舊永慶 schema）
+      const eff = (typeof zl === 'string') ? zl : (zl.original_zone || zl.zone_name);
       const far = TAIPEI_FAR_PCT[eff] || "?";
       const v = toPing(ratios[i]).toFixed(2);
       const disabled = locked ? "disabled" : "";
@@ -1312,24 +1333,12 @@ function srcLinksHTML(p) {
   // 用戶貼 URL 送出（source_origin=user_url）— fall through 到下面的 icon badge 渲染，
   // 顯示對應網站 icon（591/永慶）比「自行調查」標籤更直覺。manual 物件才保留特殊處理。
 
-  // 多來源：從 p.sources 拿（新 schema），fallback 用 p.url + p.url_alt（舊 schema）
-  let sourceList = [];   // [{name, url, date}]
+  // 多來源：sources[] 是唯一真相；alive=false 不顯示（已失效歷史）
+  let sourceList = [];
   if (Array.isArray(p.sources) && p.sources.length > 0) {
-    sourceList = p.sources.map(s => ({
-      name: s.name || "591",
-      url: s.url,
-      date: s.added_at || null,
-    })).filter(s => s.url);
-  } else if (p.url) {
-    const mainDate = p.published_at || p.analysis_completed_at || p.scraped_at || null;
-    sourceList = [{ name: p.source || "591", url: p.url, date: mainDate }];
-    (p.url_alt || []).forEach((u, i) => {
-      let n = "其他";
-      if (u && u.includes("yungching")) n = "永慶";
-      else if (u && u.includes("sinyi")) n = "信義";
-      else if (u && u.includes("591")) n = "591";
-      sourceList.push({ name: n, url: u, date: (p.published_at_alt || [])[i] || null });
-    });
+    sourceList = p.sources
+      .filter(s => s.url && s.alive !== false)
+      .map(s => ({ name: s.name || "591", url: s.url, date: s.added_at || null }));
   }
   if (!sourceList.length) return "—";
 
@@ -2189,6 +2198,11 @@ function applyFilters() {
 // 排序 / hide-bad：只重排現有資料，不動 server
 window.applyClientOrder = function () {
   _currentPage = 1;
+  // 「包含偏遠地段」chip 兩 tab 共用 → 獨立 localStorage 持久化（不綁 explore filter set）
+  try {
+    const ir = document.getElementById("include-remote");
+    if (ir) localStorage.setItem("include-remote", ir.checked ? "1" : "0");
+  } catch {}
   if (_activeTab === "explore") {
     _saveExploreFilters();
     allProperties = (_exploreResults || []).slice();
@@ -2202,6 +2216,12 @@ const PAGE_SIZE = 100;
 function filterAndSort() {
   // 一律排除軟刪除
   let list = allProperties.filter(p => !p.deleted);
+
+  // 偏遠地段預設過濾（兩 tab 共用）— 勾「包含偏遠地段」chip 才顯示
+  // is_remote_area=True 表示物件落在天險（河、山）隔開的偏遠 polygon 內
+  if (!document.getElementById("include-remote")?.checked) {
+    list = list.filter(p => !p.is_remote_area);
+  }
 
   // 搜尋 tab 的條件都在 server 端過濾，client 不再重跑同套邏輯，直接信任 _exploreResults
   // 搜尋 tab：勾「隱藏5層以上物件」時過濾掉（computeSkipReasons 只會回五層以上一條）

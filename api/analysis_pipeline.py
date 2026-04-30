@@ -661,6 +661,12 @@ def analyze_single_property(
         land_sqm=land_sqm,
     )
     doc_data["nearby_mrts"] = nearby_mrts   # 1500m 內最多 3 站；無則空 list
+
+    # 偏遠區判定（新北市天險隔開的偏遠地段，依 config.REMOTE_POLYGONS_NEW_TAIPEI）
+    # 前端預設過濾 is_remote_area=True，需勾「☐ 包含偏遠地段」才顯示
+    from analysis.geocoder import is_remote_area_new_taipei
+    doc_data["is_remote_area"] = is_remote_area_new_taipei(lat, lng, district)
+
     if is_fc:
         doc_data["is_foreclosure"] = True
         doc_data["foreclosure_reasons"] = fc_reasons
@@ -933,8 +939,13 @@ def analyze_single_property(
                 city=city, ctx=ocr_ctx,
             )
             zone_list = z.get("zone_list")
+            # 物件座標跨多塊 polygon（如「住宅區+商業區」）→ zoning 顯示成「住宅區、商業區」全列出
+            if zone_list and len(zone_list) > 1:
+                zoning_display = "、".join(zone_list)
+            else:
+                zoning_display = z["zoning"]
             doc_data.update({
-                "zoning": z["zoning"],
+                "zoning": zoning_display,
                 "zoning_candidates": z["zoning_candidates"],
                 "zoning_source": z["zoning_source"],
                 "zoning_source_url": z.get("zoning_source_url"),
@@ -954,6 +965,32 @@ def analyze_single_property(
                 doc_data["zoning_original"] = yc_orig
                 doc_data["zoning_source"] = "yongqing_detail_multi"
                 logger.info(f"[{src_id}] 永慶 zoning 多分區（{yc_multi}）取代 NTPC 點查 ({z.get('zoning')})")
+
+            # ── 都更可行性閘門（新北 4 區專屬） ──
+            # 物件座標可能跨多塊 polygon（如「住宅區+商業區」）→ 任一 in SUITABLE 就算 suitable
+            # 全部都是非實質用地（保護區/風景區/機關用地/河道用地等）→ unsuitable
+            from analysis.scorer import is_zoning_suitable_for_renewal
+            _zoning_for_check = doc_data.get("zoning_list") or doc_data.get("zoning")
+            _suitable, _unsuitable_reason = is_zoning_suitable_for_renewal(district, _zoning_for_check)
+            if not _suitable:
+                doc_data["unsuitable_for_renewal"] = True
+                doc_data["unsuitable_reason"] = _unsuitable_reason
+                # 清掉都更/危老試算結果（保留分區/事實欄位）— 不適合都更就不該顯示倍數
+                for _k in ("score_total", "score_age", "score_far", "score_land",
+                           "score_tod", "score_road", "score_consolidation",
+                           "renewal_type", "renewal_bonus_rate",
+                           "renewal_new_area_ping", "renewal_value_ntd", "renewal_profit_ntd",
+                           "ai_analysis", "ai_recommendation", "ai_reason"):
+                    doc_data[_k] = None
+                doc_data["analysis_status"] = "skipped"
+                doc_data["skip_reason"] = "unsuitable_zoning"
+                logger.info(f"[{src_id}] 不適合都更：{_unsuitable_reason}（{district}/{doc_data.get('zoning')}）")
+                doc_data["analysis_completed_at"] = now_tw_iso()
+                _cleanup_ephemeral_screenshots(src_id)
+                return {"doc_data": doc_data, "status": "skipped",
+                        "skip_reason": "unsuitable_zoning",
+                        "foreclosure_reasons": fc_reasons if is_fc else None}
+
             # 有分區後即時算 renewal v2（local 變數，不存 DB）+ 重新產生建議
             final_land = item.get("land_area_ping") or doc_data.get("land_area_ping")
             if final_land:

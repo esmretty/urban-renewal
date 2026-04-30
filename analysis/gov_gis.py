@@ -66,7 +66,10 @@ def wgs84_to_twd97(lat: float, lng: float) -> tuple[float, float]:
 # ── 分區名稱判定 ─────────────────────────────────────────────────────────────
 
 # 我們關心的「實質都市計畫分區」（建商可改建的類別）
-_REAL_ZONE_PREFIX = ("住", "商", "工", "農", "保護", "風景", "文教", "倉儲", "行政")
+_REAL_ZONE_PREFIX = ("住", "商", "工", "農", "文教", "倉儲", "行政")
+# 「保護區」「風景區」雖也是合法分區，但都更/危老不可建 → 不算實質可建分區
+import re as _re
+_REAL_ZONE_FULL_RE = _re.compile(r"^第[一二三四五]種(住宅|商業|工業|農業)區")
 # 公共設施／道路用地等（地號上有，但對都更試算意義不同）
 _NON_RESIDENTIAL = (
     "高速公路", "道路", "公園", "國小", "國中", "高中", "大學", "幼", "醫院", "市場",
@@ -75,11 +78,14 @@ _NON_RESIDENTIAL = (
 
 
 def is_real_zone(usenam: str) -> bool:
-    """是否為「實質都市計畫分區」（住/商/工 等可建蔽的類別）。"""
+    """是否為「實質都市計畫分區」（住/商/工 等可建蔽的類別）。
+    含「住宅區」「住3」「第三種住宅區」「商業區」「第二種商業區」「工業區」等。
+    排除：道路用地、公園用地、機關用地、保護區、風景區（不可建或非住）"""
     if not usenam:
         return False
     if any(usenam.startswith(p) for p in _REAL_ZONE_PREFIX):
-        # 排除如「住宅區（保留地）」之類例外（極少）
+        return True
+    if _REAL_ZONE_FULL_RE.match(usenam):
         return True
     return False
 
@@ -375,24 +381,38 @@ def _get_ntpc_token() -> str:
     return ""
 
 
+_NUMERAL_LZ4 = {"一", "二", "三", "四", "五"}
+
+
 def _build_ntpc_zone_entry(a: dict) -> Optional[dict]:
     """把 NTPC LandUse_WMS 一筆 feature attributes 轉成標準 zone dict。
-    回 None 表 LZ3 為空無法判斷。"""
+    回 None 表 LZ3 為空無法判斷。
+
+    LZ4 解析規則：
+      - 「一/二/三/四/五」→ 第N種住宅區 / 第N種商業區（中英文數字 LZ4 才合成）
+      - 「附2」→ 新店都市計畫管制注記，依 LZ7=300% 視為第四種住宅區
+      - 其他（如「住」「住(再)」「機廿九」「公(三十三)」）→ LZ4 是冗餘標籤，zone_name 直接用 LZ3
+    """
     lz3 = (a.get("LZ3") or "").strip()
     lz4 = (a.get("LZ4") or "").strip()
     if not lz3:
         return None
-    if lz3 == "住宅區" and lz4:
+    far_rate = a.get("LZ7")
+    if lz3 == "住宅區" and lz4 in _NUMERAL_LZ4:
         zone_name = f"第{lz4}種住宅區"
         zone_label = f"住{lz4}"
-        _r_map = {"一": "R1", "二": "R2", "三": "R3", "四": "R4"}
-        zone_code = _r_map.get(lz4)
-    elif lz3 == "商業區" and lz4:
+        zone_code = {"一": "R1", "二": "R2", "三": "R3", "四": "R4", "五": "R5"}.get(lz4)
+    elif lz3 == "住宅區" and lz4 == "附2":
+        # 新店都市計畫「住宅區附2」實質容積 300% = 視為第四種住宅區
+        zone_name = "第四種住宅區"
+        zone_label = "住四(附2)"
+        zone_code = "R4"
+    elif lz3 == "商業區" and lz4 in _NUMERAL_LZ4:
         zone_name = f"第{lz4}種商業區"
         zone_label = f"商{lz4}"
-        _c_map = {"一": "C1", "二": "C2", "三": "C3", "四": "C4"}
-        zone_code = _c_map.get(lz4)
+        zone_code = {"一": "C1", "二": "C2", "三": "C3", "四": "C4"}.get(lz4)
     else:
+        # 其他情況（含 lz3=住宅區 但 lz4=「住」/「住(再)」等冗餘標籤、保護區、機關用地、商業區無細分等）
         zone_name = lz3
         zone_label = lz3
         zone_code = None
@@ -404,7 +424,7 @@ def _build_ntpc_zone_entry(a: dict) -> Optional[dict]:
         "zone_list": [zone_name] if zone_name else [],
         "plan_name": a.get("LZ1"),
         "coverage_rate": a.get("LZ5") or a.get("LZ6"),
-        "far_rate": a.get("LZ7"),
+        "far_rate": far_rate,
     }
 
 
@@ -477,9 +497,26 @@ def query_zoning_newtaipei(lat: float, lng: float) -> Optional[dict]:
         if real_zones:
             break  # 找到實質分區即停止擴大
     if real_zones:
-        result = dict(real_zones[0])
-        if len(real_zones) > 1:
-            result["zone_list"] = [z["zone_name"] for z in real_zones]
+        # 多塊實質分區命中：優先取容積率最高（300% > 280% > 50%）
+        # 容積率高 = 真正可開發地塊；低容積率多半是套圖殘餘或邊角
+        def _far(z):
+            try:
+                return float(z.get("far_rate") or 0)
+            except (TypeError, ValueError):
+                return 0
+        real_zones.sort(key=_far, reverse=True)
+        # zone_list dedup by zone_name（保留順序）：同名 polygon 不重複列
+        # ArcGIS 同基地常切多塊 polygon 但 zone_name 一樣（細部計畫拼圖殘餘）
+        seen = set()
+        unique_zones = []
+        for z in real_zones:
+            zn = z.get("zone_name")
+            if zn and zn not in seen:
+                seen.add(zn)
+                unique_zones.append(z)
+        result = dict(unique_zones[0])
+        if len(unique_zones) > 1:
+            result["zone_list"] = [z["zone_name"] for z in unique_zones]
         return result
     if non_real:
         return non_real[0]

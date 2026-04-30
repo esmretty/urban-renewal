@@ -94,6 +94,8 @@ def find_cross_source_duplicate(item: dict):
             return None
         road = m.group(1)
         from google.cloud.firestore_v1.base_query import FieldFilter
+        from database.models import make_source_key, compute_source_keys
+        item_key = make_source_key(item.get("source") or "591", item.get("source_id") or "")
         col = get_col()
         cand = list(col
                     .where(filter=FieldFilter("district", "==", district))
@@ -101,8 +103,9 @@ def find_cross_source_duplicate(item: dict):
                     .stream())
         for d in cand:
             dd = d.to_dict() or {}
-            if dd.get("source_id") == item.get("source_id"):
-                continue   # 自己 — 不算 cross
+            # 跳過自己（已含此 source_key 的 doc）
+            if item_key in (dd.get("source_keys") or []):
+                continue
             da = dd.get("address") or ""
             if road in da and abs((dd.get("building_area_ping") or 0) - bld) < 0.01:
                 return d.id
@@ -111,26 +114,34 @@ def find_cross_source_duplicate(item: dict):
         return None
 
 
-def find_doc_by_source_id(source_id: str) -> tuple:
-    """用 source_id 找 properties，回傳 (doc_id, dict) 或 (None, None)。
-    Migration 後 doc_id 不再是 source_id 字串，改成 UUID 格式。
-    一個 UUID doc 可能掛多個 source_id（dup merge / 跨來源），所以查兩個地方：
-      1. 主來源 source_id 欄位（== query）
-      2. source_ids 平面陣列欄位（array_contains query）— 含所有 merged 進來的 sid
-    這樣同一 591 sid 不會反覆被當成「新物件」每次又 dup_merge 一次。"""
+def find_doc_by_source_key(source_name: str, site_id: str) -> tuple:
+    """用 (source_name, site_id) 找 properties doc，回傳 (doc_id, dict) 或 (None, None)。
+    Schema：每 doc 有 source_keys[] 平面索引（如 ["591:20114614", "yongqing:8893"]）。
+    Firestore array_contains 查 source_keys 命中即回。
+    一個 doc 可掛多個 source（591 重發 / 跨來源 dedup）→ 只要任一 key match 都會找到同 doc。
+    """
     from google.cloud.firestore_v1.base_query import FieldFilter
-    if not source_id:
+    from database.models import make_source_key
+    key = make_source_key(source_name, site_id)
+    if not key or key.endswith(":"):
         return (None, None)
     col = get_col()
-    # 1. 直接用 source_id 欄位
-    docs = list(col.where(filter=FieldFilter("source_id", "==", source_id)).limit(1).stream())
-    if docs:
-        return (docs[0].id, docs[0].to_dict())
-    # 2. 查 source_ids 平面陣列（dup merge 時會 append 進來）
-    docs = list(col.where(filter=FieldFilter("source_ids", "array_contains", source_id)).limit(1).stream())
+    docs = list(col.where(filter=FieldFilter("source_keys", "array_contains", key)).limit(1).stream())
     if docs:
         return (docs[0].id, docs[0].to_dict())
     return (None, None)
+
+
+def find_doc_by_source_id(source_id: str) -> tuple:
+    """[Backwards-compat shim] 拆 source_id ("591_20114614") 後 delegate 到 find_doc_by_source_key。
+    新 code 請直接用 find_doc_by_source_key(name, site_id)。"""
+    if not source_id:
+        return (None, None)
+    # source_id 通常是 "591_20114614" 或 "yongqing_8893" 形式
+    parts = source_id.split("_", 1)
+    if len(parts) == 2:
+        return find_doc_by_source_key(parts[0], parts[1])
+    return find_doc_by_source_key("591", source_id)
 
 
 def get_user_doc(uid: str):

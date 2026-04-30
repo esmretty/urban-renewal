@@ -315,3 +315,45 @@ def get_nearby_mrt_stations(lat: float, lng: float, max_dist_m: float = 1500, to
             per_station.append({"name": station, "dist_m": round(min_d, 1)})
     per_station.sort(key=lambda x: x["dist_m"])
     return per_station[:top_n]
+
+
+def is_inside_polygon(lat: float, lng: float, polygon: list[tuple[float, float]]) -> bool:
+    """Ray-casting 判斷點 (lat, lng) 是否在 polygon 內。
+    polygon: list of (lat, lng) tuple，第一點 == 最後一點（閉環）或不閉皆可。
+    用於 REMOTE_POLYGONS_NEW_TAIPEI（板橋偏遠區等）標 is_remote_area。
+    """
+    if not polygon or len(polygon) < 3:
+        return False
+    n = len(polygon)
+    inside = False
+    j = n - 1
+    for i in range(n):
+        lat_i, lng_i = polygon[i]
+        lat_j, lng_j = polygon[j]
+        # 標準 ray-casting: 從 (lat, lng) 往 +lng 方向射線數穿越邊次數
+        if ((lat_i > lat) != (lat_j > lat)) and (
+            lng < (lng_j - lng_i) * (lat - lat_i) / (lat_j - lat_i + 1e-12) + lng_i
+        ):
+            inside = not inside
+        j = i
+    return inside
+
+
+def is_remote_area_new_taipei(lat: Optional[float], lng: Optional[float], district: Optional[str]) -> bool:
+    """新北市偏遠區判定：district 在 REMOTE_POLYGONS_NEW_TAIPEI 中且座標落入該區任一 polygon。
+    回 True = 偏遠（板橋浮洲/大漢溪以西、新店安坑、…，依 polygon 而定）
+    沒座標、沒登記偏遠 polygon 的區、或座標不在任何 polygon 內 → False。
+    """
+    if not lat or not lng or not district:
+        return False
+    try:
+        from config import REMOTE_POLYGONS_NEW_TAIPEI
+    except ImportError:
+        return False
+    polys = REMOTE_POLYGONS_NEW_TAIPEI.get(district)
+    if not polys:
+        return False
+    for poly in polys:
+        if is_inside_polygon(lat, lng, poly):
+            return True
+    return False

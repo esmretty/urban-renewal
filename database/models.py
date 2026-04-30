@@ -15,6 +15,125 @@ REQUIRED_FIELDS = [
 ]
 
 
+# ── sources[] 是來源唯一真相 ─────────────────────────────────────────────────────
+# 每筆物件 doc 的「來源」資訊存在 sources[] 陣列：
+#   sources = [{name, source_id, url, added_at, alive}]
+# 同物件多來源（591 重發 / 跨來源 dedup）→ append 一筆
+# verify_alive 不再 archive 整 doc，只 toggle sources[i].alive
+# source_keys[] 是平面索引（Firestore array_contains 用，從 sources 衍生）
+# 不再有 url / source_id / source / url_alt 主欄位
+
+def compute_source_keys(sources: list) -> list:
+    """從 sources[] 衍生平面索引 ["591:20114614", "yongqing:8893"]
+    用於 Firestore array_contains query（Firestore 不支援巢狀 array 欄位查詢）。"""
+    out = []
+    for s in (sources or []):
+        name = (s.get("name") or "").strip()
+        sid = (s.get("source_id") or "").strip()
+        if name and sid:
+            # source_id 已含 "591_20114614" 前綴的舊資料 → 直接用 site_id 部分
+            site_id = sid.split("_", 1)[1] if sid.startswith(f"{name}_") else sid
+            key = f"{name}:{site_id}"
+            if key not in out:
+                out.append(key)
+    return out
+
+
+def make_source_key(name: str, site_id: str) -> str:
+    """組 source_key (name:site_id)。site_id 可帶或不帶 "{name}_" 前綴，自動處理。"""
+    name = (name or "").strip()
+    site_id = (site_id or "").strip()
+    if site_id.startswith(f"{name}_"):
+        site_id = site_id.split("_", 1)[1]
+    return f"{name}:{site_id}"
+
+
+def primary_source(doc: dict) -> Optional[dict]:
+    """取「主要顯示用」的 source：alive==true 中最早 added_at；無 alive 用最早 added_at。
+    所有「主 url 給 admin/LINE 用」的 caller 走這個 helper，避免直接讀已廢的 doc.url。"""
+    sources = doc.get("sources") or []
+    if not sources:
+        return None
+    alive = [s for s in sources if s.get("alive") is not False]
+    pool = alive or sources
+    return min(pool, key=lambda s: s.get("added_at") or "")
+
+
+def primary_url(doc: dict) -> Optional[str]:
+    """取主要顯示用 url（從 primary_source）"""
+    s = primary_source(doc)
+    return s.get("url") if s else None
+
+
+def primary_source_id(doc: dict) -> Optional[str]:
+    """取主要顯示用 source_id（含 prefix，如 591_20114614）"""
+    s = primary_source(doc)
+    if not s:
+        return None
+    name = s.get("name") or ""
+    sid = s.get("source_id") or ""
+    if sid and not sid.startswith(f"{name}_"):
+        return f"{name}_{sid}"
+    return sid or None
+
+
+def add_source_to_doc(doc: dict, name: str, site_id: str, url: str, added_at: Optional[str] = None) -> bool:
+    """append 一筆 source 到 doc.sources[]（若 source_key 已存在則不重複）。
+    回傳：True = 真的加了；False = 已存在沒動作。
+    呼叫端負責再寫回 Firestore。"""
+    sources = list(doc.get("sources") or [])
+    key = make_source_key(name, site_id)
+    existing_keys = {make_source_key(s.get("name"), s.get("source_id")) for s in sources}
+    if key in existing_keys:
+        return False
+    sources.append({
+        "name": name,
+        "source_id": site_id,
+        "url": url,
+        "added_at": added_at or now_tw_iso(),
+        "alive": True,
+    })
+    doc["sources"] = sources
+    doc["source_keys"] = compute_source_keys(sources)
+    return True
+
+
+def remove_source_from_doc(doc: dict, name: str, site_id: str) -> bool:
+    """從 doc.sources[] 移除指定 source（換物件流程）。
+    回傳：True = 有移除；False = 沒找到。"""
+    sources = list(doc.get("sources") or [])
+    key = make_source_key(name, site_id)
+    new_sources = [s for s in sources if make_source_key(s.get("name"), s.get("source_id")) != key]
+    if len(new_sources) == len(sources):
+        return False
+    doc["sources"] = new_sources
+    doc["source_keys"] = compute_source_keys(new_sources)
+    return True
+
+
+def set_source_alive(doc: dict, name: str, site_id: str, alive: bool) -> bool:
+    """更新 doc.sources[] 中某 source 的 alive flag（verify_alive 用）。
+    回傳：True = 找到並更新；False = 沒找到。"""
+    sources = list(doc.get("sources") or [])
+    key = make_source_key(name, site_id)
+    found = False
+    for s in sources:
+        if make_source_key(s.get("name"), s.get("source_id")) == key:
+            s["alive"] = bool(alive)
+            found = True
+    if found:
+        doc["sources"] = sources
+    return found
+
+
+def all_sources_dead(doc: dict) -> bool:
+    """所有 sources alive=False → 整個物件可標 archived。"""
+    sources = doc.get("sources") or []
+    if not sources:
+        return False
+    return all(s.get("alive") is False for s in sources)
+
+
 def age_to_completed_year(age) -> Optional[int]:
     """把「屋齡 N 年」回推成完工年 = 當前年 - N。
     抓爬蟲那刻轉換 → 之後 UI 顯示時當下重算（屋齡會跟著年份走）。"""
@@ -175,21 +294,21 @@ def make_property_doc(
         doc_id = gen_dated_id(item.get("scrape_session_at"))
 
     source_name = item.get("source", "591")
-    source_id_val = item.get("source_id")
-    primary_url = item.get("url")
+    source_id_raw = item.get("source_id") or ""
+    site_id = source_id_raw.split("_", 1)[1] if source_id_raw.startswith(f"{source_name}_") else source_id_raw
     sources_arr = [{
         "name": source_name,
-        "source_id": source_id_val,
-        "url": primary_url,
+        "source_id": site_id,
+        "url": item.get("url"),
         "added_at": now_tw_iso(),
+        "alive": True,
     }]
     return {
         "id": doc_id,
-        "source": source_name,
-        "source_id": source_id_val,
+        # sources[] 是來源唯一真相；source_keys[] 是平面索引給 Firestore array_contains 用
         "sources": sources_arr,
+        "source_keys": compute_source_keys(sources_arr),
         "archived": False,        # 新建/重抓物件一律不是 archived
-        "url": primary_url,
         "image_url": item.get("image_url"),
         "scraped_at": now_tw_iso(),
         "published_at": _parse_published_at(item.get("_published_text"))
@@ -242,6 +361,9 @@ def make_property_doc(
         "skip_reason": None,                # e.g. "5F_apartment" / "land_too_small"
         "is_foreclosure": False,            # 法拍屋
         "foreclosure_reasons": None,        # ["標題含#", "代理人刊登"] etc
+        "is_remote_area": False,            # 偏遠地段（新北市天險隔開的區，如板橋浮洲/大漢溪以西）
+        "unsuitable_for_renewal": False,    # 新北 4 區土地分區非住宅用地 → 不適合都更
+        "unsuitable_reason": None,          # 給用戶看的中性說明
         "deep_analysis_done": False,
         # 價格歷史（重複出現時追蹤）
         "is_price_changed": False,
@@ -340,10 +462,12 @@ PREFER_NEW_FIELDS = {
     "zoning_candidates", "zoning_error",
     "address", "address_inferred", "address_inferred_confidence",
     "address_inferred_candidates",
-    "image_url", "url", "list_rank", "scraped_at",
+    "image_url", "list_rank", "scraped_at",
     "scrape_session_at", "published_at", "updated_at", "title", "deep_analysis_done",
     "screenshot_cadastral", "screenshot_zoning", "screenshot_renewal",
     "analysis_status", "analysis_completed_at",
+    "is_remote_area",
+    "unsuitable_for_renewal", "unsuitable_reason",
 }
 CONFLICT_TRACK_FIELDS = {
     "building_age", "building_area_ping", "land_area_ping",
@@ -396,6 +520,9 @@ def merge_property_doc(old: dict, new: dict) -> tuple[dict, list]:
 
     for k, v_new in new.items():
         v_old = old.get(k)
+        # sources / source_keys 由 caller (api/app.py) 明確處理（append/remove），merge 不動
+        if k in ("sources", "source_keys"):
+            continue
         # reset 類：允許 None 覆寫舊值
         if k in RESET_ON_REANALYZE:
             merged[k] = v_new
@@ -460,21 +587,21 @@ def make_minimal_doc(
         from database.db import gen_dated_id
         doc_id = gen_dated_id(item.get("scrape_session_at"))
     source_name = item.get("source", "591")
-    source_id_val = item.get("source_id")
-    primary_url = item.get("url")
+    source_id_raw = item.get("source_id") or ""
+    site_id = source_id_raw.split("_", 1)[1] if source_id_raw.startswith(f"{source_name}_") else source_id_raw
     sources_arr = [{
         "name": source_name,
-        "source_id": source_id_val,
-        "url": primary_url,
+        "source_id": site_id,
+        "url": item.get("url"),
         "added_at": now_tw_iso(),
+        "alive": True,
     }]
     return {
         "id": doc_id,
-        "source": source_name,
-        "source_id": source_id_val,
+        # sources[] 是來源唯一真相；source_keys[] 是平面索引給 Firestore array_contains 用
         "sources": sources_arr,
+        "source_keys": compute_source_keys(sources_arr),
         "archived": False,        # 新建/重抓物件一律不是 archived
-        "url": primary_url,
         "image_url": item.get("image_url"),
         "scraped_at": now_tw_iso(),
         "published_at": _parse_published_at(item.get("_published_text"))
@@ -513,6 +640,7 @@ def make_minimal_doc(
         "ai_reason": None,
         "is_foreclosure": False,
         "foreclosure_reasons": None,
+        "is_remote_area": False,
         "analysis_status": "pending",
         "skip_reason": skip_reason,
         "deep_analysis_done": False,

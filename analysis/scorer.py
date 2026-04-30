@@ -338,6 +338,49 @@ def calculate_renewal_value(
     }
 
 
+def is_zoning_suitable_for_renewal(district: Optional[str], zoning) -> tuple:
+    """判斷新北 4 區（板橋/新店/中和/永和）的物件分區是否值得做都更分析。
+
+    zoning 接受兩種格式：
+      - str：單一 zone_name（如「住宅區」）
+      - list：多分區（如 ["住宅區", "商業區"]）— 物件座落跨多塊 polygon
+    多分區時：只要有任一塊在 SUITABLE 裡就算 suitable。
+
+    回 (suitable: bool, reason: str)
+      suitable=True  → 跑完整分析
+      suitable=False → 跳過分析；reason 是給用戶看的中性說明
+
+    規則：實務上有都更價值的只有「住、商、工」三種；其他（保護區/風景區/機關用地/河道用地等）無價值。
+    住宅區子類別在新北 4 區還有額外限制（見 config.SUITABLE_ZONING_FOR_RENEWAL_NEW_TAIPEI）。
+    台北市等不在 SUITABLE 的 district 一律 True（不限制）。
+    """
+    if not district:
+        return True, ""
+    try:
+        from config import SUITABLE_ZONING_FOR_RENEWAL_NEW_TAIPEI
+    except ImportError:
+        return True, ""
+    suitable_set = SUITABLE_ZONING_FOR_RENEWAL_NEW_TAIPEI.get(district)
+    if suitable_set is None:
+        return True, ""
+
+    # 標準化成 list
+    if not zoning:
+        return True, ""
+    zones = [zoning] if isinstance(zoning, str) else list(zoning)
+    zones = [z for z in zones if z]
+    if not zones:
+        return True, ""
+
+    # 任一 zone 在 SUITABLE 裡 → suitable
+    for z in zones:
+        if z in suitable_set:
+            return True, ""
+    # 全部都不在 SUITABLE
+    label = "、".join(zones)
+    return False, f"本物件土地分區為「{label}」，不適合都更分析"
+
+
 def resolve_effective_zoning(zoning: Optional[str], zoning_original: Optional[str]) -> Optional[str]:
     """依用戶規則決定計算容積率用的「有效分區」：
     - 住宅區 + (特)/(遷) → 忽略 zoning_original，一律用該住宅區本身（剝掉括號後綴）
