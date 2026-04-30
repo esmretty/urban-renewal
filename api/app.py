@@ -2400,13 +2400,22 @@ def central_search(
         if btype_set is not None and data.get("building_type") not in btype_set:
             continue
         if floor_set is not None:
-            try:
-                f_val = int(data.get("floor")) if data.get("floor") is not None else None
-            except (TypeError, ValueError):
-                f_val = None
-            # 缺樓層資料 pass-through；有資料才比對
-            if f_val is not None and f_val not in floor_set:
-                continue
+            # 優先用 floor_range_min/max（樓中樓物件 1F~2F 用戶搜 1F 或 2F 都該命中交集）
+            fr_min = data.get("floor_range_min")
+            fr_max = data.get("floor_range_max")
+            if fr_min is not None and fr_max is not None:
+                # 物件 [fr_min, fr_max] 跟 user 選的 floor_set 有交集才 match
+                if not any(fr_min <= f <= fr_max for f in floor_set):
+                    continue
+            else:
+                # 舊 doc fallback：parse floor 字串嘗試取數字
+                try:
+                    f_val = int(data.get("floor")) if data.get("floor") is not None else None
+                except (TypeError, ValueError):
+                    f_val = None
+                # 缺樓層資料 pass-through；有資料才比對
+                if f_val is not None and f_val not in floor_set:
+                    continue
         # 缺資料一律 pass-through（不因為「缺欄位」就被刷掉）
         pn = data.get("price_ntd")
         if min_price_wan is not None and pn and pn / 10000 < min_price_wan:

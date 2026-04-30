@@ -754,6 +754,21 @@ def analyze_single_property(
         doc_data["regeocode_failed"] = True
         doc_data["regeocode_failed_addr"] = item.get("regeocode_failed_addr")
 
+    # 解析 floor 字串成 (min, max, total) — 支援樓中樓 "1F~2F/4F" 等格式
+    # 樓層 filter chip 用 floor_range_min/max 判定交集（用戶搜 1F 或 2F 都能 match 1~2F 物件）
+    from database.models import parse_floor_range
+    _fmin, _fmax, _ftot = parse_floor_range(
+        doc_data.get("floor") or item.get("floor"),
+        doc_data.get("total_floors") or item.get("total_floors"),
+    )
+    if _fmin is not None:
+        doc_data["floor_range_min"] = _fmin
+    if _fmax is not None:
+        doc_data["floor_range_max"] = _fmax
+    # 若 floor 字串內含 /N 比現有 total_floors 更新（樓中樓常見），用 floor str 推的 total 覆蓋
+    if _ftot is not None and not doc_data.get("total_floors"):
+        doc_data["total_floors"] = _ftot
+
     # 偏遠路段：只標旗標 + 寫 log，分析照跑（資料完整給 client 自己決定要不要呈現）
     if doc_data.get("is_remote_area"):
         _addr_for_log = (

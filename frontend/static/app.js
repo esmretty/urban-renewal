@@ -459,6 +459,22 @@ const SKIP_REASON_MAP = {
 /**
  * 列出所有違反 threshold 的原因（不只一個）。
  */
+// 樓層顯示 helper：支援樓中樓 (1-2/4F) 跟單樓層 (3/4F)
+function formatFloorRange(p) {
+  const fmin = p.floor_range_min;
+  const fmax = p.floor_range_max;
+  const tot = p.total_floors;
+  if (fmin != null && fmax != null) {
+    const totStr = tot ? `/${tot}F` : "F";
+    return (fmin === fmax) ? `${fmin}${totStr}` : `${fmin}-${fmax}${totStr}`;
+  }
+  // 舊 doc fallback：用 floor 字串
+  if (p.floor && tot) return `${p.floor}/${tot}F`;
+  if (tot) return `${tot}F`;
+  if (p.floor) return `${p.floor}F`;
+  return "—";
+}
+
 function computeSkipReasons(p, th) {
   // 只把「五層以上」視為弱勢物件理由（都更難度高）；其餘（總價/單價/地單價）是用戶主觀篩選偏好，不標弱勢
   const reasons = [];
@@ -486,10 +502,8 @@ function rowHTML(p) {
     ? fmt1(p.price_ntd / 10000 / p.building_area_ping) : "—";
   const perLand = (p.price_ntd && p.land_area_ping)
     ? fmt1(p.price_ntd / 10000 / p.land_area_ping) : "—";
-  let floorStr = "—";
-  if (p.floor && p.total_floors) floorStr = `${p.floor}/${p.total_floors}F`;
-  else if (p.total_floors) floorStr = `${p.total_floors}F`;
-  else if (p.floor) floorStr = `${p.floor}F`;
+  // 樓層字串：樓中樓物件用 floor_range_min/max 顯示「1-2/4F」；單樓層用「3/4F」
+  let floorStr = formatFloorRange(p);
 
   const typeIcon = {
     "公寓": "🏢", "透天厝": "🏠", "華廈": "🏬", "大樓": "🏙", "店面": "🏪",
@@ -689,15 +703,9 @@ function cardHTML(p) {
     ? `🚇 ${esc(p.nearest_mrt)} ${Math.round(p.nearest_mrt_dist_m || 0)}m`
     : "";
 
-  // 樓層：2/5F 這樣寫
-  let floorStr = "";
-  if (p.floor && p.total_floors) {
-    floorStr = `${p.floor}/${p.total_floors}F`;
-  } else if (p.total_floors) {
-    floorStr = `${p.total_floors}F`;
-  } else if (p.floor) {
-    floorStr = `${p.floor}F`;
-  }
+  // 樓層：用 formatFloorRange，樓中樓顯示 1-2/4F、單樓層 3/4F
+  let floorStr = formatFloorRange(p);
+  if (floorStr === "—") floorStr = "";
 
   const renewalStr = p.renewal_profit_ntd != null
     ? `<span class="${p.renewal_profit_ntd >= 0 ? "text-success" : "text-danger"}">
@@ -906,10 +914,7 @@ function buildDetailHTML(p) {
   const perLand = (p.price_ntd && p.land_area_ping)
     ? `${fmt1(p.price_ntd / 10000 / p.land_area_ping)} 萬 / 地坪` : null;
 
-  let floorStr = "—";
-  if (p.floor && p.total_floors) floorStr = `${p.floor}/${p.total_floors}F`;
-  else if (p.total_floors) floorStr = `${p.total_floors}F`;
-  else if (p.floor) floorStr = `${p.floor}F`;
+  let floorStr = formatFloorRange(p);
 
   const recColor = {
     "強烈推薦": "success", "值得考慮": "warning",

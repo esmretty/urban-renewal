@@ -303,6 +303,51 @@ def get_missing_fields(doc: dict) -> list[str]:
     return [f for f in REQUIRED_FIELDS if doc.get(f) in (None, "", 0)]
 
 
+def parse_floor_range(floor_str, total_floors=None):
+    """解析 floor 字串成 (min, max, total) 三元組 — 支援樓中樓格式。
+
+    格式：
+      "3"    / "3F"   / "3樓"           → (3, 3, total)
+      "1~2"  / "1F~2F" / "1樓-2樓"      → (1, 2, total)
+      "1F~2F/4F"                          → (1, 2, 4)   ← 樓中樓 (1-2樓物件、整棟 4 樓)
+      "1+2"  / "1F+2F"                   → (1, 2, total)
+      "—" / "" / None                    → (None, None, total)
+
+    回 (floor_range_min, floor_range_max, total_floors)
+    """
+    import re as _re
+    if not floor_str:
+        return (None, None, total_floors)
+    s = str(floor_str).strip()
+    if not s or s == "—":
+        return (None, None, total_floors)
+    parsed_total = total_floors
+    # 1) 拆 / 後的總樓層部分
+    if "/" in s:
+        parts = s.split("/", 1)
+        s = parts[0].strip()
+        try:
+            t_clean = _re.sub(r"[Ff樓\s]", "", parts[1])
+            if t_clean:
+                parsed_total = int(t_clean)
+        except (ValueError, TypeError):
+            pass
+    # 2) 拆範圍 (~ - － +) 抽出每段的數字
+    nums = []
+    for tok in _re.split(r"[~\-－+]", s):
+        m = _re.search(r"\d+", tok)
+        if m:
+            try:
+                n = int(m.group(0))
+                if 0 < n < 200:   # 合理樓層範圍
+                    nums.append(n)
+            except ValueError:
+                pass
+    if not nums:
+        return (None, None, parsed_total)
+    return (min(nums), max(nums), parsed_total)
+
+
 def make_property_doc(
     item: dict,
     scores: dict,
