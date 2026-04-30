@@ -1168,15 +1168,19 @@ body[data-tab="explore"] .wl-only { display: none !important; }
 }
 
 .badge-new {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   margin-left: auto;   /* 推到地址欄最右邊 */
   padding: 1px 6px;
-  font-size: 10px;
-  font-weight: bold;
+  font-size: 11px;
+  font-weight: 700;
   color: #fff;
   background: #e74c3c;
-  border-radius: 8px;
+  border: 1.5px solid transparent;
+  border-radius: 10px;
   vertical-align: middle;
+  line-height: 1.3;
   animation: badge-new-pulse 1.6s ease-in-out infinite;
 }
 /* 地址 cell：用 flex（左 .addr-text 文字、右 .addr-badges NEW/事件）。
@@ -1243,16 +1247,20 @@ body[data-tab="explore"] .wl-only { display: none !important; }
   letter-spacing: 0.5px;
 }
 
-/* 統一 badge 樣式：跟 .badge-new 一致的小色塊（圓角 + 白字 + 不同底色） */
+/* 統一 badge 樣式：跟 .inferred-tag 同型態 + 字體（圓角邊框 + 11px + 不同底色白字） */
 .event-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   margin-left: 4px;
   padding: 1px 6px;
-  font-size: 10px;
-  font-weight: bold;
+  font-size: 11px;
+  font-weight: 700;
   color: #fff;
-  border-radius: 8px;
+  border: 1.5px solid transparent;
+  border-radius: 10px;
   vertical-align: middle;
+  line-height: 1.3;
 }
 .event-badge.b-down  { background: #27ae60; }   /* 降價：綠 (好消息) */
 .event-badge.b-up    { background: #d35400; }   /* 漲價：橘 */

@@ -2375,13 +2375,10 @@ def central_search(
     items = []
     for d in docs:
         data = d.to_dict() or {}
-        if data.get("analysis_error") or data.get("analysis_in_progress"):
-            continue
-        # 已封存的物件不出現在探索 tab（搜尋結果裡）
-        if data.get("archived") is True:
-            continue
-        # 過濾「用戶貼 URL 送出」的物件：搜尋 tab 只顯示 admin batch 抓進來的公開資料
-        # 舊資料沒 source_origin 欄位 → 當作 batch 不過濾
+        # 「狀態」相關的隱藏（archived / analysis_error / analysis_in_progress / skipped）
+        # 全部交給 client 過濾，admin 跟 client 看到的 API response 一致。
+        # server 只保留隱私邊界：用戶貼 URL 送出的物件不該洩漏給其他用戶
+        # （舊資料沒 source_origin 欄位 → 當作 batch 不過濾）
         if data.get("source_origin") == "user_url":
             continue
         if dist_set is not None and data.get("district") not in dist_set:

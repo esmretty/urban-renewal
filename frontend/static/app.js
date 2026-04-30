@@ -2218,8 +2218,14 @@ let _currentPage = 1;
 const PAGE_SIZE = 100;
 
 function filterAndSort() {
-  // 一律排除軟刪除
-  let list = allProperties.filter(p => !p.deleted);
+  // 一律排除軟刪除 + 分析中/分析失敗的（這些是「壞資料」狀態，不應出現在搜尋/清單畫面，
+  //   server 不再幫忙過濾，admin 跟 client 看到的 API response 一致由 client 決定顯示）
+  let list = allProperties.filter(p =>
+    !p.deleted &&
+    !p.analysis_error &&
+    !p.analysis_in_progress &&
+    p.archived !== true
+  );
 
   // 「隱藏不易都更物件」chip 勾選時 → 過濾掉 is_remote_area（偏遠路段）+ unsuitable_for_renewal（特殊土地分區）
   // 兩 tab 共用，預設勾選
