@@ -715,7 +715,7 @@ input.tb-input[disabled] {
   display: grid;
   /* 來源(含刊登時間) | 類型 | 市 | 區 | 地址 | 總+實 | 建+單 | 土+單 | 樓 | 齡 | 說明 | 獲利倍數 | 動作 */
   /* 地址改 minmax(140px, 1fr) — 避免 1fr 在其他欄位擠壓下 collapse 到 1 字寬 (中文 break-all 造成) */
-  grid-template-columns: 130px 80px 60px 60px minmax(140px, 1fr)
+  grid-template-columns: 90px 80px 60px 60px minmax(140px, 1fr)
                          110px 88px 100px 56px 46px 110px 92px 68px;
   gap: 0;
   align-items: center;
@@ -726,7 +726,7 @@ input.tb-input[disabled] {
   background: #ffffff;              /* 預設白底（不再用米黃） */
   margin-bottom: 5px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 13px;
   transition: background 0.12s, box-shadow 0.12s;
   /* 讓 hover popup（來源連結下拉）能浮在其他 row 之上 */
   position: relative;
@@ -833,12 +833,12 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   color: #5c4a0a !important;
   font-weight: 700 !important;
   text-align: center !important;
-  font-size: 11px !important;
+  font-size: 13px !important;
   line-height: 1.25;
 }
 .property-row--head .c .sub {
   display: block;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   color: #8b7c4a;
   margin-top: 1px;
@@ -852,7 +852,7 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
 }
 .property-row--head-top .c {
   text-align: center;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 1px;
   padding: 4px 0;
@@ -872,7 +872,7 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   line-height: 1.15;
 }
 .property-row--head:not(.property-row--head-top) .c { padding: 0 6px; }
-.property-row--head:not(.property-row--head-top) .sub { font-size: 11px; }
+.property-row--head:not(.property-row--head-top) .sub { font-size: 13px; }
 .property-row--head .c-score { text-align: center; }
 
 /* 表格 cell — 統一字級與粗細 */
@@ -882,7 +882,7 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   overflow: hidden;
   text-overflow: ellipsis;
   border-left: 1px solid #ede7d4;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   color: #2a2a3e;
 }
@@ -915,12 +915,12 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
 }
 .c-score-stack .score-main {
   font-weight: 700;
-  font-size: 11px;
+  font-size: 13px;
 }
 .c-score-stack .score-num { letter-spacing: -0.5px; }
-.c-score-stack .score-unit { font-size: 11px; margin-left: 1px; opacity: 0.75; }
+.c-score-stack .score-unit { font-size: 13px; margin-left: 1px; opacity: 0.75; }
 .c-score-stack .score-rec {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   margin-top: 1px;
 }
@@ -939,13 +939,13 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   font-weight: 600;
   padding: 0 4px;
   line-height: 1.25;
-  font-size: 11px;
+  font-size: 13px;
   white-space: normal;        /* 允許換行 */
   word-break: keep-all;
 }
 .c-note .note-skip {
   color: #b0790a;
-  font-size: 11px;
+  font-size: 13px;
   display: block;
 }
 
@@ -955,17 +955,17 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
 .c-multi { color: #b0790a; }
 .multi-stack {
   display: flex; flex-direction: column; gap: 2px;
-  font-size: 11px; line-height: 1.15;
+  font-size: 13px; line-height: 1.15;
 }
 .multi-stack i {
   font-style: normal; display: inline-block;
-  font-size: 11px; color: #8b7c4a; margin-right: 3px;
+  font-size: 13px; color: #8b7c4a; margin-right: 3px;
 }
-.c-action { text-align: center; font-size: 11px; }
+.c-action { text-align: center; font-size: 13px; }
 
 /* 表頭文字樣式（統一、小、上色） */
 .property-row--head .c {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   color: #8b7c4a;
   letter-spacing: 0.5px;
@@ -982,7 +982,7 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   text-align: right;
 }
 .c-bld-combo .sub {
-  font-size: 11px;
+  font-size: 13px;
   color: #c0392b;
   font-weight: 700;
 }
@@ -1715,9 +1715,9 @@ tr.archived {
 .src-badge-other {
   position: relative;
   display: inline-block;
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
+  width: 23px;
+  height: 23px;
+  border-radius: 6px;
   vertical-align: middle;
   text-decoration: none;
   cursor: pointer;
@@ -2370,7 +2370,7 @@ select.rv2-edit { text-align: left; padding-right: 18px; }
     align-items: center;
     gap: 2px 6px;
     padding: 6px 10px;
-    font-size: 11px;   /* 對齊欄位 title 的 11px */
+    font-size: 13px;   /* 跟 desktop 對齊 */
     grid-template-columns: none;   /* 取消 grid 設定 */
   }
   .property-row > .c {
@@ -2378,7 +2378,7 @@ select.rv2-edit { text-align: left; padding-right: 18px; }
     min-width: 0;
     text-align: center;
   }
-  .property-row > .c-src       { flex: 0 0 110px; order: 1; text-align: left; }
+  .property-row > .c-src       { flex: 0 0 90px;  order: 1; text-align: left; }
   .property-row > .c-type      { flex: 0 0 70px;  order: 2; }
   .property-row > .c-city      { flex: 0 0 50px;  order: 3; }
   .property-row > .c-district  { flex: 0 0 60px;  order: 4; }
@@ -2397,7 +2397,7 @@ select.rv2-edit { text-align: left; padding-right: 18px; }
     padding: 4px 0 2px 8px;
     border-top: 1px dashed #e8e4d8;
     margin-top: 4px;
-    font-size: 11px;   /* 對齊整列 11px */
+    font-size: 13px;   /* 跟 desktop 對齊 */
   }
   /* header row 對齊 (header 也適用此 layout) */
   .property-row--head .c-addr {
@@ -2407,7 +2407,7 @@ select.rv2-edit { text-align: left; padding-right: 18px; }
     padding-bottom: 0;
   }
   .property-row--head .c {
-    font-size: 11px !important;
+    font-size: 13px !important;
   }
   /* head-top 取消 grid 顯示一行（"物件資料 | 都更評估" 那行不需要兩行） */
   .property-row--head-top {
