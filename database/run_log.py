@@ -80,6 +80,46 @@ def log_action(
         logger.warning("[run_log] unexpected: %s", e)
 
 
+def build_doc_log_details(item: dict, doc_data: Optional[dict] = None, **extras) -> dict:
+    """組 log_action 的 details dict — 統一抓 batch/manual/url 各流程「處理一筆物件」的關鍵欄位。
+
+    包含：來源連結、標題、地址、價格、建坪/地坪、樓層、屋齡、分區、評分、AI 建議、旗標。
+    讓 admin 在執行紀錄詳情頁能看到完整脈絡，不用再去 properties collection 對照。
+    """
+    doc_data = doc_data or {}
+    sources = doc_data.get("sources") or item.get("sources") or []
+    url = None
+    if sources and isinstance(sources, list) and isinstance(sources[0], dict):
+        url = sources[0].get("url")
+    if not url:
+        url = item.get("url") or doc_data.get("source_url")
+    addr = (
+        doc_data.get("address_inferred")
+        or doc_data.get("address")
+        or item.get("address_inferred")
+        or item.get("address")
+    )
+    out = {
+        "title": item.get("title") or doc_data.get("title"),
+        "url": url,
+        "address": addr,
+        "price_ntd": doc_data.get("price_ntd") or item.get("price_ntd"),
+        "building_area_ping": doc_data.get("building_area_ping") or item.get("building_area_ping"),
+        "land_area_ping": doc_data.get("land_area_ping") or item.get("land_area_ping"),
+        "total_floors": doc_data.get("total_floors") or item.get("total_floors"),
+        "floor": doc_data.get("floor") or item.get("floor"),
+        "building_age": doc_data.get("building_age") or item.get("building_age"),
+        "zoning": doc_data.get("zoning"),
+        "score_total": doc_data.get("score_total"),
+        "ai_recommendation": doc_data.get("ai_recommendation"),
+        "is_remote_area": doc_data.get("is_remote_area"),
+        "unsuitable_for_renewal": doc_data.get("unsuitable_for_renewal"),
+    }
+    out.update(extras)
+    # 過濾 None 值，控制 Firestore doc 大小
+    return {k: v for k, v in out.items() if v is not None and v != ""}
+
+
 def list_recent(limit: int = 200, trigger_prefix: Optional[str] = None) -> list[dict]:
     """取最近 N 筆 log entry（依 at desc）。給 admin endpoint 用。"""
     try:

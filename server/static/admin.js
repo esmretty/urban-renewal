@@ -478,15 +478,20 @@ window.showSessionModal = function (idx) {
     if (m) return `https://sale.591.com.tw/home/house/detail/2/${m[1]}.html`;
     const my = sid.match(/^yongqing_(\d+)/);
     if (my) return `https://buy.yungching.com.tw/house/${my[1]}`;
+    const ms = sid.match(/^sinyi_([A-Z0-9]+)/);
+    if (ms) return `https://www.sinyi.com.tw/buy/house/${ms[1]}`;
     return null;
   };
-  const rows = actions.map(a => {
+  const _fmtPrice = (n) => n ? `${(Number(n) / 10000).toLocaleString("zh-TW", { maximumFractionDigits: 0 })} 萬` : "";
+  const rows = actions.map((a, idx) => {
     const t = a.at ? new Date(a.at).toLocaleTimeString("zh-TW", {hour12:false}) : "—";
     const acolor = _ACTION_COLOR[a.action] || "#555";
     const alabel = _ACTION_LABEL[a.action] || a.action;
     const sid = a.source_id || "";
     const did = a.doc_id || "";
-    const url = _urlForSid(sid);
+    const det = a.details || {};
+    // 來源連結優先用 details.url（log 寫入時就帶了），fallback 從 sid prefix 拼
+    const url = det.url || _urlForSid(sid);
     const sidCell = sid
       ? (url
           ? `<a href="${esc(url)}" target="_blank" rel="noopener" style="color:#2980b9; font-family:Consolas,monospace; font-size:11px;">${esc(sid)} ↗</a>`
@@ -495,29 +500,54 @@ window.showSessionModal = function (idx) {
     const didCell = did
       ? `<span style="color:#888; font-size:10px; font-family:Consolas,monospace;">${esc(did.slice(0, 14))}</span>`
       : "";
-    const det = a.details || {};
+
+    // 「抓取結果」摘要：價格 / 建坪+地坪 / 樓層 / 屋齡 / 評分 / AI 建議
+    const factsParts = [];
+    if (det.price_ntd) factsParts.push(`<b style="color:#b0790a;">${_fmtPrice(det.price_ntd)}</b>`);
+    if (det.building_area_ping || det.land_area_ping) {
+      const b = det.building_area_ping ? `建${det.building_area_ping}` : "";
+      const l = det.land_area_ping ? `地${det.land_area_ping}` : "";
+      factsParts.push(`${b}${b && l ? "/" : ""}${l}坪`);
+    }
+    if (det.floor || det.total_floors) {
+      factsParts.push(`${det.floor ?? "?"}/${det.total_floors ?? "?"}F`);
+    }
+    if (det.building_age != null) factsParts.push(`${det.building_age}屋齡`);
+    if (det.zoning) factsParts.push(`<span style="color:#7c6a2f;">${esc(det.zoning)}</span>`);
+    if (det.score_total != null) factsParts.push(`<span style="color:#2e7d32;">分${Math.round(det.score_total)}</span>`);
+    if (det.ai_recommendation) factsParts.push(`<span style="color:#1e88e5;">AI: ${esc(det.ai_recommendation)}</span>`);
+    if (det.is_remote_area) factsParts.push(`<span style="color:#888;">[偏遠]</span>`);
+    if (det.unsuitable_for_renewal) factsParts.push(`<span style="color:#888;">[特殊分區]</span>`);
+    const facts = factsParts.length ? `<div style="font-size:11px; color:#444; margin-top:2px;">${factsParts.join(" · ")}</div>` : "";
+
+    // 標題
+    const title = det.title ? `<div style="font-size:11px; color:#8a7e58; font-style:italic;">${esc(String(det.title).slice(0, 60))}</div>` : "";
+
+    // 既有 extras
     let extra = "";
     if (det.merged_into) extra += `<div style="color:#888; font-size:11px;">→ 併入 <span style="font-family:Consolas,monospace;">${esc(det.merged_into.slice(0, 14))}</span>${det.discarded ? "（捨棄）" : ""}</div>`;
     if (det.address) extra += `<div style="color:#666; font-size:11px;">📍 ${esc(String(det.address).slice(0, 50))}</div>`;
+    if (det.change_reason) extra += `<div style="color:#b85a30; font-size:11px;">換物件原因：${esc(det.change_reason)}</div>`;
     if (det.conflicts && det.conflicts.length) extra += `<div style="color:#c0392b; font-size:11px;">⚠ 欄位衝突保留舊值：${esc(det.conflicts.join(", "))}</div>`;
     if (det.dead_urls && det.dead_urls.length) extra += `<div style="color:#c0392b; font-size:11px;">死連結：${det.dead_urls.map(u => `<a href="${esc(u)}" target="_blank" style="color:#c0392b;">${esc(u.slice(0, 60))} ↗</a>`).join("<br>")}</div>`;
+
     return `<tr style="border-bottom:1px solid #eee;">
-      <td style="padding:4px 6px; font-family:Consolas,monospace; font-size:11px; color:#666;">${esc(t)}</td>
-      <td style="padding:4px 6px; color:${acolor}; font-weight:600; font-size:12px; white-space:nowrap;">${esc(alabel)}</td>
-      <td style="padding:4px 6px;">${sidCell}${didCell ? "<br>" + didCell : ""}</td>
-      <td style="padding:4px 6px; font-size:12px;">${esc(a.message || "")}${extra}</td>
+      <td style="padding:4px 6px; font-family:Consolas,monospace; font-size:11px; color:#666; white-space:nowrap; vertical-align:top;">${idx + 1}.<br>${esc(t)}</td>
+      <td style="padding:4px 6px; color:${acolor}; font-weight:600; font-size:12px; white-space:nowrap; vertical-align:top;">${esc(alabel)}</td>
+      <td style="padding:4px 6px; vertical-align:top;">${sidCell}${didCell ? "<br>" + didCell : ""}</td>
+      <td style="padding:4px 6px; font-size:12px; vertical-align:top;">${esc(a.message || "")}${title}${facts}${extra}</td>
     </tr>`;
   }).join("");
   body.innerHTML = topInfo + `
     <div style="font-size:13px; margin-bottom:6px;">
-      <b>每筆物件動作（${actions.length} 筆）：</b>
+      <b>每筆物件動作（${actions.length} 筆，依時間順序）：</b>
     </div>
     <table style="width:100%; border-collapse:collapse; font-size:12px;">
       <thead><tr style="background:#f0ece0; text-align:left;">
-        <th style="padding:5px 6px; width:80px;">時間</th>
+        <th style="padding:5px 6px; width:90px;">序/時間</th>
         <th style="padding:5px 6px; width:90px;">動作</th>
-        <th style="padding:5px 6px; width:220px;">物件 / 來源</th>
-        <th style="padding:5px 6px;">細節</th>
+        <th style="padding:5px 6px; width:220px;">物件 ID + 來源</th>
+        <th style="padding:5px 6px;">處理結果</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;

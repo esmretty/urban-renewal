@@ -1072,10 +1072,12 @@ function zoningCellHTML(p) {
     badge += locked
       ? `<div class="zone-ratio-note">依謄本登錄坪數鎖定（總 ${totalLand} 坪）</div>`
       : `<div class="zone-ratio-note">總土地 ${totalLand} 坪。因無法取得謄本，請依實際坪數輸入（任一改動，另一個會自動同步）</div>`;
-  } else if (z && orig) {
-    badge = `<span class="zone-badge">${esc(z)}</span> <span class="zone-orig">原：${esc(orig)}</span>`;
   } else if (z) {
     badge = `<span class="zone-badge">${esc(z)}</span>`;
+    // 只在「現行分區 vs 原分區」實際不同時才顯示「原：…」（避免「住宅區 原：住宅區」這種重複）
+    if (orig && orig !== z) {
+      badge += ` <span class="zone-orig">原：${esc(orig)}</span>`;
+    }
   } else {
     badge = `<span class="text-muted">—</span>`;
   }
@@ -1801,7 +1803,7 @@ async function scanRoadWidth(propertyId, btn) {
   }
 }
 
-async function reanalyzeManualFull() {
+async function reanalyzeManualFull(overrideBody = null) {
   if (!_detailP) return;
   const id = _detailP.id;
   if (!String(id).startsWith("manual_")) {
@@ -1810,24 +1812,29 @@ async function reanalyzeManualFull() {
   }
   const btn = document.getElementById("modal-manual-reanalyze");
   if (btn) { btn.disabled = true; btn.textContent = "⏳ 分析中…"; }
-  // 關閉 modal 後用現有 _startFakeProgress + 輪詢機制呈現進度
   detailModal.hide();
   _startFakeProgress(`重新分析中：${stripCityDist(_detailP.address_inferred || _detailP.address || id)}`);
   try {
-    const res = await fetch(`/api/manual/${encodeURIComponent(id)}/reanalyze`, { method: "POST" });
+    const fetchOpts = { method: "POST" };
+    if (overrideBody) {
+      fetchOpts.headers = { "Content-Type": "application/json" };
+      fetchOpts.body = JSON.stringify(overrideBody);
+    }
+    const res = await fetch(`/api/manual/${encodeURIComponent(id)}/reanalyze`, fetchOpts);
     const data = await res.json();
+    // 跟新建一樣，若 validate 沒過 → 走 dialog 流程（ambiguous_unit / lvr_mismatch / district_mismatch / not_found）
     if (data.status !== "started") {
-      _stopFakeProgress("失敗");
-      alert("失敗：" + (data.detail || data.message || "unknown"));
+      _stopFakeProgress("送出完成");
+      _handleManualResponse(data);
+      // 把 detail panel 重開（reanalyze button 還鎖著），讓用戶看 dialog 取消的話能再點重分析
+      if (btn) { btn.disabled = false; btn.textContent = "🔄 重新分析"; }
       return;
     }
     await _waitForManualAnalysisDone(id);
     _stopFakeProgress("分析完成");
-    // 重新拉 doc + 重開 modal 顯示新結果
     const r = await fetch(`/api/properties/${encodeURIComponent(id)}`);
     if (r.ok) {
       const fresh = await r.json();
-      // 同步到 allProperties 列表
       const idx = allProperties.findIndex(p => p.id === id);
       if (idx >= 0) Object.assign(allProperties[idx], fresh);
       filterAndSort();
@@ -2885,10 +2892,21 @@ function _showAmbiguousUnitDialog(data) {
     return;
   }
   const c = cands[idx];
-  // 把選的戶的建坪+地坪填回 form，再用 use_source="auto" 重送 → 後端 SQL 篩到唯一戶
-  if (c.building_area_ping != null) document.getElementById("manual-bld").value = c.building_area_ping;
-  if (c.land_area_ping != null) document.getElementById("manual-land").value = c.land_area_ping;
-  triggerManualAnalyze("auto");
+  // mode 來自後端 — reanalyze 跟 new submit 走不同 endpoint，不能用同一條 fallback
+  if (data.mode === "reanalyze") {
+    // reanalyze：把候選戶的 area 帶進 reanalyze body 重送，doc id 不變
+    reanalyzeManualFull({
+      building_area_ping: c.building_area_ping,
+      land_area_ping: c.land_area_ping,
+    });
+  } else if (data.mode === "admin_reanalyze") {
+    alert("admin 端遇到歧義 — 請該物件的擁有者自己在前端選戶後重分析。");
+  } else {
+    // new submit：把候選值填回 form，再用 use_source="auto" 重送 → 後端 SQL 篩到唯一戶
+    if (c.building_area_ping != null) document.getElementById("manual-bld").value = c.building_area_ping;
+    if (c.land_area_ping != null) document.getElementById("manual-land").value = c.land_area_ping;
+    triggerManualAnalyze("auto");
+  }
 }
 
 async function triggerAnalyze(id) {

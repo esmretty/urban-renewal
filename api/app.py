@@ -1764,7 +1764,8 @@ async def admin_ocr_misread_scan(admin: dict = Depends(require_admin)):
 @app.post("/admin/manual/{uid}/{property_id:path}/reanalyze")
 async def admin_reanalyze_manual(uid: str, property_id: str, admin: dict = Depends(require_admin)):
     """admin 重分析其他用戶的 manual 物件（/admin/manual_properties tab 用）。
-    `uid` 是物件所屬用戶；admin 自己沒有該物件，需透過 path 指定。"""
+    跟用戶端 reanalyze 走同一條 validate；若觸發歧義 admin 端會看到 status!=started，
+    需要請該用戶自己處理（admin 不該替別人選戶）。"""
     if not property_id.startswith("manual_"):
         raise HTTPException(status_code=400, detail="只能重分析 manual 物件")
     from database.db import get_user_manual
@@ -1773,24 +1774,37 @@ async def admin_reanalyze_manual(uid: str, property_id: str, admin: dict = Depen
     if not doc.exists:
         raise HTTPException(status_code=404, detail=f"uid={uid} 沒有此 manual 物件")
     old = doc.to_dict() or {}
-    item = {
-        "source_id": property_id,
-        "source": "manual",
-        "city": old.get("city"),
-        "district": old.get("district"),
-        "address": old.get("address"),
-        "title": old.get("title") or old.get("address"),
-        "building_type": old.get("building_type") or "公寓",
-        "total_floors": old.get("total_floors"),
-        "floor": old.get("floor"),
-        "building_age": old.get("building_age"),
-        "building_area_ping": old.get("building_area_ping"),
-        "land_area_ping": old.get("land_area_ping"),
-        "price_ntd": old.get("price_ntd"),
-    }
+
+    # 同一條 validate
+    from api.manual_analyze import validate_manual_input
+    price_wan = (old.get("price_ntd") / 10000) if old.get("price_ntd") else None
+    v = validate_manual_input(
+        city=old.get("city"),
+        district=old.get("district"),
+        address=old.get("address"),
+        building_area_ping=old.get("building_area_ping"),
+        land_area_ping=old.get("land_area_ping"),
+        price_wan=price_wan,
+        use_source="auto",
+    )
+    if v["status"] != "ok":
+        out = dict(v)
+        out["mode"] = "admin_reanalyze"
+        out["property_id"] = property_id
+        out["uid"] = uid
+        return out
+
+    item = dict(v["item"])
+    item["source_id"] = property_id
+    item.setdefault("source", "manual")
+    item.setdefault("title", old.get("title") or item.get("address"))
+    for _k in ("building_age", "building_type", "total_floors", "floor"):
+        if not item.get(_k) and old.get(_k):
+            item[_k] = old[_k]
+
     manual_col.document(property_id).update({"analysis_in_progress": True})
     asyncio.create_task(_run_manual_analysis(uid, property_id, item))
-    logger.warning("[admin] %s 觸發 manual 重分析 uid=%s src_id=%s", admin.get("email"), uid, property_id)
+    logger.warning("[admin] %s 觸發 manual 重分析 uid=%s src_id=%s (after validate)", admin.get("email"), uid, property_id)
     return {"status": "started", "source_id": property_id}
 
 
@@ -3055,11 +3069,11 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     new_count += 1
                     progress_callback(f"  ✓ {_src_name}物件已寫入 DB ({yc_doc_id})", pct)
                     try:
-                        from database.run_log import log_action
+                        from database.run_log import log_action, build_doc_log_details
                         log_action(trigger_label, "new",
                                    source_id=src_id, doc_id=yc_doc_id,
                                    message=f"{_src_name} 新物件入庫：{yc_doc.get('address_inferred') or yc_doc.get('address') or ''}",
-                                   details={"source": _src_name, "address": yc_doc.get('address')})
+                                   details=build_doc_log_details(item, yc_doc, source=_src_name))
                     except Exception: pass
                     continue   # 不走下面 591 OCR 流程
 
@@ -3495,20 +3509,22 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     logger.debug(f"dup_index 更新失敗 {src_id}: {_die}")
 
                 # log_action：reanalyze 跟 new 區分（修 user 說的「同物件被誤標 new」）
+                from database.run_log import build_doc_log_details
                 if is_reanalyze:
                     log_action(trigger_label, "reanalyze",
                                source_id=src_id, doc_id=target_doc_id,
                                message=f"重新分析（{item.get('_change_reason','')}）：{(doc_data.get('address_inferred') or doc_data.get('address') or '')[:40]}",
-                               details={"address": doc_data.get('address_inferred') or doc_data.get('address'),
-                                        "change_reason": item.get('_change_reason'),
-                                        "price_ntd": item.get("price_ntd")})
+                               details=build_doc_log_details(
+                                   item, doc_data,
+                                   change_reason=item.get('_change_reason'),
+                                   conflicts=conflicts if 'conflicts' in dir() and conflicts else None,
+                               ))
                 else:
                     new_count += 1
                     log_action(trigger_label, "new",
                                source_id=src_id, doc_id=target_doc_id,
                                message=f"新物件入庫：{(doc_data.get('address_inferred') or doc_data.get('address') or '')[:40]}",
-                               details={"address": doc_data.get('address_inferred') or doc_data.get('address'),
-                                        "price_ntd": item.get("price_ntd")})
+                               details=build_doc_log_details(item, doc_data))
                 _existing_items.append({
                     "id": target_doc_id,
                     "source_keys": list(doc_data.get("source_keys") or []),
@@ -3899,10 +3915,22 @@ async def override_road_width(property_id: str, body: RoadWidthOverride, user: d
     return {"status": "ok", "road_width_m": body.road_width_m}
 
 
+class ManualReanalyzeReq(BaseModel):
+    """重新分析時前端可選帶的覆寫值（歧義對話框選了候選戶後傳建坪/地坪過來）。"""
+    building_area_ping: Optional[float] = None
+    land_area_ping: Optional[float] = None
+
+
 @app.post("/api/manual/{property_id:path}/reanalyze")
-async def reanalyze_manual(property_id: str, user: dict = Depends(get_current_user)):
-    """重跑 manual 物件的完整 pipeline（地址 → LVR/geocode/zoning/road_width/Claude）。
-    只動該用戶自己的 manual doc，不進中央。"""
+async def reanalyze_manual(
+    property_id: str,
+    req: Optional[ManualReanalyzeReq] = None,
+    user: dict = Depends(get_current_user),
+):
+    """重跑 manual 物件的完整 pipeline。
+    跟 /api/manual_analyze (新建) 走**同一條 validate 路線** — 任何形式 reanalyze 都會經過
+    LVR ambiguity / lvr_mismatch / district_mismatch / not_found 檢查，不再黑箱直接吞舊壞值。
+    """
     if not property_id.startswith("manual_"):
         raise HTTPException(status_code=400, detail="只能重分析 manual 物件")
     uid = user["uid"]
@@ -3912,26 +3940,42 @@ async def reanalyze_manual(property_id: str, user: dict = Depends(get_current_us
         raise HTTPException(status_code=404, detail="物件不存在")
     old = doc.to_dict() or {}
 
-    # 組回 pipeline 要的 item（從舊 doc 還原當初輸入）
-    item = {
-        "source_id": property_id,
-        "source": "manual",
-        "city": old.get("city"),
-        "district": old.get("district"),
-        "address": old.get("address"),
-        "title": old.get("title") or old.get("address"),
-        "building_type": old.get("building_type") or "公寓",
-        "total_floors": old.get("total_floors"),
-        "floor": old.get("floor"),
-        "building_age": old.get("building_age"),
-        "building_area_ping": old.get("building_area_ping"),
-        "land_area_ping": old.get("land_area_ping"),
-        "price_ntd": old.get("price_ntd"),
-    }
-    # 標記進行中，讓前端 loading bar 會動
+    # 用戶若是從歧義對話框選了候選戶 → req 帶 override；否則用 OLD doc 的值當輸入
+    bld = (req.building_area_ping if req else None) or old.get("building_area_ping")
+    land = (req.land_area_ping if req else None) or old.get("land_area_ping")
+    price_wan = (old.get("price_ntd") / 10000) if old.get("price_ntd") else None
+
+    # 同一條 validate（跟新建 manual 共用）— 攔截歧義、地址不存在、城區不符等情況
+    from api.manual_analyze import validate_manual_input
+    v = validate_manual_input(
+        city=old.get("city"),
+        district=old.get("district"),
+        address=old.get("address"),
+        building_area_ping=bld,
+        land_area_ping=land,
+        price_wan=price_wan,
+        use_source="auto",
+    )
+    if v["status"] != "ok":
+        # 帶上 mode + property_id，讓前端能用 reanalyze 端口而非 new submit 重送
+        out = dict(v)
+        out["mode"] = "reanalyze"
+        out["property_id"] = property_id
+        return out
+
+    # validate 通過 → 用 normalized item 跑 pipeline（保留 OLD doc 的 source_id）
+    item = dict(v["item"])
+    item["source_id"] = property_id
+    item.setdefault("source", "manual")
+    item.setdefault("title", old.get("title") or item.get("address"))
+    # OLD doc 上有但 validate 沒回來的欄位（building_age 等）可保留
+    for _k in ("building_age", "building_type", "total_floors", "floor"):
+        if not item.get(_k) and old.get(_k):
+            item[_k] = old[_k]
+
     manual_col.document(property_id).update({"analysis_in_progress": True})
     asyncio.create_task(_run_manual_analysis(uid, property_id, item))
-    logger.info(f"[manual reanalyze] uid={uid} src_id={property_id}")
+    logger.info(f"[manual reanalyze] uid={uid} src_id={property_id} (after validate)")
     return {"status": "started", "source_id": property_id}
 
 
