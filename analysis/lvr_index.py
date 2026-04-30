@@ -329,10 +329,17 @@ def _pick_closest_by_address(candidates: list[str], ref_addr: str) -> str:
     return ranked[0]
 
 
-def _reverse_geocode_loose(lat: float, lng: float, road_hint: str) -> Optional[str]:
+def _reverse_geocode_loose(lat: float, lng: float, road_hint: str, prefer_distance: bool = False) -> Optional[str]:
     """寬鬆版 reverse geocode：只要 Google 回的結果含同路名 + 號就接受最近的一筆。
-    用於「來源座標可信」(永慶 / 信義) + 「無巷弄資訊」的情況，
-    比 _reverse_geocode_lane 寬（不排除 RANGE_INTERPOLATED）。"""
+
+    prefer_distance:
+      False (default) — 591 用：先看 location_type 排序（ROOFTOP > GEOMETRIC > RANGE_INTERPOLATED），
+                        再比距離。避免採用 RANGE_INTERPOLATED 內插出的「假號」。
+      True — 永慶/信義 用：座標精度 ±10m，**直接距離排序、忽略 location_type**。
+             永慶/信義不寫巷弄是業界規定，所以「保平路X號」可能對應任何巷內位置；
+             RANGE_INTERPOLATED 的巷內門牌即使號是內插的、至少在正確座標上，
+             比 ROOFTOP 但離座標更遠的主路門牌可信（CLAUDE.md 7/30 三方對話結論）。
+    """
     from config import GOOGLE_MAPS_API_KEY
     if not GOOGLE_MAPS_API_KEY:
         return None
@@ -370,12 +377,16 @@ def _reverse_geocode_loose(lat: float, lng: float, road_hint: str) -> Optional[s
             canon = re.sub(r"^(台灣|臺灣)", "", canon).strip()
             if road_short not in canon:
                 continue
-            # rooftop 優先；其次距離
-            priority = 0 if loc_type == "ROOFTOP" else (1 if loc_type != "RANGE_INTERPOLATED" else 2)
-            candidates.append((priority, dist, canon))
+            if prefer_distance:
+                # 永慶/信義：純距離排序，loc_type 不參與
+                candidates.append((dist, canon))
+            else:
+                # 591：rooftop 優先；其次距離（避免 RANGE_INTERPOLATED 假號）
+                priority = 0 if loc_type == "ROOFTOP" else (1 if loc_type != "RANGE_INTERPOLATED" else 2)
+                candidates.append((priority, dist, canon))
         if candidates:
             candidates.sort()
-            return candidates[0][2]
+            return candidates[0][-1]   # tuple 最後一個就是 canon
     except Exception as e:
         logger.debug(f"_reverse_geocode_loose error: {e}")
     return None

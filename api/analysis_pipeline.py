@@ -544,9 +544,10 @@ def analyze_single_property(
                 # 第一次嘗試：嚴格模式（同路名 + 同巷 + 排除 RANGE_INTERPOLATED）
                 rev_addr = _reverse_geocode_lane(src_lat, src_lng, road_seg, lane_hint or "")
                 if not rev_addr:
-                    # Fallback：寬鬆模式 — 直接打 Google reverse，只要結果含同路名+號就接受
-                    # 適用永慶（有準確座標 + 該段沒巷弄）
-                    rev_addr = _reverse_geocode_loose(src_lat, src_lng, road_seg)
+                    # Fallback：寬鬆模式 — 永慶/信義 座標準（±10m）→ prefer_distance 直接距離排序
+                    # 業界規定永慶/信義 不寫巷弄，所以巷內物件 reverse 出的可能是 RANGE_INTERPOLATED 的
+                    # 巷內門牌（離座標近）vs ROOFTOP 主路門牌（離座標遠）。距離優先 = 用更貼近物件位置的那個。
+                    rev_addr = _reverse_geocode_loose(src_lat, src_lng, road_seg, prefer_distance=True)
             except Exception as _re:
                 logger.warning(f"[{src_id}] reverse geocode 失敗: {_re}")
 
@@ -605,8 +606,12 @@ def analyze_single_property(
     # ── 6. 精準座標覆蓋 ──
     if inferred_coord:
         lat, lng = inferred_coord
+    elif src_name in ("永慶", "信義"):
+        # 永慶/信義 原始座標 ±10m 已足夠精準，不需要再從 inferred address re-geocode；
+        # 沒拿到 inferred_coord 是「正常 fallback」不是「失敗」，**不標** regeocode_failed
+        pass
     else:
-        # re-geocode 失敗：留 591 原始座標 → zoning 會用那個座標查，可能偏到鄰近 polygon
+        # 591 路徑：原座標 ±150m 不夠精準，re-geocode 失敗才有問題
         # 標記讓 admin 能用 regeocode_failed=true 找出所有受害 doc 批次重跑
         _addr_for_log = (
             item.get("address_inferred")
@@ -683,12 +688,34 @@ def analyze_single_property(
     if item.get("address_inferred"):
         _addr_inf = item["address_inferred"]
         _floor_for_addr = item.get("floor") or doc_data.get("floor")
-        # 末尾補樓層（讓地址帶樓層，前端列表 + LINE 通知就能分辨同棟不同戶）
-        # 已末尾含 {floor}F 或 {floor}樓 就不重複附加
+        # 末尾補樓層（讓地址帶樓層，前端列表 + LINE 通知就能分辨同棟不同戶）。
+        # 各種 floor 字串格式 normalize 到「{範圍}F」：
+        #   '3'                → '3F'
+        #   '3F'               → '3F'
+        #   '3樓'              → '3F'
+        #   '1~2'              → '1~2F'
+        #   '1~2F'             → '1~2F'
+        #   '1F~2F/4F'         → '1~2F'（樓中樓：去掉 / 後的總層；範圍裡每段都剝 F）
+        #   '1樓-2樓'          → '1-2F'
+        # 然後檢查 _addr_inf 末尾是否已包含同樣的字串，避免「保平路1號 1F~2F/4FF」雙 F
         if _floor_for_addr and _addr_inf:
-            _f_str = str(_floor_for_addr).strip()
-            if _f_str and not re.search(rf"{re.escape(_f_str)}\s*[Ff樓]\s*$", _addr_inf):
-                _addr_inf = f"{_addr_inf} {_f_str}F"
+            _raw = str(_floor_for_addr).strip()
+            # 1) 去除 / 後的總樓層部分
+            if "/" in _raw:
+                _raw = _raw.split("/", 1)[0].strip()
+            # 2) 範圍內每段剝掉 F/f/樓 後綴
+            _parts = re.split(r"([~\-－])", _raw)   # 保留分隔符
+            _parts = [
+                re.sub(r"\s*[Ff樓]\s*$", "", p) if i % 2 == 0 else p
+                for i, p in enumerate(_parts)
+            ]
+            _f_clean = "".join(_parts).strip()
+            # 3) 結尾加 F（除非整個字串已空）
+            _f_str = (_f_clean + "F") if _f_clean else ""
+            if _f_str:
+                # 4) 若 _addr_inf 末尾已含 {f_str}（不論大小寫 F），不重複附加
+                if not re.search(rf"{re.escape(_f_str)}\s*$", _addr_inf, re.IGNORECASE):
+                    _addr_inf = f"{_addr_inf} {_f_str}"
         doc_data["address_inferred"] = _addr_inf
         doc_data["address_inferred_confidence"] = item.get("address_inferred_confidence")
         doc_data["address_inferred_candidates"] = item.get("address_inferred_candidates")
