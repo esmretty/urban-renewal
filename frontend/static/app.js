@@ -55,6 +55,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const v = localStorage.getItem("hide-non-renewable");
       hn.checked = (v === null) ? true : (v === "1");
     }
+    const hf = document.getElementById("hide-foreclosure");
+    if (hf) {
+      const v = localStorage.getItem("hide-foreclosure");
+      hf.checked = (v === null) ? true : (v === "1");
+    }
   } catch {}
   _initDistPicker();
   populateDistrictFilter();
@@ -108,6 +113,7 @@ function _saveExploreFilters() {
     sortDir: sortDir,
     hideBad: !!document.getElementById("explore-hide-bad")?.checked,
     hideNonRenewable: !!document.getElementById("hide-non-renewable")?.checked,
+    hideForeclosure: !!document.getElementById("hide-foreclosure")?.checked,
   };
   try { localStorage.setItem(_exploreFilterKey(), JSON.stringify(obj)); } catch {}
 }
@@ -167,6 +173,8 @@ function _restoreExploreFilters() {
   if (hb && typeof obj.hideBad === "boolean") hb.checked = obj.hideBad;
   const hn = document.getElementById("hide-non-renewable");
   if (hn && typeof obj.hideNonRenewable === "boolean") hn.checked = obj.hideNonRenewable;
+  const hf = document.getElementById("hide-foreclosure");
+  if (hf && typeof obj.hideForeclosure === "boolean") hf.checked = obj.hideForeclosure;
 }
 
 // ── Tab 切換 ──────────────────────────────────────────────────────────────
@@ -1330,6 +1338,14 @@ async function saveDesiredPrice(id, val) {
 
 // 計算危老/都更換回倍數（給 row 列表用，邏輯與內頁 renewalV2HTML 一致）
 function computeRowMultiples(p) {
+  // 三種旗標物件不算倍數，避免用戶誤判高價值：
+  //   is_foreclosure: 法拍價遠低於市價（5-7 折）→ 倍數演算法會自動算出異常高倍數
+  //   is_remote_area: 新北偏遠路段，都更難度高
+  //   unsuitable_for_renewal: 特殊土地分區（保護區/河道用地等）法規不能都更
+  // 倍數=null 連帶停掉紅框/高亮/LINE 通知（既有邏輯都看 mults.w/d）；DB 資料仍保留供未來重用
+  if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal) {
+    return { w: null, d: null };
+  }
   const land = p.land_area_ping;
   const price = p.new_house_price_wan_override ?? DISTRICT_NEW_HOUSE_PRICE[p.district];
   const effFar = effectiveFarPctWeighted(p);   // 路寬縮減不實作（用戶設計）
@@ -1461,6 +1477,15 @@ function zoneAbbr(z) {
 }
 
 function renewalV2HTML(p) {
+  // 三種旗標物件 detail panel 不顯示倍數試算（避免誤導），改顯示說明文字
+  if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal) {
+    const reason = p.is_foreclosure ? "法拍屋"
+                 : p.is_remote_area ? "新北偏遠路段"
+                 : "特殊土地分區（非住商工）";
+    return `<div class="alert alert-secondary py-2 small mb-0">
+      此物件標記為「${reason}」，都更倍數試算不適用，故不顯示。
+    </div>`;
+  }
   const land = p.land_area_ping;
   const zoning = effectiveZoning(p);
   const roadWidth = p.road_width_m_override ?? p.road_width_m;
@@ -1950,6 +1975,13 @@ function formatAiReason(text) {
 function renderBidSection() {
   const p = _detailP;
   if (!p) return "—";
+  // 三種旗標物件不顯示出價試算（避免誤導）
+  if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal) {
+    const reason = p.is_foreclosure ? "法拍屋"
+                 : p.is_remote_area ? "新北偏遠路段"
+                 : "特殊土地分區（非住商工）";
+    return `此物件標記為「${reason}」，出價試算不適用。`;
+  }
   const land = p.land_area_ping;
   const zoning = effectiveZoning(p);
   const price = p.new_house_price_wan_override || DISTRICT_NEW_HOUSE_PRICE[p.district] || null;
@@ -2260,6 +2292,8 @@ window.applyClientOrder = function () {
   try {
     const hn = document.getElementById("hide-non-renewable");
     if (hn) localStorage.setItem("hide-non-renewable", hn.checked ? "1" : "0");
+    const hf = document.getElementById("hide-foreclosure");
+    if (hf) localStorage.setItem("hide-foreclosure", hf.checked ? "1" : "0");
   } catch {}
   if (_activeTab === "explore") {
     _saveExploreFilters();
@@ -2286,6 +2320,10 @@ function filterAndSort() {
   // 兩 tab 共用，預設勾選
   if (document.getElementById("hide-non-renewable")?.checked) {
     list = list.filter(p => !p.is_remote_area);
+  }
+  // 「隱藏法拍屋」chip 勾選時 → 過濾掉 is_foreclosure（591 社區欄位含「【」/ 標題＃ 等規則判定）
+  if (document.getElementById("hide-foreclosure")?.checked) {
+    list = list.filter(p => !p.is_foreclosure);
   }
 
   // 搜尋 tab 的條件都在 server 端過濾，client 不再重跑同套邏輯，直接信任 _exploreResults

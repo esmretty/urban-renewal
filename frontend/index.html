@@ -252,6 +252,10 @@
         <input type="checkbox" id="hide-non-renewable" onchange="applyClientOrder()" checked>
         <span title="勾選時隱藏新北偏遠路段（依政府河道/天險範圍判定）的物件">隱藏新北偏遠物件</span>
       </label>
+      <label class="explore-hide-bad" id="hide-foreclosure-wrap">
+        <input type="checkbox" id="hide-foreclosure" onchange="applyClientOrder()" checked>
+        <span title="勾選時隱藏法拍屋（依 591「社區」欄位廣告詞、標題＃符號等判定）">隱藏法拍屋</span>
+      </label>
       <label class="small text-muted">排序：</label>
       <select id="sort-by" class="form-select form-select-sm w-auto" onchange="applyClientOrder()">
         <option value="list_rank" selected>新進優先</option>

@@ -1124,10 +1124,10 @@ def analyze_single_property(
     # 門檻：admin 在 settings/line_config.threshold_multiple 可調，預設 2.8
     # 任何情境（危老/都更/防災都更）的 multiple ≥ threshold → 推 LINE
     # 若已通知過（doc 有 line_notified_at）+ 倍數沒漲過顯著程度 → skip
-    # 政策規則：物件被標旗標（is_remote_area / unsuitable_for_renewal）→ 一律不發 LINE
-    #   不管收件人是誰、不管 chip 設定；旗標 = 系統判定不適合都更/位置太偏 = LINE 不騷擾
-    if doc_data.get("is_remote_area") or doc_data.get("unsuitable_for_renewal"):
-        logger.info(f"[{src_id}] LINE 通知跳過：物件被標旗標（remote / unsuitable）")
+    # 政策規則：物件被標旗標（is_remote_area / unsuitable_for_renewal / is_foreclosure）→ 一律不發 LINE
+    #   不管收件人是誰、不管 chip 設定；旗標 = 系統判定不適合都更/位置太偏/法拍屋 = LINE 不騷擾
+    if doc_data.get("is_remote_area") or doc_data.get("unsuitable_for_renewal") or doc_data.get("is_foreclosure"):
+        logger.info(f"[{src_id}] LINE 通知跳過：物件被標旗標（remote / unsuitable / foreclosure）")
         rv2 = None   # 後續 try block 看不到 scenarios，自然不會觸發 notify
     try:
         rv2_check = rv2 or {}
