@@ -2341,14 +2341,58 @@ select.rv2-edit { text-align: left; padding-right: 18px; }
    原則：桌機樣式完全不動，只在這裡 override。
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* 13" 筆電 (1280-1500px) 進一步緊湊：font-size + padding 縮小 (欄寬不再變，避免 grid collapse) */
-@media (max-width: 1500px) and (min-width: 1201px) {
+/* 13" 筆電 (1201-1600px)：每筆物件改 2 行佈局
+   row1: 來源 | 類型 | 市/區 | 總價 | 建坪/單 | 土坪/單 | 樓 | 齡 | 說明 | 倍數 | ★
+   row2: 地址 (橫跨整列) */
+@media (max-width: 1600px) and (min-width: 1201px) {
   .property-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 6px;
+    padding: 6px 10px;
     font-size: 13px;
-    padding: 6px 8px;
+    grid-template-columns: none;   /* 取消 grid 設定 */
+  }
+  .property-row > .c {
+    flex: 0 0 auto;
+    min-width: 0;
+    text-align: center;
+  }
+  .property-row > .c-src       { flex: 0 0 110px; order: 1; text-align: left; }
+  .property-row > .c-type      { flex: 0 0 70px;  order: 2; }
+  .property-row > .c-city      { flex: 0 0 50px;  order: 3; }
+  .property-row > .c-district  { flex: 0 0 60px;  order: 4; }
+  .property-row > .c-total     { flex: 0 0 110px; order: 5; }
+  .property-row > .c-bld-combo { flex: 0 0 90px;  order: 6; }
+  .property-row > .c-floor     { flex: 0 0 50px;  order: 7; }
+  .property-row > .c-age       { flex: 0 0 45px;  order: 8; }
+  .property-row > .c-note      { flex: 0 0 110px; order: 9; }
+  .property-row > .c-multi     { flex: 0 0 100px; order: 10; }
+  .property-row > .c-del       { flex: 0 0 60px;  order: 11; margin-left: auto; }
+  /* 地址獨佔第二行 */
+  .property-row > .c-addr {
+    flex: 1 1 100%;
+    order: 99;
+    text-align: left;
+    padding: 4px 0 2px 8px;
+    border-top: 1px dashed #e8e4d8;
+    margin-top: 4px;
+    font-size: 13px;
+  }
+  /* header row 對齊 (header 也適用此 layout) */
+  .property-row--head .c-addr {
+    border-top: none;
+    margin-top: 0;
+    padding-top: 0;
+    padding-bottom: 0;
   }
   .property-row--head .c {
     font-size: 11px !important;
+  }
+  /* head-top 取消 grid 顯示一行（"物件資料 | 都更評估" 那行不需要兩行） */
+  .property-row--head-top {
+    display: flex;
   }
 }
 
