@@ -4922,6 +4922,8 @@ def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False, *, mar
             "zoning": vision.get("zoning"),
             "_published_text": published_text,     # 591 詳情頁「刊登時間」文字
             "_updated_text": updated_text,         # 591 詳情頁「最後更新」文字
+            # 591「社區」欄位 RAW value，給 detect_foreclosure 偵測「【」廣告詞用（跟 batch 路徑一致）
+            "_community_raw": getattr(detail_ret, "community_raw", "") or "",
         }
 
         # 必要欄位至少要有 city/district/price/bld 才能入庫
