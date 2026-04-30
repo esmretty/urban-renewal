@@ -2426,8 +2426,17 @@ def central_search(
             continue
         if road:
             r = road.strip()
-            if r and r not in (data.get("address") or "") and r not in (data.get("title") or ""):
-                continue
+            # 比對範圍：address + address_inferred + title
+            # 多數 591 物件 address 只到路段，巷弄資訊在 address_inferred 裡（LVR/reverse 推測出來的）
+            # 沒含 address_inferred 的話，用戶搜「永吉路278巷」會全部漏 match
+            if r:
+                _addr_blob = (
+                    (data.get("address") or "")
+                    + " " + (data.get("address_inferred") or "")
+                    + " " + (data.get("title") or "")
+                )
+                if r not in _addr_blob:
+                    continue
         if q:
             kw = q.strip().lower()
             blob = " ".join(str(data.get(k) or "") for k in ("address", "title", "district")).lower()
