@@ -831,6 +831,15 @@ async def _scheduled_scrape_loop():
             if not due_cmd:
                 continue
 
+            # 先把 next_due_at 推到下一個 interval boundary
+            # 為了避免 batch 跑到一半被 admin 強制 kill / 異常崩掉時，next_due_at 還卡在這一刻，
+            # 下次 loop tick 又立刻被觸發同 slot。pre-advance 後若 batch 正常完成，
+            # 後段 post-complete 的 _cmd_state_set 會再用「完成時間」重算一次（拿較晚的 boundary）。
+            _pre_interval = int(due_cmd.get("interval_hr") or cfg.get("interval_hr") or 3)
+            _cmd_state_set(due_idx,
+                next_due_at=_next_interval_boundary(now, _pre_interval).isoformat(),
+            )
+
             cmd_type = due_cmd.get("type") or "scan"
             started_at_iso = now_tw_iso()
             _scheduler_last_run_at = started_at_iso
