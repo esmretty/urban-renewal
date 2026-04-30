@@ -493,8 +493,11 @@ PREFER_NEW_FIELDS = {
     "zoning_candidates", "zoning_error",
     "address", "address_inferred", "address_inferred_confidence",
     "address_inferred_candidates",
-    "image_url", "list_rank", "scraped_at",
-    "scrape_session_at", "published_at", "updated_at", "title", "deep_analysis_done",
+    "image_url", "list_rank",
+    # 注意：scraped_at / scrape_session_at 不放這裡 — 它們是「物件第一次入庫」timestamp，
+    # frontend 排序用 _added_at = scraped_at，reanalyze 時刷新會讓既有 doc 跑到列表最前面像新物件。
+    # 移到 default 走 "preserve old"。
+    "published_at", "updated_at", "title", "deep_analysis_done",
     "screenshot_cadastral", "screenshot_zoning", "screenshot_renewal",
     "analysis_status", "analysis_completed_at",
     "is_remote_area",
