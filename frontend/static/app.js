@@ -1339,7 +1339,7 @@ function computeRowMultiples(p) {
   const isFangzai = p.city === "台北市" && currentAge(p) && (new Date().getFullYear() - currentAge(p)) <= 1974;
   const bonusW = p.bonus_weishau ?? 0.30;
   const bonusD = p.bonus_dugen ?? (isFangzai ? 0.80 : 0.50);
-  const is1F = Number(p.floor) === 1;
+  const is1F = Number(p.floor) === 1 || Number(p.floor_range_min) === 1;
   const floorPremium = p.floor_premium ?? (is1F ? 0.20 : 0);
   const effectivePrice = price * (1 + floorPremium);
   const calcVal = b => {
@@ -1490,7 +1490,7 @@ function renewalV2HTML(p) {
   const bonusW = p.bonus_weishau ?? 0.30;
   const bonusD = p.bonus_dugen ?? (isFangzai ? 0.80 : 0.50);
   // 樓層加成：1F 預設 20%，其他樓層 0%。用戶可改，0~80%，5% 為單位。
-  const is1F = Number(p.floor) === 1;
+  const is1F = Number(p.floor) === 1 || Number(p.floor_range_min) === 1;
   const floorPremium = p.floor_premium ?? (is1F ? 0.20 : 0);
   const id = p.id;
 
@@ -1965,7 +1965,7 @@ function renderBidSection() {
   const isFangzai = p.city === "台北市" && currentAge(p) && (new Date().getFullYear() - currentAge(p)) <= 1974;
   const bonusW = p.bonus_weishau ?? 0.30;
   const bonusD = p.bonus_dugen ?? (isFangzai ? 0.80 : 0.50);
-  const is1F = Number(p.floor) === 1;
+  const is1F = Number(p.floor) === 1 || Number(p.floor_range_min) === 1;
   const floorPremium = p.floor_premium ?? (is1F ? 0.20 : 0);
   const effectivePrice = price * (1 + floorPremium);
   const calcVal = b => {

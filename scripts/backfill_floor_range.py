@@ -20,6 +20,7 @@ def backfill_collection(col, label):
     n_total = len(docs)
     n_updated = 0
     n_total_filled = 0
+    n_floor_normalized = 0
     for d in docs:
         dd = d.to_dict() or {}
         floor = dd.get("floor")
@@ -28,22 +29,30 @@ def backfill_collection(col, label):
             continue
         fmin, fmax, ftot = parse_floor_range(floor, total)
         updates = {}
-        # 只在沒有 / 不同 時更新
+        # 1) floor_range_min/max
         if fmin is not None and dd.get("floor_range_min") != fmin:
             updates["floor_range_min"] = fmin
         if fmax is not None and dd.get("floor_range_max") != fmax:
             updates["floor_range_max"] = fmax
-        # 從 floor 字串解出來的 total（樓中樓 "1F~2F/4F"）若 doc 沒 total → 補
+        # 2) total_floors (樓中樓常缺值，從 / 後抽)
         if ftot is not None and not dd.get("total_floors") and ftot != total:
             updates["total_floors"] = ftot
             n_total_filled += 1
+        # 3) floor 欄位 normalize 成 int 或 None（不再存「1F」「4F」「1F~2F/4F」這種字串）
+        if fmin is not None and fmax is not None and fmin == fmax:
+            normalized_floor = fmin
+        else:
+            normalized_floor = None
+        if floor != normalized_floor:
+            updates["floor"] = normalized_floor
+            n_floor_normalized += 1
         if updates:
             try:
                 col.document(d.id).update(updates)
                 n_updated += 1
             except Exception as e:
                 logger.warning(f"  update fail {d.id}: {e}")
-    logger.info(f"[{label}] {n_total} 筆 / 更新 {n_updated} / 補 total_floors {n_total_filled}")
+    logger.info(f"[{label}] {n_total} 筆 / 更新 {n_updated} / 補 total_floors {n_total_filled} / floor normalize {n_floor_normalized}")
 
 
 def main():

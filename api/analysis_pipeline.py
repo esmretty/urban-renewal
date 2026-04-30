@@ -761,10 +761,20 @@ def analyze_single_property(
         doc_data.get("floor") or item.get("floor"),
         doc_data.get("total_floors") or item.get("total_floors"),
     )
-    if _fmin is not None:
+    # DB schema 規範：floor 寫純 int（單層）或 None（樓中樓），不寫 "1F"、"4F"、"1F~2F/4F" 字串
+    # 顯示時由前端 append "F"。這條 normalize 必須在每筆 doc 寫入前執行。
+    if _fmin is not None and _fmax is not None and _fmin == _fmax:
+        doc_data["floor"] = _fmin
         doc_data["floor_range_min"] = _fmin
-    if _fmax is not None:
         doc_data["floor_range_max"] = _fmax
+    elif _fmin is not None and _fmax is not None:
+        # 樓中樓：floor 設 None，前端用 floor_range 顯示「1-2/4F」
+        doc_data["floor"] = None
+        doc_data["floor_range_min"] = _fmin
+        doc_data["floor_range_max"] = _fmax
+    else:
+        # 解析失敗 → floor 也清 None（避免殘留原始亂字串）
+        doc_data["floor"] = None
     # 若 floor 字串內含 /N 比現有 total_floors 更新（樓中樓常見），用 floor str 推的 total 覆蓋
     if _ftot is not None and not doc_data.get("total_floors"):
         doc_data["total_floors"] = _ftot
