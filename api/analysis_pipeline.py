@@ -1079,6 +1079,8 @@ def analyze_single_property(
                     price_ntd=item.get("price_ntd"),
                     road_width_m=doc_data.get("road_width_m"),
                     is_qualified_for_fz_dugen=_is_fz_dugen,
+                    lat=lat,
+                    lng=lng,
                 )
                 final2 = generate_final_recommendation(
                     property_data={**item, **doc_data},

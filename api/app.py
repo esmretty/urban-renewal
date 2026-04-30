@@ -4049,6 +4049,8 @@ async def reanalyze_recommendation(property_id: str):
             district=p.get("district"),
             price_ntd=p.get("price_ntd"),
             road_width_m=p.get("road_width_m_override") or p.get("road_width_m"),
+            lat=p.get("latitude") or p.get("source_latitude"),
+            lng=p.get("longitude") or p.get("source_longitude"),
         )
         final = generate_final_recommendation(
             property_data=p,

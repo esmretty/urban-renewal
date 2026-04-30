@@ -417,6 +417,8 @@ def calculate_renewal_scenarios(
     new_house_price_wan_per_ping: Optional[float] = None,
     is_qualified_for_fz_dugen: bool = False,
     road_width_m: Optional[float] = None,
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
 ) -> dict:
     """
     用「重建坪數計算機」邏輯 + 房價→分回比例對照表，計算危老/都更/防災都更三情境。
@@ -450,21 +452,18 @@ def calculate_renewal_scenarios(
         out["note"] = "缺土地坪數，無法試算。"
         return out
 
-    # 1. 基準容積率（路寬限縮：基準FAR×2(m) ≤ 路寬(m) → 上限 = 路寬 × 50%）
-    base_far_pct = TAIPEI_BASE_FAR_PCT.get(zoning) if zoning else None
+    # 1. 基準容積率：用統一 lookup_far(zoning, district, lat, lng)
+    #    處理：台北市 zoning / 新北 5 區泛稱 / 板橋特例 460 / 浮洲 polygon / 新店子類別 + 泛稱 fallback
+    #    注意：用戶設計**不實作路寬縮減**（建商會把都更基地擴到旁邊大馬路吃容積，路寬限制無實務意義）
+    from config import lookup_far as _lookup_far
+    base_far_pct = _lookup_far(zoning, district, lat, lng) if zoning else None
     if base_far_pct is None:
-        out["note"] = f"未知分區 {zoning!r}，無法試算。"
+        out["note"] = f"未知分區 {zoning!r}（{district}），無法試算。"
         return out
     out["base_far_pct"] = base_far_pct
-    if road_width_m and road_width_m > 0:
-        cap = road_width_m * 50
-        far_pct = min(base_far_pct, round(cap))
-        out["effective_far_pct"] = far_pct
-        out["road_width_capped"] = far_pct < base_far_pct
-    else:
-        far_pct = base_far_pct
-        out["effective_far_pct"] = far_pct
-        out["road_width_capped"] = False
+    far_pct = base_far_pct
+    out["effective_far_pct"] = far_pct
+    out["road_width_capped"] = False   # 永遠 False（用戶設計不縮減）
 
     # 2. 新成屋單價（優先序：用戶覆寫 > Firestore 預售屋中位數 > config 寫死常數）
     price = new_house_price_wan_per_ping

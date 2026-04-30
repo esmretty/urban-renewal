@@ -1061,7 +1061,7 @@ function zoningCellHTML(p) {
     badge = zoneList.map((zl, i) => {
       // zoning_list 可能是 string list（ArcGIS 點查回傳）或 object list（舊永慶 schema）
       const eff = (typeof zl === 'string') ? zl : (zl.original_zone || zl.zone_name);
-      const far = TAIPEI_FAR_PCT[eff] || "?";
+      const far = lookupFar(eff, p) ?? "?";
       const v = toPing(ratios[i]).toFixed(2);
       const disabled = locked ? "disabled" : "";
       return `<span class="zone-badge">${esc(eff)} (${far}%)</span>
@@ -1084,7 +1084,7 @@ function zoningCellHTML(p) {
   // 若 zoning 含 (特)/(遷) 後綴 → 附加「實際容積採 X 計算」說明，並提示容積率逐案而定
   if (z && /\((?:特|遷|核|抄)\)/.test(z)) {
     const eff = effectiveZoning(p);
-    const effFar = TAIPEI_FAR_PCT[eff];
+    const effFar = lookupFar(eff, p);
     if (effFar != null && eff !== z) {
       badge += `<div class="zone-special-note">實際容積採「${esc(eff)}」${effFar}% 計算。此地塊有(特)/(遷)加註，真實容積請查都發局都市計畫書。</div>`;
     } else {
@@ -1159,14 +1159,57 @@ const SHARE_RATIO_TABLE = [
   [150,0.62,360],[160,0.63,374],[170,0.64,388],[180,0.65,402],
 ];
 const TAIPEI_FAR_PCT = {
+  // 台北市專用，依「台北市土地使用分區管制自治條例」
   "第一種住宅區":60,"第二種住宅區":120,"第三種住宅區":225,"第三種住宅區(特)":225,
   "第三之一種住宅區":300,"第三之二種住宅區":400,"第四之一種住宅區":400,
   "第四種住宅區":300,"住宅用地":200,
   "第一種商業區":360,"第二種商業區":630,"第三種商業區":560,"第三種商業區(特)":560,
   "第四種商業區":800,
-  // 新北市
-  "住宅區":300,"商業區":440,"商業區(板橋)":460,
 };
+// 新北市法定容積率（per-district，跟台北市同 key 名字數值不同 → 必須用 lookupFar 分流）
+// 路寬<8m 縮減規則刻意不實作（用戶設計：建商會把基地擴到旁邊大馬路吃容積，路寬限制無實務意義）
+const NEW_TAIPEI_FAR_PCT = {
+  "_5_districts_default": { "住宅區": 300, "商業區": 440 },
+  "_banqiao_overrides":   { "商業區": 460 },                             // 板橋特例
+  "_banqiao_fujou":       { "住宅區": 240, "住宅區(再)": 160, "商業區": 300 }, // 浮洲（用 is_remote_area 判定）
+  "新店區": {
+    "第二種住宅區": 120, "第三種住宅區": 280, "第四種住宅區": 300,
+    "第一種商業區": 420, "第二種商業區": 440,
+    "住宅區": 300, "商業區": 440,   // GeoServer 例外回泛稱時 fallback：取最高位階
+  },
+  "土城區": { "第一種住宅區": 180, "第二種住宅區": 240, "第一種商業區": 240, "第二種商業區": 320 },
+  "樹林區": { "第一種住宅區": 260, "第二種住宅區": 250, "商業區": 380 },
+  "汐止區": { "第一種住宅區": 200, "第二種住宅區": 240, "商業區": 320 },
+  "淡水區": { "第二種住宅區": 225, "第三種住宅區": 360, "第四種住宅區": 240, "第一種商業區": 360, "第二種商業區": 400 },
+  "八里區": { "第一種住宅區": 200, "第二種住宅區": 200, "第一種商業區": 300, "第二種商業區": 300 },
+};
+const _NEW_TAIPEI_5_DISTRICTS = ["板橋區", "新莊區", "中和區", "永和區", "三重區"];
+
+// 統一 FAR lookup：根據 (zoning, p) 回對應容積率（百分比）
+// p 提供 district + is_remote_area（浮洲判定）— 跟 backend config.lookup_far 對齊（CLAUDE.md rule 8）
+function lookupFar(zoning, p) {
+  if (!zoning || !p) return null;
+  const district = p.district;
+  // 1) 浮洲（板橋偏遠 polygon 內，doc 已有 is_remote_area 旗標 — pipeline 寫入時判過）
+  if (district === "板橋區" && p.is_remote_area) {
+    return NEW_TAIPEI_FAR_PCT["_banqiao_fujou"][zoning] ?? null;
+  }
+  // 2) 新北市列名區（含子類別）
+  if (NEW_TAIPEI_FAR_PCT[district]) {
+    return NEW_TAIPEI_FAR_PCT[district][zoning] ?? null;
+  }
+  // 3) 板橋特例（市區，非浮遠）
+  if (district === "板橋區") {
+    const v = NEW_TAIPEI_FAR_PCT["_banqiao_overrides"][zoning];
+    if (v != null) return v;
+  }
+  // 4) 5 區共用泛稱
+  if (_NEW_TAIPEI_5_DISTRICTS.includes(district)) {
+    return NEW_TAIPEI_FAR_PCT["_5_districts_default"][zoning] ?? null;
+  }
+  // 5) 台北市
+  return TAIPEI_FAR_PCT[zoning] ?? null;
+}
 // fallback 預設值（萬/坪）— 當 API 還沒回 / 失敗時用
 // 啟動後 fetchDistrictPrices() 會從 /api/district_new_house_price 拿 LVR 預售屋中位數覆寫
 const DISTRICT_NEW_HOUSE_PRICE = {
@@ -1223,17 +1266,19 @@ function effectiveZoning(p) {
   const hasSpecial = /\((?:特|遷|核|抄)\)/.test(z);
   const base = z.replace(/\((?:特|遷|核|抄)\)/g, "").trim();
   if (hasSpecial && z.includes("商")) {
-    if (orig && TAIPEI_FAR_PCT[orig] != null) return orig;
-    return TAIPEI_FAR_PCT[base] != null ? base : z;
+    if (orig && lookupFar(orig, p) != null) return orig;
+    return lookupFar(base, p) != null ? base : z;
   }
   if (hasSpecial && z.includes("住")) {
-    return TAIPEI_FAR_PCT[base] != null ? base : z;
+    return lookupFar(base, p) != null ? base : z;
   }
-  if (orig && TAIPEI_FAR_PCT[orig] != null) return orig;
+  if (orig && lookupFar(orig, p) != null) return orig;
   return z;
 }
 
-function effectiveFarPctWeighted(p, roadWidthM) {
+// 用戶設計：新北市路寬 < 8m 縮減規則不實作（建商會擴基地吃旁邊路寬）
+// 所以函式 signature drop roadWidthM 參數，純粹用 lookupFar(zoning, p)
+function effectiveFarPctWeighted(p) {
   const zoneList = p.zoning_list;
   if (zoneList && zoneList.length > 1) {
     // ratios 存為百分比 (0-100)；預設平均分配
@@ -1241,24 +1286,20 @@ function effectiveFarPctWeighted(p, roadWidthM) {
     const total = ratiosPct.reduce((a, b) => a + (Number(b) || 0), 0) || 1;
     let weighted = 0;
     for (let i = 0; i < zoneList.length; i++) {
-      const z = zoneList[i].original_zone || zoneList[i].zone_name;
-      const far = effectiveFarPct(z, roadWidthM);
+      // zoning_list 可能是 string list（ArcGIS 點查回傳）或 object list（舊永慶 schema）
+      const zItem = zoneList[i];
+      const z = (typeof zItem === "string") ? zItem : (zItem.original_zone || zItem.zone_name);
+      const far = lookupFar(z, p);
       if (far == null) return null;
       weighted += far * ((Number(ratiosPct[i]) || 0) / total);
     }
     return Math.round(weighted);
   }
-  const z = effectiveZoning(p);
-  return effectiveFarPct(z, roadWidthM);
+  return lookupFar(effectiveZoning(p), p);
 }
 
-function effectiveFarPct(zoning, roadWidthM) {
-  const base = TAIPEI_FAR_PCT[zoning];
-  if (base == null) return null;
-  if (!roadWidthM || roadWidthM <= 0) return base;
-  // 規則：路寬(m) ≥ 基準FAR×2(m)；不足則容積率上限 = 路寬 × 50 (%)
-  const cap = roadWidthM * 50;
-  return Math.min(base, Math.round(cap));
+function effectiveFarPct(zoning, p) {
+  return lookupFar(zoning, p);
 }
 
 function desiredPriceWan(p) {
@@ -1286,7 +1327,7 @@ async function saveDesiredPrice(id, val) {
 function computeRowMultiples(p) {
   const land = p.land_area_ping;
   const price = p.new_house_price_wan_override ?? DISTRICT_NEW_HOUSE_PRICE[p.district];
-  const effFar = effectiveFarPctWeighted(p, p.road_width_m_override ?? p.road_width_m);
+  const effFar = effectiveFarPctWeighted(p);   // 路寬縮減不實作（用戶設計）
   if (!land || effFar == null || !price) return { w: null, d: null };
   const coeff = p.rebuild_coeff ?? 1.57;
   const [ratio, parking] = lookupShareRatio(price);
@@ -1427,15 +1468,16 @@ function renewalV2HTML(p) {
         const total = ratios.reduce((a, b) => a + (Number(b) || 0), 0) || 1;
         let w = 0;
         for (let i = 0; i < n; i++) {
-          const zn = p.zoning_list[i].original_zone || p.zoning_list[i].zone_name;
-          const f = TAIPEI_FAR_PCT[zn];
+          const zItem = p.zoning_list[i];
+          const zn = (typeof zItem === "string") ? zItem : (zItem.original_zone || zItem.zone_name);
+          const f = lookupFar(zn, p);
           if (f == null) return null;
           w += f * ((Number(ratios[i]) || 0) / total);
         }
         return Math.round(w);
       })()
-    : TAIPEI_FAR_PCT[zoning];
-  const effFar = multiZone ? effectiveFarPctWeighted(p, roadWidth) : effectiveFarPct(zoning, roadWidth);
+    : lookupFar(zoning, p);
+  const effFar = multiZone ? effectiveFarPctWeighted(p) : effectiveFarPct(zoning, p);
   const coeff = p.rebuild_coeff ?? 1.57;
   const price = p.new_house_price_wan_override ?? DISTRICT_NEW_HOUSE_PRICE[p.district] ?? null;
   const [ratio, parking] = lookupShareRatio(price);
@@ -1911,8 +1953,8 @@ function renderBidSection() {
   const priceWan = parseFloat(desiredPriceWan(p)) || (p.price_ntd ? p.price_ntd / 10000 : 0);
   if (!land || !zoning || !price) return "缺資料，無法計算";
 
-  const baseFar = TAIPEI_FAR_PCT[zoning];
-  const effFar = effectiveFarPct(zoning, roadWidth);
+  const baseFar = lookupFar(zoning, p);
+  const effFar = effectiveFarPct(zoning, p);
   const coeff = p.rebuild_coeff ?? 1.57;
   const [ratio, parking] = lookupShareRatio(price);
   const isFangzai = p.city === "台北市" && currentAge(p) && (new Date().getFullYear() - currentAge(p)) <= 1974;

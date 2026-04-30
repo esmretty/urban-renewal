@@ -173,13 +173,102 @@ TAIPEI_BASE_FAR_PCT = {
     "第四種商業區": 800,
 }
 
-# 新北市法定容積率（板橋/新莊/中和/永和/新店等主要區）
-NEW_TAIPEI_BASE_FAR_PCT = {
-    "住宅區": 300,
-    "商業區": 440,
-    # 板橋商業區較高
-    "商業區(板橋)": 460,
+# 新北市法定容積率（依各區個別法規而定，不能跨區混用）
+# 結構：district → {zoning_name → far_pct}；外加 5 區共用 default + 浮洲特例
+#
+# 板橋/中和/永和/新莊/三重 5 區：法規上沒住宅區子類別細分，GeoServer 都回泛稱「住宅區/商業區」
+# 新店/淡水/土城/樹林/汐止/八里：有住二/住三/住四等子類別，GeoServer 一般回精確子類；
+#   若例外回泛稱 → fallback「住宅區→住四 / 商業區→商二」（依用戶設計：取最高位階推測）
+# 浮洲（板橋偏遠 polygon 內）：跟板橋市區完全不同的 FAR；用 is_remote_area_new_taipei polygon 判定
+#
+# 說明：路寬 < 8m 縮減規則（板橋/新莊/中和/永和原應降為 240%/320%）刻意不實作 ——
+# 用戶設計：建商一定會把都更基地擴到旁邊大馬路吃容積，路寬縮減在實務上沒意義。
+NEW_TAIPEI_FAR_PCT = {
+    # 板橋/新莊/中和/永和/三重 5 區共用預設
+    "_5_districts_default": {
+        "住宅區": 300,
+        "商業區": 440,
+    },
+    # 板橋特例：商業區 460（5 區唯一例外）
+    "_banqiao_overrides": {
+        "商業區": 460,
+    },
+    # 浮洲（板橋偏遠 polygon 內）
+    "_banqiao_fujou": {
+        "住宅區": 240,
+        "住宅區(再)": 160,
+        "商業區": 300,
+    },
+    "新店區": {
+        "第二種住宅區": 120,
+        "第三種住宅區": 280,
+        "第四種住宅區": 300,
+        "第一種商業區": 420,
+        "第二種商業區": 440,
+        # GeoServer 例外回泛稱時 fallback：取最高位階
+        "住宅區": 300,    # = 住四
+        "商業區": 440,    # = 商二
+    },
+    # 其他新北區（用戶提供的法規數字，目前不在服務區但收錄備用）
+    "土城區": {
+        "第一種住宅區": 180, "第二種住宅區": 240,
+        "第一種商業區": 240, "第二種商業區": 320,
+    },
+    "樹林區": {
+        "第一種住宅區": 260, "第二種住宅區": 250,
+        "商業區": 380,
+    },
+    "汐止區": {
+        "第一種住宅區": 200, "第二種住宅區": 240,
+        "商業區": 320,
+    },
+    "淡水區": {
+        "第二種住宅區": 225, "第三種住宅區": 360, "第四種住宅區": 240,
+        "第一種商業區": 360, "第二種商業區": 400,
+    },
+    "八里區": {
+        "第一種住宅區": 200, "第二種住宅區": 200,
+        "第一種商業區": 300, "第二種商業區": 300,
+    },
 }
+
+_NEW_TAIPEI_5_DISTRICTS = ("板橋區", "新莊區", "中和區", "永和區", "三重區")
+
+
+def lookup_far(zoning, district, lat=None, lng=None):
+    """統一 FAR lookup：根據 (zoning, district, lat?, lng?) 回對應容積率（百分比 int）。
+
+    優先序：
+    1. 板橋區 + 座標在偏遠 polygon 內 → 浮洲 FAR
+    2. 新店/土城/樹林/汐止/淡水/八里 → 該區子類別 dict
+    3. 板橋區（市區）→ _banqiao_overrides 優先 → _5_districts_default
+    4. 新莊/中和/永和/三重 → _5_districts_default
+    5. 台北市 zoning → TAIPEI_BASE_FAR_PCT
+    回 None 表「該 (zoning, district) 組合沒收錄」。
+    """
+    if not zoning:
+        return None
+    # 1) 浮洲（板橋偏遠 polygon 內）
+    if district == "板橋區" and lat is not None and lng is not None:
+        try:
+            from analysis.geocoder import is_remote_area_new_taipei
+            if is_remote_area_new_taipei(lat, lng, district):
+                return NEW_TAIPEI_FAR_PCT["_banqiao_fujou"].get(zoning)
+        except Exception:
+            pass
+    # 2) 新北市列名區（含子類別）
+    if district in NEW_TAIPEI_FAR_PCT and not district.startswith("_"):
+        return NEW_TAIPEI_FAR_PCT[district].get(zoning)
+    # 3) 板橋特例
+    if district == "板橋區":
+        v = NEW_TAIPEI_FAR_PCT["_banqiao_overrides"].get(zoning)
+        if v is not None:
+            return v
+    # 4) 5 區共用泛稱
+    if district in _NEW_TAIPEI_5_DISTRICTS:
+        return NEW_TAIPEI_FAR_PCT["_5_districts_default"].get(zoning)
+    # 5) 台北市
+    return TAIPEI_BASE_FAR_PCT.get(zoning)
 # 重建建坪係數：計入容積 1 + 免計容積估計 0.57（保守）
 REBUILD_BUILD_COEFF = 1.57
 # 容積獎勵情境
