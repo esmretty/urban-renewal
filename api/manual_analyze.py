@@ -475,7 +475,64 @@ def validate_manual_input(
 
         # 存在 — 若 LVR 有紀錄則比對坪數
         if lvr_rows:
-            lvr = lvr_rows[0]   # 取最近一筆（lvr_lookup_exact 未排序，但同地址紀錄一致）
+            # ── 多戶歧義偵測 ──
+            # 同地址（normalize 後）可能對應 LVR 多戶（不同 area_ping / land_ping 持分），
+            # 用戶若沒填足夠資訊區分（例：只給建坪沒給地坪）系統不可任意挑「第一筆」當代表
+            # （CLAUDE.md rule 7：不同戶的 LVR 不能合併呈現）。
+            # 規則：用 user 已填的值篩 lvr_rows → 若篩後仍有 >1 個 distinct (建坪, 地坪, 總樓) sig
+            # → 回 ambiguous_unit，由用戶在 UI 挑選具體那一戶
+            _filtered = list(lvr_rows)
+            if building_area_ping is not None:
+                _filtered = [r for r in _filtered
+                             if r.get("area_ping") is not None
+                             and abs(r["area_ping"] - building_area_ping) <= AREA_TOLERANCE_PING]
+            if land_area_ping is not None:
+                _filtered = [r for r in _filtered
+                             if r.get("land_ping") is not None
+                             and abs(r["land_ping"] - land_area_ping) <= AREA_TOLERANCE_PING]
+            # 篩空的話留給下面 area_mismatch 走 lvr_mismatch 流程處理（不在此早退）
+            if _filtered:
+                _sigs: dict = {}
+                for r in _filtered:
+                    a = round(r["area_ping"], 2) if r.get("area_ping") is not None else None
+                    l = round(r["land_ping"], 2) if r.get("land_ping") is not None else None
+                    tf = r.get("total_floors")
+                    _sigs.setdefault((a, l, tf), []).append(r)
+
+                if len(_sigs) > 1 and use_source == "auto":
+                    candidates = []
+                    for (a, l, tf), recs in _sigs.items():
+                        latest = max(recs, key=lambda r: r.get("txn_date") or "")
+                        candidates.append({
+                            "building_area_ping": a,
+                            "land_area_ping": l,
+                            "total_floors": tf,
+                            "year_completed": latest.get("year_completed"),
+                            "n_transactions": len(recs),
+                            "latest_txn_date": latest.get("txn_date"),
+                            "latest_price_total": latest.get("price_total"),
+                            "building_type": latest.get("building_type"),
+                        })
+                    candidates.sort(key=lambda c: (
+                        -(c.get("n_transactions") or 0),
+                        -(c.get("building_area_ping") or 0),
+                        -(c.get("land_area_ping") or 0),
+                    ))
+                    return {
+                        "status": "ambiguous_unit",
+                        "error": "此地址在實價登錄裡有多戶（建坪或地坪持分不同），無法判斷您指的是哪一戶。請選擇對應的那一戶：",
+                        "candidates": candidates,
+                        "user_input": {
+                            "address": addr,
+                            "building_area_ping": building_area_ping,
+                            "land_area_ping": land_area_ping,
+                        },
+                    }
+
+                # 唯一戶（或 use_source=lvr）→ 取篩過的 rows，後續 lvr_rows[0] 就是該戶代表
+                lvr_rows = _filtered
+
+            lvr = lvr_rows[0]   # 同戶可能多次成交，任一筆都代表同一戶
             bld_mis = area_mismatch(building_area_ping, lvr["area_ping"])
             land_mis = area_mismatch(land_area_ping, lvr["land_ping"])
             if (bld_mis or land_mis) and use_source == "auto":

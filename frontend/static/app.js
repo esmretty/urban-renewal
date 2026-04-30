@@ -2784,6 +2784,10 @@ function _handleManualResponse(data) {
     _showLvrMismatchDialog(data);
     return;
   }
+  if (data.status === "ambiguous_unit") {
+    _showAmbiguousUnitDialog(data);
+    return;
+  }
   if (data.status === "already_exists" || data.status === "already_running") {
     alert("此地址有進行中的分析，已為您顯示在列表中");
     loadProperties();
@@ -2852,6 +2856,39 @@ function _showLvrMismatchDialog(data) {
   if (a === "l") triggerManualAnalyze("lvr");
   else if (a === "u") triggerManualAnalyze("user");
   else alert("選項無效");
+}
+
+function _showAmbiguousUnitDialog(data) {
+  const cands = data.candidates || [];
+  if (!cands.length) { alert(data.error); return; }
+  const _rocToYmd = (roc) => {
+    if (!roc || roc.length < 7) return roc || "—";
+    const y = parseInt(roc.slice(0, -4)) + 1911;
+    return `${y}-${roc.slice(-4, -2)}-${roc.slice(-2)}`;
+  };
+  const lines = cands.map((c, i) => {
+    const txn = _rocToYmd(c.latest_txn_date);
+    const price = c.latest_price_total
+      ? `${(c.latest_price_total / 10000).toLocaleString("zh-TW", { maximumFractionDigits: 0 })} 萬`
+      : "—";
+    const yc = c.year_completed ? `${c.year_completed} 年完工` : "屋齡未知";
+    const tf = c.total_floors != null ? `${c.total_floors}F 棟` : "樓層未知";
+    return `${i + 1}. 建坪 ${c.building_area_ping ?? "—"} 坪 / 地坪 ${c.land_area_ping ?? "—"} 坪 / ${tf} / ${yc}\n   (共 ${c.n_transactions} 筆成交，最新 ${txn} 賣 ${price})`;
+  });
+  const picked = prompt(
+    data.error + "\n\n" + lines.join("\n\n") + "\n\n請輸入編號（1-" + cands.length + "）或按取消放棄",
+  );
+  if (!picked) return;
+  const idx = parseInt(picked) - 1;
+  if (isNaN(idx) || idx < 0 || idx >= cands.length) {
+    alert("選項無效");
+    return;
+  }
+  const c = cands[idx];
+  // 把選的戶的建坪+地坪填回 form，再用 use_source="auto" 重送 → 後端 SQL 篩到唯一戶
+  if (c.building_area_ping != null) document.getElementById("manual-bld").value = c.building_area_ping;
+  if (c.land_area_ping != null) document.getElementById("manual-land").value = c.land_area_ping;
+  triggerManualAnalyze("auto");
 }
 
 async function triggerAnalyze(id) {
