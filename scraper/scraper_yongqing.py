@@ -823,7 +823,12 @@ def scrape_yongqing_single(url: str) -> Optional[dict]:
             try:
                 data = _json.loads(sc.string or "")
                 if isinstance(data, dict) and data.get("@type") == "Product":
-                    item["title"] = data.get("name")
+                    # ld+json name 對 single URL 是完整 SEO 標題（如「萬大保平百貨一樓 | 新北市永和區... | 永慶房屋」）
+                    # 過濾 SEO 尾巴：split by "|" 取主標題，跟列表 batch 卡片標題對齊
+                    _name = data.get("name") or ""
+                    if "|" in _name:
+                        _name = _name.split("|", 1)[0].strip()
+                    item["title"] = _name
                     img = data.get("image")
                     if img:
                         item["image_url"] = img if isinstance(img, str) else img[0]

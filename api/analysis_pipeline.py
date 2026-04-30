@@ -493,8 +493,17 @@ def analyze_single_property(
             item["address_inferred"] = strip_region_prefix(_cleaned, city or "", district or "")
             item["address_inferred_confidence"] = t["confidence"]
             item["address_inferred_candidates"] = t["candidates"][:10] if t["candidates"] else None
-            _lvr_full = f"{city or ''}{district or ''}{lvr_address}" if not lvr_address.startswith(("台北市","新北市")) else lvr_address
-            inferred_coord = geocode_address(_lvr_full)
+            # 永慶/信義 page 座標 ±10m 已準；t["confidence"]=="reverse_geo" 代表 triangulate 跑了
+            # 「完全比不上 → reverse_geocode」分支拿到的地址，其精度不見得比 page coord 高 → 不蓋座標。
+            # 591 page 座標 ±150m 不準 → 用 reverse 過的地址 geocode 回去通常更準 → 仍蓋。
+            _is_trusted_src = src_name in ("永慶", "信義")
+            _is_reverse_addr = t.get("confidence") == "reverse_geo"
+            if _is_trusted_src and _is_reverse_addr:
+                # 不蓋 inferred_coord，section 6 elif yongqing/sinyi → pass，lat/lng 保留 page coord
+                pass
+            else:
+                _lvr_full = f"{city or ''}{district or ''}{lvr_address}" if not lvr_address.startswith(("台北市","新北市")) else lvr_address
+                inferred_coord = geocode_address(_lvr_full)
     except Exception as te:
         logger.warning(f"LVR 失敗 {src_id}: {te}")
 
@@ -710,11 +719,18 @@ def analyze_single_property(
                 for i, p in enumerate(_parts)
             ]
             _f_clean = "".join(_parts).strip()
-            # 3) 結尾加 F（除非整個字串已空）
+            # 3) 結尾加 F
             _f_str = (_f_clean + "F") if _f_clean else ""
             if _f_str:
-                # 4) 若 _addr_inf 末尾已含 {f_str}（不論大小寫 F），不重複附加
-                if not re.search(rf"{re.escape(_f_str)}\s*$", _addr_inf, re.IGNORECASE):
+                # 4) 若 _addr_inf 末尾已含「{純樓層數字}{F|樓}」(不論大小寫 F、不論是否帶範圍)
+                #    → 不重複附加。處理 reverse_geocode 結果含「12號1樓」的 case，
+                #    避免變成「12號1樓 1F」雙重。
+                _f_alt_pattern = re.escape(_f_clean).replace(re.escape("~"), "[~\\-－]").replace(
+                    re.escape("-"), "[~\\-－]"
+                ) if _f_clean else ""
+                # 末尾正則：可能是 {N}F、{N}樓、{N}F樓、{N}樓F (容錯)
+                _tail_re = rf"{_f_alt_pattern}\s*[Ff樓]+\s*$"
+                if not (_f_alt_pattern and re.search(_tail_re, _addr_inf)):
                     _addr_inf = f"{_addr_inf} {_f_str}"
         doc_data["address_inferred"] = _addr_inf
         doc_data["address_inferred_confidence"] = item.get("address_inferred_confidence")

@@ -221,7 +221,7 @@ def _item_from_listing(it: dict) -> Optional[dict]:
         "source": "信義",
         "source_id": f"sinyi_{house_no}",
         "url": detail_url,
-        "title": it.get("name") or "",
+        "title": ((it.get("name") or "").split("|", 1)[0].strip()),
         "city": city,
         "district": district,
         "address": addr,
