@@ -23,29 +23,60 @@ REQUIRED_FIELDS = [
 # source_keys[] 是平面索引（Firestore array_contains 用，從 sources 衍生）
 # 不再有 url / source_id / source / url_alt 主欄位
 
+# 規範化映射：sources[].name 可以是中文（"永慶"/"信義"）給前端 badge 用，
+# 但 source_keys[] 平面索引一律用英文 canonical name（"yongqing"/"sinyi"/"591"），
+# 避免相同物件用兩種 key 存在 DB 內查不到。
+_NAME_CANONICAL = {
+    "591": "591",
+    "永慶": "yongqing",
+    "yongqing": "yongqing",
+    "信義": "sinyi",
+    "sinyi": "sinyi",
+    "manual": "manual",
+}
+_KNOWN_PREFIXES = ("591_", "yongqing_", "sinyi_", "manual_")
+
+
+def canonical_source_name(name: str) -> str:
+    """name → canonical English (永慶→yongqing, 信義→sinyi)"""
+    n = (name or "").strip()
+    return _NAME_CANONICAL.get(n, n)
+
+
+def strip_known_prefix(sid: str) -> str:
+    """剝掉跨平台 prefix (yongqing_/sinyi_/591_/manual_)，避免 source_id 帶 prefix 造成 key 不一致"""
+    s = (sid or "").strip()
+    for p in _KNOWN_PREFIXES:
+        if s.startswith(p):
+            return s[len(p):]
+    return s
+
+
 def compute_source_keys(sources: list) -> list:
-    """從 sources[] 衍生平面索引 ["591:20114614", "yongqing:8893"]
+    """從 sources[] 衍生平面索引 ["591:20114614", "yongqing:8893"]（canonical 英文 name + 純 site_id）。
     用於 Firestore array_contains query（Firestore 不支援巢狀 array 欄位查詢）。"""
     out = []
     for s in (sources or []):
-        name = (s.get("name") or "").strip()
-        sid = (s.get("source_id") or "").strip()
+        name = canonical_source_name(s.get("name"))
+        sid = strip_known_prefix(s.get("source_id"))
+        # 也剝掉 name_ 前綴（若 sid 是 "{name}_X" 形式，例如 raw scrapper 設的）
+        if sid.startswith(f"{name}_"):
+            sid = sid.split("_", 1)[1]
         if name and sid:
-            # source_id 已含 "591_20114614" 前綴的舊資料 → 直接用 site_id 部分
-            site_id = sid.split("_", 1)[1] if sid.startswith(f"{name}_") else sid
-            key = f"{name}:{site_id}"
+            key = f"{name}:{sid}"
             if key not in out:
                 out.append(key)
     return out
 
 
 def make_source_key(name: str, site_id: str) -> str:
-    """組 source_key (name:site_id)。site_id 可帶或不帶 "{name}_" 前綴，自動處理。"""
-    name = (name or "").strip()
-    site_id = (site_id or "").strip()
-    if site_id.startswith(f"{name}_"):
-        site_id = site_id.split("_", 1)[1]
-    return f"{name}:{site_id}"
+    """組 source_key (canonical_name:site_id)。
+    name 自動轉 canonical 英文（永慶→yongqing, 信義→sinyi）；site_id 自動剝跨平台 prefix。"""
+    n = canonical_source_name(name)
+    sid = strip_known_prefix(site_id)
+    if sid.startswith(f"{n}_"):
+        sid = sid.split("_", 1)[1]
+    return f"{n}:{sid}"
 
 
 def primary_source(doc: dict) -> Optional[dict]:
