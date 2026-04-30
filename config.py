@@ -259,14 +259,16 @@ def lookup_far(zoning, district, lat=None, lng=None):
     # 2) 新北市列名區（含子類別）
     if district in NEW_TAIPEI_FAR_PCT and not district.startswith("_"):
         return NEW_TAIPEI_FAR_PCT[district].get(zoning)
-    # 3) 板橋特例
-    if district == "板橋區":
-        v = NEW_TAIPEI_FAR_PCT["_banqiao_overrides"].get(zoning)
-        if v is not None:
-            return v
-    # 4) 5 區共用泛稱
+    # 3+4) 板橋/中和/永和/新莊/三重 5 區：法規上只有「住宅區/商業區」泛稱無子類別。
+    #     GeoServer 偶會回怪字（「住宅區住」「第住種住宅區」「第一種住宅區」等），不嚴格 key match：
+    #     contains「商」→ 商業區 → 440（板橋特例 460）
+    #     contains「住」→ 住宅區 → 300
     if district in _NEW_TAIPEI_5_DISTRICTS:
-        return NEW_TAIPEI_FAR_PCT["_5_districts_default"].get(zoning)
+        if "商" in zoning:
+            return 460 if district == "板橋區" else 440
+        if "住" in zoning:
+            return 300
+        return None
     # 5) 台北市
     return TAIPEI_BASE_FAR_PCT.get(zoning)
 # 重建建坪係數：計入容積 1 + 免計容積估計 0.57（保守）

@@ -1198,14 +1198,14 @@ function lookupFar(zoning, p) {
   if (NEW_TAIPEI_FAR_PCT[district]) {
     return NEW_TAIPEI_FAR_PCT[district][zoning] ?? null;
   }
-  // 3) 板橋特例（市區，非浮遠）
-  if (district === "板橋區") {
-    const v = NEW_TAIPEI_FAR_PCT["_banqiao_overrides"][zoning];
-    if (v != null) return v;
-  }
-  // 4) 5 區共用泛稱
+  // 3+4) 板橋/中和/永和/新莊/三重 5 區：法規只有「住宅區/商業區」泛稱無子類別。
+  //     GeoServer 偶有怪字（「住宅區住」「第住種住宅區」「第一種住宅區」），用 contains 不嚴格 key match：
+  //       含「商」→ 商業區 → 440（板橋特例 460）
+  //       含「住」→ 住宅區 → 300
   if (_NEW_TAIPEI_5_DISTRICTS.includes(district)) {
-    return NEW_TAIPEI_FAR_PCT["_5_districts_default"][zoning] ?? null;
+    if (zoning.includes("商")) return district === "板橋區" ? 460 : 440;
+    if (zoning.includes("住")) return 300;
+    return null;
   }
   // 5) 台北市
   return TAIPEI_FAR_PCT[zoning] ?? null;
