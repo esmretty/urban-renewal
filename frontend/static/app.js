@@ -1365,7 +1365,7 @@ function srcLinksHTML(p) {
     const links = items.map((s, i) => {
       const d = _fmtPubDate(s.date);
       const cleanUrl = (name === "591") ? clean591Url(s.url) : s.url;
-      const label = items.length === 1 ? `${name} 頁面` : `#${i+1}`;
+      const label = `#${i+1}`;
       return `<a href="${esc(cleanUrl)}" target="_blank" rel="noopener noreferrer" class="src-num" onclick="event.stopPropagation()" title="${esc(label)}">
         <span>${esc(label)}</span>${d ? `<span class="src-num-date">${esc(d)}</span>` : ""}
       </a>`;

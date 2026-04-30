@@ -7,8 +7,12 @@ html {
 body {
   background: #faf8f3;
   color: #2a2a3e;
-  font-family: -apple-system, 'Microsoft JhengHei', sans-serif;
+  /* 中文字體優先序：思源黑體 → Noto Sans TC → Microsoft JhengHei UI（Win 10/11 內建較清晰版本）→ 標楷體後備 */
+  font-family: "Source Han Sans TC", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
   font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* ── 頂部 Topbar ── */
@@ -689,7 +693,7 @@ input.tb-input[disabled] {
   background: #ffffff;
   border: 1px solid #e0d9c2;
   border-radius: 8px;                  /* 表格四角圓弧 */
-  overflow: hidden;                    /* 讓子元素 sharp corner 被裁掉 */
+  /* 不再 overflow:hidden — 讓來源 logo hover popup 能浮出表格邊界 */
 }
 /* head/row 在 wrapper 內部 → 取消個別 border-radius，由 wrapper 統一 */
 .property-rows > .property-row,
@@ -726,7 +730,7 @@ input.tb-input[disabled] {
   background: #ffffff;              /* 預設白底（不再用米黃） */
   margin-bottom: 5px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
   transition: background 0.12s, box-shadow 0.12s;
   /* 讓 hover popup（來源連結下拉）能浮在其他 row 之上 */
   position: relative;
@@ -833,12 +837,12 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   color: #5c4a0a !important;
   font-weight: 700 !important;
   text-align: center !important;
-  font-size: 13px !important;
+  font-size: 14px !important;
   line-height: 1.25;
 }
 .property-row--head .c .sub {
   display: block;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: #8b7c4a;
   margin-top: 1px;
@@ -852,7 +856,7 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
 }
 .property-row--head-top .c {
   text-align: center;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 1px;
   padding: 4px 0;
@@ -872,7 +876,7 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   line-height: 1.15;
 }
 .property-row--head:not(.property-row--head-top) .c { padding: 0 6px; }
-.property-row--head:not(.property-row--head-top) .sub { font-size: 13px; }
+.property-row--head:not(.property-row--head-top) .sub { font-size: 14px; }
 .property-row--head .c-score { text-align: center; }
 
 /* 表格 cell — 統一字級與粗細 */
@@ -882,7 +886,7 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   overflow: hidden;
   text-overflow: ellipsis;
   border-left: 1px solid #ede7d4;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: #2a2a3e;
 }
@@ -915,12 +919,12 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
 }
 .c-score-stack .score-main {
   font-weight: 700;
-  font-size: 13px;
+  font-size: 14px;
 }
 .c-score-stack .score-num { letter-spacing: -0.5px; }
-.c-score-stack .score-unit { font-size: 13px; margin-left: 1px; opacity: 0.75; }
+.c-score-stack .score-unit { font-size: 14px; margin-left: 1px; opacity: 0.75; }
 .c-score-stack .score-rec {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   margin-top: 1px;
 }
@@ -939,13 +943,13 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   font-weight: 600;
   padding: 0 4px;
   line-height: 1.25;
-  font-size: 13px;
+  font-size: 14px;
   white-space: normal;        /* 允許換行 */
   word-break: keep-all;
 }
 .c-note .note-skip {
   color: #b0790a;
-  font-size: 13px;
+  font-size: 14px;
   display: block;
 }
 
@@ -955,17 +959,17 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
 .c-multi { color: #b0790a; }
 .multi-stack {
   display: flex; flex-direction: column; gap: 2px;
-  font-size: 13px; line-height: 1.15;
+  font-size: 14px; line-height: 1.15;
 }
 .multi-stack i {
   font-style: normal; display: inline-block;
-  font-size: 13px; color: #8b7c4a; margin-right: 3px;
+  font-size: 14px; color: #8b7c4a; margin-right: 3px;
 }
-.c-action { text-align: center; font-size: 13px; }
+.c-action { text-align: center; font-size: 14px; }
 
 /* 表頭文字樣式（統一、小、上色） */
 .property-row--head .c {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: #8b7c4a;
   letter-spacing: 0.5px;
@@ -982,7 +986,7 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   text-align: right;
 }
 .c-bld-combo .sub {
-  font-size: 13px;
+  font-size: 14px;
   color: #c0392b;
   font-weight: 700;
 }
@@ -2370,7 +2374,7 @@ select.rv2-edit { text-align: left; padding-right: 18px; }
     align-items: center;
     gap: 2px 6px;
     padding: 6px 10px;
-    font-size: 13px;   /* 跟 desktop 對齊 */
+    font-size: 14px;   /* 跟 desktop 對齊 */
     grid-template-columns: none;   /* 取消 grid 設定 */
   }
   .property-row > .c {
@@ -2397,7 +2401,7 @@ select.rv2-edit { text-align: left; padding-right: 18px; }
     padding: 4px 0 2px 8px;
     border-top: 1px dashed #e8e4d8;
     margin-top: 4px;
-    font-size: 13px;   /* 跟 desktop 對齊 */
+    font-size: 14px;   /* 跟 desktop 對齊 */
   }
   /* header row 對齊 (header 也適用此 layout) */
   .property-row--head .c-addr {
@@ -2407,7 +2411,7 @@ select.rv2-edit { text-align: left; padding-right: 18px; }
     padding-bottom: 0;
   }
   .property-row--head .c {
-    font-size: 13px !important;
+    font-size: 14px !important;
   }
   /* head-top 取消 grid 顯示一行（"物件資料 | 都更評估" 那行不需要兩行） */
   .property-row--head-top {
