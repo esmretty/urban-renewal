@@ -188,35 +188,33 @@
     <div class="filter-col filter-col--mid">
       <div class="filter-col__title">數字條件設定</div>
       <div class="filter-col__subrow">
-        <span class="filter-dist-label">總價：</span>
-        <input id="filter-price-min" type="number" min="0" step="100" placeholder="最低" value="0"
-               class="form-control form-control-sm" style="width:78px;"
+        <span class="filter-dist-label filter-dist-label--nowrap">總價</span>
+        <input id="filter-price-min" type="number" min="0" step="100" value="0"
+               class="filter-num-inline" style="width:64px;"
                oninput="applyFilters()">
-        <span class="small text-muted">–</span>
-        <input id="filter-price-max" type="number" min="0" step="100" placeholder="最高" value="5000"
-               class="form-control form-control-sm" style="width:78px;"
+        <span class="text-muted">–</span>
+        <input id="filter-price-max" type="number" min="0" step="100" value="5000"
+               class="filter-num-inline" style="width:64px;"
                oninput="applyFilters()">
-        <span class="small text-muted">萬</span>
+        <span class="text-muted">萬</span>
       </div>
       <div class="filter-col__subrow filter-col__subrow--pair">
-        <span class="filter-dist-label filter-dist-label--nowrap">建單價：</span>
+        <span class="filter-dist-label filter-dist-label--nowrap">建單價&lt;</span>
         <input id="filter-max-bld-price" type="number" min="0" step="5" value="300"
-               class="form-control form-control-sm" style="width:62px;"
+               class="filter-num-inline"
                oninput="applyFilters()">
-        <span class="small text-muted">▼</span>
         <span class="filter-col__divider"></span>
-        <span class="filter-dist-label filter-dist-label--nowrap">地單價：</span>
+        <span class="filter-dist-label filter-dist-label--nowrap">地單價&lt;</span>
         <input id="filter-max-land-price" type="number" min="0" step="10" value="600"
-               class="form-control form-control-sm" style="width:62px;"
+               class="filter-num-inline"
                oninput="applyFilters()">
-        <span class="small text-muted">▼</span>
       </div>
       <div class="filter-col__subrow">
-        <span class="filter-dist-label">地坪：</span>
+        <span class="filter-dist-label filter-dist-label--nowrap">地坪≥</span>
         <input id="filter-min-land-ping" type="number" min="0" step="1" value="0"
-               class="form-control form-control-sm" style="width:78px;"
+               class="filter-num-inline"
                oninput="applyFilters()">
-        <span class="small text-muted">坪以上</span>
+        <span class="text-muted">坪</span>
       </div>
     </div>
 

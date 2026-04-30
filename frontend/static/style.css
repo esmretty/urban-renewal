@@ -567,7 +567,26 @@ body {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+  font-size: 12px;
 }
+/* 子列裡所有文字（label / 單位 / 分隔字）一律 12px，跟 input 字體一致 */
+.filter-col__subrow .small,
+.filter-col__subrow .text-muted { font-size: 12px; }
+/* 數字條件設定的 inline 數字輸入框：跟旁邊 label 字體一致、高度精簡 */
+.filter-num-inline {
+  width: 56px;
+  height: 22px;
+  line-height: 18px;
+  padding: 0 4px;
+  font-size: 12px;
+  border: 1px solid #d8c88f;
+  border-radius: 3px;
+  background: #fff;
+  color: #2a2a3e;
+  outline: none;
+  text-align: right;
+}
+.filter-num-inline:focus { border-color: #b85a30; }
 .dist-picker__note {
   font-size: 12px;
   color: #c0392b;
@@ -2351,7 +2370,7 @@ select.rv2-edit { text-align: left; padding-right: 18px; }
     align-items: center;
     gap: 2px 6px;
     padding: 6px 10px;
-    font-size: 13px;
+    font-size: 11px;   /* 對齊欄位 title 的 11px */
     grid-template-columns: none;   /* 取消 grid 設定 */
   }
   .property-row > .c {
@@ -2378,7 +2397,7 @@ select.rv2-edit { text-align: left; padding-right: 18px; }
     padding: 4px 0 2px 8px;
     border-top: 1px dashed #e8e4d8;
     margin-top: 4px;
-    font-size: 13px;
+    font-size: 11px;   /* 對齊整列 11px */
   }
   /* header row 對齊 (header 也適用此 layout) */
   .property-row--head .c-addr {
