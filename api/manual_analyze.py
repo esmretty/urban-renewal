@@ -562,11 +562,17 @@ def validate_manual_input(
                     normalized_item["building_age"] = datetime.now().year - source_rec["year_completed"]
                 normalized_item["_lvr_matched"] = True
             else:
-                # 用 user 值或 LVR 沒差距，可順便把 LVR 的額外欄位補上
+                # 用 user 值或 LVR 沒差距，可順便把 LVR 的額外欄位補上（樓層/總樓層/屋齡都從 LVR 拿）
                 if not normalized_item.get("building_area_ping") and lvr.get("area_ping"):
                     normalized_item["building_area_ping"] = lvr["area_ping"]
                 if not normalized_item.get("land_area_ping") and lvr.get("land_ping"):
                     normalized_item["land_area_ping"] = lvr["land_ping"]
+                if not normalized_item.get("total_floors") and lvr.get("total_floors"):
+                    normalized_item["total_floors"] = lvr["total_floors"]
+                if not normalized_item.get("floor") and lvr.get("floor"):
+                    normalized_item["floor"] = lvr["floor"]
+                if not normalized_item.get("building_age") and lvr.get("year_completed"):
+                    normalized_item["building_age"] = datetime.now().year - lvr["year_completed"]
                 normalized_item["_lvr_matched"] = True
 
         return {"status": "ok", "item": normalized_item}
