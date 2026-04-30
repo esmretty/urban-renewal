@@ -188,11 +188,16 @@ def _item_from_listing(it: dict) -> Optional[dict]:
     floor_first = re.match(r"(\d+)", str(floor_raw))
     floor_str = floor_first.group(1) if floor_first else None
     floor_num = int(floor_str) if floor_str else None
+    # 信義 contentData 用 'floors'（複數），不是 'totalfloor'（單數，那個只在 tradeData 同棟成交紀錄裡）
     total_floors = None
-    try:
-        total_floors = int(it.get("totalfloor"))
-    except (TypeError, ValueError):
-        pass
+    for key in ("floors", "totalfloor"):
+        v = it.get(key)
+        if v is not None:
+            try:
+                total_floors = int(v)
+                break
+            except (TypeError, ValueError):
+                pass
     # totalfloor 缺漏時 fallback 用 floor（避免漏過濾高樓層）
     eff_total = total_floors or floor_num or 0
     # 屋型決定：5F 以下且非透天 → 強制標「公寓」或「店面」
