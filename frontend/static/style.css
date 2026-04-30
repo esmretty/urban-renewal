@@ -1183,36 +1183,44 @@ body[data-tab="explore"] .wl-only { display: none !important; }
   line-height: 1.3;
   animation: badge-new-pulse 1.6s ease-in-out infinite;
 }
-/* 地址 cell：用 flex（左 .addr-text 文字、右 .addr-badges NEW/事件）。
-   單行 ellipsis 顯示，避免中文地址 wrap 撐高 row（13" 筆電必要） */
+/* 地址 cell：兩行 — 第一行 (addr-line1) 是地址+badges，第二行 (addr-title) 是 591 標題 */
 .c.c-addr {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 1px;
   line-height: 1.3;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   padding-top: 4px;
   padding-bottom: 4px;
 }
+/* 第一行：地址 + badges（單行 ellipsis） */
+.c.c-addr > .addr-line1 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
 /* 左半：地址文字 + 推測/法拍/map 圖示。永遠單行 ellipsis，讓 hover/click 看完整 */
-.c.c-addr > .addr-text {
+.c.c-addr .addr-text {
   flex: 1 1 auto;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.c.c-addr > .addr-text > .inferred-tag,
-.c.c-addr > .addr-text > .fc-badge,
-.c.c-addr > .addr-text > .map-link {
+.c.c-addr .addr-text > .inferred-tag,
+.c.c-addr .addr-text > .fc-badge,
+.c.c-addr .addr-text > .map-link {
   vertical-align: middle;
   margin-left: 4px;
 }
 /* 右半：NEW + 事件 badges 群組，整組靠右 */
-.c.c-addr > .addr-badges {
+.c.c-addr .addr-badges {
   flex: 0 0 auto;
   margin-left: auto;
   display: inline-flex;
@@ -1221,11 +1229,21 @@ body[data-tab="explore"] .wl-only { display: none !important; }
   white-space: nowrap;
 }
 /* 群組內 badge order：event 在 archived 在 NEW 之左（HTML 已照此順序輸出）*/
-.c.c-addr > .addr-badges > .badge-new,
-.c.c-addr > .addr-badges > .event-badge,
-.c.c-addr > .addr-badges > .archived-badge {
+.c.c-addr .addr-badges > .badge-new,
+.c.c-addr .addr-badges > .event-badge,
+.c.c-addr .addr-badges > .archived-badge {
   margin-left: 0;     /* 用 gap 控間距，不疊 margin */
   vertical-align: middle;
+}
+/* 第二行：591 標題 — 小、淡灰、非粗體、單行 ellipsis */
+.c.c-addr > .addr-title {
+  font-size: 11px;
+  font-weight: 400;
+  color: #8a7e58;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* badge-new 不要再用 margin-left:auto 推到底（現在靠 .addr-badges 的 margin-left:auto）*/
 .c.c-addr .badge-new { margin-left: 0; }
