@@ -2338,6 +2338,33 @@ select.rv2-edit { text-align: left; padding-right: 18px; }
    原則：桌機樣式完全不動，只在這裡 override。
    ══════════════════════════════════════════════════════════════════════════ */
 
+/* 13" 筆電 (1366-1500px) 緊湊 layout：壓欄寬 + 地址單行 ellipsis 不換行 */
+@media (max-width: 1500px) and (min-width: 1201px) {
+  .property-row {
+    grid-template-columns: 110px 70px 56px 56px 1fr
+                           96px 80px 90px 50px 42px 100px 86px 64px;
+    font-size: 13px;
+    padding: 6px 8px;
+  }
+  .property-row--head,
+  .property-row--head-top {
+    grid-template-columns: 110px 70px 56px 56px 1fr
+                           96px 80px 90px 50px 42px 100px 86px 64px;
+    font-size: 12px;
+  }
+  .c.c-addr {
+    white-space: nowrap;
+    line-height: 1.2;
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+  .c.c-addr > .addr-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: normal;
+  }
+}
+
 /* Tablet：螢幕不夠寬時，表格區塊橫向可捲，桌機桌面就不會爆欄 */
 @media (max-width: 1200px) and (min-width: 768px) {
   .property-rows {
