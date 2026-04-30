@@ -709,28 +709,14 @@ def analyze_single_property(
         doc_data["regeocode_failed"] = True
         doc_data["regeocode_failed_addr"] = item.get("regeocode_failed_addr")
 
-    # ── 偏遠路段早退：is_remote_area=True → 同 unsuitable_zoning 模式跳過後續 ──
-    # 清空試算 + 評分 + AI 結果（避免顯示誤導倍數），但保留 doc + 地址 + 來源連結讓 dedup 擋重抓。
+    # 偏遠路段：只標旗標 + 寫 log，分析照跑（資料完整給 client 自己決定要不要呈現）
     if doc_data.get("is_remote_area"):
-        for _k in ("score_total", "score_age", "score_far", "score_land",
-                   "score_tod", "score_road", "score_consolidation",
-                   "renewal_type", "renewal_bonus_rate",
-                   "renewal_new_area_ping", "renewal_value_ntd", "renewal_profit_ntd",
-                   "ai_analysis", "ai_recommendation", "ai_reason"):
-            doc_data[_k] = None
-        doc_data["analysis_status"] = "skipped"
-        doc_data["skip_reason"] = "remote_area"
-        doc_data["analysis_completed_at"] = now_tw_iso()
         _addr_for_log = (
             doc_data.get("address_inferred") or doc_data.get("address") or item.get("address") or "(無地址)"
         )
         logger.info(
-            f"[{src_id}] 偏遠路段：{district} {_addr_for_log}（lat={lat}, lng={lng}）"
+            f"[{src_id}] 偏遠路段（標旗標但仍完整分析）：{district} {_addr_for_log}（lat={lat}, lng={lng}）"
         )
-        _cleanup_ephemeral_screenshots(src_id)
-        return {"doc_data": doc_data, "status": "skipped",
-                "skip_reason": "remote_area",
-                "foreclosure_reasons": fc_reasons if is_fc else None}
 
     # ── 10. 路寬（GeoServer + zonemap 截圖 + Vision）──
     # 規則：lat 有值且在台北市就一律截 zonemap（供肉眼驗證）；
@@ -1012,28 +998,17 @@ def analyze_single_property(
             _zoning_for_check = doc_data.get("zoning_list") or doc_data.get("zoning")
             _suitable, _unsuitable_reason = is_zoning_suitable_for_renewal(district, _zoning_for_check)
             if not _suitable:
+                # 只標旗標 + 寫 log，分析照跑（資料完整給 client 自己決定要不要呈現）
+                # 都更試算函式對「保護區/風景區/河道用地」這類分區會自然回傳 null（找不到 base_far），
+                # 倍數欄位在前端會自動顯示 "—"，不需在這裡硬清空
                 doc_data["unsuitable_for_renewal"] = True
                 doc_data["unsuitable_reason"] = _unsuitable_reason
-                # 清掉都更/危老試算結果（保留分區/事實欄位）— 不適合都更就不該顯示倍數
-                for _k in ("score_total", "score_age", "score_far", "score_land",
-                           "score_tod", "score_road", "score_consolidation",
-                           "renewal_type", "renewal_bonus_rate",
-                           "renewal_new_area_ping", "renewal_value_ntd", "renewal_profit_ntd",
-                           "ai_analysis", "ai_recommendation", "ai_reason"):
-                    doc_data[_k] = None
-                doc_data["analysis_status"] = "skipped"
-                doc_data["skip_reason"] = "unsuitable_zoning"
                 _addr_for_log = (
                     doc_data.get("address_inferred") or doc_data.get("address") or item.get("address") or "(無地址)"
                 )
                 logger.info(
-                    f"[{src_id}] 特殊土地分區：{_unsuitable_reason}（{district}/{doc_data.get('zoning')}/{_addr_for_log}）"
+                    f"[{src_id}] 特殊土地分區（標旗標但仍完整分析）：{_unsuitable_reason}（{district}/{doc_data.get('zoning')}/{_addr_for_log}）"
                 )
-                doc_data["analysis_completed_at"] = now_tw_iso()
-                _cleanup_ephemeral_screenshots(src_id)
-                return {"doc_data": doc_data, "status": "skipped",
-                        "skip_reason": "unsuitable_zoning",
-                        "foreclosure_reasons": fc_reasons if is_fc else None}
 
             # 有分區後即時算 renewal v2（local 變數，不存 DB）+ 重新產生建議
             final_land = item.get("land_area_ping") or doc_data.get("land_area_ping")
@@ -1077,6 +1052,11 @@ def analyze_single_property(
     # 門檻：admin 在 settings/line_config.threshold_multiple 可調，預設 2.8
     # 任何情境（危老/都更/防災都更）的 multiple ≥ threshold → 推 LINE
     # 若已通知過（doc 有 line_notified_at）+ 倍數沒漲過顯著程度 → skip
+    # 若物件被標旗標（is_remote_area / unsuitable_for_renewal）→ skip
+    #   （用戶已用 chip 表示不感興趣，LINE 不應推送這類物件）
+    if doc_data.get("is_remote_area") or doc_data.get("unsuitable_for_renewal"):
+        logger.info(f"[{src_id}] LINE 通知跳過：物件被標旗標（remote / unsuitable）")
+        rv2 = None   # 後續 try block 看不到 scenarios，自然不會觸發 notify
     try:
         rv2_check = rv2 or {}
         scenarios_check = rv2_check.get("scenarios") or {}

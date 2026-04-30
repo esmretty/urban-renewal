@@ -155,9 +155,13 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  /* 跟 client 一致：思源黑體優先，後備 PingFang TC / Microsoft JhengHei UI */
+  font-family: "Noto Sans TC", "Source Han Sans TC", "PingFang TC", "Microsoft JhengHei UI", "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: #f0eee3;
   color: #2a2a3e;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 .hidden { display: none !important; }
 
