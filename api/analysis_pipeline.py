@@ -670,7 +670,8 @@ def analyze_single_property(
     doc_data["nearby_mrts"] = nearby_mrts   # 1500m 內最多 3 站；無則空 list
 
     # 偏遠區判定（新北市天險隔開的偏遠地段，依 config.REMOTE_POLYGONS_NEW_TAIPEI）
-    # 前端預設過濾 is_remote_area=True，需勾「☐ 包含偏遠地段」才顯示
+    # 標記 is_remote_area=True 後續會走「跳過分析」流程（同 unsuitable_zoning），
+    # 仍存 DB（讓 dedup 擋掉重抓），但清空誤導性的試算/評分/AI 結果。
     from analysis.geocoder import is_remote_area_new_taipei
     doc_data["is_remote_area"] = is_remote_area_new_taipei(lat, lng, district)
 
@@ -707,6 +708,29 @@ def analyze_single_property(
     if item.get("regeocode_failed"):
         doc_data["regeocode_failed"] = True
         doc_data["regeocode_failed_addr"] = item.get("regeocode_failed_addr")
+
+    # ── 偏遠路段早退：is_remote_area=True → 同 unsuitable_zoning 模式跳過後續 ──
+    # 清空試算 + 評分 + AI 結果（避免顯示誤導倍數），但保留 doc + 地址 + 來源連結讓 dedup 擋重抓。
+    if doc_data.get("is_remote_area"):
+        for _k in ("score_total", "score_age", "score_far", "score_land",
+                   "score_tod", "score_road", "score_consolidation",
+                   "renewal_type", "renewal_bonus_rate",
+                   "renewal_new_area_ping", "renewal_value_ntd", "renewal_profit_ntd",
+                   "ai_analysis", "ai_recommendation", "ai_reason"):
+            doc_data[_k] = None
+        doc_data["analysis_status"] = "skipped"
+        doc_data["skip_reason"] = "remote_area"
+        doc_data["analysis_completed_at"] = now_tw_iso()
+        _addr_for_log = (
+            doc_data.get("address_inferred") or doc_data.get("address") or item.get("address") or "(無地址)"
+        )
+        logger.info(
+            f"[{src_id}] 偏遠路段：{district} {_addr_for_log}（lat={lat}, lng={lng}）"
+        )
+        _cleanup_ephemeral_screenshots(src_id)
+        return {"doc_data": doc_data, "status": "skipped",
+                "skip_reason": "remote_area",
+                "foreclosure_reasons": fc_reasons if is_fc else None}
 
     # ── 10. 路寬（GeoServer + zonemap 截圖 + Vision）──
     # 規則：lat 有值且在台北市就一律截 zonemap（供肉眼驗證）；
@@ -999,7 +1023,12 @@ def analyze_single_property(
                     doc_data[_k] = None
                 doc_data["analysis_status"] = "skipped"
                 doc_data["skip_reason"] = "unsuitable_zoning"
-                logger.info(f"[{src_id}] 不適合都更：{_unsuitable_reason}（{district}/{doc_data.get('zoning')}）")
+                _addr_for_log = (
+                    doc_data.get("address_inferred") or doc_data.get("address") or item.get("address") or "(無地址)"
+                )
+                logger.info(
+                    f"[{src_id}] 特殊土地分區：{_unsuitable_reason}（{district}/{doc_data.get('zoning')}/{_addr_for_log}）"
+                )
                 doc_data["analysis_completed_at"] = now_tw_iso()
                 _cleanup_ephemeral_screenshots(src_id)
                 return {"doc_data": doc_data, "status": "skipped",

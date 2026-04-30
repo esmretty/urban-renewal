@@ -246,9 +246,9 @@
                style="width:48px; padding:0 4px; height:20px; line-height:18px; font-size:13px; border:1px solid #ffe69c; border-radius:3px; background:#fff;">
         <span>倍以上</span>
       </label>
-      <label class="explore-hide-bad" id="include-remote-wrap">
-        <input type="checkbox" id="include-remote" onchange="applyClientOrder()">
-        <span title="天險（河、山）隔開的偏遠地段，預設不顯示">包含偏遠地段</span>
+      <label class="explore-hide-bad" id="hide-non-renewable-wrap">
+        <input type="checkbox" id="hide-non-renewable" onchange="applyClientOrder()" checked>
+        <span title="勾選時隱藏「偏遠路段」與「特殊土地分區」物件（這些都更難度高）">隱藏不易都更物件</span>
       </label>
       <label class="small text-muted">排序：</label>
       <select id="sort-by" class="form-select form-select-sm w-auto" onchange="applyClientOrder()">

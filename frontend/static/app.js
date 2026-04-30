@@ -47,10 +47,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (_detailP) _detailP._ephemeral_edit_made = false;
   });
   restoreThresholds();
-  // 「包含偏遠地段」chip 跨 tab 共用，從獨立 localStorage 還原（不綁 explore filter set）
+  // 「隱藏不易都更物件」chip 跨 tab 共用，從獨立 localStorage 還原（不綁 explore filter set）
+  // 預設勾起來（隱藏偏遠路段 + 特殊土地分區）；舊 localStorage key "include-remote" 已 deprecated
   try {
-    const ir = document.getElementById("include-remote");
-    if (ir) ir.checked = (localStorage.getItem("include-remote") === "1");
+    const hn = document.getElementById("hide-non-renewable");
+    if (hn) {
+      const v = localStorage.getItem("hide-non-renewable");
+      hn.checked = (v === null) ? true : (v === "1");
+    }
   } catch {}
   _initDistPicker();
   populateDistrictFilter();
@@ -103,7 +107,7 @@ function _saveExploreFilters() {
     sortBy: document.getElementById("sort-by")?.value || "list_rank",
     sortDir: sortDir,
     hideBad: !!document.getElementById("explore-hide-bad")?.checked,
-    includeRemote: !!document.getElementById("include-remote")?.checked,
+    hideNonRenewable: !!document.getElementById("hide-non-renewable")?.checked,
   };
   try { localStorage.setItem(_exploreFilterKey(), JSON.stringify(obj)); } catch {}
 }
@@ -161,8 +165,8 @@ function _restoreExploreFilters() {
   }
   const hb = document.getElementById("explore-hide-bad");
   if (hb && typeof obj.hideBad === "boolean") hb.checked = obj.hideBad;
-  const ir = document.getElementById("include-remote");
-  if (ir && typeof obj.includeRemote === "boolean") ir.checked = obj.includeRemote;
+  const hn = document.getElementById("hide-non-renewable");
+  if (hn && typeof obj.hideNonRenewable === "boolean") hn.checked = obj.hideNonRenewable;
 }
 
 // ── Tab 切換 ──────────────────────────────────────────────────────────────
@@ -842,8 +846,8 @@ function showDetailModal(p) {
     r.className = "fc-badge";
     r.style.marginLeft = "8px";
     r.style.background = "#9aa0a6";
-    r.textContent = "偏遠地段";
-    r.title = "天險（河、山）隔開的偏遠位置";
+    r.textContent = "偏遠路段";
+    r.title = "依政府河道/天險範圍判定為偏遠位置";
     titleEl.appendChild(r);
   }
   if (p.unsuitable_for_renewal) {
@@ -851,8 +855,8 @@ function showDetailModal(p) {
     u.className = "fc-badge";
     u.style.marginLeft = "8px";
     u.style.background = "#9aa0a6";
-    u.textContent = "不適合都更";
-    u.title = p.unsuitable_reason || "土地分區非住宅用地";
+    u.textContent = "特殊土地分區";
+    u.title = p.unsuitable_reason || "土地分區非住、商、工用地";
     titleEl.appendChild(u);
   }
   // 多來源連結區：讀 p.sources（新 schema）為主，fallback 用 p.url + p.url_alt（舊 schema）
@@ -2198,10 +2202,10 @@ function applyFilters() {
 // 排序 / hide-bad：只重排現有資料，不動 server
 window.applyClientOrder = function () {
   _currentPage = 1;
-  // 「包含偏遠地段」chip 兩 tab 共用 → 獨立 localStorage 持久化（不綁 explore filter set）
+  // 「隱藏不易都更物件」chip 兩 tab 共用 → 獨立 localStorage 持久化（不綁 explore filter set）
   try {
-    const ir = document.getElementById("include-remote");
-    if (ir) localStorage.setItem("include-remote", ir.checked ? "1" : "0");
+    const hn = document.getElementById("hide-non-renewable");
+    if (hn) localStorage.setItem("hide-non-renewable", hn.checked ? "1" : "0");
   } catch {}
   if (_activeTab === "explore") {
     _saveExploreFilters();
@@ -2217,10 +2221,10 @@ function filterAndSort() {
   // 一律排除軟刪除
   let list = allProperties.filter(p => !p.deleted);
 
-  // 偏遠地段預設過濾（兩 tab 共用）— 勾「包含偏遠地段」chip 才顯示
-  // is_remote_area=True 表示物件落在天險（河、山）隔開的偏遠 polygon 內
-  if (!document.getElementById("include-remote")?.checked) {
-    list = list.filter(p => !p.is_remote_area);
+  // 「隱藏不易都更物件」chip 勾選時 → 過濾掉 is_remote_area（偏遠路段）+ unsuitable_for_renewal（特殊土地分區）
+  // 兩 tab 共用，預設勾選
+  if (document.getElementById("hide-non-renewable")?.checked) {
+    list = list.filter(p => !p.is_remote_area && !p.unsuitable_for_renewal);
   }
 
   // 搜尋 tab 的條件都在 server 端過濾，client 不再重跑同套邏輯，直接信任 _exploreResults
