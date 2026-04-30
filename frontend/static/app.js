@@ -2234,10 +2234,11 @@ function filterAndSort() {
     p.archived !== true
   );
 
-  // 「隱藏不易都更物件」chip 勾選時 → 過濾掉 is_remote_area（偏遠路段）+ unsuitable_for_renewal（特殊土地分區）
+  // 「隱藏新北偏遠物件」chip 勾選時 → 過濾掉 is_remote_area（新北市偏遠路段）
+  // 特殊土地分區（unsuitable_for_renewal）不再被此 chip 控制，由 badge 提醒用戶；
   // 兩 tab 共用，預設勾選
   if (document.getElementById("hide-non-renewable")?.checked) {
-    list = list.filter(p => !p.is_remote_area && !p.unsuitable_for_renewal);
+    list = list.filter(p => !p.is_remote_area);
   }
 
   // 搜尋 tab 的條件都在 server 端過濾，client 不再重跑同套邏輯，直接信任 _exploreResults
