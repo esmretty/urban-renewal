@@ -726,7 +726,7 @@ input.tb-input[disabled] {
   background: #ffffff;              /* 預設白底（不再用米黃） */
   margin-bottom: 5px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 11px;
   transition: background 0.12s, box-shadow 0.12s;
   /* 讓 hover popup（來源連結下拉）能浮在其他 row 之上 */
   position: relative;
@@ -833,12 +833,12 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   color: #5c4a0a !important;
   font-weight: 700 !important;
   text-align: center !important;
-  font-size: 12px !important;
+  font-size: 11px !important;
   line-height: 1.25;
 }
 .property-row--head .c .sub {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: #8b7c4a;
   margin-top: 1px;
@@ -852,7 +852,7 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
 }
 .property-row--head-top .c {
   text-align: center;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 1px;
   padding: 4px 0;
@@ -872,7 +872,7 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   line-height: 1.15;
 }
 .property-row--head:not(.property-row--head-top) .c { padding: 0 6px; }
-.property-row--head:not(.property-row--head-top) .sub { font-size: 12px; }
+.property-row--head:not(.property-row--head-top) .sub { font-size: 11px; }
 .property-row--head .c-score { text-align: center; }
 
 /* 表格 cell — 統一字級與粗細 */
@@ -882,7 +882,7 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   overflow: hidden;
   text-overflow: ellipsis;
   border-left: 1px solid #ede7d4;
-  font-size: 15px;
+  font-size: 11px;
   font-weight: 500;
   color: #2a2a3e;
 }
@@ -915,10 +915,10 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
 }
 .c-score-stack .score-main {
   font-weight: 700;
-  font-size: 16px;
+  font-size: 11px;
 }
 .c-score-stack .score-num { letter-spacing: -0.5px; }
-.c-score-stack .score-unit { font-size: 14px; margin-left: 1px; opacity: 0.75; }
+.c-score-stack .score-unit { font-size: 11px; margin-left: 1px; opacity: 0.75; }
 .c-score-stack .score-rec {
   font-size: 11px;
   font-weight: 500;
@@ -939,13 +939,13 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   font-weight: 600;
   padding: 0 4px;
   line-height: 1.25;
-  font-size: 12px;
+  font-size: 11px;
   white-space: normal;        /* 允許換行 */
   word-break: keep-all;
 }
 .c-note .note-skip {
   color: #b0790a;
-  font-size: 12px;
+  font-size: 11px;
   display: block;
 }
 
@@ -955,17 +955,17 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
 .c-multi { color: #b0790a; }
 .multi-stack {
   display: flex; flex-direction: column; gap: 2px;
-  font-size: 14px; line-height: 1.15;
+  font-size: 11px; line-height: 1.15;
 }
 .multi-stack i {
   font-style: normal; display: inline-block;
   font-size: 11px; color: #8b7c4a; margin-right: 3px;
 }
-.c-action { text-align: center; font-size: 14px; }
+.c-action { text-align: center; font-size: 11px; }
 
 /* 表頭文字樣式（統一、小、上色） */
 .property-row--head .c {
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 600;
   color: #8b7c4a;
   letter-spacing: 0.5px;
@@ -982,7 +982,7 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   text-align: right;
 }
 .c-bld-combo .sub {
-  font-size: 12px;
+  font-size: 11px;
   color: #c0392b;
   font-weight: 700;
 }
