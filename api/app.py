@@ -3138,6 +3138,8 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 if page_coords and page_coords[0] and page_coords[1]:
                     item["source_latitude"] = page_coords[0]
                     item["source_longitude"] = page_coords[1]
+                # 把 591「社區」欄位 RAW value 帶進 item，給 detect_foreclosure 偵測「【」廣告詞用
+                item["_community_raw"] = getattr(_detail_ret, "community_raw", "") or ""
                 # 詳情頁抓到的更新時間 → 寫進 item 讓 make_property_doc 轉 updated_at
                 _upd_txt = getattr(_detail_ret, "updated_text", None)
                 _pub_txt_detail = getattr(_detail_ret, "published_text", None)

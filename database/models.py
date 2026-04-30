@@ -479,14 +479,21 @@ DEFAULT_SKIP_THRESHOLDS = {
 def detect_foreclosure(item: dict, detail_text: str = "") -> tuple[bool, list]:
     """
     偵測法拍屋。
-    規則：標題含 "#" 或全形 "＃" 且 刊登者含 "代理人" → 法拍。
-    591 代理人標記常用全形 ＃（U+FF03），也有半形 # — 兩種都要抓。
+    規則：
+      1. 標題含 "#" 或全形 "＃" 且 刊登者含 "代理人" → 法拍。
+         591 代理人標記常用全形 ＃（U+FF03），也有半形 # — 兩種都要抓。
+      2. 591「社區」欄位 RAW value（item["_community_raw"]）含「【」廣告詞 → 法拍。
+         仲介在「社區」label 寫「【店長推薦】XX」這種廣告字串通常是法拍特徵。
+    回 (是否法拍, [reason 列表])
     """
     title = item.get("title") or ""
     raw = item.get("_raw_text") or detail_text or ""
     has_hash = "#" in title or "＃" in title
     if has_hash and "代理人" in raw:
         return True, ["標題含 # 或 ＃ + 代理人"]
+    community_raw = item.get("_community_raw") or ""
+    if "【" in community_raw:
+        return True, [f"591「社區」欄位含「【」廣告詞：{community_raw[:50]}"]
     return False, []
 
 

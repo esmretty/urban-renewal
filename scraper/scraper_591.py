@@ -1009,7 +1009,7 @@ def screenshot_detail_page(ctx: BrowserContext, url: str, source_id: str):
             full_path.replace(path)
         # 從 DOM 盡可能多抓地址候選（純文字，不受 CSS 防爬影響；比 OCR 可靠很多）
         detail_data = page.evaluate(r"""() => {
-            const results = { addr_candidates: [], lat: null, lng: null };
+            const results = { addr_candidates: [], lat: null, lng: null, community_raw: '' };
 
             // 規則：地址只從「社區」或「地址」這兩個明確 label 右邊的值抓。
             // 其他地方（實價登錄 banner、熱門社區推薦、仲介介紹、title h1 等）都視為不可信。
@@ -1036,6 +1036,11 @@ def screenshot_detail_page(ctx: BrowserContext, url: str, source_id: str):
                 }
                 if (!val && lbl.parentElement && lbl.parentElement.nextElementSibling) {
                     val = (lbl.parentElement.nextElementSibling.innerText || '').trim();
+                }
+                // 「社區」label 的 RAW value 額外保留（不過任何 filter）→ 給法拍偵測用
+                // 仲介在「社區」欄位寫「【店長推薦】XX」這種廣告詞通常是法拍特徵
+                if (text === '社區' && val && !results.community_raw) {
+                    results.community_raw = val.slice(0, 100);
                 }
                 // 最少要 5 字 + 含路/街/號/巷 才算地址（擋掉像空字串、短短幾字的誤值）
                 // 擋掉雜訊：仲介名/瀏覽數/更新時間 被串進來的情況
@@ -1106,18 +1111,20 @@ def screenshot_detail_page(ctx: BrowserContext, url: str, source_id: str):
             logger.info(f"  DOM 日期 ({source_id}): 刊登={published_text!r} 更新={updated_text!r}")
         # Backward-compatible tuple return + extra attrs（含新切的 addr_path / house_path）
         class _DetailResult(tuple):
-            def __new__(cls, path, addr, coords, pub, upd, addr_p, house_p):
+            def __new__(cls, path, addr, coords, pub, upd, addr_p, house_p, community_raw):
                 inst = super().__new__(cls, (path, addr, coords))
                 inst.published_text = pub
                 inst.updated_text = upd
                 inst.addr_path = addr_p
                 inst.house_path = house_p
+                inst.community_raw = community_raw
                 return inst
         return _DetailResult(
             str(path), community_addr, page_coords,
             published_text, updated_text,
             str(addr_path) if addr_path.exists() else None,
             str(house_path) if house_path.exists() else None,
+            detail_data.get("community_raw") or "",
         )
     except Exception as e:
         logger.debug(f"Screenshot detail page failed ({url}): {e}")
