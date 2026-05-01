@@ -1767,42 +1767,37 @@ function renderRegionSourceMatrix(s) {
   if (!box) return;
   const matrix = s.by_region_source || {};
   const order = s.region_order || [];
-  const srcTotals = s.src_totals || {};
   // 來源欄序固定：591, 永慶, 信義, 手動, 其他
   const SRC_KEYS = ["591", "yongqing", "sinyi", "manual", "其他"];
   const SRC_LBL = { "591": "591", "yongqing": "永慶", "sinyi": "信義", "manual": "手動", "其他": "其他" };
-  // 整體 grand total per source（用於最下面 total-row）
-  const grandTotal = SRC_KEYS.reduce((sum, k) => sum + (srcTotals[k] || 0), 0);
   const cell = (n) => `<td class="${(!n) ? 'zero' : ''}">${n || 0}</td>`;
-  const rows = [];
-  rows.push(`<tr><th class="dist">行政區</th>${SRC_KEYS.map(k => `<th>${SRC_LBL[k]}</th>`).join("")}<th>小計</th></tr>`);
-  for (const reg of order) {
-    if (!matrix[reg.city]) continue;   // 該縣市完全沒資料 → 不顯示
-    // city header row
-    rows.push(`<tr class="city-row"><th colspan="${SRC_KEYS.length + 2}">${esc(reg.city)}</th></tr>`);
+
+  function buildCityTable(city, districts) {
+    if (!matrix[city]) return "";
+    const rows = [];
+    rows.push(`<tr class="city-row"><th colspan="${SRC_KEYS.length + 2}">${esc(city)}</th></tr>`);
+    rows.push(`<tr><th class="dist">行政區</th>${SRC_KEYS.map(k => `<th>${SRC_LBL[k]}</th>`).join("")}<th>計</th></tr>`);
     let citySrcSum = SRC_KEYS.map(_ => 0);
     let cityTotal = 0;
-    for (const dist of reg.districts) {
-      const row = matrix[reg.city][dist];
+    for (const dist of districts) {
+      const row = matrix[city][dist];
       if (!row) continue;
       const cells = SRC_KEYS.map(k => row[k] || 0);
       const rowTotal = cells.reduce((a, b) => a + b, 0);
-      if (rowTotal === 0) continue;   // 該行政區完全沒資料 → 跳過（避免空行太多）
+      if (rowTotal === 0) continue;
       cityTotal += rowTotal;
       cells.forEach((v, i) => citySrcSum[i] += v);
       rows.push(`<tr><td class="dist">${esc(dist)}</td>${cells.map(cell).join("")}<td>${rowTotal}</td></tr>`);
     }
-    // 縣市小計
-    rows.push(`<tr class="total-row"><td class="dist">${esc(reg.city)} 小計</td>${citySrcSum.map(cell).join("")}<td>${cityTotal}</td></tr>`);
+    rows.push(`<tr class="total-row"><td class="dist">小計</td>${citySrcSum.map(cell).join("")}<td>${cityTotal}</td></tr>`);
+    return `<table class="region-matrix">${rows.join("")}</table>`;
   }
-  // 來源總計列
-  const srcSumCells = SRC_KEYS.map(k => srcTotals[k] || 0).map(cell).join("");
-  rows.push(`<tr class="total-row"><td class="dist">全部來源</td>${srcSumCells}<td>${grandTotal}</td></tr>`);
-  box.innerHTML = `
-    <table class="region-matrix">
-      ${rows.join("")}
-    </table>
-  `;
+
+  const tables = order
+    .filter(reg => matrix[reg.city])
+    .map(reg => buildCityTable(reg.city, reg.districts))
+    .join("");
+  box.innerHTML = `<div class="region-matrix-grid">${tables}</div>`;
 }
 
 // ── 物件列表分頁狀態 ─────────────────────────────────────

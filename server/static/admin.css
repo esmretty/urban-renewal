@@ -268,21 +268,27 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: 18px;
-  align-items: stretch;   /* 兩欄等高，下緣對齊 */
+  align-items: start;
 }
 .overview-right {
   background: #f8f5e8;
   border: 1px solid #e6dfc6;
   border-radius: 6px;
   padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
 }
-.overview-right > div:not(:last-child) { flex: 0 0 auto; }
-.overview-left { display: flex; flex-direction: column; }
 @media (max-width: 1100px) {
-  .overview-grid { grid-template-columns: 1fr; align-items: start; }
+  .overview-grid { grid-template-columns: 1fr; }
   .overview-right { margin-top: 4px; }
+}
+
+/* 來源 × 行政區矩陣：台北 + 新北 並排兩個小表，壓縮高度 */
+.region-matrix-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 800px) {
+  .region-matrix-grid { grid-template-columns: 1fr; }
 }
 
 /* 來源 × 行政區計數矩陣 — 緊縮版 */
