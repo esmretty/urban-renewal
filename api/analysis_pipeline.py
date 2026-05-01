@@ -575,17 +575,23 @@ def analyze_single_property(
             else:
                 logger.info(f"[{src_id}] reverse geocode 無結果 (lat={src_lat}, lng={src_lng}, road={road_seg})")
 
-    # ── 5.7 591 LVR 空 + 原地址含巷弄 → 保留原模糊地址（不硬給門牌）──
-    # 591 座標不準 (±150m) 不該用 591 原座標 reverse_geocode；但保留巷弄地址可讓路寬/分區查得到。
-    # 寧可顯示「松江路313巷」+ 標 confidence=lane_only，比硬給「松江路327號」誤導用戶好。
+    # ── 5.7 591 LVR 空 + 原地址含號 / 巷弄 → 保留原地址當 address_inferred ──
+    # 591 座標不準 (±150m) 不該用 591 原座標 reverse_geocode；但 item["address"] 已是
+    # 經主迴圈「rule 1/2/3 + validate_addr (geocode_with_district)」驗證過真實存在的
+    # 地址（DOM 社區 / OCR 抓到的「地址」label）→ 直接拿來當 address_inferred，
+    # 不該被 5.8 的 reverse_geocode 從座標推一個附近的「不同門牌號」蓋掉。
+    # 例：591_20125266 「寶橋路174號」(社區) validate 通過 → 應直接用，但舊邏輯只看巷弄
+    # 跳過 5.7 → 走 5.8 reverse 推「寶橋路231號」覆蓋掉真值。
     import re as _re_lane2
     if not item.get("address_inferred") and src_name == "591" and item.get("address"):
         _orig = item.get("address") or ""
-        if _re_lane2.search(r"[巷弄]", _orig):
+        # 含「號」（含 之N 號）或含「巷弄」 都直接保留（含號 = 真實門牌；含巷弄 = 模糊但精準到巷）
+        if "號" in _orig or _re_lane2.search(r"[巷弄]", _orig):
             from database.models import strip_region_prefix
             item["address_inferred"] = strip_region_prefix(_orig, city or "", district or "")
-            item["address_inferred_confidence"] = "lane_only"
-            logger.info(f"[{src_id}] LVR 空 → 保留原巷弄地址當推測: {item['address_inferred']}")
+            # confidence 標：含號 = "dom_validated"，僅含巷弄 = "lane_only"
+            item["address_inferred_confidence"] = "dom_validated" if "號" in _orig else "lane_only"
+            logger.info(f"[{src_id}] LVR 空 → 保留原地址當推測: {item['address_inferred']!r} ({item['address_inferred_confidence']})")
 
     # ── 5.8 591 LVR 空 + 沒巷弄（只到路名）→ 優先用 591 source_lat reverse；fallback 街級 geocode ──
     # 重要：591 source_latitude 對「號碼級」精準 ±150m，對「整條街」reverse 來說已夠準
