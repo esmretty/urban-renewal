@@ -516,7 +516,7 @@ function computeSkipReasons(p, th) {
 function computeAdvantageChips(p) {
   const chips = [];
   if (p.nearest_mrt_dist_m != null && p.nearest_mrt_dist_m <= 500) {
-    chips.push({ key: 'tod', label: 'TOD', cls: 'adv-chip adv-tod' });
+    chips.push({ key: 'tod', label: 'ＴＯＤ', cls: 'adv-chip adv-tod' });
   }
   const age = currentAge(p);
   if (p.city === "台北市" && age && (new Date().getFullYear() - age) <= 1974) {
