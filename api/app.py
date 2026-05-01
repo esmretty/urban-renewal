@@ -3318,6 +3318,18 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 if _v_land and _i_land and abs(_v_land - _i_land) > 0.5:
                     logger.warning(f"[{src_id}] DOM land={_i_land} vs Vision land={_v_land} 不一致，採用 Vision")
                     item["land_area_ping"] = _v_land
+                # floor 特殊處理：591 listing API 偶爾誤標（例 591_20125871 listing 給 'B1/5F'
+                # 但 detail page 描述是「1+2樓店面 + 附屬地下室」實際是 1F）→ 信 Vision OCR
+                # detail page 的可見字串。比對：listing 標 B 但 Vision 看到非 B → 採 Vision
+                _v_floor = vision_data.get("floor")
+                _i_floor = item.get("floor")
+                if _v_floor and _i_floor and str(_v_floor).strip() != str(_i_floor).strip():
+                    from database.models import is_basement_floor as _is_bsmt
+                    _listing_says_basement = _is_bsmt(_i_floor)
+                    _vision_says_basement = _is_bsmt(_v_floor)
+                    if _listing_says_basement and not _vision_says_basement:
+                        logger.warning(f"[{src_id}] listing floor={_i_floor!r} 標地下室但 Vision OCR={_v_floor!r} 看到非地下室 → 採用 Vision (591 listing 誤標)")
+                        item["floor"] = _v_floor
                 # 源頭已 filter 公寓，直接標公寓（admin 重分析可保留舊 type）
                 if not item.get("building_type"):
                     item["building_type"] = "公寓"
