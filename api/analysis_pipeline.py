@@ -709,7 +709,9 @@ def analyze_single_property(
         #   '1F~2F/4F'         → '1~2F'（樓中樓：去掉 / 後的總層；範圍裡每段都剝 F）
         #   '1樓-2樓'          → '1-2F'
         # 然後檢查 _addr_inf 末尾是否已包含同樣的字串，避免「保平路1號 1F~2F/4FF」雙 F
-        if _floor_for_addr and _addr_inf:
+        # 只在「地址已含號」時才補樓層 — 沒號的地址只到巷（confidence='lane_only'），
+        # 加 ' 4F' 看起來怪（例：「永和路9巷 4F」），而且樓層資訊有 floor 欄位獨立顯示。
+        if _floor_for_addr and _addr_inf and "號" in _addr_inf:
             _raw = str(_floor_for_addr).strip()
             # 1) 去除 / 後的總樓層部分
             if "/" in _raw:
