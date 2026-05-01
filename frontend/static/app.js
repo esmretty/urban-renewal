@@ -2455,8 +2455,7 @@ function filterAndSort() {
   renderList(pageItems);
   renderMapMarkers(filteredProperties);
   _renderPagination(list.length, totalPages);
-  document.getElementById("result-count").textContent =
-    `共 ${list.length} 筆` + (totalPages > 1 ? `（第 ${_currentPage}/${totalPages} 頁）` : "");
+  document.getElementById("result-count").textContent = `共 ${list.length} 筆`;
 }
 
 function _renderPagination(total, totalPages) {
