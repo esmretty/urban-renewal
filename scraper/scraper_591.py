@@ -889,6 +889,22 @@ def screenshot_detail_page(ctx: BrowserContext, url: str, source_id: str):
             )
         except Exception:
             logger.debug(f"  房屋介紹 lazy render timeout ({source_id}) — 繼續")
+        # 額外等「社區」label 旁邊的 .info-addr-value 渲染出含路名+號的 text
+        # （之前 591_20125266 等案例 community link 是 lazy render，wait 不夠久 → community_raw 抓空）
+        try:
+            page.wait_for_function(
+                r"""() => {
+                    const els = document.querySelectorAll('.info-addr-value');
+                    for (const el of els) {
+                        const t = (el.innerText || el.textContent || '').trim();
+                        if (t && /[路街道巷弄號]/.test(t)) return true;
+                    }
+                    return false;
+                }""",
+                timeout=5000
+            )
+        except Exception:
+            logger.debug(f"  社區地址 lazy render timeout ({source_id}) — 繼續")
         human_delay(0.7, 1.2)
         full_path = SCREENSHOTS_DIR / f"{source_id.replace('/', '_')}_detail_full.png"
         page.screenshot(path=str(full_path), full_page=True)
