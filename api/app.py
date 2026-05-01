@@ -2978,11 +2978,13 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
     # 的 memory cache 會累積（每筆 +200~400MB），跑滿 quota 必 OOM。改用 yield (ctx, browser)
     # 版本，loop 內每 RECYCLE_EVERY 筆 close+reopen context 強制 Chromium 釋放 page cache。
     from scraper.browser_manager import get_browser_context_with_browser, _build_ctx
+    from scraper.cancel_state import take_version as _cancel_take_version, is_cancelled as _cancel_is
+    _my_cancel_version = _cancel_take_version()   # batch 開頭記住自己的 version；kill 後 bump 對舊 batch 觸發 break
     RECYCLE_EVERY = 5
     with get_browser_context_with_browser(headless=headless) as (ocr_ctx_init, _browser):
         ocr_ctx = ocr_ctx_init
         for idx, item in enumerate(new_items, 1):
-            if _cancel_requested:
+            if _cancel_is(_my_cancel_version) or _cancel_requested:
                 progress_callback("⛔ 使用者取消", 100)
                 break
             # 每 RECYCLE_EVERY 筆關掉舊 ctx 重開（Chromium memory cache 釋放）
@@ -3208,6 +3210,10 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
 
                 # 591：詳情頁截圖 + Vision OCR
                 progress_callback(f"  📷 截圖詳情頁...", pct)
+                # cancel check：admin kill 在 batch 內也能在 step 邊界 break
+                if _cancel_is(_my_cancel_version):
+                    progress_callback("⛔ 使用者取消（截圖前）", 100)
+                    break
                 _detail_ret = screenshot_detail_page(ocr_ctx, item["url"], src_id)
                 # 下架偵測：listing 列表還在快取顯示卡片，但詳情頁已是 404 → 刪 DB 並跳過
                 if getattr(_detail_ret, "delisted", False) or (isinstance(_detail_ret, tuple) and len(_detail_ret) >= 2 and _detail_ret[1] == "__DELISTED__"):
@@ -3289,6 +3295,10 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                         for k, v in (_r or {}).items():
                             if v not in (None, "", 0) and vision_data.get(k) in (None, "", 0):
                                 vision_data[k] = v
+                # cancel check：Vision 完到 analyze 前
+                if _cancel_is(_my_cancel_version):
+                    progress_callback("⛔ 使用者取消（Vision 後）", 100)
+                    break
                 # leak-hunt point B：截圖+Vision OCR 完，看是否吃了大量 RSS
                 try:
                     _rss_b = _psutil.Process().memory_info().rss / 1048576
@@ -4633,24 +4643,30 @@ async def admin_kill_session(body: KillSessionReq, admin: dict = Depends(require
         return {"status": "error", "message": str(e)}
     # 也發 cancel 信號（如果剛好是 currently running 那個會中斷）
     if _scrape_running:
+        from scraper.cancel_state import bump_version as _cancel_bump
+        _cancel_bump()
         _cancel_requested = True
-        _scrape_running = False
+        # 不再強制 reset _scrape_running，讓 batch 自己 break + finally cleanup
     logger.warning(f"[admin] {admin.get('email')} 中斷 session {body.trigger} {body.started_at}")
     return {"status": "ok", "message": f"已標記 session 完成（{src}）"}
 
 
 @app.post("/admin/scrape/kill")
 async def admin_kill_scrape(admin: dict = Depends(require_admin)):
-    """中斷正在跑的 batch（軟取消 + 補 batch_end log + 重設 running flag）。
-    後端執行緒可能因 HTTP 等待而沒立即停，但前端紀錄會立刻顯示完成。
-    下一次 scheduler tick 也能正常起新 batch（不被卡住）。"""
+    """中斷正在跑的 batch — version-based cancel。
+    舊設計：bump 全域 boolean flag + 強制 reset _scrape_running=False 讓 scheduler 起新 batch
+    → race：新 batch 起來時 reset flag = False，舊 batch 看不到 cancel 信號 → 兩 batch 並行。
+    新設計：bump cancel_state 的 version counter；舊 batch 在下個 step check 點發現 version
+    變動 → break；break 後 _run_scrape_task 的 finally 自動 reset _scrape_running，
+    scheduler 才會在下一輪 tick 起新 batch（拿到的 version 已是 bump 後新值，不被舊 kill 影響）。
+    """
     global _cancel_requested, _scrape_running
     _cancel_requested = True
-    # 設共享 cancel flag — scraper inner loops 立刻看得到
-    from scraper.cancel_state import set_cancelled as _cancel_set
-    _cancel_set(True)
+    from scraper.cancel_state import bump_version as _cancel_bump
+    _cancel_bump()   # 全部 in-flight batch 在下個 check 點會 break
     was_running = _scrape_running
-    _scrape_running = False   # 強制 reset 讓 scheduler 能起新 batch
+    # 不再強制 reset _scrape_running — 讓舊 batch 自己 break + finally 處理 cleanup
+    # （之前 reset 會讓 scheduler 立刻起新 batch 跟舊 batch 並行）
 
     # 找最近沒對應 batch_end 的 batch_start，補 batch_end log
     closed_sessions = []

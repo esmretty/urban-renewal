@@ -478,6 +478,11 @@ const SKIP_REASON_MAP = {
  */
 // 樓層顯示 helper：支援樓中樓 (1-2/4F) 跟單樓層 (3/4F)
 function formatFloorRange(p) {
+  // 地下室物件特殊顯示（CLAUDE.md「抗性物件 — 地下室」）
+  // is_basement=True → floor / fmin / fmax 都會是 None（避免 B1 被當 1F），用 B/{tot}F 顯示
+  if (p.is_basement) {
+    return p.total_floors ? `B/${p.total_floors}F` : "B";
+  }
   const fmin = p.floor_range_min;
   const fmax = p.floor_range_max;
   const tot = p.total_floors;

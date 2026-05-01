@@ -301,11 +301,13 @@ def analyze_single_property(
     addr = item.get("address") or ""
     if addr:
         from analysis.claude_analyzer import _clean_address_garbage
-        from database.models import strip_region_prefix
+        from database.models import strip_region_prefix, is_basement_floor
         addr = _clean_address_garbage(addr)
-        if "號" in addr and "樓" not in addr and item.get("floor"):
-            # floor 可能是 "2"、"3"、"2/4" 或 "2/4F"（主樓/總樓層）；只取斜線前的第一組數字
-            f_raw = str(item["floor"])
+        # 地下室物件：591 listing 給 floor='B1/5F'，OCR 看截圖會誤讀成 1，補「1樓」會產生
+        # 「文化路70號1樓」這種錯誤地址（實際是 B1）→ 地下室物件不補 floor 後綴
+        _floor_raw_for_addr = item.get("floor")
+        if "號" in addr and "樓" not in addr and _floor_raw_for_addr and not is_basement_floor(_floor_raw_for_addr):
+            f_raw = str(_floor_raw_for_addr)
             f_main = f_raw.split("/")[0]
             f_num_m = re.search(r"\d+", f_main)
             f_num = f_num_m.group(0) if f_num_m else ""
