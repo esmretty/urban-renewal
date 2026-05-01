@@ -971,9 +971,17 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   color: #4a4742;
   white-space: nowrap;
 }
+/* 抗性 chip：ghost outline 風格（透明底 + 灰邊 + 灰字），跟優勢實心 shimmer 對比 */
+.c-note .resist-chip {
+  background: transparent;
+  border: 1px solid #b8b3a7;
+  color: #6b685e;
+}
+/* 抗性 5F+：warning red outline（特別點名，最常見的劣勢類型）*/
 .c-note .resist-chip.resist-floors5plus {
-  background: #d8a73a;        /* 土黃底（五樓蓋+）*/
-  color: #fff;
+  background: transparent;
+  border: 1px solid #c0392b;
+  color: #c0392b;
 }
 
 /* 優勢 chip：彩色漸層閃爍/反光 */

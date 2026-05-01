@@ -525,15 +525,15 @@ function computeAdvantageChips(p) {
 }
 
 // 抗性 chip helper（CLAUDE.md「抗性物件」定義）—— 4 種類型
-// 規則：「五樓蓋+」永遠第一個 + 土黃底（class resist-floors5plus），其餘灰底
+// 視覺：ghost outline（灰邊灰字），5F+ 用 warning red outline。所有抗性 chip 加 ⚠ prefix
 function computeResistChips(p) {
   const chips = [];
   if (p.total_floors && p.total_floors >= 5) {
-    chips.push({ key: 'floors5plus', label: '五樓蓋+', cls: 'resist-floors5plus' });
+    chips.push({ key: 'floors5plus', label: '⚠ 五樓蓋+', cls: 'resist-floors5plus' });
   }
-  if (p.is_remote_area) chips.push({ key: 'remote', label: '偏遠路段', cls: '' });
-  if (p.unsuitable_for_renewal) chips.push({ key: 'unsuitable', label: '特殊土地', cls: '' });
-  if (p.is_basement) chips.push({ key: 'basement', label: '地下室', cls: '' });
+  if (p.is_remote_area) chips.push({ key: 'remote', label: '⚠ 偏遠路段', cls: '' });
+  if (p.unsuitable_for_renewal) chips.push({ key: 'unsuitable', label: '⚠ 特殊土地', cls: '' });
+  if (p.is_basement) chips.push({ key: 'basement', label: '⚠ 地下室', cls: '' });
   return chips;
 }
 
