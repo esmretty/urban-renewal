@@ -446,6 +446,18 @@ def scrape_sinyi_single(url: str) -> Optional[dict]:
             item["longitude"] = detail["longitude"]
             item["source_latitude"] = detail["latitude"]
             item["source_longitude"] = detail["longitude"]
+        # zoning 從 HTML server-side render 抓（NEXT_DATA contentData 沒這欄位）
+        # 信義網頁格式：<span class="...info-label...">使用分區</span><span>第四種住宅區; 道路用地</span>
+        # 抓「使用分區」整段原文（可能含「; 道路用地」「; 公共設施保留地」等公設地警示）
+        zon_m = re.search(
+            r'<span[^>]*info-label[^>]*>使用分區</span>\s*<span[^>]*>([^<]+)</span>',
+            html,
+        )
+        if zon_m:
+            zon_raw = zon_m.group(1).strip().rstrip(";；").strip()
+            if zon_raw:
+                # 存原文（含分隔的多分區）給 pipeline 合併「(含道路用地)」標示用
+                item["_zoning_raw_text"] = zon_raw
         return item
 
     # contentData 沒匹配 → 物件可能已下架

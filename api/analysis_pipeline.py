@@ -1063,6 +1063,27 @@ def analyze_single_property(
                 doc_data["zoning_source"] = "yongqing_detail_multi"
                 logger.info(f"[{src_id}] 永慶 zoning 多分區（{yc_multi}）取代 NTPC 點查 ({z.get('zoning')})")
 
+            # 信義/永慶 詳情頁原文含「道路用地」「公共設施保留地」等公設地 →
+            # 在 zoning_original 後面加「(含 XX)」標示讓用戶知道這塊地有部分被公設徵收
+            # （NTPC ArcGIS 用點查只回單一分區，看不到「另一部分是道路用地」這個重要警示）
+            zr = item.get("_zoning_raw_text") or ""
+            if zr:
+                public_kw_in_raw = []
+                for kw in ("道路用地", "公共設施保留地", "停車場用地", "綠地", "機關用地", "學校用地"):
+                    if kw in zr:
+                        public_kw_in_raw.append(kw)
+                if public_kw_in_raw:
+                    base_orig = doc_data.get("zoning_original") or doc_data.get("zoning") or ""
+                    suffix = f"(含{','.join(public_kw_in_raw)})"
+                    if base_orig and suffix not in base_orig:
+                        doc_data["zoning_original"] = base_orig + suffix
+                    doc_data["has_public_use_land"] = True
+                    doc_data["public_use_land_kinds"] = public_kw_in_raw
+                    logger.info(
+                        f"[{src_id}] 偵測到公設地（{public_kw_in_raw}）→ "
+                        f"zoning_original 改為 {doc_data.get('zoning_original')!r}"
+                    )
+
             # ── 都更可行性閘門（新北 4 區專屬） ──
             # 物件座標可能跨多塊 polygon（如「住宅區+商業區」）→ 任一 in SUITABLE 就算 suitable
             # 全部都是非實質用地（保護區/風景區/機關用地/河道用地等）→ unsuitable

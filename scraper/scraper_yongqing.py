@@ -361,15 +361,19 @@ def _parse_detail_html(item: dict, detail_html: str) -> None:
             pass
 
     # 使用分區（過濾含糊回答）
-    # 永慶詳情頁可能寫單分區「住宅區」或多分區「住宅區、商業區」 — text 已經 strip HTML tag
+    # 永慶詳情頁可能寫單分區「住宅區」或多分區「住宅區、商業區、道路用地」 — text 已 strip HTML tag
     # 抓「使用分區」後一段含中文+常見符號的 30 字 → findall 分區
     zoning_m = re.search(
         r"使用分區[\s:：]{0,3}([一-龥、,，()（）一二三四五六七八九十第種]{2,30})",
         text,
     )
     if zoning_m and not any(bad in zoning_m.group(1) for bad in ["謄本", "複雜", "不明", "未知"]):
+        # 把整段原文存進 _zoning_raw_text 給 pipeline 偵測「道路用地」等公設地
+        item["_zoning_raw_text"] = zoning_m.group(1).strip()
+        # zone_findings 包含「住宅/商業/工業/...」+ 公設地用語（道路用地/公共設施保留地/停車場用地等）
         zone_findings = re.findall(
-            r"((?:第[一二三四五六七八九十]+種)?(?:住宅|商業|工業|農業|文教|風景|保護)區(?:\([一-龥]+\))?)",
+            r"((?:第[一二三四五六七八九十]+種)?(?:住宅|商業|工業|農業|文教|風景|保護)區(?:\([一-龥]+\))?"
+            r"|道路用地|公共設施保留地|停車場用地|綠地|機關用地|學校用地)",
             zoning_m.group(1),
         )
         if zone_findings:
