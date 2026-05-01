@@ -2920,6 +2920,13 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 is_enrich = item.get("_enrich_existing", False)
                 is_force_reanalyze = item.get("_force_reanalyze", False)
                 src_id = item["source_id"]
+                # leak-hunt point A：每筆進迴圈時的 RSS
+                try:
+                    import psutil as _psutil
+                    _rss_a = _psutil.Process().memory_info().rss / 1048576
+                    logger.info(f"[mem] iter#{idx}/{total_to_analyze} src={src_id} A_start rss={_rss_a:.0f}MB")
+                except Exception:
+                    _rss_a = 0.0
 
                 if is_force_reanalyze:
                     progress_callback(
@@ -3192,6 +3199,11 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                         for k, v in (_r or {}).items():
                             if v not in (None, "", 0) and vision_data.get(k) in (None, "", 0):
                                 vision_data[k] = v
+                # leak-hunt point B：截圖+Vision OCR 完，看是否吃了大量 RSS
+                try:
+                    _rss_b = _psutil.Process().memory_info().rss / 1048576
+                    logger.info(f"[mem] iter#{idx} src={src_id} B_postVision rss={_rss_b:.0f}MB delta={_rss_b-_rss_a:+.0f}")
+                except Exception: pass
                 # 不從 Vision 抓 building_type（591 filter 已保證是公寓；OCR 易把 5F 誤判華廈）
                 # land_area_ping 特別重要 — 加 log 追蹤每次 Vision 結果（之前 20109672 漏 bug）
                 _v_land = vision_data.get("land_area_ping")
@@ -3447,6 +3459,11 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     thresholds=None,
                 )
                 doc_data = result["doc_data"]
+                # leak-hunt point C：analyze_single_property 完成（含 LVR / AI / zoning / road_width）
+                try:
+                    _rss_c = _psutil.Process().memory_info().rss / 1048576
+                    logger.info(f"[mem] iter#{idx} src={src_id} C_postAnalyze rss={_rss_c:.0f}MB delta={_rss_c-_rss_a:+.0f}")
+                except Exception: pass
 
                 # ── 情況 B：換物件偵測 ────────────────────────────
                 # 同 source_id 重抓後，路段不同 OR 建坪 ±0.5 變化 → 視為「ID 換成另一物件」
@@ -3602,6 +3619,11 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     "foreclosure": f"  ⚖ 法拍：{', '.join(result.get('foreclosure_reasons') or [])}",
                 }.get(result["status"], "")
                 progress_callback(status_msg, pct, new_item=(result["status"] == "done"))
+                # leak-hunt point D：DB 寫入完，每筆全結束（含 dup_index 更新）
+                try:
+                    _rss_d = _psutil.Process().memory_info().rss / 1048576
+                    logger.info(f"[mem] iter#{idx} src={src_id} D_iterEnd rss={_rss_d:.0f}MB delta={_rss_d-_rss_a:+.0f} (net per-iter growth)")
+                except Exception: pass
 
             except Exception as e:
                 logger.exception(f"分析失敗 {item.get('source_id')}: {e}")
