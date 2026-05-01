@@ -59,15 +59,19 @@
 
       <section class="panel">
         <h2>資料總覽</h2>
-        <div id="stats-box" class="stats-grid">載入中…</div>
-      </section>
-
-      <section class="panel">
-        <h2>💾 系統用量</h2>
-        <div id="system-usage-box" style="font-size:14px; line-height:1.7;">載入中…</div>
-        <div style="margin-top:10px;">
-          <button onclick="loadSystemUsage()" style="padding:5px 12px; background:#3a3a4a; color:#fff; border:none; border-radius:4px; cursor:pointer; margin-right:8px;">🔄 重新整理</button>
-          <button onclick="cleanupOrphanOcr()" style="padding:5px 12px; background:#c78a00; color:#fff; border:none; border-radius:4px; cursor:pointer;" title="清掉 _detail / _addr / _house / *_tile_* 等 OCR 中途遺留檔（不刪 _roadwidth）">🧹 清孤兒 OCR 截圖</button>
+        <div class="overview-grid">
+          <div class="overview-left">
+            <div id="stats-box" class="stats-grid">載入中…</div>
+            <div id="region-source-matrix" style="margin-top:18px;">載入中…</div>
+          </div>
+          <div class="overview-right">
+            <h3 style="margin:0 0 10px; font-size:15px; color:#2c3e50; border-bottom:2px solid #ecf0f1; padding-bottom:6px;">💾 系統用量</h3>
+            <div id="system-usage-box" style="font-size:13px; line-height:1.7;">載入中…</div>
+            <div style="margin-top:10px;">
+              <button onclick="loadSystemUsage()" style="padding:4px 10px; background:#3a3a4a; color:#fff; border:none; border-radius:4px; cursor:pointer; margin-right:6px; font-size:12px;">🔄 重新整理</button>
+              <button onclick="cleanupOrphanOcr()" style="padding:4px 10px; background:#c78a00; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;" title="清掉 _detail / _addr / _house / *_tile_* 等 OCR 中途遺留檔（不刪 _roadwidth）">🧹 清孤兒 OCR</button>
+            </div>
+          </div>
         </div>
       </section>
 

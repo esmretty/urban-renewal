@@ -1166,10 +1166,18 @@ async def admin_page():
 
 @app.get("/admin/stats")
 async def admin_stats(admin: dict = Depends(require_admin)):
+    """admin 資料總覽：物件總數 / 已分析 / 錯誤 / 用戶數，
+    + 各 (source, city, district) 計數矩陣（一個 doc 多 source 會在多家都計入一次）。"""
+    from database.models import canonical_source_name
+    from config import TARGET_REGIONS
     col = get_col()
     docs = list(col.get())
     total = len(docs)
-    done = err = 0
+    done = err = archived = fc = 0
+    # 計數矩陣：matrix[city][district][source] = count
+    # source ∈ {"591", "yongqing", "sinyi", "manual", "其他"}
+    matrix: dict = {}
+    src_totals: dict = {"591": 0, "yongqing": 0, "sinyi": 0, "manual": 0, "其他": 0}
     for d in docs:
         data = d.to_dict() or {}
         st = data.get("analysis_status")
@@ -1177,6 +1185,23 @@ async def admin_stats(admin: dict = Depends(require_admin)):
             done += 1
         if data.get("analysis_error"):
             err += 1
+        if data.get("archived"):
+            archived += 1
+        if data.get("is_foreclosure"):
+            fc += 1
+        city = (data.get("city") or "").strip()
+        district = (data.get("district") or "").strip()
+        if not (city and district):
+            continue
+        sources = data.get("sources") or []
+        # 一個 doc 每個 source 計一次（cross-source dup 會在多家算到）
+        for s in sources:
+            sname = canonical_source_name(s.get("name") or "")
+            if sname not in src_totals:
+                sname = "其他"
+            matrix.setdefault(city, {}).setdefault(district, {"591": 0, "yongqing": 0, "sinyi": 0, "manual": 0, "其他": 0})
+            matrix[city][district][sname] += 1
+            src_totals[sname] += 1
     # 用戶數：users collection（可能還沒建）
     users_count = 0
     try:
@@ -1184,11 +1209,30 @@ async def admin_stats(admin: dict = Depends(require_admin)):
         users_count = len(list(users_col.get()))
     except Exception:
         pass
+    # 給前端固定順序的 (city, [districts]) 列表（用 TARGET_REGIONS 排序，
+    # DB 出現但不在 TARGET_REGIONS 的 city/district 也附在後面）
+    region_order = []
+    for city, conf in TARGET_REGIONS.items():
+        dists = list(conf["districts"].keys())
+        # 加入 DB 實際有資料但不在 TARGET_REGIONS 的 district
+        if city in matrix:
+            extra = [dd for dd in matrix[city].keys() if dd not in dists]
+            dists = dists + extra
+        region_order.append({"city": city, "districts": dists})
+    # DB 有資料但不在 TARGET_REGIONS 的 city
+    for city in matrix.keys():
+        if city not in {r["city"] for r in region_order}:
+            region_order.append({"city": city, "districts": list(matrix[city].keys())})
     return {
         "total_properties": total,
         "analysis_done": done,
         "analysis_error": err,
+        "archived_count": archived,
+        "foreclosure_count": fc,
         "total_users": users_count,
+        "by_region_source": matrix,         # {city: {district: {591, yongqing, sinyi, manual, 其他}}}
+        "src_totals": src_totals,           # 各家總數
+        "region_order": region_order,       # [{city, districts:[...]}]
     }
 
 

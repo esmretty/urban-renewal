@@ -1752,11 +1752,58 @@ function renderStats(s) {
     { num: s.total_properties, lbl: "中央物件總數" },
     { num: s.analysis_done, lbl: "已分析" },
     { num: s.analysis_error, lbl: "分析錯誤" },
+    { num: s.foreclosure_count, lbl: "法拍屋" },
+    { num: s.archived_count, lbl: "已封存" },
     { num: s.total_users, lbl: "用戶數" },
   ];
   document.getElementById("stats-box").innerHTML = cards.map(c =>
     `<div class="stat-card"><div class="stat-num">${c.num ?? "—"}</div><div class="stat-lbl">${c.lbl}</div></div>`
   ).join("");
+  renderRegionSourceMatrix(s);
+}
+
+function renderRegionSourceMatrix(s) {
+  const box = document.getElementById("region-source-matrix");
+  if (!box) return;
+  const matrix = s.by_region_source || {};
+  const order = s.region_order || [];
+  const srcTotals = s.src_totals || {};
+  // 來源欄序固定：591, 永慶, 信義, 手動, 其他
+  const SRC_KEYS = ["591", "yongqing", "sinyi", "manual", "其他"];
+  const SRC_LBL = { "591": "591", "yongqing": "永慶", "sinyi": "信義", "manual": "手動", "其他": "其他" };
+  // 整體 grand total per source（用於最下面 total-row）
+  const grandTotal = SRC_KEYS.reduce((sum, k) => sum + (srcTotals[k] || 0), 0);
+  const cell = (n) => `<td class="${(!n) ? 'zero' : ''}">${n || 0}</td>`;
+  const rows = [];
+  rows.push(`<tr><th class="dist">行政區</th>${SRC_KEYS.map(k => `<th>${SRC_LBL[k]}</th>`).join("")}<th>小計</th></tr>`);
+  for (const reg of order) {
+    if (!matrix[reg.city]) continue;   // 該縣市完全沒資料 → 不顯示
+    // city header row
+    rows.push(`<tr class="city-row"><th colspan="${SRC_KEYS.length + 2}">${esc(reg.city)}</th></tr>`);
+    let citySrcSum = SRC_KEYS.map(_ => 0);
+    let cityTotal = 0;
+    for (const dist of reg.districts) {
+      const row = matrix[reg.city][dist];
+      if (!row) continue;
+      const cells = SRC_KEYS.map(k => row[k] || 0);
+      const rowTotal = cells.reduce((a, b) => a + b, 0);
+      if (rowTotal === 0) continue;   // 該行政區完全沒資料 → 跳過（避免空行太多）
+      cityTotal += rowTotal;
+      cells.forEach((v, i) => citySrcSum[i] += v);
+      rows.push(`<tr><td class="dist">${esc(dist)}</td>${cells.map(cell).join("")}<td>${rowTotal}</td></tr>`);
+    }
+    // 縣市小計
+    rows.push(`<tr class="total-row"><td class="dist">${esc(reg.city)} 小計</td>${citySrcSum.map(cell).join("")}<td>${cityTotal}</td></tr>`);
+  }
+  // 來源總計列
+  const srcSumCells = SRC_KEYS.map(k => srcTotals[k] || 0).map(cell).join("");
+  rows.push(`<tr class="total-row"><td class="dist">全部來源</td>${srcSumCells}<td>${grandTotal}</td></tr>`);
+  box.innerHTML = `
+    <table class="region-matrix">
+      <caption>📊 來源 × 行政區 物件數（同物件多來源各自計入）</caption>
+      ${rows.join("")}
+    </table>
+  `;
 }
 
 // ── 物件列表分頁狀態 ─────────────────────────────────────
