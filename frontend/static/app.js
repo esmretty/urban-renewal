@@ -522,12 +522,33 @@ function computeAdvantageChips(p) {
   if (p.city === "台北市" && age && (new Date().getFullYear() - age) <= 1974) {
     chips.push({ key: 'fangzai', label: '防災型', cls: 'adv-chip adv-fangzai' });
   }
-  // 商業區：zoning 任一字段含「商業區」（含「第三種商業區」「商業區(特)」「商業區、住宅區」等）
-  const _zonStr = (p.zoning || '') + ' ' + (p.zoning_original || '') + ' ' + (Array.isArray(p.zoning_list) ? p.zoning_list.join(' ') : '');
-  if (_zonStr.includes('商業區')) {
+  // 商業區：以「實際計算容積率時用的 zoning」為準（不只 raw 字串含商業區）
+  // - 多分區：zoning_list 任一是商業區且 ratios > 0（被加權算進效益）
+  // - 單分區：effectiveZoning(p) 含商業區（含「住宅區、商業區（特）」這種 zoning 但
+  //   zoning_original=住宅區 → effective=住宅區 → 不算商業區優勢）
+  if (_isCommercialEffective(p)) {
     chips.push({ key: 'commercial', label: '商業區', cls: 'adv-chip adv-commercial' });
   }
   return chips;
+}
+
+function _isCommercialEffective(p) {
+  const zoneList = p.zoning_list;
+  if (Array.isArray(zoneList) && zoneList.length > 1) {
+    const ratiosPct = p.zoning_ratios || zoneList.map(() => 100 / zoneList.length);
+    for (let i = 0; i < zoneList.length; i++) {
+      const zItem = zoneList[i];
+      const z = (typeof zItem === "string") ? zItem : (zItem.original_zone || zItem.zone_name);
+      const r = Number(ratiosPct[i]) || 0;
+      if (z && z.includes('商業區') && r > 0) return true;
+    }
+    return false;
+  }
+  // 單分區：看 effectiveZoning 算出的真實「計算用」zoning
+  try {
+    const eff = effectiveZoning(p);
+    return !!(eff && eff.includes('商業區'));
+  } catch { return false; }
 }
 
 // 抗性 chip helper（CLAUDE.md「抗性物件」定義）—— 4 種類型
