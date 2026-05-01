@@ -304,12 +304,16 @@ def get_missing_fields(doc: dict) -> list[str]:
 
 
 def is_basement_floor(floor_str) -> bool:
-    """偵測 591 floor 字串是否為地下室（B1 / B2 / 地下 1 樓 等）。
-    591 listing API 對地下室會給 'B1/5F'（地下 1 樓 / 共 5 樓），舊 parse_floor_range
-    會把 B1 解析成 1F → 嚴重誤判。這 helper 給 pipeline 標 is_basement flag。
+    """偵測 591 floor 字串是否為「純地下室」物件（CLAUDE.md「抗性物件 — 地下室」）。
+    591 listing API 對純地下室會給 'B1/5F'（地下 1 樓 / 共 5 樓），舊 parse_floor_range
+    把 B1 解析成 1F → 嚴重誤判。
 
-    True 例：'B1', 'B1F', 'B1/5F', 'B1~B2/5F', '地下1樓', '地下'
-    False 例：'1F/5F', '4F~5F/5F', None, '', '5F'
+    重要：只有「純地下室」才算抗性。1F+地下室（如 B1F~1F/5F、1F+B1/5F）視為 1F 物件，
+    地下室僅是附屬空間，不算抗性。判定邏輯：拆 / 前段，再用 ~/-/+ 拆 token，
+    **每個 token 都以 B 開頭** → 純地下室；任一 token 是非 B 數字 → 1F+地下室不算抗性。
+
+    True 例：'B1', 'B1F', 'B1/5F', 'B1~B2/5F', 'B1F-B2F/5F', '地下1樓'
+    False 例：'1F/5F', '4F~5F/5F', 'B1F~1F/5F', '1F+B1/5F', None, '', '5F'
     """
     if not floor_str:
         return False
@@ -317,12 +321,18 @@ def is_basement_floor(floor_str) -> bool:
     s = str(floor_str).strip().upper()
     if not s:
         return False
-    # 拆 / 前段（591 floor 通常是「物件樓層 / 總樓層」）
+    # 拆 / 前段（591 floor「物件樓層 / 總樓層」格式）
     main = s.split("/", 1)[0].strip()
-    # 偵測 'B' + 數字 (B1/B2/B3...) 或中文「地下」
-    if _re.search(r"\bB\d+\b", main) or _re.search(r"^B\d", main) or "地下" in main:
+    if not main:
+        return False
+    # 中文「地下」直接視為純地下室
+    if "地下" in main:
         return True
-    return False
+    # 拆範圍 token（~ - － +），每個非空 token 都必須以 'B' 開頭才算純地下室
+    tokens = [t.strip() for t in _re.split(r"[~\-－+]", main) if t.strip()]
+    if not tokens:
+        return False
+    return all(_re.match(r"^B\d", t) for t in tokens)
 
 
 def parse_floor_range(floor_str, total_floors=None):

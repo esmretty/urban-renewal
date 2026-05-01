@@ -123,7 +123,7 @@
 | **五樓蓋以上** | `total_floors >= 5` | 591 listing API floor 欄位 | 5F 公寓有頂樓加蓋 / 戶數多協議難，都更幾乎跑不動 |
 | **偏遠路段** | `is_remote_area=True` | `REMOTE_POLYGONS_NEW_TAIPEI` polygon 判定 | 過天險（河、山）的偏遠地段，房價/需求斷層 |
 | **特殊土地分區** | `unsuitable_for_renewal=True` | ArcGIS / Taipei GeoServer | 保護區/河道用地/機關用地等非住商工，法規不能都更 |
-| **地下室** | `is_basement=True` | 591 listing floor 含 'B' | 地下室不會被都更分回（停車/儲藏/避難），無投資價值 |
+| **地下室** | `is_basement=True` | 591 listing floor **每段 token 都以 'B' 開頭**（純地下室）| 地下室不會被都更分回（停車/儲藏/避難），無投資價值。1F+地下室不算抗性，當 1F 計算（地下室僅是附屬空間） |
 
 ### 一致性規則
 
