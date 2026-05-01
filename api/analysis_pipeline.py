@@ -764,11 +764,16 @@ def analyze_single_property(
 
     # 解析 floor 字串成 (min, max, total) — 支援樓中樓 "1F~2F/4F" 等格式
     # 樓層 filter chip 用 floor_range_min/max 判定交集（用戶搜 1F 或 2F 都能 match 1~2F 物件）
-    from database.models import parse_floor_range
+    from database.models import parse_floor_range, is_basement_floor
+    _floor_raw = doc_data.get("floor") or item.get("floor")
     _fmin, _fmax, _ftot = parse_floor_range(
-        doc_data.get("floor") or item.get("floor"),
+        _floor_raw,
         doc_data.get("total_floors") or item.get("total_floors"),
     )
+    # 抗性物件：地下室（B1/B2/地下 X 樓）→ 標 is_basement flag（CLAUDE.md「抗性物件」定義）
+    if is_basement_floor(_floor_raw):
+        doc_data["is_basement"] = True
+        logger.info(f"[{src_id}] 抗性: 地下室物件 (floor={_floor_raw!r})")
     # DB schema 規範：floor 寫純 int（單層）或 None（樓中樓），不寫 "1F"、"4F"、"1F~2F/4F" 字串
     # 顯示時由前端 append "F"。這條 normalize 必須在每筆 doc 寫入前執行。
     if _fmin is not None and _fmax is not None and _fmin == _fmax:
@@ -1152,7 +1157,7 @@ def analyze_single_property(
     # ── 高價值物件 LINE 通知 ──
     # 門檻：admin 在 settings/line_config.threshold_multiple 可調，預設 2.8
     # 不可觸發旗標：admin 在 settings/line_config 可勾選（預設全勾）：
-    #   skip_remote_area / skip_unsuitable / skip_foreclosure / skip_floors_5plus
+    #   skip_remote_area / skip_unsuitable / skip_foreclosure / skip_floors_5plus / skip_basement
     try:
         from database.db import get_firestore as _gf_skip
         _cfg_skip = _gf_skip().collection("settings").document("line_config").get()
@@ -1161,8 +1166,9 @@ def analyze_single_property(
         _skip_unsuitable = bool(_cfg_data_skip.get("skip_unsuitable", True))
         _skip_foreclosure = bool(_cfg_data_skip.get("skip_foreclosure", True))
         _skip_floors_5plus = bool(_cfg_data_skip.get("skip_floors_5plus", True))
+        _skip_basement = bool(_cfg_data_skip.get("skip_basement", True))
     except Exception:
-        _skip_remote = _skip_unsuitable = _skip_foreclosure = _skip_floors_5plus = True
+        _skip_remote = _skip_unsuitable = _skip_foreclosure = _skip_floors_5plus = _skip_basement = True
     _skip_reasons = []
     if _skip_remote and doc_data.get("is_remote_area"):
         _skip_reasons.append("remote_area")
@@ -1170,6 +1176,8 @@ def analyze_single_property(
         _skip_reasons.append("unsuitable_zoning")
     if _skip_foreclosure and doc_data.get("is_foreclosure"):
         _skip_reasons.append("foreclosure")
+    if _skip_basement and doc_data.get("is_basement"):
+        _skip_reasons.append("basement")
     if _skip_floors_5plus:
         _tf_chk = doc_data.get("total_floors") or 0
         try: _tf_chk = int(_tf_chk)

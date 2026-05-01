@@ -1367,6 +1367,7 @@ async def admin_line_status(admin: dict = Depends(require_admin)):
         "skip_unsuitable": True,
         "skip_foreclosure": True,
         "skip_floors_5plus": True,
+        "skip_basement": True,
     }
     try:
         cfg = get_firestore().collection("settings").document("line_config").get()
@@ -1424,29 +1425,32 @@ class LineSkipFlagsReq(BaseModel):
     skip_unsuitable: bool = True
     skip_foreclosure: bool = True
     skip_floors_5plus: bool = True
+    skip_basement: bool = True
 
 
 @app.post("/admin/line/skip_flags")
 async def admin_set_line_skip_flags(body: LineSkipFlagsReq, admin: dict = Depends(require_admin)):
     """Admin 設定 LINE「不可觸發」旗標 — 對應 doc 欄位有命中時 skip 通知。
-    4 個 flag 預設全 True：
-      - skip_remote_area: 偏遠路段（is_remote_area）
-      - skip_unsuitable:  特殊土地分區（unsuitable_for_renewal）
-      - skip_foreclosure: 法拍屋（is_foreclosure）
-      - skip_floors_5plus: 總樓層 ≥5（公寓 5F 也排除）
+    5 個 flag 預設全 True（4 抗性 + 法拍）：
+      - skip_remote_area: 偏遠路段（抗性）
+      - skip_unsuitable:  特殊土地分區（抗性）
+      - skip_floors_5plus: 總樓層 ≥5（抗性）
+      - skip_basement: 地下室（抗性）
+      - skip_foreclosure: 法拍屋（資料異常，獨立類別）
     """
     payload = {
         "skip_remote_area": bool(body.skip_remote_area),
         "skip_unsuitable": bool(body.skip_unsuitable),
         "skip_foreclosure": bool(body.skip_foreclosure),
         "skip_floors_5plus": bool(body.skip_floors_5plus),
+        "skip_basement": bool(body.skip_basement),
         "updated_at": now_tw_iso(),
         "updated_by_email": admin.get("email") or "",
     }
     get_firestore().collection("settings").document("line_config").set(payload, merge=True)
     logger.warning(f"[admin] {admin.get('email')} 設 LINE skip_flags = {payload}")
     return {"status": "ok", "skip_flags": {k: payload[k] for k in (
-        "skip_remote_area", "skip_unsuitable", "skip_foreclosure", "skip_floors_5plus"
+        "skip_remote_area", "skip_unsuitable", "skip_foreclosure", "skip_floors_5plus", "skip_basement"
     )}}
 
 

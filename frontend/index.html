@@ -236,10 +236,6 @@
 <div id="filter-bar" class="app-container px-3 py-2">
   <div class="filter-top-row">
     <div class="d-flex align-items-center gap-2 ms-auto">
-      <label class="explore-hide-bad" id="explore-hide-bad-wrap" style="display:none">
-        <input type="checkbox" id="explore-hide-bad" onchange="applyClientOrder()">
-        <span>隱藏5層以上物件</span>
-      </label>
       <label class="explore-hide-bad" id="explore-min-profit-wrap" style="display:none;">
         <input type="checkbox" id="explore-min-profit-on" onchange="applyClientOrder()">
         <span>僅顯示獲利倍數</span>
@@ -248,10 +244,22 @@
                style="width:48px; padding:0 4px; height:20px; line-height:18px; font-size:13px; border:1px solid #ffe69c; border-radius:3px; background:#fff;">
         <span>倍以上</span>
       </label>
-      <label class="explore-hide-bad" id="hide-non-renewable-wrap">
-        <input type="checkbox" id="hide-non-renewable" onchange="applyClientOrder()" checked>
-        <span title="勾選時隱藏新北偏遠路段（依政府河道/天險範圍判定）+ 特殊土地分區（保護區/河道用地等不能都更）的物件">隱藏偏遠/特殊分區</span>
-      </label>
+      <!-- 抗性物件過濾器：hover 顯示 panel 含 4 個抗性 checkbox（CLAUDE.md「抗性物件」定義） -->
+      <div class="resistance-filter-wrap" id="resistance-filter-wrap">
+        <button class="resistance-filter-btn" type="button" id="resistance-filter-btn"
+                title="hover 展開抗性類型過濾">
+          <span>抗性物件過濾器</span>
+          <span class="resistance-filter-count" id="resistance-filter-count"></span>
+        </button>
+        <div class="resistance-filter-panel" id="resistance-filter-panel">
+          <div class="resistance-filter-title">勾選要隱藏的抗性類型</div>
+          <label><input type="checkbox" id="hide-resist-floors5plus" onchange="applyClientOrder()" checked> 五樓蓋以上</label>
+          <label><input type="checkbox" id="hide-resist-remote" onchange="applyClientOrder()" checked> 偏遠路段</label>
+          <label><input type="checkbox" id="hide-resist-unsuitable" onchange="applyClientOrder()" checked> 特殊土地分區</label>
+          <label><input type="checkbox" id="hide-resist-basement" onchange="applyClientOrder()" checked> 地下室</label>
+        </div>
+      </div>
+      <!-- 法拍屋獨立 chip（不是抗性，是資料異常類別） -->
       <label class="explore-hide-bad" id="hide-foreclosure-wrap">
         <input type="checkbox" id="hide-foreclosure" onchange="applyClientOrder()" checked>
         <span title="勾選時隱藏法拍屋（依 591「社區」欄位廣告詞、標題＃符號等判定）">隱藏法拍屋</span>

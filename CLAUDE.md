@@ -108,6 +108,41 @@
   - 換算只能在「同一概念，單位轉換」時做（例：坪 ↔ m²）
   - 不同概念的欄位互推絕對禁止
 
+## 【名詞定義】抗性物件
+
+「**抗性物件**」= 本身具有讓都更困難 / 投資風險增加的**結構性特性**，不是單純的優劣評分問題，
+而是**該物件的法規 / 地理位置 / 樓層性質**就決定它「都更不容易成」「不該被推薦為高價值」。
+
+注意：**法拍屋不是抗性物件**（它是「資料異常」類別 — 法拍價遠低於市價會誤導倍數計算），
+也獨立有自己的 LINE skip flag / 前端 chip / 卡片標示，但跟抗性 panel 分開處理。
+
+### 4 種抗性類型（未來可能擴增）
+
+| 類型 | DB 欄位 | 偵測來源 | 為何抗性 |
+|---|---|---|---|
+| **五樓蓋以上** | `total_floors >= 5` | 591 listing API floor 欄位 | 5F 公寓有頂樓加蓋 / 戶數多協議難，都更幾乎跑不動 |
+| **偏遠路段** | `is_remote_area=True` | `REMOTE_POLYGONS_NEW_TAIPEI` polygon 判定 | 過天險（河、山）的偏遠地段，房價/需求斷層 |
+| **特殊土地分區** | `unsuitable_for_renewal=True` | ArcGIS / Taipei GeoServer | 保護區/河道用地/機關用地等非住商工，法規不能都更 |
+| **地下室** | `is_basement=True` | 591 listing floor 含 'B' | 地下室不會被都更分回（停車/儲藏/避難），無投資價值 |
+
+### 一致性規則
+
+任何新加的「抗性類型」必須：
+1. 在 [database/models.py:PREFER_NEW_FIELDS](database/models.py) 註冊欄位
+2. Pipeline ([api/analysis_pipeline.py](api/analysis_pipeline.py)) 在 doc_data 寫入旗標
+3. LINE 不可觸發旗標 (`settings/line_config`) 加對應 `skip_<X>` flag (預設 True)
+4. 前端「抗性物件過濾器」加對應 checkbox（預設勾選）
+5. 物件卡片「優勢/抗性」欄位顯示對應 chip
+6. CLAUDE.md 上面那張表新增一列
+
+### 視覺化規範（前端）
+
+- 物件卡片有「優勢/抗性」欄位（取代舊「說明」欄，寬度 ×1.5）顯示 chip list
+- **「五樓蓋以上」chip 永遠排第一個 + 土黃色底**（最常見、最易混淆，故置頂）
+- 其他抗性 chip 灰色底
+- 卡片地址欄不再 inline 顯示抗性 badge（避免分散）
+- **法拍屋的標示獨立**（不在抗性 chip list；保留地址欄 inline `fc-badge` 跟獨立過濾 chip）
+
 ## 技術架構快照
 
 - **DB**: Firebase Firestore（`properties` collection，document ID = source_id）

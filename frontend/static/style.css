@@ -717,10 +717,11 @@ input.tb-input[disabled] {
 .property-rows > .property-row--head-top { box-shadow: none; padding-left: 10px; }
 .property-row {
   display: grid;
-  /* 來源(含刊登時間) | 類型 | 市 | 區 | 地址 | 總+實 | 建+單 | 土+單 | 樓 | 齡 | 說明 | 獲利倍數 | 動作 */
+  /* 來源(含刊登時間) | 類型 | 市 | 區 | 地址 | 總+實 | 建+單 | 土+單 | 樓 | 齡 | 優勢/抗性 | 獲利倍數 | 動作 */
   /* 地址改 minmax(140px, 1fr) — 避免 1fr 在其他欄位擠壓下 collapse 到 1 字寬 (中文 break-all 造成) */
+  /* 優勢/抗性欄寬度 ×1.5 (110→165 px) 以容納多個 chip */
   grid-template-columns: 90px 80px 60px 60px minmax(140px, 1fr)
-                         110px 88px 100px 56px 46px 110px 92px 68px;
+                         110px 88px 100px 56px 46px 165px 92px 68px;
   gap: 0;
   align-items: center;
   padding: 8px 10px;
@@ -937,20 +938,104 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
 .c-score-stack.score-low  .score-rec { color: #b02a2a; }
 .c-score-stack.score-none .score-rec { color: #8b8680; }
 
-/* 說明欄 */
+/* 優勢/抗性欄（取代舊「說明」欄；寬度 ×1.5）*/
 .c-note {
   text-align: center;
   font-weight: 600;
   padding: 0 4px;
   line-height: 1.25;
-  font-size: 14px;
-  white-space: normal;        /* 允許換行 */
+  font-size: 13px;
+  white-space: normal;
   word-break: keep-all;
 }
 .c-note .note-skip {
   color: #b0790a;
   font-size: 14px;
   display: block;
+}
+.c-note .resist-chip-stack {
+  display: flex; flex-wrap: wrap; gap: 4px; justify-content: center;
+}
+.c-note .resist-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  background: #e0dfdb;
+  color: #4a4742;
+  white-space: nowrap;
+}
+.c-note .resist-chip.resist-floors5plus {
+  background: #d8a73a;        /* 土黃底（五樓蓋以上永遠第一個 + 標色）*/
+  color: #fff;
+}
+
+/* 抗性物件過濾器（hover panel）*/
+.resistance-filter-wrap {
+  position: relative;
+  display: inline-block;
+}
+.resistance-filter-btn {
+  background: #fdf6e0;
+  color: #c78a00;
+  border: 1px solid #e0d9c2;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.resistance-filter-btn:hover {
+  background: #f5ecc8;
+}
+.resistance-filter-count {
+  display: inline-block;
+  margin-left: 4px;
+  background: #c78a00;
+  color: #fff;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.resistance-filter-panel {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 100;
+  background: #fff;
+  border: 1px solid #e0d9c2;
+  border-radius: 4px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  min-width: 180px;
+  margin-top: 2px;
+}
+.resistance-filter-wrap:hover .resistance-filter-panel,
+.resistance-filter-panel:hover {
+  display: block;
+}
+.resistance-filter-title {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 4px;
+}
+.resistance-filter-panel label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 13px;
+  cursor: pointer;
+}
+.resistance-filter-panel input[type=checkbox] {
+  margin: 0;
+  cursor: pointer;
 }
 
 .c-type { text-align: center; }
@@ -2416,7 +2501,7 @@ select.rv2-edit { text-align: left; padding-right: 18px; }
   .property-row > .c-bld-combo { flex: 0 0 90px;  order: 6; }
   .property-row > .c-floor     { flex: 0 0 50px;  order: 7; }
   .property-row > .c-age       { flex: 0 0 45px;  order: 8; }
-  .property-row > .c-note      { flex: 0 0 110px; order: 9; }
+  .property-row > .c-note      { flex: 0 0 165px; order: 9; }   /* 優勢/抗性欄 ×1.5 (110→165) */
   .property-row > .c-multi     { flex: 0 0 100px; order: 10; }
   .property-row > .c-del       { flex: 0 0 60px;  order: 11; margin-left: auto; }
   /* 地址獨佔第二行 */

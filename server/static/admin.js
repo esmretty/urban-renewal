@@ -208,6 +208,7 @@ window.loadLineStatus = async function () {
       "line-skip-unsuitable": sf.skip_unsuitable,
       "line-skip-foreclosure": sf.skip_foreclosure,
       "line-skip-floors-5plus": sf.skip_floors_5plus,
+      "line-skip-basement": sf.skip_basement,
     };
     Object.entries(flagMap).forEach(([id, v]) => {
       const el = document.getElementById(id);
@@ -254,6 +255,7 @@ window.saveLineSkipFlags = async function () {
     skip_unsuitable: !!document.getElementById("line-skip-unsuitable")?.checked,
     skip_foreclosure: !!document.getElementById("line-skip-foreclosure")?.checked,
     skip_floors_5plus: !!document.getElementById("line-skip-floors-5plus")?.checked,
+    skip_basement: !!document.getElementById("line-skip-basement")?.checked,
   };
   if (resEl) resEl.textContent = "儲存中…";
   try {

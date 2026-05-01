@@ -47,19 +47,20 @@ document.addEventListener("DOMContentLoaded", () => {
     if (_detailP) _detailP._ephemeral_edit_made = false;
   });
   restoreThresholds();
-  // 「隱藏不易都更物件」chip 跨 tab 共用，從獨立 localStorage 還原（不綁 explore filter set）
-  // 預設勾起來（隱藏偏遠路段 + 特殊土地分區）；舊 localStorage key "include-remote" 已 deprecated
+  // 抗性物件過濾器 + 法拍屋 chip 跨 tab 共用，從獨立 localStorage 還原（不綁 explore filter set）
+  // 預設全部勾起（隱藏 4 種抗性 + 法拍）
   try {
-    const hn = document.getElementById("hide-non-renewable");
-    if (hn) {
-      const v = localStorage.getItem("hide-non-renewable");
-      hn.checked = (v === null) ? true : (v === "1");
-    }
-    const hf = document.getElementById("hide-foreclosure");
-    if (hf) {
-      const v = localStorage.getItem("hide-foreclosure");
-      hf.checked = (v === null) ? true : (v === "1");
-    }
+    const _restoreCheck = (id, key) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const v = localStorage.getItem(key);
+      el.checked = (v === null) ? true : (v === "1");
+    };
+    _restoreCheck("hide-resist-floors5plus", "hide-resist-floors5plus");
+    _restoreCheck("hide-resist-remote", "hide-resist-remote");
+    _restoreCheck("hide-resist-unsuitable", "hide-resist-unsuitable");
+    _restoreCheck("hide-resist-basement", "hide-resist-basement");
+    _restoreCheck("hide-foreclosure", "hide-foreclosure");
   } catch {}
   _initDistPicker();
   populateDistrictFilter();
@@ -112,7 +113,10 @@ function _saveExploreFilters() {
     sortBy: document.getElementById("sort-by")?.value || "list_rank",
     sortDir: sortDir,
     hideBad: !!document.getElementById("explore-hide-bad")?.checked,
-    hideNonRenewable: !!document.getElementById("hide-non-renewable")?.checked,
+    hideResistFloors5plus: !!document.getElementById("hide-resist-floors5plus")?.checked,
+    hideResistRemote: !!document.getElementById("hide-resist-remote")?.checked,
+    hideResistUnsuitable: !!document.getElementById("hide-resist-unsuitable")?.checked,
+    hideResistBasement: !!document.getElementById("hide-resist-basement")?.checked,
     hideForeclosure: !!document.getElementById("hide-foreclosure")?.checked,
   };
   try { localStorage.setItem(_exploreFilterKey(), JSON.stringify(obj)); } catch {}
@@ -171,10 +175,15 @@ function _restoreExploreFilters() {
   }
   const hb = document.getElementById("explore-hide-bad");
   if (hb && typeof obj.hideBad === "boolean") hb.checked = obj.hideBad;
-  const hn = document.getElementById("hide-non-renewable");
-  if (hn && typeof obj.hideNonRenewable === "boolean") hn.checked = obj.hideNonRenewable;
-  const hf = document.getElementById("hide-foreclosure");
-  if (hf && typeof obj.hideForeclosure === "boolean") hf.checked = obj.hideForeclosure;
+  const _setCheck = (id, v) => {
+    const el = document.getElementById(id);
+    if (el && typeof v === "boolean") el.checked = v;
+  };
+  _setCheck("hide-resist-floors5plus", obj.hideResistFloors5plus);
+  _setCheck("hide-resist-remote", obj.hideResistRemote);
+  _setCheck("hide-resist-unsuitable", obj.hideResistUnsuitable);
+  _setCheck("hide-resist-basement", obj.hideResistBasement);
+  _setCheck("hide-foreclosure", obj.hideForeclosure);
 }
 
 // ── Tab 切換 ──────────────────────────────────────────────────────────────
@@ -448,7 +457,7 @@ function renderList(props) {
       <div class="c c-val">土地<br><span class="sub">地單價</span></div>
       <div class="c c-val">樓層</div>
       <div class="c c-val">屋齡</div>
-      <div class="c c-note">說明</div>
+      <div class="c c-note">優勢/抗性</div>
       <div class="c c-val c-multi">獲利倍數</div>
       <div class="c c-del">${_activeTab === "explore" ? "加觀察" : "刪除"}</div>
     </div>`;
@@ -492,6 +501,19 @@ function computeSkipReasons(p, th) {
     reasons.push("五層以上 👎");
   }
   return reasons;
+}
+
+// 抗性 chip helper（CLAUDE.md「抗性物件」定義）—— 4 種類型
+// 規則：「五樓蓋以上」永遠第一個 + 土黃底（class resist-floors5plus），其餘灰底
+function computeResistChips(p) {
+  const chips = [];
+  if (p.total_floors && p.total_floors >= 5) {
+    chips.push({ key: 'floors5plus', label: '五樓蓋以上', cls: 'resist-floors5plus' });
+  }
+  if (p.is_remote_area) chips.push({ key: 'remote', label: '偏遠路段', cls: '' });
+  if (p.unsuitable_for_renewal) chips.push({ key: 'unsuitable', label: '特殊土地分區', cls: '' });
+  if (p.is_basement) chips.push({ key: 'basement', label: '地下室', cls: '' });
+  return chips;
 }
 
 function rowHTML(p) {
@@ -565,7 +587,7 @@ function rowHTML(p) {
        </div>`
     : "—";
 
-  // 不再高亮資料欄；違反原因都集中顯示在「說明」欄
+  // 不再高亮資料欄；抗性集中顯示在「優勢/抗性」欄
   const th = loadThresholds();
   const hotCls = () => "";
 
@@ -577,16 +599,20 @@ function rowHTML(p) {
   const scoreCell = isPending
     ? `<button class="btn-analyze" onclick="event.stopPropagation();triggerAnalyze('${p.id}')"><span class="analyze-line1">判斷為不值得分析</span><span class="analyze-line2">可點此開始分析</span></button>`
     : `<span class="analysis-done">完成</span>`;
-  // 說明 cell：列出違反 threshold 的原因（不論 analysis_status，server 端不再過濾）
-  const skipReasons = computeSkipReasons(p, th);
-  const skipReasonsHTML = skipReasons.map(r => `<div class="note-skip">${esc(r)}</div>`).join("");
-  const noteCell = skipReasonsHTML || (isPending ? `<span class="text-muted">—</span>` : ``);
-  const deprioritized = (_activeTab === "explore" && skipReasons.length > 0) ? "is-deprioritized" : "";
+  // 優勢/抗性 cell：渲染 chip list（CLAUDE.md「抗性物件」定義）
+  // 「五樓蓋以上」永遠第一 + 土黃底；其餘灰底
+  const resistChips = computeResistChips(p);
+  const noteCell = resistChips.length
+    ? `<div class="resist-chip-stack">${resistChips.map(c =>
+        `<span class="resist-chip ${c.cls}">${esc(c.label)}</span>`
+      ).join('')}</div>`
+    : (isPending ? `<span class="text-muted">—</span>` : ``);
+  const deprioritized = (_activeTab === "explore" && resistChips.length > 0) ? "is-deprioritized" : "";
   // 獲利倍數 > 3.2 → 高亮整列（紅框 + 字體放大）
   const _maxMult = Math.max(mults.w ?? 0, mults.d ?? 0);
   const highValue = _maxMult > 3.2 ? "is-high-value" : "";
-  // 搜尋 tab 非弱勢物件（沒 skip reasons）→ 紅底推薦色（高價值物件同時拿到紅框加碼）
-  const recommended = (_activeTab === "explore" && skipReasons.length === 0) ? "is-recommended" : "";
+  // 搜尋 tab 非抗性物件（沒抗性 chip）→ 紅底推薦色（高價值物件同時拿到紅框加碼）
+  const recommended = (_activeTab === "explore" && resistChips.length === 0) ? "is-recommended" : "";
 
   const analyzing = !!p.analysis_in_progress;
   return `
@@ -600,7 +626,7 @@ function rowHTML(p) {
     <div class="c c-type" data-label="類型">${typeIcon} ${esc(typeLabel)}</div>
     <div class="c c-city" data-label="縣市">${esc(p.city || "—")}</div>
     <div class="c c-district" data-label="區">${esc(p.district || "—")}</div>
-    <div class="c c-addr" title="${esc(roadOnly)}${p.title ? '\n' + esc(p.title) : ''}" data-label="地址"><div class="addr-line1"><span class="addr-text">${esc(roadOnly)}${p.address_inferred ? '<span class="inferred-tag">推測</span>' : ''}${p.is_foreclosure ? '<span class="fc-badge" title="法拍屋">法拍屋</span>' : ''}${p.is_remote_area ? `<span class="fc-badge" style="background:#9aa0a6" title="依政府河道/天險範圍判定為偏遠位置">偏遠路段</span>` : ''}${p.unsuitable_for_renewal ? `<span class="fc-badge" style="background:#9aa0a6" title="${esc(p.unsuitable_reason || '土地分區非住、商、工用地')}">特殊土地分區</span>` : ''}<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener noreferrer" class="map-link" onclick="event.stopPropagation()" title="Google Maps">📍</a></span>${(evBadge || archivedBadge || newBadge) ? `<span class="addr-badges">${evBadge}${archivedBadge}${newBadge}</span>` : ''}</div>${p.title ? `<div class="addr-title">${esc(p.title)}</div>` : ''}</div>
+    <div class="c c-addr" title="${esc(roadOnly)}${p.title ? '\n' + esc(p.title) : ''}" data-label="地址"><div class="addr-line1"><span class="addr-text">${esc(roadOnly)}${p.address_inferred ? '<span class="inferred-tag">推測</span>' : ''}${p.is_foreclosure ? '<span class="fc-badge" title="法拍屋">法拍屋</span>' : ''}<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener noreferrer" class="map-link" onclick="event.stopPropagation()" title="Google Maps">📍</a></span>${(evBadge || archivedBadge || newBadge) ? `<span class="addr-badges">${evBadge}${archivedBadge}${newBadge}</span>` : ''}</div>${p.title ? `<div class="addr-title">${esc(p.title)}</div>` : ''}</div>
     <div class="c c-val c-total ${hotCls('price')}" data-label="總價">${priceStr}${(p.lvr_records && p.lvr_records.length) ? `<span class="lvr-icon" onclick="event.stopPropagation()" onmouseenter="showLvrPopup(event, '${p.id}')" onmouseleave="hideLvrPopup()">實</span>` : ""}</div>
     <div class="c c-val c-bld-combo" data-label="建坪/單價">
       <div class="${hotCls('bldA')}">${p.building_area_ping ?? "—"} 坪</div>
@@ -2285,15 +2311,20 @@ function applyFilters() {
     loadProperties();
   }
 }
-// 排序 / hide-bad：只重排現有資料，不動 server
+// 排序 / 抗性過濾器 / 法拍：只重排現有資料，不動 server
 window.applyClientOrder = function () {
   _currentPage = 1;
-  // 「隱藏不易都更物件」chip 兩 tab 共用 → 獨立 localStorage 持久化（不綁 explore filter set）
+  // 抗性過濾器 + 法拍 chip 跨 tab 共用 → 獨立 localStorage 持久化（不綁 explore filter set）
   try {
-    const hn = document.getElementById("hide-non-renewable");
-    if (hn) localStorage.setItem("hide-non-renewable", hn.checked ? "1" : "0");
-    const hf = document.getElementById("hide-foreclosure");
-    if (hf) localStorage.setItem("hide-foreclosure", hf.checked ? "1" : "0");
+    const _saveCheck = (id) => {
+      const el = document.getElementById(id);
+      if (el) localStorage.setItem(id, el.checked ? "1" : "0");
+    };
+    _saveCheck("hide-resist-floors5plus");
+    _saveCheck("hide-resist-remote");
+    _saveCheck("hide-resist-unsuitable");
+    _saveCheck("hide-resist-basement");
+    _saveCheck("hide-foreclosure");
   } catch {}
   if (_activeTab === "explore") {
     _saveExploreFilters();
@@ -2315,12 +2346,24 @@ function filterAndSort() {
     p.archived !== true
   );
 
-  // 「隱藏偏遠/特殊分區」chip 勾選時 → 過濾掉 is_remote_area（新北偏遠路段）
-  //   + unsuitable_for_renewal（保護區/河道用地等都更不適用分區）。兩 tab 共用，預設勾選。
-  if (document.getElementById("hide-non-renewable")?.checked) {
-    list = list.filter(p => !p.is_remote_area && !p.unsuitable_for_renewal);
-  }
-  // 「隱藏法拍屋」chip 勾選時 → 過濾掉 is_foreclosure（591 社區欄位含「【」/ 標題＃ 等規則判定）
+  // 抗性物件過濾器（4 種抗性類型 — CLAUDE.md「抗性物件」定義）：勾選後該類型物件隱藏
+  const _hideF5 = !!document.getElementById("hide-resist-floors5plus")?.checked;
+  const _hideRem = !!document.getElementById("hide-resist-remote")?.checked;
+  const _hideUns = !!document.getElementById("hide-resist-unsuitable")?.checked;
+  const _hideBas = !!document.getElementById("hide-resist-basement")?.checked;
+  list = list.filter(p => {
+    if (_hideF5 && p.total_floors && p.total_floors >= 5) return false;
+    if (_hideRem && p.is_remote_area) return false;
+    if (_hideUns && p.unsuitable_for_renewal) return false;
+    if (_hideBas && p.is_basement) return false;
+    return true;
+  });
+  // 過濾器按鈕的 count badge：顯示有幾個 checkbox 已勾
+  const _resistCount = [_hideF5, _hideRem, _hideUns, _hideBas].filter(Boolean).length;
+  const _rcEl = document.getElementById("resistance-filter-count");
+  if (_rcEl) _rcEl.textContent = _resistCount > 0 ? String(_resistCount) : "";
+
+  // 「隱藏法拍屋」chip（獨立於抗性 panel — 法拍是資料異常類別不算抗性）
   if (document.getElementById("hide-foreclosure")?.checked) {
     list = list.filter(p => !p.is_foreclosure);
   }

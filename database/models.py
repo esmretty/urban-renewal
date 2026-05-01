@@ -303,6 +303,28 @@ def get_missing_fields(doc: dict) -> list[str]:
     return [f for f in REQUIRED_FIELDS if doc.get(f) in (None, "", 0)]
 
 
+def is_basement_floor(floor_str) -> bool:
+    """偵測 591 floor 字串是否為地下室（B1 / B2 / 地下 1 樓 等）。
+    591 listing API 對地下室會給 'B1/5F'（地下 1 樓 / 共 5 樓），舊 parse_floor_range
+    會把 B1 解析成 1F → 嚴重誤判。這 helper 給 pipeline 標 is_basement flag。
+
+    True 例：'B1', 'B1F', 'B1/5F', 'B1~B2/5F', '地下1樓', '地下'
+    False 例：'1F/5F', '4F~5F/5F', None, '', '5F'
+    """
+    if not floor_str:
+        return False
+    import re as _re
+    s = str(floor_str).strip().upper()
+    if not s:
+        return False
+    # 拆 / 前段（591 floor 通常是「物件樓層 / 總樓層」）
+    main = s.split("/", 1)[0].strip()
+    # 偵測 'B' + 數字 (B1/B2/B3...) 或中文「地下」
+    if _re.search(r"\bB\d+\b", main) or _re.search(r"^B\d", main) or "地下" in main:
+        return True
+    return False
+
+
 def parse_floor_range(floor_str, total_floors=None):
     """解析 floor 字串成 (min, max, total) 三元組 — 支援樓中樓格式。
 
@@ -311,9 +333,12 @@ def parse_floor_range(floor_str, total_floors=None):
       "1~2"  / "1F~2F" / "1樓-2樓"      → (1, 2, total)
       "1F~2F/4F"                          → (1, 2, 4)   ← 樓中樓 (1-2樓物件、整棟 4 樓)
       "1+2"  / "1F+2F"                   → (1, 2, total)
+      "B1/5F" / "B1F"                     → (None, None, 5)  ← 地下室；caller 改看 is_basement_floor
       "—" / "" / None                    → (None, None, total)
 
-    回 (floor_range_min, floor_range_max, total_floors)
+    回 (floor_range_min, floor_range_max, total_floors)。
+    地下室 case (含 'B' 前綴) 一律回 floor_range_min/max=None — 別讓 B1 被當 1F；
+    caller 需要另外用 is_basement_floor() 標 is_basement flag。
     """
     import re as _re
     if not floor_str:
@@ -332,6 +357,9 @@ def parse_floor_range(floor_str, total_floors=None):
                 parsed_total = int(t_clean)
         except (ValueError, TypeError):
             pass
+    # 1.5) 地下室（B1 / B2 / 地下 X 樓）→ floor_range 全部回 None，total 仍保留
+    if is_basement_floor(floor_str):
+        return (None, None, parsed_total)
     # 2) 拆範圍 (~ - － +) 抽出每段的數字
     nums = []
     for tok in _re.split(r"[~\-－+]", s):
@@ -554,6 +582,7 @@ PREFER_NEW_FIELDS = {
     "analysis_status", "analysis_completed_at",
     "is_remote_area",
     "unsuitable_for_renewal", "unsuitable_reason",
+    "is_basement",
 }
 CONFLICT_TRACK_FIELDS = {
     "building_age", "building_area_ping", "land_area_ping",
