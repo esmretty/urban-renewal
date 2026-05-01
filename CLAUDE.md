@@ -108,6 +108,30 @@
   - 換算只能在「同一概念，單位轉換」時做（例：坪 ↔ m²）
   - 不同概念的欄位互推絕對禁止
 
+## 【Deploy 規則】改完 code 自動 deploy
+
+除非用戶**明示或暗示不要 deploy**（例如「先別 push」「等我看一下」「只是想討論」「WIP / 半成品」「等等再上」「local 試就好」等明確訊號），**否則改完 code 一律自動跑 `bash deploy.sh`**，不需再問。
+
+- commit message 必須標清楚「更新原因」（這版為什麼改、解了什麼、影響哪些 path），不可只寫「fix bug」這種空訊息 — 跟 policy 9（敵意審查）一致
+- deploy 前必須已通過自我驗證（policy 4）：smoke test / 跑過受影響 path / grep 過所有 caller
+- deploy 是 production 動作（GCE VM `taipei.retty-ai.com`），失敗 / 出錯要立即回報，不可吞掉錯誤
+- **deploy 完一定要回報「版本號」**（git short SHA）給用戶確認，例：「deploy 完成，版本 `a6f29b2`，admin 左上「管理後台」badge 旁邊應該也顯示同一個 sha」。版本號來自 `deploy.sh` 最後印的 local commit / server `/api/version`，兩邊要對得上才算 deploy 成功
+- admin 後台 topbar「管理後台」badge 旁邊 chip 會顯示 `/api/version` 回傳的 sha — 用戶可以直接視覺對版，所以**不可以擅自關掉這個顯示**
+- 不該 auto deploy 的訊號：
+  - 用戶明說「先別 deploy」「等我確認」「先 local 試」
+  - 改的是 WIP，自己心裡知道沒測完 / 還會再改
+  - 改的是 destructive migration / drop column / 影響歷史資料的 backfill — 這類一律先問
+  - 改的是 `deploy.sh` 自己 / `.env` / secrets / systemd config — 先確認
+
+## 【語言規則】全程中文
+
+除非用戶明確要求英文回覆，**一律用中文跟用戶說話**。包括：
+- 對話回應、解釋、確認問題
+- 執行工作中的進度更新 / 自言自語式的狀態報告（「先檢查 X」「跑了 Y，結果 Z」）
+- commit message、PR description、log 訊息（中英混雜也 OK，但對話文字以中文為主）
+
+英文是專有名詞 / 程式碼識別名 / 技術術語（function name / API path / package name 等）保留 — 不要硬翻。
+
 ## 【名詞定義】抗性物件
 
 「**抗性物件**」= 本身具有讓都更困難 / 投資風險增加的**結構性特性**，不是單純的優劣評分問題，

@@ -1470,6 +1470,35 @@ tr.archived {
   margin-bottom: 4px;
 }
 
+/* 物件列表讀取動畫 — 比 skeleton 更醒目，置於 skeleton 之上 */
+.list-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px 16px;
+  background: linear-gradient(90deg, #fffbe9, #fff7d6, #fffbe9);
+  background-size: 400px 100%;
+  animation: shimmer 1.6s infinite linear;
+  border: 1px solid #f0e3a8;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  font-size: 0.95rem;
+  color: #7a5800;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+.list-loading .spinner {
+  width: 22px; height: 22px;
+  border: 3px solid #f0d886;
+  border-top-color: #c78a00;
+  border-radius: 50%;
+  animation: spinner-spin 0.9s linear infinite;
+}
+@keyframes spinner-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ── Bootstrap form-select 覆蓋（light） ── */
 .form-select, .form-control {
   background-color: #ffffff !important;

@@ -1255,8 +1255,10 @@ def analyze_single_property(
 
 def _cleanup_ephemeral_screenshots(src_id: str) -> None:
     """刪除分析後不再需要的一次性截圖。
-    保留：_roadwidth.png（前端地籍圖按鈕）、_cadastral/_zoning/_renewal.png（deep analysis，暫留）
-    刪除：_detail.png / _addr.png / _house.png / _detail_tile_* / _house_tile_* / _detail_full.png"""
+    保留：_roadwidth.png（前端「📐 路寬地籍圖」按鈕長期讀）
+    刪除：_detail.png / _detail_full.png / _addr.png / _house.png /
+          _detail_tile_* / _house_tile_* / _addr_tile_*
+    （_cadastral / _zoning / _renewal 註解已移除：grep 整個 codebase 沒人產這幾個檔）"""
     from config import BASE_DIR
     folder = BASE_DIR / "data" / "screenshots"
     if not folder.exists():

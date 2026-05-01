@@ -86,6 +86,14 @@ function showApp() {
   try { lastPage = localStorage.getItem("admin_page") || "dashboard"; } catch {}
   if (typeof switchAdminPage === "function") switchAdminPage(lastPage);
   loadAll();
+  // 顯示版本號（commit short SHA）— 跟 deploy 完成訊息對版用
+  fetch("/api/version", { cache: "no-store" })
+    .then(r => r.json())
+    .then(d => {
+      const el = document.getElementById("app-version");
+      if (el && d && d.sha) el.textContent = "v " + d.sha;
+    })
+    .catch(() => {});
 }
 
 async function authedFetch(url, init = {}) {
@@ -147,8 +155,57 @@ window.loadAll = async function () {
   loadRetryQueue();
   loadRunSessions();
   loadLineStatus();
+  loadSystemUsage();
   // 頁面載入時若 verify-alive 還在跑 → 自動恢復 polling 顯示進度
   _resumeVerifyAlivePollIfRunning();
+};
+
+window.loadSystemUsage = async function () {
+  const box = document.getElementById("system-usage-box");
+  if (!box) return;
+  box.textContent = "載入中…";
+  try {
+    const r = await authedFetch("/admin/system_usage");
+    if (!r.ok) { box.textContent = "讀取失敗 (" + r.status + ")"; return; }
+    const d = await r.json();
+    const disk = d.disk || {};
+    const ss = d.screenshots || {};
+    const dd = d.data_dir || {};
+    const freeColor = (disk.free_pct != null && disk.free_pct < 15) ? "#c0392b"
+                    : (disk.free_pct != null && disk.free_pct < 30) ? "#c78a00" : "#2a7a2a";
+    const ocrCount = (ss.by_kind && ss.by_kind.ocr_temp) || 0;
+    const ocrMb = (ss.by_kind_mb && ss.by_kind_mb.ocr_temp) || 0;
+    const rwCount = (ss.by_kind && ss.by_kind.roadwidth) || 0;
+    const rwMb = (ss.by_kind_mb && ss.by_kind_mb.roadwidth) || 0;
+    box.innerHTML = `
+      <div>💽 <strong>磁碟：</strong>剩 <span style="color:${freeColor}; font-weight:700;">${disk.free_gb ?? "?"} GB</span> / ${disk.total_gb ?? "?"} GB（${disk.free_pct ?? "?"}%）</div>
+      <div>📷 <strong>截圖總計：</strong>${ss.file_count ?? 0} 檔，${ss.total_mb ?? 0} MB
+        ${ss.oldest_age_days != null ? `（最舊 ${ss.oldest_age_days} 天前）` : ""}</div>
+      <div style="padding-left:24px; color:#555;">
+        ・路寬地籍圖（保留）：${rwCount} 檔 / ${rwMb} MB<br>
+        ・OCR 中途檔（孤兒，可清）：<span style="color:${ocrCount > 50 ? '#c0392b' : '#888'};">${ocrCount} 檔 / ${ocrMb} MB</span>
+      </div>
+      <div>📂 <strong>data/ 整體：</strong>${dd.total_mb ?? 0} MB（含 LVR DB / cache / logs / screenshots）</div>
+    `;
+  } catch (e) {
+    box.textContent = "讀取失敗：" + e.message;
+  }
+};
+
+window.cleanupOrphanOcr = async function () {
+  if (!confirm("清掉 screenshots 裡的孤兒 OCR 中途檔（_detail / _addr / _house / *_tile_*）？\n\n（_roadwidth.png 不會被刪 — 前端按鈕還在用。）")) return;
+  try {
+    const r = await authedFetch("/admin/system_usage/cleanup_orphan_ocr", { method: "POST" });
+    const d = await r.json();
+    if (r.ok) {
+      alert(`✓ 清掉 ${d.deleted} 檔，釋放 ${d.freed_mb} MB`);
+      loadSystemUsage();
+    } else {
+      alert("清理失敗：" + (d.detail || r.status));
+    }
+  } catch (e) {
+    alert("清理失敗：" + e.message);
+  }
 };
 
 async function _resumeVerifyAlivePollIfRunning() {

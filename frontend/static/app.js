@@ -764,7 +764,10 @@ function lvrBlock(p) {
 function renderSkeleton(count = 6) {
   const el = document.getElementById("property-list");
   const skeletons = Array(count).fill('<div class="skeleton-card"></div>').join("");
-  el.innerHTML = `<div class="property-grid">${skeletons}</div>`;
+  el.innerHTML = `
+    <div class="list-loading"><div class="spinner"></div><span>讀取中…</span></div>
+    <div class="property-grid">${skeletons}</div>
+  `;
 }
 
 function cardHTML(p) {

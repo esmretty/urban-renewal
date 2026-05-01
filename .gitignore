@@ -28,6 +28,9 @@ block_result.json
 debug_*.py
 debug_*.png
 
+# Deploy 時 server 寫的版本號檔（git short SHA），不入 commit
+VERSION
+
 # 開發過程的 debug 預覽圖（preview_*.png / zonemap_yh_preview.png）
 preview_*.png
 zonemap_yh_preview.png

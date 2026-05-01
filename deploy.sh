@@ -31,18 +31,22 @@ if [[ "$1" != "--no-push" ]]; then
     git push origin main
 fi
 
-echo "==> SSH → git pull + restart $SERVICE"
+echo "==> SSH → git pull + 寫 VERSION + restart $SERVICE"
+# VERSION 檔給 /api/version 讀，admin UI 顯示在「管理後台」badge 旁邊（對版用）
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$SSH_HOST" "
     cd $APP_DIR &&
     git pull origin main 2>&1 | tail -5 &&
+    git rev-parse --short HEAD > VERSION &&
     sudo systemctl restart $SERVICE &&
     echo '✓ service restarted'
 "
 
-echo "==> Verify CSS md5 (local vs server)"
+echo "==> Verify CSS md5 + 取版本號"
 LOCAL_MD5=$(md5sum frontend/static/style.css | awk '{print $1}')
+LOCAL_SHA=$(git rev-parse --short HEAD)
 sleep 2
 REMOTE_MD5=$(curl -sf https://taipei.retty-ai.com/static/style.css | md5sum | awk '{print $1}')
+REMOTE_SHA=$(curl -sf https://taipei.retty-ai.com/api/version | sed -n 's/.*"sha":"\([^"]*\)".*/\1/p')
 if [[ "$LOCAL_MD5" == "$REMOTE_MD5" ]]; then
     echo "✓ CSS md5 match: $LOCAL_MD5"
     echo "✓ Deploy 完成 https://taipei.retty-ai.com"
@@ -51,3 +55,9 @@ else
     echo "  local:  $LOCAL_MD5"
     echo "  server: $REMOTE_MD5"
 fi
+echo ""
+echo "================================="
+echo "  版本號 (對 admin UI 用)"
+echo "  local commit:  $LOCAL_SHA"
+echo "  server /api/version: ${REMOTE_SHA:-(unknown)}"
+echo "================================="

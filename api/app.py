@@ -1113,6 +1113,36 @@ async def maintenance_status_public():
     return {"enabled": bool(maint.get("enabled")), "message": maint.get("message") or ""}
 
 
+_VERSION_CACHE = {"sha": None, "ts": 0.0}
+
+@app.get("/api/version")
+def api_version():
+    """回傳目前 deploy 的 git short SHA — admin UI / 對版用。
+    來源優先：repo VERSION 檔（deploy.sh 寫）→ git rev-parse fallback → 'unknown'。
+    cache 60 秒避免每次 poll 都 fork process。"""
+    import time, subprocess
+    now = time.time()
+    if _VERSION_CACHE["sha"] and (now - _VERSION_CACHE["ts"] < 60):
+        return {"sha": _VERSION_CACHE["sha"]}
+    sha = "unknown"
+    try:
+        vfile = BASE_DIR / "VERSION"
+        if vfile.exists():
+            sha = vfile.read_text(encoding="utf-8").strip().split()[0][:12] or "unknown"
+        else:
+            r = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=str(BASE_DIR), capture_output=True, text=True, timeout=2,
+            )
+            if r.returncode == 0:
+                sha = r.stdout.strip() or "unknown"
+    except Exception:
+        pass
+    _VERSION_CACHE["sha"] = sha
+    _VERSION_CACHE["ts"] = now
+    return {"sha": sha}
+
+
 @app.get("/login.html")
 async def login_page():
     return FileResponse(str(FRONTEND_DIR / "login.html"))
@@ -1158,6 +1188,121 @@ async def admin_stats(admin: dict = Depends(require_admin)):
         "analysis_done": done,
         "analysis_error": err,
         "total_users": users_count,
+    }
+
+
+@app.get("/admin/system_usage")
+async def admin_system_usage(admin: dict = Depends(require_admin)):
+    """admin 控制台用：磁碟空間 + screenshot 用量總覽。
+    回傳：
+      disk: {total_gb, used_gb, free_gb, free_pct}
+      screenshots: {file_count, total_mb, oldest_age_days, by_kind: {roadwidth: N, ocr_temp: N, other: N}}
+      data_dir: {total_mb}  # data/ 整體用量（screenshots + LVR DB + cache + logs）
+    """
+    import shutil, time
+    out: dict = {"disk": {}, "screenshots": {}, "data_dir": {}}
+    # ── 磁碟整體 ─
+    try:
+        du = shutil.disk_usage(str(BASE_DIR))
+        out["disk"] = {
+            "total_gb": round(du.total / 1024**3, 1),
+            "used_gb": round(du.used / 1024**3, 1),
+            "free_gb": round(du.free / 1024**3, 1),
+            "free_pct": round(du.free / du.total * 100, 1) if du.total else 0,
+        }
+    except Exception as e:
+        out["disk"] = {"error": str(e)}
+    # ── screenshots 目錄 ─
+    try:
+        from config import SCREENSHOTS_DIR
+        sdir = SCREENSHOTS_DIR
+        if sdir.exists():
+            now = time.time()
+            total_size = 0
+            file_count = 0
+            oldest_mtime = now
+            kinds = {"roadwidth": 0, "ocr_temp": 0, "other": 0}
+            kind_size = {"roadwidth": 0, "ocr_temp": 0, "other": 0}
+            for p in sdir.iterdir():
+                if not p.is_file():
+                    continue
+                try:
+                    st = p.stat()
+                except OSError:
+                    continue
+                file_count += 1
+                total_size += st.st_size
+                if st.st_mtime < oldest_mtime:
+                    oldest_mtime = st.st_mtime
+                name = p.name
+                if name.endswith("_roadwidth.png"):
+                    kinds["roadwidth"] += 1
+                    kind_size["roadwidth"] += st.st_size
+                elif "_detail" in name or "_addr" in name or "_house" in name or "_tile_" in name:
+                    kinds["ocr_temp"] += 1
+                    kind_size["ocr_temp"] += st.st_size
+                else:
+                    kinds["other"] += 1
+                    kind_size["other"] += st.st_size
+            out["screenshots"] = {
+                "file_count": file_count,
+                "total_mb": round(total_size / 1024**2, 1),
+                "oldest_age_days": round((now - oldest_mtime) / 86400, 1) if file_count else None,
+                "by_kind": kinds,
+                "by_kind_mb": {k: round(v / 1024**2, 1) for k, v in kind_size.items()},
+            }
+        else:
+            out["screenshots"] = {"file_count": 0, "total_mb": 0}
+    except Exception as e:
+        out["screenshots"] = {"error": str(e)}
+    # ── data/ 整體 ─（screenshots + LVR DB + cache + logs）
+    try:
+        data_root = BASE_DIR / "data"
+        if data_root.exists():
+            total = 0
+            for p in data_root.rglob("*"):
+                if p.is_file():
+                    try: total += p.stat().st_size
+                    except OSError: pass
+            out["data_dir"] = {"total_mb": round(total / 1024**2, 1)}
+        else:
+            out["data_dir"] = {"total_mb": 0}
+    except Exception as e:
+        out["data_dir"] = {"error": str(e)}
+    return out
+
+
+@app.post("/admin/system_usage/cleanup_orphan_ocr")
+async def admin_cleanup_orphan_ocr(admin: dict = Depends(require_admin)):
+    """清掉 screenshots 裡的孤兒 OCR 截圖（_detail / _addr / _house / *_tile_*）。
+    這些檔正常情況分析完會被 _cleanup_ephemeral_screenshots 清掉，但若某筆中途 raise
+    沒走到 cleanup 就會孤兒。本 endpoint 一次掃光。**不刪 _roadwidth.png**（前端按鈕仍在用）。"""
+    from config import SCREENSHOTS_DIR
+    sdir = SCREENSHOTS_DIR
+    if not sdir.exists():
+        return {"deleted": 0, "freed_mb": 0}
+    deleted = 0
+    freed = 0
+    errs: list[str] = []
+    for p in sdir.iterdir():
+        if not p.is_file():
+            continue
+        name = p.name
+        if name.endswith("_roadwidth.png"):
+            continue
+        if ("_detail" in name) or ("_addr" in name) or ("_house" in name) or ("_tile_" in name):
+            try:
+                size = p.stat().st_size
+                p.unlink()
+                deleted += 1
+                freed += size
+            except Exception as e:
+                errs.append(f"{name}: {e}")
+    logger.warning(f"[admin] {admin.get('email')} 清孤兒 OCR 截圖：{deleted} 檔 / {round(freed/1024**2,1)} MB")
+    return {
+        "deleted": deleted,
+        "freed_mb": round(freed / 1024**2, 1),
+        "errors": errs[:20],   # 最多回 20 條 error
     }
 
 
@@ -3827,6 +3972,13 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
             except Exception as e:
                 logger.exception(f"分析失敗 {item.get('source_id')}: {e}")
             finally:
+                # 不論該筆成功 / skip / raise，一律清掉 OCR 截圖
+                # （_detail / _addr / _house / *_tile_*）— 避免 exception path 漏清
+                # 累積到硬碟。analyze_single_property 內部成功路徑也會清，重複呼叫無害。
+                try:
+                    from api.analysis_pipeline import _cleanup_ephemeral_screenshots as _cleanup_shots_iter
+                    _cleanup_shots_iter(src_id)
+                except Exception: pass
                 # 每筆做完強制 gc — 釋放 PIL Image / Vision response / Anthropic SDK
                 # 持有的 base64 image 等大物件，避免跨 iter 累積成 OOM
                 try:
@@ -4924,13 +5076,28 @@ def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False, *, mar
     """同步：開瀏覽器 + 抓單一 URL + 跑分析。
     is_reanalyze=True：admin 重新分析路徑，跳過「公寓 only」「目標區域」等過濾，
                       強制更新既有 doc（admin 特權，用於修正舊資料）。
-    支援 591 / 永慶 / 信義 三種 URL（依 src_id prefix 分流）。"""
+    支援 591 / 永慶 / 信義 三種 URL（依 src_id prefix 分流）。
+    591 path 用 outer try/finally 保證 cleanup — 即使 inner raise 或走任何 return path
+    都會清掉 OCR 截圖（_detail / _addr / _house / tile_*）。"""
     # 永慶 URL → 走永慶單筆分析路徑（純 HTTP + Playwright，不需 Vision OCR）
     if src_id.startswith("yongqing_"):
         return _scrape_single_url_yongqing(url, src_id, is_reanalyze, mark_user_url=mark_user_url)
     if src_id.startswith("sinyi_"):
         return _scrape_single_url_sinyi(url, src_id, is_reanalyze, mark_user_url=mark_user_url)
+    # 591 path：用 wrapper 保證 cleanup（避免漏掉 success return / uncaught exception 兩種 path）
+    try:
+        return _scrape_single_url_591_inner(url, src_id, is_reanalyze, mark_user_url=mark_user_url)
+    finally:
+        try:
+            from api.analysis_pipeline import _cleanup_ephemeral_screenshots as _cleanup_shots_outer
+            _cleanup_shots_outer(src_id)
+        except Exception: pass
 
+
+def _scrape_single_url_591_inner(url: str, src_id: str, is_reanalyze: bool = False, *, mark_user_url: bool = True):
+    """591 詳情頁分析 body — 由 _scrape_single_url 外層包 try/finally 確保 cleanup。
+    本函式內部仍保留多個 inline cleanup（idempotent，重複呼叫無害），用於 early-return path
+    讓 cleanup 點離 return 近、語意清楚。"""
     from scraper.browser_manager import get_browser_context
     from scraper.scraper_591 import _parse_card  # 既有 card 解析（不適用詳情頁）
     from scraper.scraper_591 import screenshot_detail_page
