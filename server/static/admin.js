@@ -1800,7 +1800,6 @@ function renderRegionSourceMatrix(s) {
   rows.push(`<tr class="total-row"><td class="dist">全部來源</td>${srcSumCells}<td>${grandTotal}</td></tr>`);
   box.innerHTML = `
     <table class="region-matrix">
-      <caption>📊 來源 × 行政區 物件數（同物件多來源各自計入）</caption>
       ${rows.join("")}
     </table>
   `;
