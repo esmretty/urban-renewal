@@ -23,6 +23,15 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
+
+# 591 detail 抓取策略 flag（單筆動態切換用，不需 deploy）：
+#   True → 591 詳情頁先試 mobile BFF API (純 JSON)，省掉 Vision OCR call (~3 次/筆)
+#         若 mobile API 失敗（限流 / schema 改 / 物件下架）→ fallback 到 desktop OCR path
+#   False → 一律走 desktop screenshot + Vision OCR（舊行為）
+# 設計：若哪天 591 封 mobile API → 改 False 立即切回 OCR，no code change required。
+# 注意：mobile path 仍會跑 screenshot_detail_page (拿 community_raw / body_text / 截圖 給
+# detect_foreclosure 跟地址 OCR consensus fallback 用)，只跳過最貴的 Vision OCR phase。
+USE_591_MOBILE_API = os.getenv("USE_591_MOBILE_API", "1") not in ("0", "false", "False", "no", "off")
 DB_PATH = DATA_DIR / "urban_renewal.db"
 SCREENSHOTS_DIR = DATA_DIR / "screenshots"
 

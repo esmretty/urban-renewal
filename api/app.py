@@ -3208,6 +3208,27 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     except Exception: pass
                     continue   # 不走下面 591 OCR 流程
 
+                # 591：先試 mobile BFF API (純 JSON 無防爬，省 Vision OCR ~3 次/筆)
+                # 若 mobile API 抓到 → 後續跳過 Vision OCR phase；失敗 → fallback OCR (原流程)
+                # 注意 screenshot_detail_page 仍要跑 — 拿 community_raw / body_text / 截圖
+                # 給 detect_foreclosure 跟地址 OCR consensus fallback 用
+                _mobile_data_591 = None
+                try:
+                    from config import USE_591_MOBILE_API as _USE_MOBILE
+                except ImportError:
+                    _USE_MOBILE = True
+                if _USE_MOBILE:
+                    try:
+                        from scraper.scraper_591_mobile import fetch_mobile_detail
+                        _hid = src_id.split("591_", 1)[-1] if src_id.startswith("591_") else src_id
+                        _mobile_data_591 = fetch_mobile_detail(_hid)
+                        if _mobile_data_591:
+                            _mobile_data_591.pop("_mobile_raw", None)
+                            progress_callback(f"  ⚡ 591 mobile API 抓到 detail (省 OCR)", pct)
+                    except Exception as _me:
+                        logger.warning(f"  591 mobile API 例外，fallback OCR ({src_id}): {_me}")
+                        _mobile_data_591 = None
+
                 # 591：詳情頁截圖 + Vision OCR
                 progress_callback(f"  📷 截圖詳情頁...", pct)
                 # cancel check：admin kill 在 batch 內也能在 step 邊界 break
@@ -3282,19 +3303,38 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     )
                     item["address"] = community_addr
                 vision_data = {}
-                # 全頁截圖 + 房屋欄位窄裁切兩張都跑 OCR，合併結果（兩張平行跑）：
-                # 觀察：全頁 OCR 偶會漏 land_area_ping / zoning（文字過小），house_crop 反而抓得到；
-                # 反之也可能 house_crop 沒切到某欄位而 full 有 → 互補填。
-                from concurrent.futures import ThreadPoolExecutor
-                _paths = [p for p in (shot_path, _house_crop) if p]
-                if _paths:
-                    with ThreadPoolExecutor(max_workers=len(_paths)) as _ex:
-                        _results = list(_ex.map(extract_full_detail_from_screenshot, _paths))
-                    vision_data = _results[0] if _results else {}
-                    for _r in _results[1:]:
-                        for k, v in (_r or {}).items():
-                            if v not in (None, "", 0) and vision_data.get(k) in (None, "", 0):
-                                vision_data[k] = v
+                if _mobile_data_591:
+                    # === Mobile API path：跳過 Vision OCR，用 mobile JSON 填 vision_data ===
+                    # 拿到的 floor / area / age / land 直接放，下游邏輯 (parse_floor_range,
+                    # 地址決策, etc.) 完全不變
+                    vision_data = {
+                        "building_area_ping": _mobile_data_591.get("building_area_ping"),
+                        "land_area_ping": _mobile_data_591.get("land_area_ping"),
+                        "building_age": _mobile_data_591.get("building_age"),
+                        "floor": _mobile_data_591.get("floor"),
+                        # total_floors 透過 parse_floor_range 從 floor 字串拆出（'B1/5F' → total=5）
+                    }
+                    # 也補 item — mobile 給的 community_name / 座標 等可立即覆蓋
+                    if _mobile_data_591.get("community_name"):
+                        item["community_name"] = _mobile_data_591["community_name"]
+                    if _mobile_data_591.get("source_latitude") and _mobile_data_591.get("source_longitude"):
+                        item["source_latitude"] = _mobile_data_591["source_latitude"]
+                        item["source_longitude"] = _mobile_data_591["source_longitude"]
+                else:
+                    # === Desktop OCR path（保留 fallback）===
+                    # 全頁截圖 + 房屋欄位窄裁切兩張都跑 OCR，合併結果（兩張平行跑）：
+                    # 觀察：全頁 OCR 偶會漏 land_area_ping / zoning（文字過小），house_crop 反而抓得到；
+                    # 反之也可能 house_crop 沒切到某欄位而 full 有 → 互補填。
+                    from concurrent.futures import ThreadPoolExecutor
+                    _paths = [p for p in (shot_path, _house_crop) if p]
+                    if _paths:
+                        with ThreadPoolExecutor(max_workers=len(_paths)) as _ex:
+                            _results = list(_ex.map(extract_full_detail_from_screenshot, _paths))
+                        vision_data = _results[0] if _results else {}
+                        for _r in _results[1:]:
+                            for k, v in (_r or {}).items():
+                                if v not in (None, "", 0) and vision_data.get(k) in (None, "", 0):
+                                    vision_data[k] = v
                 # cancel check：Vision 完到 analyze 前
                 if _cancel_is(_my_cancel_version):
                     progress_callback("⛔ 使用者取消（Vision 後）", 100)
@@ -4994,11 +5034,41 @@ def _scrape_single_url(url: str, src_id: str, is_reanalyze: bool = False, *, mar
         published_text = getattr(detail_ret, "published_text", None)
         updated_text = getattr(detail_ret, "updated_text", None)
         _house_crop_single = getattr(detail_ret, "house_path", None)
+        # === 591 mobile API fast path (省 Vision OCR) ===
+        # 跟 _scrape_and_analyze 同樣策略：先試 mobile，失敗 fallback OCR
+        _mobile_data_url = None
+        try:
+            from config import USE_591_MOBILE_API as _USE_MOBILE_URL
+        except ImportError:
+            _USE_MOBILE_URL = True
+        if _USE_MOBILE_URL:
+            try:
+                from scraper.scraper_591_mobile import fetch_mobile_detail
+                _hid_url = src_id.split("591_", 1)[-1] if src_id.startswith("591_") else src_id
+                _mobile_data_url = fetch_mobile_detail(_hid_url)
+                if _mobile_data_url:
+                    _mobile_data_url.pop("_mobile_raw", None)
+                    logger.info(f"  ⚡ 591 mobile API 抓到 detail (省 OCR) ({src_id})")
+            except Exception as _me:
+                logger.warning(f"  591 mobile API 例外，fallback OCR ({src_id}): {_me}")
+                _mobile_data_url = None
+
         # shot + house_crop 平行 OCR 然後合併，house_crop 補漏（全頁 OCR 偶會漏 land_area_ping）
         from concurrent.futures import ThreadPoolExecutor as _TPE_URL
         _paths_u = [p for p in (shot, _house_crop_single) if p]
         vision = {}
-        if _paths_u:
+        if _mobile_data_url:
+            # Mobile path：用 mobile JSON 填 vision，跳過 Vision OCR
+            vision = {
+                "building_area_ping": _mobile_data_url.get("building_area_ping"),
+                "land_area_ping": _mobile_data_url.get("land_area_ping"),
+                "building_age": _mobile_data_url.get("building_age"),
+                "floor": _mobile_data_url.get("floor"),
+            }
+            # 價格給「萬」格式（vision schema），mobile 給 ntd → 轉萬
+            if _mobile_data_url.get("price_ntd"):
+                vision["price_wan"] = _mobile_data_url["price_ntd"] // 10000
+        elif _paths_u:
             with _TPE_URL(max_workers=len(_paths_u)) as _ex:
                 _results_u = list(_ex.map(extract_full_detail_from_screenshot, _paths_u))
             vision = _results_u[0] if _results_u else {}
