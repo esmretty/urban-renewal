@@ -1084,6 +1084,9 @@ def screenshot_detail_page(ctx: BrowserContext, url: str, source_id: str):
             results.published_text = null;
             results.updated_text = null;
             const bodyText = document.body.innerText || '';
+            // body 前 5000 字 → 給 detect_foreclosure 偵測「代理人」「拍賣」等關鍵字用
+            // （之前 591 API 模式 _raw_text='' 導致法拍偵測「# + 代理人」永遠 AND 失敗）
+            results.body_text = bodyText.slice(0, 5000);
             // 刊登
             let m = bodyText.match(/(?:刊登(?:時間|日期)|上架時間)[\s:：]*([^\n]{1,30})/);
             if (m) results.published_text = m[1].trim();
@@ -1131,13 +1134,14 @@ def screenshot_detail_page(ctx: BrowserContext, url: str, source_id: str):
             logger.info(f"  DOM 日期 ({source_id}): 刊登={published_text!r} 更新={updated_text!r}")
         # Backward-compatible tuple return + extra attrs（含新切的 addr_path / house_path）
         class _DetailResult(tuple):
-            def __new__(cls, path, addr, coords, pub, upd, addr_p, house_p, community_raw):
+            def __new__(cls, path, addr, coords, pub, upd, addr_p, house_p, community_raw, body_text):
                 inst = super().__new__(cls, (path, addr, coords))
                 inst.published_text = pub
                 inst.updated_text = upd
                 inst.addr_path = addr_p
                 inst.house_path = house_p
                 inst.community_raw = community_raw
+                inst.body_text = body_text
                 return inst
         return _DetailResult(
             str(path), community_addr, page_coords,
@@ -1145,6 +1149,7 @@ def screenshot_detail_page(ctx: BrowserContext, url: str, source_id: str):
             str(addr_path) if addr_path.exists() else None,
             str(house_path) if house_path.exists() else None,
             detail_data.get("community_raw") or "",
+            detail_data.get("body_text") or "",
         )
     except Exception as e:
         logger.debug(f"Screenshot detail page failed ({url}): {e}")
