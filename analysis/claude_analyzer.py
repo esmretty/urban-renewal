@@ -148,7 +148,11 @@ Fields (use null when unknown, never omit keys):
 - land_area_ping (number): 土地坪數
 - building_age (number): 屋齡（年）
 - total_floors (number): 總樓層
-- floor (string): 物件樓層
+- floor (string): 物件樓層 — **必須保留原始 591 寫法**：
+    - 一般樓層：直接給數字字串「1」「2」「3」「4」「5」
+    - 樓中樓：「1F~2F/4F」 → 給「1~2」
+    - 地下室：591 寫「B1」「B2」「B1F/5F」這類 → **必須保留 'B' 字母**回「B1」「B2」
+      千萬不要把 B1 當成 1 或寫成「地下1樓」「-1」，下游需要 'B' 字母判定地下室
 - price_wan (number): 售價（萬）
 - zoning (string): 使用分區（「住三」「商二」等）
 
