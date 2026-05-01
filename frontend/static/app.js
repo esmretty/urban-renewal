@@ -508,6 +508,21 @@ function computeSkipReasons(p, th) {
   return reasons;
 }
 
+// 優勢 chip helper — 彩色閃爍，列在抗性 chip 前面
+//   TOD: 捷運 500m 內
+//   防災型: 台北市建物且 1974 前蓋（防災都更額外容積獎勵 0.80x，比一般都更 0.50x 高）
+function computeAdvantageChips(p) {
+  const chips = [];
+  if (p.nearest_mrt_dist_m != null && p.nearest_mrt_dist_m <= 500) {
+    chips.push({ key: 'tod', label: 'TOD', cls: 'adv-chip adv-tod' });
+  }
+  const age = currentAge(p);
+  if (p.city === "台北市" && age && (new Date().getFullYear() - age) <= 1974) {
+    chips.push({ key: 'fangzai', label: '防災型', cls: 'adv-chip adv-fangzai' });
+  }
+  return chips;
+}
+
 // 抗性 chip helper（CLAUDE.md「抗性物件」定義）—— 4 種類型
 // 規則：「五樓蓋+」永遠第一個 + 土黃底（class resist-floors5plus），其餘灰底
 function computeResistChips(p) {
@@ -604,11 +619,12 @@ function rowHTML(p) {
   const scoreCell = isPending
     ? `<button class="btn-analyze" onclick="event.stopPropagation();triggerAnalyze('${p.id}')"><span class="analyze-line1">判斷為不值得分析</span><span class="analyze-line2">可點此開始分析</span></button>`
     : `<span class="analysis-done">完成</span>`;
-  // 優勢/抗性 cell：渲染 chip list（CLAUDE.md「抗性物件」定義）
-  // 「五樓蓋以上」永遠第一 + 土黃底；其餘灰底
+  // 優勢/抗性 cell：先渲染優勢 chip（TOD/防災型 彩色閃爍）→ 抗性 chip（灰底，5F+ 土黃）
+  const advantageChips = computeAdvantageChips(p);
   const resistChips = computeResistChips(p);
-  const noteCell = resistChips.length
-    ? `<div class="resist-chip-stack">${resistChips.map(c =>
+  const allChips = [...advantageChips, ...resistChips];
+  const noteCell = allChips.length
+    ? `<div class="resist-chip-stack">${allChips.map(c =>
         `<span class="resist-chip ${c.cls}">${esc(c.label)}</span>`
       ).join('')}</div>`
     : (isPending ? `<span class="text-muted">—</span>` : ``);

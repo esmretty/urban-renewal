@@ -970,8 +970,48 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   white-space: nowrap;
 }
 .c-note .resist-chip.resist-floors5plus {
-  background: #d8a73a;        /* 土黃底（五樓蓋以上永遠第一個 + 標色）*/
+  background: #d8a73a;        /* 土黃底（五樓蓋+）*/
   color: #fff;
+}
+
+/* 優勢 chip：彩色漸層閃爍/反光 */
+.c-note .resist-chip.adv-chip {
+  color: #fff;
+  font-weight: 700;
+  position: relative;
+  overflow: hidden;
+  background-size: 200% 100%;
+  animation: adv-shimmer 2.4s linear infinite;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.4);
+}
+/* 反光 sweep（白光從左到右掃過） */
+.c-note .resist-chip.adv-chip::after {
+  content: "";
+  position: absolute;
+  top: 0; left: -50%;
+  width: 50%; height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.5) 50%,
+    transparent 100%
+  );
+  animation: adv-sweep 2.4s linear infinite;
+  pointer-events: none;
+}
+.c-note .resist-chip.adv-tod {
+  background-image: linear-gradient(90deg, #06b6d4, #3b82f6, #06b6d4);   /* 青藍漸層 — 捷運感 */
+}
+.c-note .resist-chip.adv-fangzai {
+  background-image: linear-gradient(90deg, #f97316, #ef4444, #f97316);   /* 橘紅漸層 — 防災感 */
+}
+@keyframes adv-shimmer {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+@keyframes adv-sweep {
+  0%   { left: -50%; }
+  100% { left: 100%; }
 }
 
 /* 抗性物件過濾器（hover panel）*/
