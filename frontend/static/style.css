@@ -719,11 +719,10 @@ input.tb-input[disabled] {
 .property-rows > .property-row--head-top { box-shadow: none; padding-left: 10px; }
 .property-row {
   display: grid;
-  /* 來源(含刊登時間) | 類型 | 市 | 區 | 地址 | 總+實 | 建+單 | 土+單 | 樓 | 齡 | 優勢/抗性 | 獲利倍數 | 動作 */
-  /* 地址改 minmax(140px, 1fr) — 避免 1fr 在其他欄位擠壓下 collapse 到 1 字寬 (中文 break-all 造成) */
-  /* 優勢/抗性欄寬度 ×1.5 (110→165 px) 以容納多個 chip */
+  /* 來源 | 類型 | 市 | 區 | 地址 | 總+實 | 建+單 | 土+單 | 樓 | 齡 | 優勢 | 抗性 | 獲利倍數 | 動作 */
+  /* 優勢/抗性 拆兩欄各 90px (chip 一行一個 縱向排列)，原 165 → 90+90=180 略寬一點容納 */
   grid-template-columns: 90px 80px 60px 60px minmax(140px, 1fr)
-                         110px 88px 100px 56px 46px 165px 92px 68px;
+                         110px 88px 100px 56px 46px 90px 90px 92px 68px;
   gap: 0;
   align-items: center;
   padding: 8px 10px;
@@ -940,8 +939,8 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
 .c-score-stack.score-low  .score-rec { color: #b02a2a; }
 .c-score-stack.score-none .score-rec { color: #8b8680; }
 
-/* 優勢/抗性欄（取代舊「說明」欄；寬度 ×1.5）*/
-.c-note {
+/* 優勢欄 / 抗性欄（拆兩個獨立欄，每個 chip 一行縱向排列）*/
+.c-advantage, .c-note {
   text-align: center;
   font-weight: 600;
   padding: 0 4px;
@@ -955,9 +954,12 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   font-size: 14px;
   display: block;
 }
+/* chip 縱向 stack — 一個 chip 一行，多個就換行 */
+.c-advantage .resist-chip-stack,
 .c-note .resist-chip-stack {
-  display: flex; flex-wrap: wrap; gap: 4px; justify-content: center;
+  display: flex; flex-direction: column; gap: 3px; align-items: center;
 }
+.c-advantage .resist-chip,
 .c-note .resist-chip {
   display: inline-block;
   padding: 2px 8px;
@@ -975,7 +977,7 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
 }
 
 /* 優勢 chip：彩色漸層閃爍/反光 */
-.c-note .resist-chip.adv-chip {
+.c-advantage .resist-chip.adv-chip {
   color: #fff;
   font-weight: 700;
   position: relative;
@@ -985,7 +987,7 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   box-shadow: 0 0 4px rgba(255, 255, 255, 0.4);
 }
 /* 反光 sweep（白光從左到右掃過） */
-.c-note .resist-chip.adv-chip::after {
+.c-advantage .resist-chip.adv-chip::after {
   content: "";
   position: absolute;
   top: 0; left: -50%;
@@ -999,10 +1001,10 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   animation: adv-sweep 2.4s linear infinite;
   pointer-events: none;
 }
-.c-note .resist-chip.adv-tod {
+.c-advantage .resist-chip.adv-tod {
   background-image: linear-gradient(90deg, #06b6d4, #3b82f6, #06b6d4);   /* 青藍漸層 — 捷運感 */
 }
-.c-note .resist-chip.adv-fangzai {
+.c-advantage .resist-chip.adv-fangzai {
   background-image: linear-gradient(90deg, #f97316, #ef4444, #f97316);   /* 橘紅漸層 — 防災感 */
 }
 @keyframes adv-shimmer {
@@ -2542,9 +2544,10 @@ select.rv2-edit { text-align: left; padding-right: 18px; }
   .property-row > .c-bld-combo { flex: 0 0 90px;  order: 6; }
   .property-row > .c-floor     { flex: 0 0 50px;  order: 7; }
   .property-row > .c-age       { flex: 0 0 45px;  order: 8; }
-  .property-row > .c-note      { flex: 0 0 165px; order: 9; }   /* 優勢/抗性欄 ×1.5 (110→165) */
-  .property-row > .c-multi     { flex: 0 0 100px; order: 10; }
-  .property-row > .c-del       { flex: 0 0 60px;  order: 11; margin-left: auto; }
+  .property-row > .c-advantage { flex: 0 0 90px;  order: 9; }   /* 優勢欄（chip 縱向 stack）*/
+  .property-row > .c-note      { flex: 0 0 90px;  order: 10; }  /* 抗性欄（chip 縱向 stack）*/
+  .property-row > .c-multi     { flex: 0 0 100px; order: 11; }
+  .property-row > .c-del       { flex: 0 0 60px;  order: 12; margin-left: auto; }
   /* 地址獨佔第二行 */
   .property-row > .c-addr {
     flex: 1 1 100%;

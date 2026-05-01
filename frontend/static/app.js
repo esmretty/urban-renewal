@@ -457,7 +457,8 @@ function renderList(props) {
       <div class="c c-val">土地<br><span class="sub">地單價</span></div>
       <div class="c c-val">樓層</div>
       <div class="c c-val">屋齡</div>
-      <div class="c c-note">優勢/抗性</div>
+      <div class="c c-advantage">優勢</div>
+      <div class="c c-note">抗性</div>
       <div class="c c-val c-multi">獲利倍數</div>
       <div class="c c-del">${_activeTab === "explore" ? "加觀察" : "刪除"}</div>
     </div>`;
@@ -619,12 +620,16 @@ function rowHTML(p) {
   const scoreCell = isPending
     ? `<button class="btn-analyze" onclick="event.stopPropagation();triggerAnalyze('${p.id}')"><span class="analyze-line1">判斷為不值得分析</span><span class="analyze-line2">可點此開始分析</span></button>`
     : `<span class="analysis-done">完成</span>`;
-  // 優勢/抗性 cell：先渲染優勢 chip（TOD/防災型 彩色閃爍）→ 抗性 chip（灰底，5F+ 土黃）
+  // 優勢欄 + 抗性欄拆兩個 cell，每個 chip 一行（縱向排列）
   const advantageChips = computeAdvantageChips(p);
   const resistChips = computeResistChips(p);
-  const allChips = [...advantageChips, ...resistChips];
-  const noteCell = allChips.length
-    ? `<div class="resist-chip-stack">${allChips.map(c =>
+  const advantageCell = advantageChips.length
+    ? `<div class="resist-chip-stack">${advantageChips.map(c =>
+        `<span class="resist-chip ${c.cls}">${esc(c.label)}</span>`
+      ).join('')}</div>`
+    : ``;
+  const noteCell = resistChips.length
+    ? `<div class="resist-chip-stack">${resistChips.map(c =>
         `<span class="resist-chip ${c.cls}">${esc(c.label)}</span>`
       ).join('')}</div>`
     : (isPending ? `<span class="text-muted">—</span>` : ``);
@@ -659,7 +664,8 @@ function rowHTML(p) {
     </div>
     <div class="c c-val c-floor" data-label="樓層">${floorStr}</div>
     <div class="c c-val c-age" data-label="屋齡">${currentAge(p) ?? "—"}</div>
-    <div class="c c-note" data-label="說明">${noteCell}</div>
+    <div class="c c-advantage" data-label="優勢">${advantageCell}</div>
+    <div class="c c-note" data-label="抗性">${noteCell}</div>
     <div class="c c-val c-multi" data-label="獲利倍數">${multiCell}</div>
     <div class="c c-del">${_rowActionHTML(p)}</div>
   </div>
