@@ -526,9 +526,9 @@ body {
   gap: 12px;
 }
 .filter-cols--4 {
-  /* col 2 (物件性質過濾) 拓寬讓樓層 row「地下室 全部 1F~5F」7 個 chip 一排放下；
-     col 3 (數字條件設定) 縮窄讓出空間 */
-  grid-template-columns: 1.5fr 1.7fr 0.7fr 140px;
+  /* col 2 (物件性質過濾) 比原本 1.3fr 寬一點以容納樓層 row「地下室+全部+1F~5F」7 chip；
+     col 3 (數字條件設定) 對應縮一點點。原本 1.5/1.3/1.0/140，調整幅度不大 */
+  grid-template-columns: 1.5fr 1.45fr 0.95fr 140px;
 }
 .filter-col--action {
   background: #f7f3ea;
