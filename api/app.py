@@ -43,6 +43,7 @@ _PUBLIC_PATHS = {
     "/api/firebase_config",
     "/api/target_regions",
     "/api/maintenance_status",   # 維護頁 polling 用，公開不需 auth
+    "/api/version",              # 版本號（commit short SHA），admin UI 對版用，無敏感資訊
     "/admin.html",            # admin 也走自己的登入頁
 }
 _PUBLIC_PREFIXES = (
