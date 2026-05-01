@@ -48,19 +48,19 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   restoreThresholds();
   // 抗性物件過濾器 + 法拍屋 chip 跨 tab 共用，從獨立 localStorage 還原（不綁 explore filter set）
-  // 預設全部勾起（隱藏 4 種抗性 + 法拍）
+  // 預設：偏遠路段 + 特殊土地分區 + 法拍屋 勾起；五樓蓋以上 + 地下室 不勾
   try {
-    const _restoreCheck = (id, key) => {
+    const _restoreCheck = (id, defaultChecked) => {
       const el = document.getElementById(id);
       if (!el) return;
-      const v = localStorage.getItem(key);
-      el.checked = (v === null) ? true : (v === "1");
+      const v = localStorage.getItem(id);
+      el.checked = (v === null) ? defaultChecked : (v === "1");
     };
-    _restoreCheck("hide-resist-floors5plus", "hide-resist-floors5plus");
-    _restoreCheck("hide-resist-remote", "hide-resist-remote");
-    _restoreCheck("hide-resist-unsuitable", "hide-resist-unsuitable");
-    _restoreCheck("hide-resist-basement", "hide-resist-basement");
-    _restoreCheck("hide-foreclosure", "hide-foreclosure");
+    _restoreCheck("hide-resist-floors5plus", false);
+    _restoreCheck("hide-resist-remote", true);
+    _restoreCheck("hide-resist-unsuitable", true);
+    _restoreCheck("hide-resist-basement", false);
+    _restoreCheck("hide-foreclosure", true);
   } catch {}
   _initDistPicker();
   populateDistrictFilter();
