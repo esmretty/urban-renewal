@@ -1003,7 +1003,7 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
 .resistance-filter-panel {
   display: none;
   position: absolute;
-  top: 100%;
+  top: 100%;       /* 緊貼 button 底邊，無 gap，避免 hover 過渡時 panel 消失 */
   right: 0;
   z-index: 100;
   background: #fff;
@@ -1012,7 +1012,6 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
   padding: 8px 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   min-width: 180px;
-  margin-top: 2px;
 }
 .resistance-filter-wrap:hover .resistance-filter-panel,
 .resistance-filter-panel:hover {
