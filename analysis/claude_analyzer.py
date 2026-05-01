@@ -377,38 +377,16 @@ def _ocr_one_tile(tile_path: str) -> dict:
 
 
 def extract_full_detail_from_screenshot(screenshot_path: str) -> dict:
-    """切 2×2 共 4 片，取 r0c1（右上）/ r1c0（左下）/ r1c1（右下）三片跑 OCR 合併。
-    跳過 r0c0（左上通常是標題/首圖，沒欄位資料）。
-    每片是原圖 1/4 大小 → Vision 看到的文字像素密度翻倍，大幅降低字太小誤判。
-    三片用 ThreadPoolExecutor 平行呼叫 Claude API → 總耗時 ≈ max(單片)，不是 sum。"""
-    # 固定 tile 尺寸 1200×1500，不隨原圖長度浮動 → Vision 每次看到的字體密度一致
-    # 591 詳情頁基本資料區塊通常在前 3000px 內，2×2 固定切可覆蓋
-    try:
-        all_tiles = _split_image_into_tiles(
-            screenshot_path, cols=2, rows=2,
-            fixed_tile_w=1200, fixed_tile_h=1500,
-        )
-    except Exception as e:
-        logger.warning(f"tile 切片失敗 fallback 單張: {e}")
-        return _ocr_one_tile(screenshot_path)
+    """整張 screenshot 一次跑 OCR。
 
-    # _split_image_into_tiles 回傳順序：r0c0, r0c1, r1c0, r1c1 → 跳過 [0]，取 [1:]
-    target_tiles = all_tiles[1:] if len(all_tiles) >= 4 else all_tiles
+    歷史：之前用 2×2 切片再 OCR 三片合併，當初設計為了讓 Vision 看到的字密度
+    翻倍。但實測 6 個 case 顯示「整張 OCR」對 DOM-aware crop 過的 house_path /
+    addr_path 反而更準（land_area_ping 命中率 4/6 vs 切片 2/6），且省 2/3 API call。
+    切片邏輯把同一 row 的 label/value 切到不同 tile，反而造成漏判。
 
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=len(target_tiles)) as executor:
-        per_tile_results = list(executor.map(_ocr_one_tile, target_tiles))
-
-    merged = {}
-    for result in per_tile_results:
-        for k, v in result.items():
-            if v not in (None, "") and merged.get(k) in (None, ""):
-                merged[k] = v
-    logger.info(
-        f"Vision 3-tile OCR (parallel, r0c1/r1c0/r1c1) merged={merged} "
-        f"per_tile_keys={[list(r.keys()) for r in per_tile_results]}"
-    )
-    return merged
+    切片函式（_split_image_into_tiles）保留供其他 caller / 將來 fallback 用，但這
+    條 hot path 不再切。"""
+    return _ocr_one_tile(screenshot_path)
 
 
 def extract_detail_from_screenshot(screenshot_path: str) -> dict:
