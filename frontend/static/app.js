@@ -512,6 +512,7 @@ function computeSkipReasons(p, th) {
 // 優勢 chip helper — 彩色閃爍，列在抗性 chip 前面
 //   TOD: 捷運 500m 內
 //   防災型: 台北市建物且 1974 前蓋（防災都更額外容積獎勵 0.80x，比一般都更 0.50x 高）
+//   商業區: 土地分區含「商業區」(zoning / zoning_original / zoning_list 任一)
 function computeAdvantageChips(p) {
   const chips = [];
   if (p.nearest_mrt_dist_m != null && p.nearest_mrt_dist_m <= 500) {
@@ -520,6 +521,11 @@ function computeAdvantageChips(p) {
   const age = currentAge(p);
   if (p.city === "台北市" && age && (new Date().getFullYear() - age) <= 1974) {
     chips.push({ key: 'fangzai', label: '防災型', cls: 'adv-chip adv-fangzai' });
+  }
+  // 商業區：zoning 任一字段含「商業區」（含「第三種商業區」「商業區(特)」「商業區、住宅區」等）
+  const _zonStr = (p.zoning || '') + ' ' + (p.zoning_original || '') + ' ' + (Array.isArray(p.zoning_list) ? p.zoning_list.join(' ') : '');
+  if (_zonStr.includes('商業區')) {
+    chips.push({ key: 'commercial', label: '商業區', cls: 'adv-chip adv-commercial' });
   }
   return chips;
 }

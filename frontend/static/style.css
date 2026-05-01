@@ -1015,6 +1015,9 @@ body[data-tab="watchlist"] .property-row:not(.property-row--head):hover {
 .c-advantage .resist-chip.adv-fangzai {
   background-image: linear-gradient(90deg, #f97316, #ef4444, #f97316);   /* 橘紅漸層 — 防災感 */
 }
+.c-advantage .resist-chip.adv-commercial {
+  background-image: linear-gradient(90deg, #ca8a04, #facc15, #ca8a04);   /* 金黃漸層 — 商業價值感 */
+}
 @keyframes adv-shimmer {
   0%   { background-position: 0% 50%; }
   100% { background-position: 200% 50%; }
