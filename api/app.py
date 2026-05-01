@@ -3248,40 +3248,92 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 if not item.get("building_type"):
                     item["building_type"] = "公寓"
 
-                # 地址：若 DOM 已抓到「含號 + 含路名」的完整地址 → 跳過 OCR（省 API 錢 + 避免 OCR 誤覆蓋）
-                # 否則用「物件基本資料」窄裁切圖跑 consensus OCR
-                # 注意：用 helper 過濾「廣告詞含號但無路名」的 dirty 卡片地址（屋主把 community-name 填廣告詞）
-                from database.models import looks_like_real_address as _lkra_dom
-                _dom_has_full = _lkra_dom(item.get("address"), require_number=True)
-                if _dom_has_full:
-                    logger.info(f"  DOM 已有完整地址，跳過 OCR address: {item.get('address')!r}")
-                elif item.get("address") and "號" in (item.get("address") or ""):
-                    # 卡片 address 含號但無路名 → 廣告詞 → 清掉再走 OCR
-                    logger.info(f"  卡片 address {item.get('address')!r} 看似廣告詞（無路名）→ 清掉走 OCR")
+                # 地址決策（CLAUDE.md 規則 1：禁止 AI 幻覺、禁止填假地址）：
+                # 591「社區」label 是社區名稱可能含假路名（例 591_20123399「中佳北新路二段35號公寓」
+                # 路名根本不存在）；「地址」label 真值用 Web Component 包，DOM 看不到，必須 OCR。
+                # 規則（user 指定）：
+                #   1) 兩個都到號 → 地址欄(OCR)優先；OCR 無效才試社區欄；都無效 → 無資料
+                #   2) 只有社區到號 → 驗證；無效當沒資料
+                #   3) 只有地址欄到號 → 驗證；無效拿掉號（保留路+巷）
+                # 永遠跑 OCR（之前條件式跳過 → 假地址漏網）。
+                from database.models import looks_like_real_address as _lkra_dom, extract_district as _extract_dist
+                from analysis.claude_analyzer import extract_address_consensus, _clean_address_garbage
+                from analysis.geocoder import geocode_with_district as _geo_with_dist
+
+                _dom_addr = item.get("address") or ""
+                _ocr_addr = None
+                if _addr_crop and item.get("city") and item.get("district"):
+                    _ocr_raw = extract_address_consensus(_addr_crop, item["city"], item["district"])
+                    if _ocr_raw and _lkra_dom(_ocr_raw, require_number=False):
+                        _ocr_addr = _ocr_raw
+
+                def _validate_addr(addr, require_num: bool = True):
+                    """確認地址在 city+district 內 geocode 得到（即真實存在）。
+                    require_num=True：要含號才算（含號才能精確定位）；False：巷級也接受。"""
+                    if not addr:
+                        return False
+                    if require_num and "號" not in addr:
+                        return False
+                    full = addr if addr.startswith(item.get("city") or "") else f"{item.get('city','')}{item.get('district','')}{addr}"
+                    try:
+                        return bool(_geo_with_dist(full))
+                    except Exception:
+                        return False
+
+                _dom_has_num = bool(_dom_addr) and "號" in _dom_addr and _lkra_dom(_dom_addr, require_number=True)
+                _ocr_has_num = bool(_ocr_addr) and "號" in _ocr_addr
+
+                final_addr = None
+                final_source = None
+                if _ocr_has_num and _dom_has_num:
+                    # rule 3: 地址欄(OCR)優先
+                    if _validate_addr(_ocr_addr):
+                        final_addr, final_source = _ocr_addr, "ocr"
+                    elif _validate_addr(_dom_addr):
+                        final_addr, final_source = _dom_addr, "dom_community"
+                    # 都無效 → final_addr None（後面拿無號的）
+                elif _dom_has_num and not _ocr_has_num:
+                    # rule 1: 只有社區到號
+                    if _validate_addr(_dom_addr):
+                        final_addr, final_source = _dom_addr, "dom_community"
+                elif _ocr_has_num and not _dom_has_num:
+                    # rule 2: 只有地址欄到號
+                    if _validate_addr(_ocr_addr):
+                        final_addr, final_source = _ocr_addr, "ocr"
+                    else:
+                        # 拿掉號
+                        import re as _re_st
+                        _stripped = _re_st.sub(r"\s*\d+(?:之\d+)?號.*$", "", _ocr_addr).rstrip()
+                        if _stripped:
+                            final_addr, final_source = _stripped, "ocr_no_num"
+                # fallback：上面都沒匹配 → 取無號的候選（巷級）
+                # user: 最終地址必須真實存在 → 巷級也要 geocode 驗證，假路名直接拒收
+                if not final_addr:
+                    for cand, src_label in [(_ocr_addr, "ocr_no_num"), (_dom_addr, "dom_no_num")]:
+                        if cand:
+                            import re as _re_st2
+                            _s = _re_st2.sub(r"\s*\d+(?:之\d+)?號.*$", "", cand).rstrip()
+                            if _s and _validate_addr(_s, require_num=False):
+                                final_addr, final_source = _s, src_label
+                                break
+
+                logger.info(f"  地址決策 ({src_id}): dom={_dom_addr!r} ocr={_ocr_addr!r} → final={final_addr!r} src={final_source}")
+
+                if final_addr and final_source == "ocr":
+                    # OCR 地址若含「XX區」→ 信 OCR district
+                    _ocr_dist = _extract_dist(final_addr)
+                    if _ocr_dist and _ocr_dist != item.get("district"):
+                        logger.info(f"  [district 修正 OCR] card={item.get('district')!r} → OCR={_ocr_dist!r} ({src_id})")
+                        item["district"] = _ocr_dist
+
+                if final_addr:
+                    if not final_addr.startswith(item.get("city") or ""):
+                        final_addr = f"{item.get('city','')}{item.get('district','')}{final_addr}"
+                    final_addr = _clean_address_garbage(final_addr)
+                    item["address"] = final_addr
+                else:
+                    # 兩邊都失敗 → 清掉，下游 LVR / reverse_geo 會試從座標反推
                     item["address"] = ""
-                elif _addr_crop and item.get("city") and item.get("district"):
-                    from analysis.claude_analyzer import extract_address_consensus, _clean_address_garbage
-                    from database.models import looks_like_real_address as _lkra_batch_ocr
-                    ocr_addr = extract_address_consensus(_addr_crop, item["city"], item["district"])
-                    # OCR 看詳情頁可能讀到屋主自填的廣告詞（如「近XX1號出口」）→ 過 helper 才採用
-                    if ocr_addr and not _lkra_batch_ocr(ocr_addr, require_number=False):
-                        logger.info(f"  OCR 抓到 {ocr_addr!r} 但沒路名結構 → 拒收 ({src_id})")
-                        ocr_addr = None
-                    if ocr_addr:
-                        # OCR 地址若含「XX區」→ **信 OCR 的 district** 覆蓋 card district。
-                        # 591 card 多區混查有時會 mislabel section（e.g. 物件在中山區卻標大安區）
-                        from database.models import extract_district as _extract_dist
-                        _ocr_dist = _extract_dist(ocr_addr)
-                        if _ocr_dist and _ocr_dist != item.get("district"):
-                            logger.info(
-                                f"  [district 修正 OCR] card={item.get('district')!r} → OCR={_ocr_dist!r} ({src_id})"
-                            )
-                            item["district"] = _ocr_dist
-                        # 補上 city/district 前綴（OCR 通常只給「路名+巷號」）
-                        if not ocr_addr.startswith(item["city"]):
-                            ocr_addr = f"{item['city']}{item['district']}{ocr_addr}"
-                        ocr_addr = _clean_address_garbage(ocr_addr)
-                        item["address"] = ocr_addr
 
                 # ─ 詳情頁 scrape 失敗檢查：缺核心欄位（價格 / 行政區）→ 視為頁面沒拿到結構化資料，整筆丟棄
                 if not item.get("price_ntd") or not (item.get("district") or "").strip():
