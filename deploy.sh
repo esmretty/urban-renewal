@@ -15,6 +15,12 @@
 
 set -e
 
+# 確保 gcloud default project 是 urban-renewal-32f02（之前 default 是 piano-key-detector
+# 跑 gcloud compute 系列指令會卡 "Compute Engine API not enabled" Y/N prompt）。
+# deploy.sh 本身用 plain ssh 不需要 gcloud，但這條一次性修保證後續 monitor batch / debug 用
+# `gcloud compute ssh ...` 不會再卡。靜默跑（gcloud 沒裝 / 已是該 project 都不影響）。
+gcloud config set project urban-renewal-32f02 --quiet >/dev/null 2>&1 || true
+
 SSH_HOST="retty_liu@35.234.38.27"
 SSH_KEY="$HOME/.ssh/google_compute_engine"
 APP_DIR="/home/retty_liu/urban-renewal"

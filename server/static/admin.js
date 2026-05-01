@@ -201,6 +201,18 @@ window.loadLineStatus = async function () {
     // 同步 threshold input
     const inp = document.getElementById("line-threshold-input");
     if (inp && s.threshold_multiple != null) inp.value = s.threshold_multiple;
+    // 同步 skip flags checkbox
+    const sf = s.skip_flags || {};
+    const flagMap = {
+      "line-skip-remote-area": sf.skip_remote_area,
+      "line-skip-unsuitable": sf.skip_unsuitable,
+      "line-skip-foreclosure": sf.skip_foreclosure,
+      "line-skip-floors-5plus": sf.skip_floors_5plus,
+    };
+    Object.entries(flagMap).forEach(([id, v]) => {
+      const el = document.getElementById(id);
+      if (el && typeof v === "boolean") el.checked = v;
+    });
     // 載入發送紀錄
     if (typeof loadLineNotifications === "function") loadLineNotifications();
   } catch (e) {
@@ -226,6 +238,34 @@ window.saveLineThreshold = async function () {
     const data = await r.json();
     if (r.ok) {
       if (resEl) resEl.innerHTML = `<span style="color:#27ae60;">✓ 已儲存（${data.threshold_multiple} 倍）</span>`;
+      loadLineStatus();
+    } else {
+      if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(data.detail || "失敗")}</span>`;
+    }
+  } catch (e) {
+    if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(e.message)}</span>`;
+  }
+};
+
+window.saveLineSkipFlags = async function () {
+  const resEl = document.getElementById("line-skip-flags-result");
+  const payload = {
+    skip_remote_area: !!document.getElementById("line-skip-remote-area")?.checked,
+    skip_unsuitable: !!document.getElementById("line-skip-unsuitable")?.checked,
+    skip_foreclosure: !!document.getElementById("line-skip-foreclosure")?.checked,
+    skip_floors_5plus: !!document.getElementById("line-skip-floors-5plus")?.checked,
+  };
+  if (resEl) resEl.textContent = "儲存中…";
+  try {
+    const r = await authedFetch("/admin/line/skip_flags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      const checked = Object.values(data.skip_flags || {}).filter(v => v).length;
+      if (resEl) resEl.innerHTML = `<span style="color:#27ae60;">✓ 已儲存（${checked}/4 勾選）</span>`;
       loadLineStatus();
     } else {
       if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(data.detail || "失敗")}</span>`;

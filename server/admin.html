@@ -325,6 +325,19 @@
           <span id="line-threshold-result" style="font-size:13px; margin-left:10px;"></span>
         </div>
 
+        <!-- 不可觸發旗標（admin 勾選） -->
+        <div style="margin-bottom: 14px; padding:10px 12px; background:#fff; border:1px solid #e0d9c2; border-radius:4px;">
+          <div style="font-weight:600; margin-bottom:8px;">不可觸發 LINE 通知的物件類型（任一勾選命中即 skip）：</div>
+          <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center;">
+            <label style="cursor:pointer;"><input type="checkbox" id="line-skip-remote-area" checked> 偏遠地區</label>
+            <label style="cursor:pointer;"><input type="checkbox" id="line-skip-unsuitable" checked> 特殊土地分區</label>
+            <label style="cursor:pointer;"><input type="checkbox" id="line-skip-foreclosure" checked> 法拍屋</label>
+            <label style="cursor:pointer;"><input type="checkbox" id="line-skip-floors-5plus" checked> 總樓層 5 層以上</label>
+            <button onclick="saveLineSkipFlags()" style="padding:6px 14px; background:#c78a00; color:#fff; border:none; border-radius:4px; cursor:pointer; margin-left:auto;">儲存旗標</button>
+            <span id="line-skip-flags-result" style="font-size:13px;"></span>
+          </div>
+        </div>
+
         <!-- 測試訊息 -->
         <div style="display:flex; gap:10px; align-items:center; margin-bottom: 18px;">
           <button onclick="testLineNotify()" style="padding:8px 18px; background:#c78a00; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:600;">

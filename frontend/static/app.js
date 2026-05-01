@@ -2315,11 +2315,10 @@ function filterAndSort() {
     p.archived !== true
   );
 
-  // 「隱藏新北偏遠物件」chip 勾選時 → 過濾掉 is_remote_area（新北市偏遠路段）
-  // 特殊土地分區（unsuitable_for_renewal）不再被此 chip 控制，由 badge 提醒用戶；
-  // 兩 tab 共用，預設勾選
+  // 「隱藏偏遠/特殊分區」chip 勾選時 → 過濾掉 is_remote_area（新北偏遠路段）
+  //   + unsuitable_for_renewal（保護區/河道用地等都更不適用分區）。兩 tab 共用，預設勾選。
   if (document.getElementById("hide-non-renewable")?.checked) {
-    list = list.filter(p => !p.is_remote_area);
+    list = list.filter(p => !p.is_remote_area && !p.unsuitable_for_renewal);
   }
   // 「隱藏法拍屋」chip 勾選時 → 過濾掉 is_foreclosure（591 社區欄位含「【」/ 標題＃ 等規則判定）
   if (document.getElementById("hide-foreclosure")?.checked) {

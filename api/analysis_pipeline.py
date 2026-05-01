@@ -1145,12 +1145,33 @@ def analyze_single_property(
 
     # ── 高價值物件 LINE 通知 ──
     # 門檻：admin 在 settings/line_config.threshold_multiple 可調，預設 2.8
-    # 任何情境（危老/都更/防災都更）的 multiple ≥ threshold → 推 LINE
-    # 若已通知過（doc 有 line_notified_at）+ 倍數沒漲過顯著程度 → skip
-    # 政策規則：物件被標旗標（is_remote_area / unsuitable_for_renewal / is_foreclosure）→ 一律不發 LINE
-    #   不管收件人是誰、不管 chip 設定；旗標 = 系統判定不適合都更/位置太偏/法拍屋 = LINE 不騷擾
-    if doc_data.get("is_remote_area") or doc_data.get("unsuitable_for_renewal") or doc_data.get("is_foreclosure"):
-        logger.info(f"[{src_id}] LINE 通知跳過：物件被標旗標（remote / unsuitable / foreclosure）")
+    # 不可觸發旗標：admin 在 settings/line_config 可勾選（預設全勾）：
+    #   skip_remote_area / skip_unsuitable / skip_foreclosure / skip_floors_5plus
+    try:
+        from database.db import get_firestore as _gf_skip
+        _cfg_skip = _gf_skip().collection("settings").document("line_config").get()
+        _cfg_data_skip = _cfg_skip.to_dict() if _cfg_skip.exists else {}
+        _skip_remote = bool(_cfg_data_skip.get("skip_remote_area", True))
+        _skip_unsuitable = bool(_cfg_data_skip.get("skip_unsuitable", True))
+        _skip_foreclosure = bool(_cfg_data_skip.get("skip_foreclosure", True))
+        _skip_floors_5plus = bool(_cfg_data_skip.get("skip_floors_5plus", True))
+    except Exception:
+        _skip_remote = _skip_unsuitable = _skip_foreclosure = _skip_floors_5plus = True
+    _skip_reasons = []
+    if _skip_remote and doc_data.get("is_remote_area"):
+        _skip_reasons.append("remote_area")
+    if _skip_unsuitable and doc_data.get("unsuitable_for_renewal"):
+        _skip_reasons.append("unsuitable_zoning")
+    if _skip_foreclosure and doc_data.get("is_foreclosure"):
+        _skip_reasons.append("foreclosure")
+    if _skip_floors_5plus:
+        _tf_chk = doc_data.get("total_floors") or 0
+        try: _tf_chk = int(_tf_chk)
+        except Exception: _tf_chk = 0
+        if _tf_chk >= 5:
+            _skip_reasons.append(f"floors={_tf_chk}")
+    if _skip_reasons:
+        logger.info(f"[{src_id}] LINE 通知跳過：{','.join(_skip_reasons)}")
         rv2 = None   # 後續 try block 看不到 scenarios，自然不會觸發 notify
     try:
         rv2_check = rv2 or {}

@@ -1360,12 +1360,22 @@ async def admin_line_status(admin: dict = Depends(require_admin)):
     import os as _os
     token = _os.getenv("LINE_CHANNEL_TOKEN", "").strip()
     user_id = _os.getenv("LINE_USER_ID", "").strip()
-    # 讀門檻（預設 2.8）
+    # 讀門檻（預設 2.8）+ 不可觸發旗標（admin 勾選，預設全勾）
     threshold = 2.8
+    skip_flags = {
+        "skip_remote_area": True,
+        "skip_unsuitable": True,
+        "skip_foreclosure": True,
+        "skip_floors_5plus": True,
+    }
     try:
         cfg = get_firestore().collection("settings").document("line_config").get()
         if cfg.exists:
-            threshold = float((cfg.to_dict() or {}).get("threshold_multiple", 2.8))
+            cfg_data = cfg.to_dict() or {}
+            threshold = float(cfg_data.get("threshold_multiple", 2.8))
+            for k in skip_flags:
+                if k in cfg_data:
+                    skip_flags[k] = bool(cfg_data.get(k))
     except Exception: pass
     notified_count = 0
     last_notified = None
@@ -1384,6 +1394,7 @@ async def admin_line_status(admin: dict = Depends(require_admin)):
         "user_id_set": bool(user_id),
         "user_id_preview": (user_id[:6] + "...") if len(user_id) > 7 else "(empty)",
         "threshold_multiple": threshold,
+        "skip_flags": skip_flags,
         "notified_property_count": notified_count,
         "last_notified_at": last_notified,
         "trigger_threshold": f"都更/危老/防災都更 任一情境 ≥ {threshold} 倍",
@@ -1406,6 +1417,37 @@ async def admin_set_line_threshold(body: LineThresholdReq, admin: dict = Depends
     }, merge=True)
     logger.warning(f"[admin] {admin.get('email')} 設 LINE threshold = {body.threshold}")
     return {"status": "ok", "threshold_multiple": float(body.threshold)}
+
+
+class LineSkipFlagsReq(BaseModel):
+    skip_remote_area: bool = True
+    skip_unsuitable: bool = True
+    skip_foreclosure: bool = True
+    skip_floors_5plus: bool = True
+
+
+@app.post("/admin/line/skip_flags")
+async def admin_set_line_skip_flags(body: LineSkipFlagsReq, admin: dict = Depends(require_admin)):
+    """Admin 設定 LINE「不可觸發」旗標 — 對應 doc 欄位有命中時 skip 通知。
+    4 個 flag 預設全 True：
+      - skip_remote_area: 偏遠路段（is_remote_area）
+      - skip_unsuitable:  特殊土地分區（unsuitable_for_renewal）
+      - skip_foreclosure: 法拍屋（is_foreclosure）
+      - skip_floors_5plus: 總樓層 ≥5（公寓 5F 也排除）
+    """
+    payload = {
+        "skip_remote_area": bool(body.skip_remote_area),
+        "skip_unsuitable": bool(body.skip_unsuitable),
+        "skip_foreclosure": bool(body.skip_foreclosure),
+        "skip_floors_5plus": bool(body.skip_floors_5plus),
+        "updated_at": now_tw_iso(),
+        "updated_by_email": admin.get("email") or "",
+    }
+    get_firestore().collection("settings").document("line_config").set(payload, merge=True)
+    logger.warning(f"[admin] {admin.get('email')} 設 LINE skip_flags = {payload}")
+    return {"status": "ok", "skip_flags": {k: payload[k] for k in (
+        "skip_remote_area", "skip_unsuitable", "skip_foreclosure", "skip_floors_5plus"
+    )}}
 
 
 @app.get("/admin/line/notifications")
