@@ -2910,11 +2910,32 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
     new_items.reverse()
 
     # 開個新 browser context 給 detail page 截圖用
-    with get_browser_context(headless=headless) as ocr_ctx:
+    # 注意：原本用 `with get_browser_context() as ocr_ctx` 包整個迴圈 — Chromium 跨頁
+    # 的 memory cache 會累積（每筆 +200~400MB），跑滿 quota 必 OOM。改用 yield (ctx, browser)
+    # 版本，loop 內每 RECYCLE_EVERY 筆 close+reopen context 強制 Chromium 釋放 page cache。
+    from scraper.browser_manager import get_browser_context_with_browser, _build_ctx
+    RECYCLE_EVERY = 5
+    with get_browser_context_with_browser(headless=headless) as (ocr_ctx_init, _browser):
+        ocr_ctx = ocr_ctx_init
         for idx, item in enumerate(new_items, 1):
             if _cancel_requested:
                 progress_callback("⛔ 使用者取消", 100)
                 break
+            # 每 RECYCLE_EVERY 筆關掉舊 ctx 重開（Chromium memory cache 釋放）
+            if idx > 1 and (idx - 1) % RECYCLE_EVERY == 0:
+                try:
+                    ocr_ctx.close()
+                except Exception as _ce:
+                    logger.warning(f"  [mem] ctx close err: {_ce}")
+                try:
+                    import gc as _gc_recyc; _gc_recyc.collect()
+                except Exception: pass
+                ocr_ctx = _build_ctx(_browser)
+                try:
+                    import psutil as _psutil_r
+                    _rss_r = _psutil_r.Process().memory_info().rss / 1048576
+                    logger.info(f"  [mem] recycled ctx at iter#{idx} post_recycle_rss={_rss_r:.0f}MB")
+                except Exception: pass
             try:
                 pct = 50 + (idx / max(total_to_analyze, 1)) * 50
                 is_enrich = item.get("_enrich_existing", False)
@@ -3619,14 +3640,21 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     "foreclosure": f"  ⚖ 法拍：{', '.join(result.get('foreclosure_reasons') or [])}",
                 }.get(result["status"], "")
                 progress_callback(status_msg, pct, new_item=(result["status"] == "done"))
-                # leak-hunt point D：DB 寫入完，每筆全結束（含 dup_index 更新）
-                try:
-                    _rss_d = _psutil.Process().memory_info().rss / 1048576
-                    logger.info(f"[mem] iter#{idx} src={src_id} D_iterEnd rss={_rss_d:.0f}MB delta={_rss_d-_rss_a:+.0f} (net per-iter growth)")
-                except Exception: pass
 
             except Exception as e:
                 logger.exception(f"分析失敗 {item.get('source_id')}: {e}")
+            finally:
+                # 每筆做完強制 gc — 釋放 PIL Image / Vision response / Anthropic SDK
+                # 持有的 base64 image 等大物件，避免跨 iter 累積成 OOM
+                try:
+                    import gc as _gc
+                    _gc.collect()
+                except Exception: pass
+                # leak-hunt point D：gc 完印 RSS（看 net growth）
+                try:
+                    _rss_d = _psutil.Process().memory_info().rss / 1048576
+                    logger.info(f"[mem] iter#{idx} src={src_id} D_iterEnd_postGC rss={_rss_d:.0f}MB delta={_rss_d-_rss_a:+.0f} (net per-iter growth)")
+                except Exception: pass
 
     progress_callback(
         f"完成：新增 {new_count} 筆，補資料 {enrich_count} 筆，重複捨棄 {skip_dup_count} 筆，價格變動 {len(price_updates)} 筆",

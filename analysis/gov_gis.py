@@ -805,11 +805,22 @@ def fetch_zoning_map_image_newtaipei(
         )
 
     try:
-        composed.convert("RGB").save(output_path, format="PNG")
+        # PIL 不會自動釋放 pixel buffer → 顯式 close 避免 batch 累積
+        rgb = composed.convert("RGB")
+        try: rgb.save(output_path, format="PNG")
+        finally: rgb.close()
         return True
     except Exception as e:
         logger.warning(f"composed 寫檔失敗: {e}")
         return False
+    finally:
+        try: composed.close()
+        except Exception: pass
+        try: base.close()
+        except Exception: pass
+        try:
+            if landuse_img: landuse_img.close()
+        except Exception: pass
 
 
 def query_section_parcel(lat: float, lng: float) -> Optional[dict]:

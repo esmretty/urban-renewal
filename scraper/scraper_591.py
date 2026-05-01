@@ -932,73 +932,93 @@ def screenshot_detail_page(ctx: BrowserContext, url: str, source_id: str):
         house_path = SCREENSHOTS_DIR / f"{source_id.replace('/', '_')}_house.png"
         try:
             from PIL import Image
+            # 注意：PIL 的 `with Image.open() as im` __exit__ 只關 file pointer，
+            # 不會釋放 self.im 的 pixel buffer！591 詳情頁 full_page 截圖約 99M pixels
+            # = 400MB 原始 RGBA，必須顯式 close() 才釋放。否則跑 batch 一筆漏 ~300MB。
             im = Image.open(full_path)
-            DPR = 2
-            page_h_actual = im.height
+            try:
+                DPR = 2
+                page_h_actual = im.height
+                im_width = im.width
 
-            basic = section_ys.get("basic") if isinstance(section_ys, dict) else None
-            house = section_ys.get("house") if isinstance(section_ys, dict) else None
+                basic = section_ys.get("basic") if isinstance(section_ys, dict) else None
+                house = section_ys.get("house") if isinstance(section_ys, dict) else None
 
-            # 房屋介紹切片（含土地坪數/使用分區）：以 DOM y 為起點，向下取 1500 CSS px
-            # 縮小切片高度（1800→1500）以避免 PNG 超過 Claude Vision 5MB base64 限制
-            if house and house.get("y") is not None:
-                h_top = max(0, int(house["y"] - 30) * DPR)
-                h_bot = min(page_h_actual, int(house["y"] + 1500) * DPR)
-                if h_bot > h_top:
-                    im.crop((0, h_top, im.width, h_bot)).save(house_path)
+                # 房屋介紹切片（含土地坪數/使用分區）：以 DOM y 為起點，向下取 1500 CSS px
+                # 縮小切片高度（1800→1500）以避免 PNG 超過 Claude Vision 5MB base64 限制
+                if house and house.get("y") is not None:
+                    h_top = max(0, int(house["y"] - 30) * DPR)
+                    h_bot = min(page_h_actual, int(house["y"] + 1500) * DPR)
+                    if h_bot > h_top:
+                        c = im.crop((0, h_top, im_width, h_bot))
+                        try: c.save(house_path)
+                        finally: c.close()
 
-            # 物件基本資料切片（含地址）：
-            # 優先用 basic DOM y；若 basic 找不到但 house 找到了，「基本資料」必在 house 上方 →
-            # 從 (house_y - 1500 CSS) 到 house_y 切一段（通常剛好涵蓋地址/屋齡/樓層/坪數表格）
-            if basic and basic.get("y") is not None:
-                a_top = max(0, int(basic["y"] - 30) * DPR)
-                a_bot = min(page_h_actual, int(basic["y"] + 1400) * DPR)
-                if a_bot > a_top:
-                    im.crop((0, a_top, im.width, a_bot)).save(addr_path)
-            elif house and house.get("y") is not None and house["y"] > 400:
-                # fallback：基本資料必在房屋介紹上方
-                a_top = max(0, int(house["y"] - 1500) * DPR)
-                a_bot = int(house["y"]) * DPR
-                if a_bot > a_top:
-                    im.crop((0, a_top, im.width, a_bot)).save(addr_path)
-            else:
-                # 最 fallback：section DOM 完全找不到 → 給全頁 y=500~2500 CSS px 區間
-                # （通常基本資料表格在這個範圍內，避開最上面 header + gallery）
-                a_top = 500 * DPR
-                a_bot = min(page_h_actual, 2500 * DPR)
-                if a_bot > a_top:
-                    im.crop((0, a_top, im.width, a_bot)).save(addr_path)
-
-            # 合併「基本資料 + 房屋介紹」成 shot_path（供 tile OCR 用）：
-            # - 垂直：basic.y-30 (或 house.y-30 若無 basic) 到 house.y+1000
-            #   新版 591 很多頁面只有「房屋介紹」section，所有結構化欄位都在裡面
-            # - 水平：以內容區 x/w 為中央帶（1920 viewport 兩側各 ~400px 留白可切掉）
-            # x 範圍：取 basic、house 的最左 / 最右，多加 20px padding
-            sections = [s for s in (basic, house) if s and s.get("x") is not None]
-            x_lefts = [s.get("x") for s in sections]
-            x_rights = [s.get("x", 0) + s.get("w", 0) for s in sections]
-            # top 優先用 basic；沒有 basic 時需往上涵蓋價格/屋況卡（屋齡、樓層、建坪、價格都在這裡）
-            # 依經驗價格卡大約在 house.y 上方 800-900 CSS，取 max(200, house.y - 900) 避開最上頭 header
-            bot = (house or {}).get("y")
-            if basic:
-                top = basic.get("y")
-            elif house:
-                top = max(200, (house.get("y") or 0) - 900)
-            else:
-                top = None
-            if top is not None and bot is not None:
-                t = max(0, int(top - 30) * DPR)
-                b = min(page_h_actual, int(bot + 1000) * DPR)
-                if x_lefts and x_rights:
-                    cx_left = max(0, int(min(x_lefts) - 20) * DPR)
-                    cx_right = min(im.width, int(max(x_rights) + 20) * DPR)
+                # 物件基本資料切片（含地址）：
+                # 優先用 basic DOM y；若 basic 找不到但 house 找到了，「基本資料」必在 house 上方 →
+                # 從 (house_y - 1500 CSS) 到 house_y 切一段（通常剛好涵蓋地址/屋齡/樓層/坪數表格）
+                if basic and basic.get("y") is not None:
+                    a_top = max(0, int(basic["y"] - 30) * DPR)
+                    a_bot = min(page_h_actual, int(basic["y"] + 1400) * DPR)
+                    if a_bot > a_top:
+                        c = im.crop((0, a_top, im_width, a_bot))
+                        try: c.save(addr_path)
+                        finally: c.close()
+                elif house and house.get("y") is not None and house["y"] > 400:
+                    # fallback：基本資料必在房屋介紹上方
+                    a_top = max(0, int(house["y"] - 1500) * DPR)
+                    a_bot = int(house["y"]) * DPR
+                    if a_bot > a_top:
+                        c = im.crop((0, a_top, im_width, a_bot))
+                        try: c.save(addr_path)
+                        finally: c.close()
                 else:
-                    cx_left, cx_right = 0, im.width
-                im.crop((cx_left, t, cx_right, b)).save(path)
-                logger.info(f"  shot_path crop x=[{cx_left}-{cx_right}] y=[{t}-{b}] basic={basic is not None} ({source_id})")
-            else:
-                # 完全找不到 section → 退回固定 y 截至 4500
-                im.crop((0, 0, im.width, min(page_h_actual, 4500 * DPR))).save(path)
+                    # 最 fallback：section DOM 完全找不到 → 給全頁 y=500~2500 CSS px 區間
+                    # （通常基本資料表格在這個範圍內，避開最上面 header + gallery）
+                    a_top = 500 * DPR
+                    a_bot = min(page_h_actual, 2500 * DPR)
+                    if a_bot > a_top:
+                        c = im.crop((0, a_top, im_width, a_bot))
+                        try: c.save(addr_path)
+                        finally: c.close()
+
+                # 合併「基本資料 + 房屋介紹」成 shot_path（供 tile OCR 用）：
+                # - 垂直：basic.y-30 (或 house.y-30 若無 basic) 到 house.y+1000
+                #   新版 591 很多頁面只有「房屋介紹」section，所有結構化欄位都在裡面
+                # - 水平：以內容區 x/w 為中央帶（1920 viewport 兩側各 ~400px 留白可切掉）
+                # x 範圍：取 basic、house 的最左 / 最右，多加 20px padding
+                sections = [s for s in (basic, house) if s and s.get("x") is not None]
+                x_lefts = [s.get("x") for s in sections]
+                x_rights = [s.get("x", 0) + s.get("w", 0) for s in sections]
+                # top 優先用 basic；沒有 basic 時需往上涵蓋價格/屋況卡（屋齡、樓層、建坪、價格都在這裡）
+                # 依經驗價格卡大約在 house.y 上方 800-900 CSS，取 max(200, house.y - 900) 避開最上頭 header
+                bot = (house or {}).get("y")
+                if basic:
+                    top = basic.get("y")
+                elif house:
+                    top = max(200, (house.get("y") or 0) - 900)
+                else:
+                    top = None
+                if top is not None and bot is not None:
+                    t = max(0, int(top - 30) * DPR)
+                    b = min(page_h_actual, int(bot + 1000) * DPR)
+                    if x_lefts and x_rights:
+                        cx_left = max(0, int(min(x_lefts) - 20) * DPR)
+                        cx_right = min(im_width, int(max(x_rights) + 20) * DPR)
+                    else:
+                        cx_left, cx_right = 0, im_width
+                    c = im.crop((cx_left, t, cx_right, b))
+                    try: c.save(path)
+                    finally: c.close()
+                    logger.info(f"  shot_path crop x=[{cx_left}-{cx_right}] y=[{t}-{b}] basic={basic is not None} ({source_id})")
+                else:
+                    # 完全找不到 section → 退回固定 y 截至 4500
+                    c = im.crop((0, 0, im_width, min(page_h_actual, 4500 * DPR)))
+                    try: c.save(path)
+                    finally: c.close()
+            finally:
+                im.close()   # 釋放 self.im pixel buffer（with 不會做這件事）
+                im = None
 
             full_path.unlink(missing_ok=True)
             logger.info(

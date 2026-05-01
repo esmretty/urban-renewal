@@ -19,6 +19,32 @@ USER_AGENTS = [
 ]
 
 
+def _build_ctx(browser: Browser) -> BrowserContext:
+    """從既有 browser 建立 context（擬人化設定）。
+    抽出來讓 caller 可以在 loop 中關掉舊 context 重建新的，藉此釋放 Chromium
+    跨頁 memory cache（OOM 防護）。"""
+    ctx: BrowserContext = browser.new_context(
+        user_agent=random.choice(USER_AGENTS),
+        viewport={"width": 1920, "height": 1080},
+        device_scale_factor=2,   # 2× DPR：截圖每個字 4 倍像素量，對 Claude Vision OCR 精度幫助明顯
+        locale="zh-TW",
+        timezone_id="Asia/Taipei",
+        java_script_enabled=True,
+        accept_downloads=False,
+        extra_http_headers={
+            "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+        },
+    )
+    # 覆蓋 navigator.webdriver 屬性
+    ctx.add_init_script("""
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined,
+        });
+        window.chrome = { runtime: {} };
+    """)
+    return ctx
+
+
 @contextmanager
 def get_browser_context(headless: bool = True):
     """
@@ -34,30 +60,36 @@ def get_browser_context(headless: bool = True):
                 "--disable-dev-shm-usage",
             ],
         )
-        ctx: BrowserContext = browser.new_context(
-            user_agent=random.choice(USER_AGENTS),
-            viewport={"width": 1920, "height": 1080},
-            device_scale_factor=2,   # 2× DPR：截圖每個字 4 倍像素量，對 Claude Vision OCR 精度幫助明顯
-            locale="zh-TW",
-            timezone_id="Asia/Taipei",
-            java_script_enabled=True,
-            accept_downloads=False,
-            # 讓 navigator.webdriver 為 false
-            extra_http_headers={
-                "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-            },
-        )
-        # 覆蓋 navigator.webdriver 屬性
-        ctx.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined,
-            });
-            window.chrome = { runtime: {} };
-        """)
+        ctx = _build_ctx(browser)
         try:
             yield ctx
         finally:
             browser.close()
+
+
+@contextmanager
+def get_browser_context_with_browser(headless: bool = True):
+    """跟 get_browser_context 同樣的設定，但 yield (ctx, browser) tuple。
+    用途：caller 想在 loop 中定期 close+reopen ctx 釋放 Chromium memory cache 時用。
+    Caller 自己負責 ctx.close() 跟新 ctx 的建立（用 _build_ctx）。
+    這個 manager 自己只保證 browser.close()/playwright.stop() 在退出時跑。"""
+    with sync_playwright() as pw:
+        browser: Browser = pw.chromium.launch(
+            headless=headless,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+            ],
+        )
+        ctx = _build_ctx(browser)
+        try:
+            yield ctx, browser
+        finally:
+            try:
+                browser.close()
+            except Exception:
+                pass
 
 
 def human_delay(min_sec: float = SCRAPE_DELAY_MIN, max_sec: float = SCRAPE_DELAY_MAX) -> None:

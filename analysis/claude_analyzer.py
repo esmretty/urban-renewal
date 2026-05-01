@@ -310,26 +310,32 @@ def _split_image_into_tiles(screenshot_path: str, cols: int = 2, rows: int = 4,
     from pathlib import Path
     # PIL 安全限制放寬（591 長頁 93M pixels 會超過預設 89M）
     Image.MAX_IMAGE_PIXELS = 200_000_000
+    # 注意：PIL `with Image.open()` 不會釋放 pixel buffer（只關 fp）→ 必須顯式 close()
     im = Image.open(screenshot_path)
-    w, h = im.size
-    if fixed_tile_w and fixed_tile_h:
-        tile_w, tile_h = fixed_tile_w, fixed_tile_h
-    else:
-        tile_w = w // cols
-        tile_h = h // rows
-    stem = Path(screenshot_path).with_suffix("")
-    tiles = []
-    for r in range(rows):
-        for c in range(cols):
-            left = c * tile_w
-            top = r * tile_h
-            right = min(left + tile_w, w)
-            bottom = min(top + tile_h, h)
-            if right <= left or bottom <= top:
-                continue   # tile 完全落在原圖外 → 略過
-            tile_path = f"{stem}_tile_r{r}c{c}.png"
-            im.crop((left, top, right, bottom)).save(tile_path)
-            tiles.append(tile_path)
+    try:
+        w, h = im.size
+        if fixed_tile_w and fixed_tile_h:
+            tile_w, tile_h = fixed_tile_w, fixed_tile_h
+        else:
+            tile_w = w // cols
+            tile_h = h // rows
+        stem = Path(screenshot_path).with_suffix("")
+        tiles = []
+        for r in range(rows):
+            for c in range(cols):
+                left = c * tile_w
+                top = r * tile_h
+                right = min(left + tile_w, w)
+                bottom = min(top + tile_h, h)
+                if right <= left or bottom <= top:
+                    continue   # tile 完全落在原圖外 → 略過
+                tile_path = f"{stem}_tile_r{r}c{c}.png"
+                cropped = im.crop((left, top, right, bottom))
+                try: cropped.save(tile_path)
+                finally: cropped.close()
+                tiles.append(tile_path)
+    finally:
+        im.close()
     return tiles
 
 
@@ -574,18 +580,27 @@ def _encode_image(path: str):
         # base64 會把大小放大 1.33x；Claude 上限 5MB 指 base64 後大小 → raw 要 <3.75MB 才安全
         if len(raw) <= 3_700_000:
             return base64.standard_b64encode(raw).decode("utf-8"), "image/png"
+        # PIL Image.open 必須顯式 close() 才釋放 pixel buffer
         im = Image.open(io.BytesIO(raw))
-        max_dim = 2000
-        if max(im.size) > max_dim:
-            scale = max_dim / max(im.size)
-            im = im.resize((int(im.width * scale), int(im.height * scale)), Image.LANCZOS)
-        if im.mode != "RGB":
-            im = im.convert("RGB")
-        buf = io.BytesIO()
-        im.save(buf, format="JPEG", quality=85, optimize=True)
-        out = buf.getvalue()
-        logger.info(f"  截圖過大 ({len(raw)//1024}KB) → 縮圖 JPEG ({len(out)//1024}KB)")
-        return base64.standard_b64encode(out).decode("utf-8"), "image/jpeg"
+        try:
+            max_dim = 2000
+            if max(im.size) > max_dim:
+                scale = max_dim / max(im.size)
+                resized = im.resize((int(im.width * scale), int(im.height * scale)), Image.LANCZOS)
+                im.close()
+                im = resized
+            if im.mode != "RGB":
+                converted = im.convert("RGB")
+                im.close()
+                im = converted
+            buf = io.BytesIO()
+            im.save(buf, format="JPEG", quality=85, optimize=True)
+            out = buf.getvalue()
+            logger.info(f"  截圖過大 ({len(raw)//1024}KB) → 縮圖 JPEG ({len(out)//1024}KB)")
+            return base64.standard_b64encode(out).decode("utf-8"), "image/jpeg"
+        finally:
+            try: im.close()
+            except Exception: pass
     except Exception as e:
         logger.error(f"Failed to encode image {path}: {e}")
         return None, "image/png"
