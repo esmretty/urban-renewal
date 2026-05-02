@@ -770,6 +770,23 @@ def fetch_zoning_map_image_taipei(
     except Exception as e:
         logger.info(f"台北 WMS 地號文字層 (PIL) 例外（不影響主圖）: {e}")
 
+    # ── 物件中心紅點（PIL 直接畫在 composed 上）────────────────────────────
+    # WMS address-WGS84 給的是該街區所有門牌號，但用戶想看「這個物件」位置
+    # 用一開始 wgs84_to_twd97 算的 (cx_center, cy_center) → pixel 中央
+    try:
+        from PIL import ImageDraw as _ImageDraw_pin
+        _draw_pin = _ImageDraw_pin.Draw(composed)
+        cpx = img_w / 2   # bbox 是以 lat/lng 為中心畫的，所以 pixel 中央剛好
+        cpy = img_h / 2
+        # 雙圈：外圈黑描邊（半徑 14）+ 內圈紅（半徑 10）→ 在任何底色都顯眼
+        for r_pin, color in ((14, (0, 0, 0, 255)), (10, (220, 30, 30, 255))):
+            _draw_pin.ellipse(
+                (cpx - r_pin, cpy - r_pin, cpx + r_pin, cpy + r_pin),
+                fill=color,
+            )
+    except Exception as e:
+        logger.info(f"台北 WMS 中心紅點例外（不影響主圖）: {e}")
+
     # ── 門牌層（單獨打 → 紅色 composite，避開 label conflict）─────────────
     try:
         r2 = httpx.get(
