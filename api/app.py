@@ -5256,10 +5256,12 @@ def _scrape_single_url_591_inner(url: str, src_id: str, is_reanalyze: bool = Fal
         if _mobile_data_url:
             # ─── Mobile fast path：純 HTTP，無 Playwright ───
             m = _mobile_data_url
-            # body_text 給法拍偵測 + city/district fallback；mobile 用 title + remark + region/section 拼
-            _body_text = ((m.get("title") or "") + "\n"
-                          + (m.get("remark") or "") + "\n"
-                          + (m.get("city") or "") + (m.get("district") or ""))
+            # body_text 給法拍偵測 + city/district fallback；
+            # **city+district 必須放最前面**，避免下游 regex `[一-龥]{2,3}區`
+            # 抓到 title/remark 廣告詞的「實踐學區」「忠孝商圈」之類當成 district
+            _body_text = ((m.get("city") or "") + (m.get("district") or "") + "\n"
+                          + (m.get("title") or "") + "\n"
+                          + (m.get("remark") or ""))
             data = {
                 "docTitle": m.get("title") or "",
                 "title": m.get("title") or "",
@@ -5274,6 +5276,8 @@ def _scrape_single_url_591_inner(url: str, src_id: str, is_reanalyze: bool = Fal
                 "land_area_ping": m.get("land_area_ping"),
                 "building_age": m.get("building_age"),
                 "floor": m.get("floor"),
+                # mobile API address：可能完整 (含號) 或 hide_addr_detail=1 case 只到「街X段」
+                "address": m.get("address") or "",
             }
             if m.get("price_ntd"):
                 vision["price_wan"] = m["price_ntd"] // 10000

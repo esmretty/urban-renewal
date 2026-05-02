@@ -127,17 +127,39 @@ def _build_address(d: dict) -> str:
 
 def _land_area_ping_from_arr(area_intro_arr) -> Optional[float]:
     """從 data.area_intro_arr (list of {name, value}) 找土地坪數。
-    範例：[{name:'登記總面積', value:'38.32坪'},
-           {name:'主建物', value:'38.32坪'},
-           {name:'土地坪數', value:'16.10坪'},
-           {name:'車位面積', value:'-'}]"""
+    591 不同物件 name 標法不一，可能是：
+      '土地坪數'          (大部分案件)
+      '土地（持分）坪數'  (永康街 591_20129938 等案件)
+      '土地持分坪數' / '土地持分'
+    比對策略：含「土地」AND（含「坪」OR含「持分」）→ 視為土地坪數欄位。
+    """
     if not isinstance(area_intro_arr, list):
         return None
     for it in area_intro_arr:
         if not isinstance(it, dict):
             continue
-        if it.get("name") == "土地坪數":
-            return _parse_ping(it.get("value"))
+        name = (it.get("name") or "").strip()
+        if "土地" in name and ("坪" in name or "持分" in name):
+            v = _parse_ping(it.get("value"))
+            if v is not None:
+                return v
+    return None
+
+
+def _land_area_ping_from_intro_str(area_intro: str) -> Optional[float]:
+    """area_intro_arr 抓不到時，fallback 從 area_intro 字串拆。
+    範例：'主建物38.09坪，附屬建物6.19坪，土地15.43坪'
+          '主建物38.32坪，土地坪數16.10坪'"""
+    if not area_intro:
+        return None
+    s = str(area_intro)
+    # 找「土地」後第一個「\d+.\d+坪」
+    m = re.search(r"土地[（(一-龥]*[）)]?(?:坪數)?\s*([\d.]+)\s*坪", s)
+    if m:
+        try:
+            return float(m.group(1))
+        except (ValueError, TypeError):
+            pass
     return None
 
 
