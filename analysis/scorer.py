@@ -419,9 +419,25 @@ def calculate_renewal_scenarios(
     road_width_m: Optional[float] = None,
     lat: Optional[float] = None,
     lng: Optional[float] = None,
+    zoning_list: Optional[list] = None,
+    zoning_ratios: Optional[list] = None,
+    floor: Optional[int] = None,
+    floor_range_min: Optional[int] = None,
+    floor_premium: Optional[float] = None,
+    building_area_ping: Optional[float] = None,
 ) -> dict:
     """
     用「重建坪數計算機」邏輯 + 房價→分回比例對照表，計算危老/都更/防災都更三情境。
+
+    多分區：當 zoning_list 有 ≥ 2 項且每項都能查到 FAR 時，用 zoning_ratios 加權平均
+    （ratios 為 None 時等比例分配）；否則退回單一 zoning。
+
+    1F 加成：floor_premium 顯式給優先；否則 floor==1 或 floor_range_min==1 預設 +20%。
+
+    車位：每 40 坪分回配 1 個車位（跟前端 renewalV2HTML 一致），不再固定 1 個。
+
+    土地坪數異常：building_area_ping > 0 且 land_area_ping > building_area_ping →
+    回 land_area_suspicious=True 且 scenarios={}（不算倍數，避免誤導）。
 
     Returns:
         {
@@ -430,8 +446,9 @@ def calculate_renewal_scenarios(
             "new_house_price_source": str,    # default_district / override
             "share_ratio": float | None,      # 分回比例（從表查）
             "parking_value_wan": float | None,# 車位市值（萬）
+            "land_area_suspicious": bool,     # 土地坪數 > 建坪 → 不可信，跳過試算
             "scenarios": {
-                "危老":      { bonus, share_ping, house_value_wan, total_value_wan, profit_wan, multiple },
+                "危老":      { bonus, share_ping, parking_value_wan, total_value_wan, profit_wan, multiple },
                 "都更":      { ... },
                 "防災都更":  { ... } 若 is_qualified_for_fz_dugen
             },
@@ -444,6 +461,7 @@ def calculate_renewal_scenarios(
         "new_house_price_source": None,
         "share_ratio": None,
         "parking_value_wan": None,
+        "land_area_suspicious": False,
         "scenarios": {},
         "note": "",
     }
@@ -452,11 +470,53 @@ def calculate_renewal_scenarios(
         out["note"] = "缺土地坪數，無法試算。"
         return out
 
-    # 1. 基準容積率：用統一 lookup_far(zoning, district, lat, lng)
+    # 土地坪數 > 建坪：591 詳情頁有時誤抓土地坪數（極端例：建坪 23、土地 107）
+    # 一般公寓的土地持分 ≈ 建坪 × 0.3-0.5，土地若 > 建坪幾乎一定是抓錯。
+    # → 跳過倍數試算（避免「異常高倍數」誤導用戶買進）
+    if building_area_ping and building_area_ping > 0 and land_area_ping > building_area_ping:
+        out["land_area_suspicious"] = True
+        out["note"] = "土地坪數大於建坪，可能不可信；不試算倍數。"
+        return out
+
+    # 1. 基準容積率：多分區加權 / 單一 zoning lookup
     #    處理：台北市 zoning / 新北 5 區泛稱 / 板橋特例 460 / 浮洲 polygon / 新店子類別 + 泛稱 fallback
     #    注意：用戶設計**不實作路寬縮減**（建商會把都更基地擴到旁邊大馬路吃容積，路寬限制無實務意義）
     from config import lookup_far as _lookup_far
-    base_far_pct = _lookup_far(zoning, district, lat, lng) if zoning else None
+
+    base_far_pct = None
+    multi_zone_used = False
+    if zoning_list and isinstance(zoning_list, (list, tuple)) and len(zoning_list) >= 2:
+        # 多分區：每塊查 FAR，按 zoning_ratios 加權；ratios 為 None 時等比例
+        zone_keys = []
+        for zItem in zoning_list:
+            if isinstance(zItem, str):
+                zone_keys.append(zItem)
+            elif isinstance(zItem, dict):
+                zone_keys.append(zItem.get("original_zone") or zItem.get("zone_name") or "")
+            else:
+                zone_keys.append("")
+        zone_keys = [z for z in zone_keys if z]
+        if len(zone_keys) >= 2:
+            n = len(zone_keys)
+            if zoning_ratios and len(zoning_ratios) == n:
+                ratios = [float(r or 0) for r in zoning_ratios]
+            else:
+                ratios = [100.0 / n] * n
+            tot = sum(ratios) or 1.0
+            weighted = 0.0
+            ok = True
+            for zk, r in zip(zone_keys, ratios):
+                f = _lookup_far(zk, district, lat, lng)
+                if f is None:
+                    ok = False
+                    break
+                weighted += f * (r / tot)
+            if ok:
+                base_far_pct = round(weighted)
+                multi_zone_used = True
+    if base_far_pct is None and zoning:
+        base_far_pct = _lookup_far(zoning, district, lat, lng)
+
     if base_far_pct is None:
         out["note"] = f"未知分區 {zoning!r}（{district}），無法試算。"
         return out
@@ -464,6 +524,7 @@ def calculate_renewal_scenarios(
     far_pct = base_far_pct
     out["effective_far_pct"] = far_pct
     out["road_width_capped"] = False   # 永遠 False（用戶設計不縮減）
+    out["multi_zone_weighted"] = multi_zone_used
 
     # 2. 新成屋單價（優先序：用戶覆寫 > Firestore 預售屋中位數 > config 寫死常數）
     price = new_house_price_wan_per_ping
@@ -492,6 +553,25 @@ def calculate_renewal_scenarios(
     out["parking_value_wan"] = round(parking, 1) if parking else None
 
     # 4. 跑情境
+    # 1F 加成：顯式 floor_premium > floor==1 / floor_range_min==1 預設 20%（跟前端對齊）
+    is_1f = False
+    try:
+        if floor is not None and int(floor) == 1:
+            is_1f = True
+        elif floor_range_min is not None and int(floor_range_min) == 1:
+            is_1f = True
+    except (TypeError, ValueError):
+        pass
+    if floor_premium is None:
+        floor_premium_eff = 0.20 if is_1f else 0.0
+    else:
+        try:
+            floor_premium_eff = float(floor_premium)
+        except (TypeError, ValueError):
+            floor_premium_eff = 0.20 if is_1f else 0.0
+    out["floor_premium"] = floor_premium_eff
+    effective_price = price * (1 + floor_premium_eff)
+
     scenarios = {}
     targets = ["危老", "都更"]
     if is_qualified_for_fz_dugen:
@@ -501,12 +581,15 @@ def calculate_renewal_scenarios(
         # 公式：分回坪 = 土地 × 容積率(%)/100 × bonus × 1.57 × 分回比例
         new_built_ping = land_area_ping * (far_pct / 100.0) * bonus * REBUILD_BUILD_COEFF
         share_ping = new_built_ping * (ratio or 0)
-        house_value_wan = share_ping * price
-        # 假設分回 1 個平面車位
-        total_value_wan = house_value_wan + (parking or 0)
-        # multiple 分母用「欲出價」(開價 × 0.9) — 跟前端 UI 一致（前端 desiredPriceWan = 開價×0.9）
+        # 車位：每 40 坪分回配 1 個（跟前端 renewalV2HTML 一致）
+        parking_count = (share_ping / 40.0) if share_ping else 0.0
+        parking_value_wan = parking_count * (parking or 0)
+        # 房屋市值：分回坪 × 含樓層加成的單價
+        house_value_wan = share_ping * effective_price
+        total_value_wan = house_value_wan + parking_value_wan
+        # multiple 分母用「欲出價」(開價 × 0.9，四捨五入到 10 萬) — 跟前端 desiredPriceWan 一致
         list_price_wan = (price_ntd / 10000) if price_ntd else None
-        desired_price_wan = (list_price_wan * 0.9) if list_price_wan else None
+        desired_price_wan = (round(list_price_wan * 0.9 / 10) * 10) if list_price_wan else None
         profit_wan = (total_value_wan - desired_price_wan) if desired_price_wan else None
         multiple = (total_value_wan / desired_price_wan) if desired_price_wan and desired_price_wan > 0 else None
         scenarios[name] = {
@@ -514,7 +597,8 @@ def calculate_renewal_scenarios(
             "new_built_ping": round(new_built_ping, 1),
             "share_ping": round(share_ping, 1),
             "house_value_wan": round(house_value_wan, 1),
-            "parking_value_wan": round(parking or 0, 1),
+            "parking_count": round(parking_count, 2),
+            "parking_value_wan": round(parking_value_wan, 1),
             "total_value_wan": round(total_value_wan, 1),
             "profit_wan": round(profit_wan, 1) if profit_wan is not None else None,
             "multiple": round(multiple, 2) if multiple else None,
@@ -528,7 +612,11 @@ def calculate_renewal_scenarios(
         notes.append(f"新成屋單價採 {district} 預設 {price} 萬/坪（可手動覆寫）")
     elif out["new_house_price_source"] == "override":
         notes.append(f"新成屋單價使用人工覆寫值 {price} 萬/坪")
-    notes.append("分回比例由房價查表內插；含 1 個平面車位市值")
+    if multi_zone_used:
+        notes.append(f"多分區加權容積率 {far_pct}%")
+    if floor_premium_eff > 0:
+        notes.append(f"樓層加成 {round(floor_premium_eff*100)}%")
+    notes.append("分回比例由房價查表內插；車位每 40 坪分回 1 個")
     out["note"] = "；".join(notes)
     return out
 

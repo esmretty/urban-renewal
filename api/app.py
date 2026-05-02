@@ -4501,6 +4501,12 @@ async def reanalyze_recommendation(property_id: str):
             road_width_m=p.get("road_width_m_override") or p.get("road_width_m"),
             lat=p.get("latitude") or p.get("source_latitude"),
             lng=p.get("longitude") or p.get("source_longitude"),
+            zoning_list=p.get("zoning_list"),
+            zoning_ratios=p.get("zoning_ratios"),
+            floor=p.get("floor"),
+            floor_range_min=p.get("floor_range_min"),
+            floor_premium=p.get("floor_premium"),
+            building_area_ping=p.get("building_area_ping"),
         )
         final = generate_final_recommendation(
             property_data=p,
@@ -5575,6 +5581,12 @@ async def override_new_house_price(property_id: str, body: NewHousePriceOverride
         price_ntd=p.get("price_ntd"),
         new_house_price_wan_per_ping=body.new_house_price_wan_per_ping,
         road_width_m=p.get("road_width_m_override") or p.get("road_width_m"),
+        zoning_list=p.get("zoning_list"),
+        zoning_ratios=p.get("zoning_ratios"),
+        floor=p.get("floor"),
+        floor_range_min=p.get("floor_range_min"),
+        floor_premium=p.get("floor_premium"),
+        building_area_ping=p.get("building_area_ping"),
     )
     return {"status": "ok", "renewal_v2": v2}
 

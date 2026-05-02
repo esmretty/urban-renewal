@@ -1037,7 +1037,7 @@ function buildDetailHTML(p) {
                 </td>
               </tr>
               <tr><td>建坪</td><td>${p.building_area_ping ? p.building_area_ping + " 坪" : "—"}${perBuilding ? ` <span class="text-muted-sm">(${perBuilding})</span>` : ""}</td></tr>
-              <tr><td>地坪</td><td><span class="land-ping-val">${p.land_area_ping ? p.land_area_ping + " 坪" : "—"}</span>${perLand ? ` <span class="text-muted-sm land-per">(${perLand})</span>` : ""}${p.land_area_source === "lvr" ? ` <span class="text-muted-sm" style="color:#888;">(實登)</span>` : ""}${p.land_area_inconsistent ? `<div class="land-warn">⚠ 此物件的實登候選地坪差異大，可能不是同一棟建築；選擇後請務必驗證。</div>` : ""}</td></tr>
+              <tr><td>地坪</td><td><span class="land-ping-val">${p.land_area_ping ? p.land_area_ping + " 坪" : "—"}</span>${perLand ? ` <span class="text-muted-sm land-per">(${perLand})</span>` : ""}${p.land_area_source === "lvr" ? ` <span class="text-muted-sm" style="color:#888;">(實登)</span>` : ""}${isLandAreaSuspicious(p) ? `<div class="land-warn">⚠ 坪數過大（大於建坪），可能不可信</div>` : ""}${p.land_area_inconsistent ? `<div class="land-warn">⚠ 此物件的實登候選地坪差異大，可能不是同一棟建築；選擇後請務必驗證。</div>` : ""}</td></tr>
             </tbody>
           </table>
         </div>
@@ -1419,14 +1419,24 @@ async function saveDesiredPrice(id, val) {
   }).catch(e => console.error("saveDesiredPrice", e));
 }
 
+// 土地持分坪數異常偵測：591 詳情頁有時誤抓土地坪數（建坪 23 vs 土地 107 這類比例極端）
+// 一般公寓土地持分 ≈ 建坪 × 0.3-0.5；土地若 > 建坪近乎都是抓錯。
+// → 不算倍數（avoid 異常高倍數誤導用戶買進）
+function isLandAreaSuspicious(p) {
+  const land = Number(p.land_area_ping) || 0;
+  const build = Number(p.building_area_ping) || 0;
+  return build > 0 && land > build;
+}
+
 // 計算危老/都更換回倍數（給 row 列表用，邏輯與內頁 renewalV2HTML 一致）
 function computeRowMultiples(p) {
   // 三種旗標物件不算倍數，避免用戶誤判高價值：
   //   is_foreclosure: 法拍價遠低於市價（5-7 折）→ 倍數演算法會自動算出異常高倍數
   //   is_remote_area: 新北偏遠路段，都更難度高
   //   unsuitable_for_renewal: 特殊土地分區（保護區/河道用地等）法規不能都更
+  //   isLandAreaSuspicious: 土地坪數抓錯（>建坪），數字不可信
   // 倍數=null 連帶停掉紅框/高亮/LINE 通知（既有邏輯都看 mults.w/d）；DB 資料仍保留供未來重用
-  if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal) {
+  if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal || isLandAreaSuspicious(p)) {
     return { w: null, d: null };
   }
   const land = p.land_area_ping;
@@ -1560,11 +1570,12 @@ function zoneAbbr(z) {
 }
 
 function renewalV2HTML(p) {
-  // 三種旗標物件 detail panel 不顯示倍數試算（避免誤導），改顯示說明文字
-  if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal) {
+  // 三種旗標物件 + 土地坪數異常 → detail panel 不顯示倍數試算（避免誤導），改顯示說明文字
+  if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal || isLandAreaSuspicious(p)) {
     const reason = p.is_foreclosure ? "法拍屋"
                  : p.is_remote_area ? "新北偏遠路段"
-                 : "特殊土地分區（非住商工）";
+                 : p.unsuitable_for_renewal ? "特殊土地分區（非住商工）"
+                 : "土地坪數可能不可信（大於建坪）";
     return `<div class="alert alert-secondary py-2 small mb-0">
       此物件標記為「${reason}」，都更倍數試算不適用，故不顯示。
     </div>`;

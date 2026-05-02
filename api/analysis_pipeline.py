@@ -1171,6 +1171,12 @@ def analyze_single_property(
                     is_qualified_for_fz_dugen=_is_fz_dugen,
                     lat=lat,
                     lng=lng,
+                    zoning_list=z.get("zone_list") or doc_data.get("zoning_list"),
+                    zoning_ratios=doc_data.get("zoning_ratios"),
+                    floor=doc_data.get("floor") or item.get("floor"),
+                    floor_range_min=doc_data.get("floor_range_min") or item.get("floor_range_min"),
+                    floor_premium=doc_data.get("floor_premium"),
+                    building_area_ping=doc_data.get("building_area_ping") or item.get("building_area_ping"),
                 )
                 final2 = generate_final_recommendation(
                     property_data={**item, **doc_data},
