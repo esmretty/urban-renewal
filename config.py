@@ -265,9 +265,18 @@ def lookup_far(zoning, district, lat=None, lng=None):
                 return NEW_TAIPEI_FAR_PCT["_banqiao_fujou"].get(zoning)
         except Exception:
             pass
-    # 2) 新北市列名區（含子類別）
+    # 2) 新北市列名區（含子類別）— 子類別精確 match 優先，miss 才 fallback 到泛稱
+    # （ArcGIS 偶會回該區法規未明列的子類別，例如新店「第三種商業區」config 只到第二種）
     if district in NEW_TAIPEI_FAR_PCT and not district.startswith("_"):
-        return NEW_TAIPEI_FAR_PCT[district].get(zoning)
+        sub_val = NEW_TAIPEI_FAR_PCT[district].get(zoning)
+        if sub_val is not None:
+            return sub_val
+        # Fallback：含「商」→ 該區「商業區」泛稱；含「住」→ 「住宅區」泛稱
+        if "商" in zoning:
+            return NEW_TAIPEI_FAR_PCT[district].get("商業區")
+        if "住" in zoning:
+            return NEW_TAIPEI_FAR_PCT[district].get("住宅區")
+        return None
     # 3+4) 板橋/中和/永和/新莊/三重 5 區：法規上只有「住宅區/商業區」泛稱無子類別。
     #     GeoServer 偶會回怪字（「住宅區住」「第住種住宅區」「第一種住宅區」等），不嚴格 key match：
     #     contains「商」→ 商業區 → 440（板橋特例 460）
