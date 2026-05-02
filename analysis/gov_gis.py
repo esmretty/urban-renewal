@@ -649,10 +649,9 @@ def fetch_zoning_map_image_taipei(
     import io as _io
     from pathlib import Path
     try:
-        from PIL import Image
-        import numpy as np
+        from PIL import Image, ImageChops
     except ImportError:
-        logger.warning("PIL/numpy 未安裝，無法合成台北 WMS 地籍圖")
+        logger.warning("PIL 未安裝，無法合成台北 WMS 地籍圖")
         return False
 
     cx, cy = wgs84_to_twd97(lat, lng)
@@ -710,19 +709,29 @@ def fetch_zoning_map_image_taipei(
             timeout=20, verify=False,
         )
         if r2.status_code == 200 and "image" in r2.headers.get("content-type", "") and len(r2.content) > 200:
-            addr_arr = np.array(Image.open(_io.BytesIO(r2.content)).convert("RGBA"))
-            # 黑色文字 → 紅色（RGB < 100 且 alpha > 200）
-            mask = (
-                (addr_arr[..., 0] < 100)
-                & (addr_arr[..., 1] < 100)
-                & (addr_arr[..., 2] < 100)
-                & (addr_arr[..., 3] > 200)
+            addr_img = Image.open(_io.BytesIO(r2.content)).convert("RGBA")
+            # 黑色文字 → 紅色（RGB 三通道都 < 100 且 alpha > 200 視為文字像素）
+            # 純 PIL 做法：每通道做 threshold → ImageChops.multiply 串成最終 mask
+            r_, g_, b_, a_ = addr_img.split()
+            r_t = r_.point(lambda v: 255 if v < 100 else 0)
+            g_t = g_.point(lambda v: 255 if v < 100 else 0)
+            b_t = b_.point(lambda v: 255 if v < 100 else 0)
+            a_t = a_.point(lambda v: 255 if v > 200 else 0)
+            # AND：兩兩相乘（因為值只有 0 / 255，相乘等於邏輯 AND）
+            mask = ImageChops.multiply(
+                ImageChops.multiply(r_t, g_t),
+                ImageChops.multiply(b_t, a_t),
             )
-            if mask.any():
-                addr_arr[mask] = [220, 0, 0, 255]
-                red_addr = Image.fromarray(addr_arr)
-                composed = Image.alpha_composite(main_img, red_addr)
-                try: red_addr.close()
+            # 用 mask 把純紅色 layer 疊到主圖上
+            red_layer = Image.new("RGBA", addr_img.size, (220, 0, 0, 255))
+            red_layer.putalpha(mask)
+            composed = Image.alpha_composite(main_img, red_layer)
+            try: red_layer.close()
+            except Exception: pass
+            try: addr_img.close()
+            except Exception: pass
+            for _band in (r_, g_, b_, a_, r_t, g_t, b_t, a_t, mask):
+                try: _band.close()
                 except Exception: pass
         else:
             logger.info(
