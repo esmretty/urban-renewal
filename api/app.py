@@ -5419,9 +5419,15 @@ def _scrape_single_url_591_inner(url: str, src_id: str, is_reanalyze: bool = Fal
         import re as _re
         body = data.get("bodyText", "")
         title = data.get("title") or body.split("\n", 1)[0][:60]
-        city = next((c for c in ("台北市", "新北市") if c in body), None)
-        district_m = _re.search(r"([\u4e00-\u9fa5]{2,3}區)", body)
-        district = district_m.group(1) if district_m else None
+        # Mobile API 給結構化的 region/section（純值，不誤判）→ 優先用
+        # 否則才走 bodyText regex（給 Playwright fallback path 用）
+        if _mobile_data_url:
+            city = _mobile_data_url.get("city")
+            district = _mobile_data_url.get("district")
+        else:
+            city = next((c for c in ("台北市", "新北市") if c in body), None)
+            district_m = _re.search(r"([\u4e00-\u9fa5]{2,3}區)", body)
+            district = district_m.group(1) if district_m else None
 
         # DOM 社區地址若含「XX區」→ 優先用這個 district（比 body text 準）
         _community = (data.get("community_address") or "").strip()
