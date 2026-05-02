@@ -323,16 +323,19 @@ def fetch_mobile_detail(houseid: str, *, timeout: float = 20.0) -> Optional[dict
                         out["community_address"] = str(first[k]).strip()
                         break
 
-    # 圖片：591 支援最高 !2000x.water2.jpg（稍微大檔但避免前端放大糊掉）
-    # mobile API photo field 預設給 !1000x，主圖一律升到 2000x；thumb 保留小尺寸
+    # 圖片：591 size 選擇權衡：
+    #   !1000x ~282 KB（mobile API 預設）— 偶爾偏小但夠用
+    #   !1280x ~418 KB（次高解析）— **最佳平衡：清晰度足 + 載入快**
+    #   !2000x ~813 KB（最高）— 太大造成詳情頁載入慢（用戶反應）
+    # 用 1280x 取代 2000x：載入時間減半，視覺差別不明顯
     if d.get("photo"):
         photos_raw = str(d["photo"]).split("|*|")
         photos = []
         for p in photos_raw:
             if not p or not p.startswith("http"):
                 continue
-            # 把 !1000x → !2000x（其他 size spec 也統一升到 2000）
-            p_hi = re.sub(r"!\d+x\.water\d?\.(jpg|png|webp)", r"!2000x.water2.\1", p)
+            # 統一升到 !1280x.water2（mobile API 預設給 !1000x，listing 給 !400x300）
+            p_hi = re.sub(r"!\d+x\.water\d?\.(jpg|png|webp)", r"!1280x.water2.\1", p)
             photos.append(p_hi)
         if photos:
             out["photos"] = photos
