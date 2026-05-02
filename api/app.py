@@ -3225,23 +3225,43 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                             _missing = [k for k in _critical if dd.get(k) in (None, "", 0)]
                             if _missing:
                                 try:
-                                    _dup_detail = screenshot_detail_page(ocr_ctx, item["url"], src_id)
-                                    if _dup_detail and not getattr(_dup_detail, "delisted", False):
-                                        _dup_shot, _, _ = _dup_detail[:3]
-                                        _dup_house = getattr(_dup_detail, "house_path", None)
-                                        _crop = _dup_house or _dup_shot
-                                        if _crop:
-                                            _vd = extract_full_detail_from_screenshot(_crop)
-                                            _fill = {k: _vd[k] for k in _missing if _vd.get(k) not in (None, "", 0)}
-                                            if _fill:
-                                                col.document(dup_sid).update(_fill)
-                                                progress_callback(
-                                                    f"  ↻ 重複物件補資料 {dup_sid}: {', '.join(_fill.keys())}",
-                                                    pct,
-                                                )
-                                                dd.update(_fill)   # 本地 dd 同步，後面 url_alt 不會再 re-read
+                                    # 先試 mobile API（純 HTTP、無 Playwright）
+                                    _vd = None
+                                    try:
+                                        from scraper.scraper_591_mobile import fetch_mobile_detail
+                                        _hid_dup = src_id.split("591_", 1)[-1] if src_id.startswith("591_") else src_id
+                                        _md = fetch_mobile_detail(_hid_dup)
+                                        if _md:
+                                            _md.pop("_mobile_raw", None)
+                                            _vd = {
+                                                "land_area_ping": _md.get("land_area_ping"),
+                                                "building_age": _md.get("building_age"),
+                                                "zoning": _md.get("zoning"),
+                                                "total_floors": None,   # mobile 給 floor str，下游再 parse
+                                                "floor": _md.get("floor"),
+                                            }
+                                    except Exception as _me_dup:
+                                        logger.warning(f"  dup mobile API 失敗 {src_id}: {_me_dup}")
+                                    # mobile 失敗才走 Playwright OCR
+                                    if not _vd:
+                                        _dup_detail = screenshot_detail_page(ocr_ctx, item["url"], src_id)
+                                        if _dup_detail and not getattr(_dup_detail, "delisted", False):
+                                            _dup_shot, _, _ = _dup_detail[:3]
+                                            _dup_house = getattr(_dup_detail, "house_path", None)
+                                            _crop = _dup_house or _dup_shot
+                                            if _crop:
+                                                _vd = extract_full_detail_from_screenshot(_crop)
+                                    if _vd:
+                                        _fill = {k: _vd[k] for k in _missing if _vd.get(k) not in (None, "", 0)}
+                                        if _fill:
+                                            col.document(dup_sid).update(_fill)
+                                            progress_callback(
+                                                f"  ↻ 重複物件補資料 {dup_sid}: {', '.join(_fill.keys())}",
+                                                pct,
+                                            )
+                                            dd.update(_fill)   # 本地 dd 同步
                                 except Exception as _de:
-                                    logger.warning(f"dup enrich OCR 失敗 {src_id}: {_de}")
+                                    logger.warning(f"dup enrich 失敗 {src_id}: {_de}")
 
                             # 唯一真相：sources[] + source_keys[]。把新 src 加進 sources（如果還不在）
                             from database.models import add_source_to_doc, compute_source_keys, _parse_published_at
@@ -3398,10 +3418,9 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     except Exception: pass
                     continue   # 不走下面 591 OCR 流程
 
-                # 591：先試 mobile BFF API (純 JSON 無防爬，省 Vision OCR ~3 次/筆)
-                # 若 mobile API 抓到 → 後續跳過 Vision OCR phase；失敗 → fallback OCR (原流程)
-                # 注意 screenshot_detail_page 仍要跑 — 拿 community_raw / body_text / 截圖
-                # 給 detect_foreclosure 跟地址 OCR consensus fallback 用
+                # 591：先試 mobile BFF API (純 JSON 無防爬，feature parity)
+                # 若 mobile API 抓到 → **完全跳過 Playwright 詳情頁截圖** + Vision OCR (省 ~100s/筆)
+                # 失敗 → fallback 原 Playwright + Vision OCR 流程
                 _mobile_data_591 = None
                 try:
                     from config import USE_591_MOBILE_API as _USE_MOBILE
@@ -3414,53 +3433,76 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                         _mobile_data_591 = fetch_mobile_detail(_hid)
                         if _mobile_data_591:
                             _mobile_data_591.pop("_mobile_raw", None)
-                            progress_callback(f"  ⚡ 591 mobile API 抓到 detail (省 OCR)", pct)
+                            progress_callback(f"  ⚡ 591 mobile API 抓到 detail，跳過 Playwright", pct)
                     except Exception as _me:
-                        logger.warning(f"  591 mobile API 例外，fallback OCR ({src_id}): {_me}")
+                        logger.warning(f"  591 mobile API 例外，fallback Playwright ({src_id}): {_me}")
                         _mobile_data_591 = None
 
-                # 591：詳情頁截圖 + Vision OCR
-                progress_callback(f"  📷 截圖詳情頁...", pct)
                 # cancel check：admin kill 在 batch 內也能在 step 邊界 break
                 if _cancel_is(_my_cancel_version):
                     progress_callback("⛔ 使用者取消（截圖前）", 100)
                     break
-                _detail_ret = screenshot_detail_page(ocr_ctx, item["url"], src_id)
-                # 下架偵測：listing 列表還在快取顯示卡片，但詳情頁已是 404 → 刪 DB 並跳過
-                if getattr(_detail_ret, "delisted", False) or (isinstance(_detail_ret, tuple) and len(_detail_ret) >= 2 and _detail_ret[1] == "__DELISTED__"):
-                    try:
-                        db.collection("properties").document(src_id).delete()
-                        logger.warning(f"已移除下架物件 {src_id}")
-                    except Exception as _de:
-                        logger.warning(f"移除下架物件失敗 {src_id}: {_de}")
-                    progress_callback(f"  ⚠️ 物件已下架，跳過", pct)
-                    log_action(trigger_label, "skip_delisted",
-                               source_id=src_id,
-                               message=f"物件已下架（591 詳情頁回 404）：{(item.get('title') or '')[:25]}",
-                               details={"url": item.get("url"), "title": item.get("title"),
-                                        "district": item.get("district")})
-                    continue
-                shot_path, community_addr, page_coords = _detail_ret[:3]
-                _addr_crop = getattr(_detail_ret, "addr_path", None)
-                _house_crop = getattr(_detail_ret, "house_path", None)
-                # 591 原生座標（詳情頁 JS 提供的 lat/lng）→ 存進 item，以供 OCR 誤讀偵測比對用
-                if page_coords and page_coords[0] and page_coords[1]:
-                    item["source_latitude"] = page_coords[0]
-                    item["source_longitude"] = page_coords[1]
-                # 把 591「社區」欄位 RAW value 帶進 item，給 detect_foreclosure 偵測「【」廣告詞用
-                item["_community_raw"] = getattr(_detail_ret, "community_raw", "") or ""
-                # 把詳情頁 body 純文字帶進 item._raw_text，給 detect_foreclosure 偵測「代理人」/「拍賣」用
-                # （591 API 模式 _parse_api_items 的 _raw_text='' → 沒這行，detect 規則「# + 代理人」AND 永遠失敗）
-                _body = getattr(_detail_ret, "body_text", "") or ""
-                if _body:
-                    item["_raw_text"] = _body
-                # 詳情頁抓到的更新時間 → 寫進 item 讓 make_property_doc 轉 updated_at
-                _upd_txt = getattr(_detail_ret, "updated_text", None)
-                _pub_txt_detail = getattr(_detail_ret, "published_text", None)
-                if _upd_txt:
-                    item["_updated_text"] = _upd_txt
-                if _pub_txt_detail and not item.get("_published_text"):
-                    item["_published_text"] = _pub_txt_detail
+
+                # 共用變數（mobile path 跟 Playwright path 都會填）
+                shot_path = None
+                _addr_crop = None
+                _house_crop = None
+                community_addr = ""
+                page_coords = None
+                _detail_ret = None
+
+                if _mobile_data_591:
+                    # ─── Mobile fast path：純 HTTP，無 Playwright ───
+                    m591 = _mobile_data_591
+                    community_addr = m591.get("community_address") or ""
+                    page_coords = (m591.get("source_latitude"), m591.get("source_longitude"))
+                    if page_coords[0] and page_coords[1]:
+                        item["source_latitude"] = page_coords[0]
+                        item["source_longitude"] = page_coords[1]
+                    # _community_raw / _raw_text 給法拍偵測用：title + remark 涵蓋「法拍 / 銀拍 / 【拍」
+                    _fc_text_591 = (m591.get("title") or "") + "\n" + (m591.get("remark") or "")
+                    item["_community_raw"] = m591.get("title") or ""
+                    if _fc_text_591.strip():
+                        item["_raw_text"] = _fc_text_591
+                    # 上架/更新時間
+                    if m591.get("updated_at_591"):
+                        item["_updated_text"] = m591["updated_at_591"]
+                    if m591.get("published_at") and not item.get("_published_text"):
+                        item["_published_text"] = m591["published_at"]
+                else:
+                    # ─── Fallback：Playwright 詳情頁截圖 ───
+                    progress_callback(f"  📷 截圖詳情頁...", pct)
+                    _detail_ret = screenshot_detail_page(ocr_ctx, item["url"], src_id)
+                    # 下架偵測：listing 列表還在快取顯示卡片，但詳情頁已是 404 → 刪 DB 並跳過
+                    if getattr(_detail_ret, "delisted", False) or (isinstance(_detail_ret, tuple) and len(_detail_ret) >= 2 and _detail_ret[1] == "__DELISTED__"):
+                        try:
+                            db.collection("properties").document(src_id).delete()
+                            logger.warning(f"已移除下架物件 {src_id}")
+                        except Exception as _de:
+                            logger.warning(f"移除下架物件失敗 {src_id}: {_de}")
+                        progress_callback(f"  ⚠️ 物件已下架，跳過", pct)
+                        log_action(trigger_label, "skip_delisted",
+                                   source_id=src_id,
+                                   message=f"物件已下架（591 詳情頁回 404）：{(item.get('title') or '')[:25]}",
+                                   details={"url": item.get("url"), "title": item.get("title"),
+                                            "district": item.get("district")})
+                        continue
+                    shot_path, community_addr, page_coords = _detail_ret[:3]
+                    _addr_crop = getattr(_detail_ret, "addr_path", None)
+                    _house_crop = getattr(_detail_ret, "house_path", None)
+                    if page_coords and page_coords[0] and page_coords[1]:
+                        item["source_latitude"] = page_coords[0]
+                        item["source_longitude"] = page_coords[1]
+                    item["_community_raw"] = getattr(_detail_ret, "community_raw", "") or ""
+                    _body = getattr(_detail_ret, "body_text", "") or ""
+                    if _body:
+                        item["_raw_text"] = _body
+                    _upd_txt = getattr(_detail_ret, "updated_text", None)
+                    _pub_txt_detail = getattr(_detail_ret, "published_text", None)
+                    if _upd_txt:
+                        item["_updated_text"] = _upd_txt
+                    if _pub_txt_detail and not item.get("_published_text"):
+                        item["_published_text"] = _pub_txt_detail
                 # 社區地址（DOM 純文字）優先於卡片地址
                 # looks_like_real_address 擋廣告詞（屋主自填「近XX1號出口」這類無路名字串）
                 from database.models import looks_like_real_address
@@ -5166,134 +5208,183 @@ def _scrape_single_url_591_inner(url: str, src_id: str, is_reanalyze: bool = Fal
 
     col = get_col()
     from api.analysis_pipeline import _cleanup_ephemeral_screenshots as _cleanup_shots
-    with get_browser_context(headless=True) as ctx:
-        page = ctx.new_page()
+
+    # ────────────────────────────────────────────────────────────────────────
+    # 591 Mobile API fast path：mobile API 涵蓋詳情頁 100% 欄位（title / remark /
+    # community / posttime / lat/lng / 建坪/土地/屋齡/樓層/價格 等），完全省 Playwright +
+    # Vision OCR（單筆 ~100s → ~5s）。失敗才走 Playwright fallback。
+    # ────────────────────────────────────────────────────────────────────────
+    _mobile_data_url = None
+    try:
+        from config import USE_591_MOBILE_API as _USE_MOBILE_URL
+    except ImportError:
+        _USE_MOBILE_URL = True
+    if _USE_MOBILE_URL:
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            page.wait_for_timeout(2500)
-            # 從詳情頁抓基本欄位
-            data = page.evaluate(r"""() => {
-              const text = (sel) => {
-                const e = document.querySelector(sel);
-                return e ? (e.innerText || '').trim() : '';
-              };
-              // 抓首圖：找物件主圖（class=img_main）或相簿區
-              let imgUrl = '';
-              const imgs = document.querySelectorAll(
-                '.img_main, .swiper-slide img, [class*="photo"] img, [class*="album"] img, [class*="gallery"] img'
-              );
-              for (const i of imgs) {
-                const el = i.tagName === 'IMG' ? i : i.querySelector('img') || i;
-                const src = el.getAttribute('data-src') || el.getAttribute('data-original') || el.getAttribute('src') || '';
-                if (!src || src.startsWith('data:')) continue;
-                if (/\/build\/static\/|\/header\/|\/icon|\/newload/i.test(src)) continue;
-                if (!/\.(jpg|jpeg|png|webp)/i.test(src)) continue;
-                imgUrl = src.startsWith('//') ? 'https:' + src : src;
-                break;
-              }
-              // 社區欄位的地址（純文字，不受 CSS 位移防爬影響）
-              // 必要條件：含「號」+「路/街/大道/巷」結構（避免屋主把社區欄位填成「近XX1號出口」廣告詞）
-              let communityAddr = '';
-              const addrEls = document.querySelectorAll('.info-addr-value');
-              for (const el of addrEls) {
-                const t = (el.innerText || '').trim();
-                if (t && /\d+號/.test(t) && /路|街|大道|巷|弄/.test(t)) { communityAddr = t; break; }
-              }
-              // 591 原生座標（從地圖 iframe URL 抓）
-              let pageLat = null, pageLng = null;
-              const scripts = document.querySelectorAll('script');
-              for (const s of scripts) {
-                const t = s.textContent || '';
-                const m = t.match(/rsMapIframe\?lat=([\d.]+)&lng=([\d.]+)/);
-                if (m) { pageLat = parseFloat(m[1]); pageLng = parseFloat(m[2]); break; }
-              }
-              // 物件標題：document.title 較穩（591 詳情頁 tab 標題就是物件名，含「- 591售屋網」尾綴）
-              // DOM 抓 h1 時排除麵包屑類元素（會誤抓到「所有物件」「地圖找地」等導航文字）
-              let pageTitle = (document.title || '').replace(/\s*[-|]\s*591.*$/,'').trim();
-              if (!pageTitle || /591/.test(pageTitle) || /不存在/.test(pageTitle)) {
-                // fallback：明確抓 h1（不抓任何 class*="title" 的通用元素）
-                const h1 = document.querySelector('h1.detail-title, h1.info-title, h1');
-                pageTitle = h1 ? (h1.innerText || '').trim() : '';
-              }
-              // 排除已知麵包屑字串
-              if (['所有物件','地圖找地','地圖查實價'].includes(pageTitle)) pageTitle = '';
-              return {
-                docTitle: document.title || '',
-                title: pageTitle,
-                bodyText: document.body.innerText.slice(0, 6000),
-                image_url: imgUrl,
-                community_address: communityAddr,
-                page_lat: pageLat,
-                page_lng: pageLng,
-              };
-            }""")
-        finally:
-            page.close()
+            from scraper.scraper_591_mobile import fetch_mobile_detail
+            _hid_url = src_id.split("591_", 1)[-1] if src_id.startswith("591_") else src_id
+            _mobile_data_url = fetch_mobile_detail(_hid_url)
+            if _mobile_data_url:
+                _mobile_data_url.pop("_mobile_raw", None)
+                logger.info(f"  ⚡ 591 mobile API 抓到 detail，跳過 Playwright ({src_id})")
+        except Exception as _me:
+            logger.warning(f"  591 mobile API 例外，fallback Playwright ({src_id}): {_me}")
+            _mobile_data_url = None
 
-        # 591 錯誤頁偵測：物件下架/刪除時會回 "對不起，您訪問的頁面不存在"
-        # 直接從 DB 移除該筆（省得留一堆無效資料）
-        _dtitle = (data.get("docTitle") or "")
-        _body_head = (data.get("bodyText") or "")[:300]
-        if ("不存在" in _dtitle) or ("您查詢的物件不存在" in _body_head) or ("已關閉或者被刪除" in _body_head):
-            logger.warning(f"591 物件已下架 {src_id}: {_dtitle!r} → 從 DB 移除")
-            try:
-                col.document(src_id).delete()
-            except Exception as _de:
-                logger.warning(f"移除下架物件失敗 {src_id}: {_de}")
-            return {
-                "status": "removed",
-                "message": f"591 物件已下架/刪除（{src_id}），已自動從中央 DB 移除。",
-                "removed": True,
-            }
+    # 共用 contextmanager：mobile 成功就不開 Chromium；失敗才開
+    import contextlib
+    @contextlib.contextmanager
+    def _maybe_browser(need: bool):
+        if not need:
+            yield None
+            return
+        with get_browser_context(headless=True) as _ctx:
+            yield _ctx
 
-        # 用全頁截圖 + 完整 Vision OCR 抓所有詳情頁欄位（591 防爬，regex 無效）
-        detail_ret = screenshot_detail_page(ctx, url, src_id)
-        shot, _community_addr_from_screenshot, _page_coords = detail_ret[:3]
-        published_text = getattr(detail_ret, "published_text", None)
-        updated_text = getattr(detail_ret, "updated_text", None)
-        _house_crop_single = getattr(detail_ret, "house_path", None)
-        # === 591 mobile API fast path (省 Vision OCR) ===
-        # 跟 _scrape_and_analyze 同樣策略：先試 mobile，失敗 fallback OCR
-        _mobile_data_url = None
-        try:
-            from config import USE_591_MOBILE_API as _USE_MOBILE_URL
-        except ImportError:
-            _USE_MOBILE_URL = True
-        if _USE_MOBILE_URL:
-            try:
-                from scraper.scraper_591_mobile import fetch_mobile_detail
-                _hid_url = src_id.split("591_", 1)[-1] if src_id.startswith("591_") else src_id
-                _mobile_data_url = fetch_mobile_detail(_hid_url)
-                if _mobile_data_url:
-                    _mobile_data_url.pop("_mobile_raw", None)
-                    logger.info(f"  ⚡ 591 mobile API 抓到 detail (省 OCR) ({src_id})")
-            except Exception as _me:
-                logger.warning(f"  591 mobile API 例外，fallback OCR ({src_id}): {_me}")
-                _mobile_data_url = None
+    with _maybe_browser(not _mobile_data_url) as ctx:
+        # 兩條路會填的變數
+        data = None              # docTitle/title/bodyText/image_url/community_address/page_lat/page_lng
+        vision = {}              # building/land/age/floor/price_wan
+        detail_ret = None        # SimpleNamespace-ish (addr_path / house_path / community_raw)
+        shot = None
+        _community_addr_from_screenshot = ""
+        _page_coords = None
+        _house_crop_single = None
+        published_text = None
+        updated_text = None
 
-        # shot + house_crop 平行 OCR 然後合併，house_crop 補漏（全頁 OCR 偶會漏 land_area_ping）
-        from concurrent.futures import ThreadPoolExecutor as _TPE_URL
-        _paths_u = [p for p in (shot, _house_crop_single) if p]
-        vision = {}
         if _mobile_data_url:
-            # Mobile path：用 mobile JSON 填 vision，跳過 Vision OCR
-            vision = {
-                "building_area_ping": _mobile_data_url.get("building_area_ping"),
-                "land_area_ping": _mobile_data_url.get("land_area_ping"),
-                "building_age": _mobile_data_url.get("building_age"),
-                "floor": _mobile_data_url.get("floor"),
+            # ─── Mobile fast path：純 HTTP，無 Playwright ───
+            m = _mobile_data_url
+            # body_text 給法拍偵測 + city/district fallback；mobile 用 title + remark + region/section 拼
+            _body_text = ((m.get("title") or "") + "\n"
+                          + (m.get("remark") or "") + "\n"
+                          + (m.get("city") or "") + (m.get("district") or ""))
+            data = {
+                "docTitle": m.get("title") or "",
+                "title": m.get("title") or "",
+                "bodyText": _body_text,
+                "image_url": m.get("thumbnail_url") or "",
+                "community_address": m.get("community_address") or "",
+                "page_lat": m.get("source_latitude"),
+                "page_lng": m.get("source_longitude"),
             }
-            # 價格給「萬」格式（vision schema），mobile 給 ntd → 轉萬
-            if _mobile_data_url.get("price_ntd"):
-                vision["price_wan"] = _mobile_data_url["price_ntd"] // 10000
-        elif _paths_u:
-            with _TPE_URL(max_workers=len(_paths_u)) as _ex:
-                _results_u = list(_ex.map(extract_full_detail_from_screenshot, _paths_u))
-            vision = _results_u[0] if _results_u else {}
-            for _r in _results_u[1:]:
-                for k, v in (_r or {}).items():
-                    if v not in (None, "", 0) and vision.get(k) in (None, "", 0):
-                        vision[k] = v
+            vision = {
+                "building_area_ping": m.get("building_area_ping"),
+                "land_area_ping": m.get("land_area_ping"),
+                "building_age": m.get("building_age"),
+                "floor": m.get("floor"),
+            }
+            if m.get("price_ntd"):
+                vision["price_wan"] = m["price_ntd"] // 10000
+            published_text = m.get("published_at")
+            updated_text = m.get("updated_at_591")
+            _page_coords = (m.get("source_latitude"), m.get("source_longitude"))
+            # 模擬 detail_ret 接口（下游 getattr(detail_ret, "addr_path", None) 等使用）
+            from types import SimpleNamespace
+            # community_raw 給 detect_foreclosure 用 — title + remark 都含「【法拍」「銀拍」等關鍵字
+            _fc_text = (m.get("title") or "") + "\n" + (m.get("remark") or "")
+            detail_ret = SimpleNamespace(
+                published_text=published_text,
+                updated_text=updated_text,
+                addr_path=None,
+                house_path=None,
+                community_raw=_fc_text,
+            )
+            # 591 不存在 / 已下架：fetch_mobile_detail status≠1 已 return None → 進這裡的就還在線
+        else:
+            # ─── Fallback：Playwright + Vision OCR（mobile API 限流 / 改 schema 走這條）───
+            page = ctx.new_page()
+            try:
+                page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(2500)
+                # 從詳情頁抓基本欄位
+                data = page.evaluate(r"""() => {
+                  const text = (sel) => {
+                    const e = document.querySelector(sel);
+                    return e ? (e.innerText || '').trim() : '';
+                  };
+                  // 抓首圖：找物件主圖（class=img_main）或相簿區
+                  let imgUrl = '';
+                  const imgs = document.querySelectorAll(
+                    '.img_main, .swiper-slide img, [class*="photo"] img, [class*="album"] img, [class*="gallery"] img'
+                  );
+                  for (const i of imgs) {
+                    const el = i.tagName === 'IMG' ? i : i.querySelector('img') || i;
+                    const src = el.getAttribute('data-src') || el.getAttribute('data-original') || el.getAttribute('src') || '';
+                    if (!src || src.startsWith('data:')) continue;
+                    if (/\/build\/static\/|\/header\/|\/icon|\/newload/i.test(src)) continue;
+                    if (!/\.(jpg|jpeg|png|webp)/i.test(src)) continue;
+                    imgUrl = src.startsWith('//') ? 'https:' + src : src;
+                    break;
+                  }
+                  // 社區欄位的地址（純文字，不受 CSS 位移防爬影響）
+                  let communityAddr = '';
+                  const addrEls = document.querySelectorAll('.info-addr-value');
+                  for (const el of addrEls) {
+                    const t = (el.innerText || '').trim();
+                    if (t && /\d+號/.test(t) && /路|街|大道|巷|弄/.test(t)) { communityAddr = t; break; }
+                  }
+                  // 591 原生座標（從地圖 iframe URL 抓）
+                  let pageLat = null, pageLng = null;
+                  const scripts = document.querySelectorAll('script');
+                  for (const s of scripts) {
+                    const t = s.textContent || '';
+                    const m = t.match(/rsMapIframe\?lat=([\d.]+)&lng=([\d.]+)/);
+                    if (m) { pageLat = parseFloat(m[1]); pageLng = parseFloat(m[2]); break; }
+                  }
+                  let pageTitle = (document.title || '').replace(/\s*[-|]\s*591.*$/,'').trim();
+                  if (!pageTitle || /591/.test(pageTitle) || /不存在/.test(pageTitle)) {
+                    const h1 = document.querySelector('h1.detail-title, h1.info-title, h1');
+                    pageTitle = h1 ? (h1.innerText || '').trim() : '';
+                  }
+                  if (['所有物件','地圖找地','地圖查實價'].includes(pageTitle)) pageTitle = '';
+                  return {
+                    docTitle: document.title || '',
+                    title: pageTitle,
+                    bodyText: document.body.innerText.slice(0, 6000),
+                    image_url: imgUrl,
+                    community_address: communityAddr,
+                    page_lat: pageLat,
+                    page_lng: pageLng,
+                  };
+                }""")
+            finally:
+                page.close()
+
+            # 591 錯誤頁偵測：物件下架/刪除時會回 "對不起，您訪問的頁面不存在"
+            _dtitle = (data.get("docTitle") or "")
+            _body_head = (data.get("bodyText") or "")[:300]
+            if ("不存在" in _dtitle) or ("您查詢的物件不存在" in _body_head) or ("已關閉或者被刪除" in _body_head):
+                logger.warning(f"591 物件已下架 {src_id}: {_dtitle!r} → 從 DB 移除")
+                try:
+                    col.document(src_id).delete()
+                except Exception as _de:
+                    logger.warning(f"移除下架物件失敗 {src_id}: {_de}")
+                return {
+                    "status": "removed",
+                    "message": f"591 物件已下架/刪除（{src_id}），已自動從中央 DB 移除。",
+                    "removed": True,
+                }
+
+            # 用全頁截圖 + 完整 Vision OCR 抓所有詳情頁欄位（591 防爬，regex 無效）
+            detail_ret = screenshot_detail_page(ctx, url, src_id)
+            shot, _community_addr_from_screenshot, _page_coords = detail_ret[:3]
+            published_text = getattr(detail_ret, "published_text", None)
+            updated_text = getattr(detail_ret, "updated_text", None)
+            _house_crop_single = getattr(detail_ret, "house_path", None)
+
+            # shot + house_crop 平行 OCR 然後合併，house_crop 補漏
+            from concurrent.futures import ThreadPoolExecutor as _TPE_URL
+            _paths_u = [p for p in (shot, _house_crop_single) if p]
+            if _paths_u:
+                with _TPE_URL(max_workers=len(_paths_u)) as _ex:
+                    _results_u = list(_ex.map(extract_full_detail_from_screenshot, _paths_u))
+                vision = _results_u[0] if _results_u else {}
+                for _r in _results_u[1:]:
+                    for k, v in (_r or {}).items():
+                        if v not in (None, "", 0) and vision.get(k) in (None, "", 0):
+                            vision[k] = v
 
         # 若 screenshot_detail_page 的進階 DOM selector 抓到更完整地址，覆蓋簡陋的 inline 結果
         # looks_like_real_address 擋廣告詞（屋主自填「近XX1號出口」這類無路名字串）

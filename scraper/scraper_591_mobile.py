@@ -146,6 +146,16 @@ def fetch_mobile_detail(houseid: str, *, timeout: float = 20.0) -> Optional[dict
     抓不到 / 物件下架 / 限流 → return None（caller 應 fallback 到舊 OCR path）。
 
     houseid 不需要 'S' 前綴；本函式自己加。
+
+    Mobile API 涵蓋 desktop 詳情頁所有用得到的欄位（feature parity）：
+      - 結構化資料：building/land/age/floor/price/lat/lng/community/shape
+      - 法拍偵測：title / remark
+      - 上架/更新時間：posttime / update（top-level body）
+      - 建案資訊：casesname / cases_id / community_address
+      - 圖片：photo / maxphoto / thumb
+      - 標籤：feat_tag / good_house_tags
+      - 格局/朝向/車位：layout / direction / parking
+      - 聯絡人：linkman / identity
     """
     if not houseid:
         return None
@@ -245,5 +255,91 @@ def fetch_mobile_detail(houseid: str, *, timeout: float = 20.0) -> Optional[dict
             pass
     if out.get("price_ntd") and out.get("building_area_ping"):
         out["price_per_ping"] = out["price_ntd"] / out["building_area_ping"]
+
+    # === 取代 desktop screenshot_detail_page DOM 抓的欄位 ===
+
+    # 標題：法拍偵測 + 通用顯示用
+    if d.get("title"):
+        out["title"] = d["title"]
+
+    # 物件詳細描述（屋主自填）：補強法拍偵測（含「【法拍】」「銀拍」等關鍵字）
+    if d.get("remark"):
+        out["remark"] = d["remark"]
+
+    # 上架時間（unix timestamp）→ ISO 字串
+    pt = d.get("posttime")
+    if pt:
+        try:
+            from datetime import datetime, timezone, timedelta
+            ts = int(pt)
+            tw = timezone(timedelta(hours=8))
+            out["published_at"] = datetime.fromtimestamp(ts, tw).isoformat()
+        except (ValueError, TypeError):
+            pass
+
+    # 更新時間（在 top-level body，不在 data 裡）
+    upd = body.get("update")
+    if upd:
+        out["updated_at_591"] = str(upd)   # 已是 'YYYY-MM-DD HH:MM:SS' 格式
+
+    # 建案資訊（591「建案」物件會有 casesname；一般物件 cases_id='0' 跳過）
+    cases_id = str(d.get("cases_id") or d.get("casesID") or "0")
+    if cases_id and cases_id != "0":
+        if d.get("casesname"):
+            out["case_name"] = d["casesname"]
+        out["case_id"] = cases_id
+        # community_address 是 list — 取第一筆當建案地址
+        ca_list = d.get("community_address") or []
+        if isinstance(ca_list, list) and ca_list:
+            first = ca_list[0]
+            if isinstance(first, str) and first.strip():
+                out["community_address"] = first.strip()
+            elif isinstance(first, dict):
+                # 可能是 {address: '...'} 之類的格式
+                for k in ("address", "addr", "value"):
+                    if first.get(k):
+                        out["community_address"] = str(first[k]).strip()
+                        break
+
+    # 圖片：取 maxphoto 第一張當主圖；photo 列拆成 list
+    if d.get("photo"):
+        photos_raw = str(d["photo"]).split("|*|")
+        photos = [p for p in photos_raw if p and p.startswith("http")]
+        if photos:
+            out["photos"] = photos
+            out["thumbnail_url"] = d.get("thumb") or photos[0]
+
+    # 特性標籤：feat_tag / good_house_tags
+    feat = d.get("feat_tag")
+    if isinstance(feat, list) and feat:
+        out["feat_tags"] = feat
+    good = d.get("good_house_tags")
+    if isinstance(good, list) and good:
+        out["good_house_tags"] = good
+
+    # 格局 / 朝向 / 管理費 / 車位
+    if d.get("layout"):
+        out["layout"] = d["layout"]
+    if d.get("direction"):
+        out["direction"] = d["direction"]
+    if d.get("managefee"):
+        out["managefee"] = d["managefee"]
+    if d.get("parking"):
+        out["parking"] = d["parking"]
+
+    # 聯絡人 / 屋主標記（識別仲介或屋主）
+    if d.get("linkman"):
+        out["linkman"] = d["linkman"]
+    if d.get("identity"):
+        out["seller_identity"] = d["identity"]   # '屋主' / '仲介' / etc.
+
+    # 法拍快速旗標：title / remark 含關鍵字 → 給下游 detect_foreclosure 用
+    fc_signals = []
+    for src_key in ("title", "remark"):
+        v = (d.get(src_key) or "")
+        if any(kw in v for kw in ("法拍", "銀拍", "金拍", "代標", "【拍", "拍定")):
+            fc_signals.append(src_key)
+    if fc_signals:
+        out["_foreclosure_kw_in"] = fc_signals
 
     return out
