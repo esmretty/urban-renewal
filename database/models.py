@@ -108,6 +108,16 @@ def primary_source_id(doc: dict) -> Optional[str]:
     return sid or None
 
 
+_DISPLAY_NAME = {"sinyi": "信義", "yongqing": "永慶", "591": "591", "manual": "manual"}
+
+
+def display_source_name(name: str) -> str:
+    """顯示用 name（英文 internal → 中文展示）— 防止英文 name 進 sources，避免前端 group 重複。"""
+    n = (name or "").strip()
+    canon = _NAME_CANONICAL.get(n, n)
+    return _DISPLAY_NAME.get(canon, n or canon)
+
+
 def add_source_to_doc(doc: dict, name: str, site_id: str, url: str, added_at: Optional[str] = None) -> bool:
     """append 一筆 source 到 doc.sources[]（若 source_key 已存在則不重複）。
     回傳：True = 真的加了；False = 已存在 / 無效 input 跳過。
@@ -121,6 +131,8 @@ def add_source_to_doc(doc: dict, name: str, site_id: str, url: str, added_at: Op
     existing_keys = {make_source_key(s.get("name"), s.get("source_id")) for s in sources}
     if key in existing_keys:
         return False
+    # 統一存中文 display name（"sinyi"→"信義", "yongqing"→"永慶"），防止前端 group by raw name 重複渲染
+    name = display_source_name(name)
     sources.append({
         "name": name,
         "source_id": site_id,

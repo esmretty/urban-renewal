@@ -1508,11 +1508,18 @@ function srcLinksHTML(p) {
   // 顯示對應網站 icon（591/永慶）比「自行調查」標籤更直覺。manual 物件才保留特殊處理。
 
   // 多來源：sources[] 是唯一真相；alive=false 不顯示（已失效歷史）
+  // name 先 normalize 成中文 display：早期 scraper 寫過 'sinyi'/'yongqing' 英文 name，
+  // 跟後來中文「信義/永慶」並存 → 前端 group 時要把英文歸成同一組，否則灰色 default badge 跑出來
+  const _NAME_NORMALIZE = { sinyi: "信義", yongqing: "永慶", manual: "manual" };
   let sourceList = [];
   if (Array.isArray(p.sources) && p.sources.length > 0) {
     sourceList = p.sources
       .filter(s => s.url && s.alive !== false)
-      .map(s => ({ name: s.name || "591", url: s.url, date: s.added_at || null }));
+      .map(s => {
+        const rawName = (s.name || "591").trim();
+        const name = _NAME_NORMALIZE[rawName] || rawName;
+        return { name, url: s.url, date: s.added_at || null };
+      });
   }
   if (!sourceList.length) return "—";
 
