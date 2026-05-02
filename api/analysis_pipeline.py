@@ -1227,20 +1227,21 @@ def analyze_single_property(
     try:
         rv2_check = rv2 or {}
         scenarios_check = rv2_check.get("scenarios") or {}
-        max_mult = 0.0
-        max_scen = ""
-        for name, s in scenarios_check.items():
-            m = s.get("multiple")
-            if m is not None and m > max_mult:
-                max_mult = float(m)
-                max_scen = name
-        # 從 Firestore 讀門檻（預設 2.8）
+        # 從 Firestore 讀門檻 + 比對情境（admin radio 選的）
         try:
             from database.db import get_firestore as _gf2
             _cfg = _gf2().collection("settings").document("line_config").get()
-            _threshold = float((_cfg.to_dict() or {}).get("threshold_multiple", 2.8)) if _cfg.exists else 2.8
+            _cfg_data = _cfg.to_dict() or {}
+            _threshold = float(_cfg_data.get("threshold_multiple", 2.8)) if _cfg.exists else 2.8
+            _trigger_scenario = (_cfg_data.get("trigger_scenario") or "都更") if _cfg.exists else "都更"
         except Exception:
             _threshold = 2.8
+            _trigger_scenario = "都更"
+        # 只比對 admin 選定的情境（不再取最大值）
+        _target_s = scenarios_check.get(_trigger_scenario) or {}
+        _target_mult = _target_s.get("multiple")
+        max_mult = float(_target_mult) if _target_mult is not None else 0.0
+        max_scen = _trigger_scenario   # LINE 訊息仍標示比對的情境
         if max_mult >= _threshold:
             # 跟既有 doc 比對：若已通知過 + 倍數差不多 → skip
             should_notify = True

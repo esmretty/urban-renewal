@@ -1559,11 +1559,13 @@ async def admin_line_status(admin: dict = Depends(require_admin)):
         "skip_floors_5plus": True,
         "skip_basement": True,
     }
+    trigger_scenario = "都更"   # 預設拿「都更」倍數比對 threshold；admin 可改為「危老」或「防災都更」
     try:
         cfg = get_firestore().collection("settings").document("line_config").get()
         if cfg.exists:
             cfg_data = cfg.to_dict() or {}
             threshold = float(cfg_data.get("threshold_multiple", 2.8))
+            trigger_scenario = cfg_data.get("trigger_scenario") or "都更"
             for k in skip_flags:
                 if k in cfg_data:
                     skip_flags[k] = bool(cfg_data.get(k))
@@ -1585,29 +1587,45 @@ async def admin_line_status(admin: dict = Depends(require_admin)):
         "user_id_set": bool(user_id),
         "user_id_preview": (user_id[:6] + "...") if len(user_id) > 7 else "(empty)",
         "threshold_multiple": threshold,
+        "trigger_scenario": trigger_scenario,
         "skip_flags": skip_flags,
         "notified_property_count": notified_count,
         "last_notified_at": last_notified,
-        "trigger_threshold": f"都更/危老/防災都更 任一情境 ≥ {threshold} 倍",
+        "trigger_threshold": f"{trigger_scenario} ≥ {threshold} 倍",
     }
 
 
 class LineThresholdReq(BaseModel):
     threshold: float
+    trigger_scenario: Optional[str] = None   # "危老" / "都更" / "防災都更"；不傳則保留原值
+
+
+_VALID_TRIGGER_SCENARIOS = {"危老", "都更", "防災都更"}
 
 
 @app.post("/admin/line/threshold")
 async def admin_set_line_threshold(body: LineThresholdReq, admin: dict = Depends(require_admin)):
-    """Admin 設定 LINE 通知觸發倍數門檻。"""
+    """Admin 設定 LINE 通知觸發倍數門檻 + 比對的情境（危老/都更/防災都更）。"""
     if body.threshold < 1.0 or body.threshold > 10.0:
         raise HTTPException(400, "threshold 必須介於 1.0~10.0")
-    get_firestore().collection("settings").document("line_config").set({
+    payload = {
         "threshold_multiple": float(body.threshold),
         "updated_at": now_tw_iso(),
         "updated_by_email": admin.get("email") or "",
-    }, merge=True)
-    logger.warning(f"[admin] {admin.get('email')} 設 LINE threshold = {body.threshold}")
-    return {"status": "ok", "threshold_multiple": float(body.threshold)}
+    }
+    if body.trigger_scenario:
+        if body.trigger_scenario not in _VALID_TRIGGER_SCENARIOS:
+            raise HTTPException(400, f"trigger_scenario 必須是 {_VALID_TRIGGER_SCENARIOS} 之一")
+        payload["trigger_scenario"] = body.trigger_scenario
+    get_firestore().collection("settings").document("line_config").set(payload, merge=True)
+    logger.warning(
+        f"[admin] {admin.get('email')} 設 LINE threshold={body.threshold} scenario={body.trigger_scenario}"
+    )
+    return {
+        "status": "ok",
+        "threshold_multiple": float(body.threshold),
+        "trigger_scenario": body.trigger_scenario,
+    }
 
 
 class LineSkipFlagsReq(BaseModel):

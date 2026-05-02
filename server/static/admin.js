@@ -258,6 +258,10 @@ window.loadLineStatus = async function () {
     // 同步 threshold input
     const inp = document.getElementById("line-threshold-input");
     if (inp && s.threshold_multiple != null) inp.value = s.threshold_multiple;
+    // 同步 trigger_scenario radio
+    const trigScen = s.trigger_scenario || "都更";
+    const radios = document.querySelectorAll('input[name="line-trigger-scenario"]');
+    radios.forEach(r => { r.checked = (r.value === trigScen); });
     // 同步 skip flags checkbox
     const sf = s.skip_flags || {};
     const flagMap = {
@@ -286,16 +290,19 @@ window.saveLineThreshold = async function () {
     if (resEl) resEl.innerHTML = '<span style="color:#c0392b;">門檻必須 1.0~10.0</span>';
     return;
   }
+  // 抓選中的 trigger_scenario
+  const checked = document.querySelector('input[name="line-trigger-scenario"]:checked');
+  const trigger_scenario = checked ? checked.value : "都更";
   if (resEl) resEl.textContent = "儲存中…";
   try {
     const r = await authedFetch("/admin/line/threshold", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ threshold: v }),
+      body: JSON.stringify({ threshold: v, trigger_scenario }),
     });
     const data = await r.json();
     if (r.ok) {
-      if (resEl) resEl.innerHTML = `<span style="color:#27ae60;">✓ 已儲存（${data.threshold_multiple} 倍）</span>`;
+      if (resEl) resEl.innerHTML = `<span style="color:#27ae60;">✓ 已儲存（${data.threshold_multiple} 倍 / ${esc(data.trigger_scenario || trigger_scenario)}）</span>`;
       loadLineStatus();
     } else {
       if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(data.detail || "失敗")}</span>`;
