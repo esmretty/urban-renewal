@@ -110,8 +110,12 @@ def primary_source_id(doc: dict) -> Optional[str]:
 
 def add_source_to_doc(doc: dict, name: str, site_id: str, url: str, added_at: Optional[str] = None) -> bool:
     """append 一筆 source 到 doc.sources[]（若 source_key 已存在則不重複）。
-    回傳：True = 真的加了；False = 已存在沒動作。
+    回傳：True = 真的加了；False = 已存在 / 無效 input 跳過。
     呼叫端負責再寫回 Firestore。"""
+    # Guard：空 url / 空 site_id 視為無效，不寫進 sources（避免 garbage entries
+    # 像 {url: None, alive: True} 出現在 sources 列表裡 — 之前 audit 發現 44 筆混雜）
+    if not url or not site_id:
+        return False
     sources = list(doc.get("sources") or [])
     key = make_source_key(name, site_id)
     existing_keys = {make_source_key(s.get("name"), s.get("source_id")) for s in sources}

@@ -715,6 +715,36 @@ input.tb-input[disabled] {
 }
 .property-rows > .property-row.is-pending { box-shadow: inset 5px 0 0 0 #c8c2a8; }
 .property-rows > .property-row.is-deprioritized { box-shadow: inset 5px 0 0 0 #e0e0e0; }
+/* 已下架：深灰底 + 白色「已下架」大字覆蓋層，用戶可點 ★ 從 watchlist 移除 */
+.property-rows > .property-row.is-archived {
+  position: relative;
+  background-color: #4a4a4a;
+  color: #d0d0d0;
+  box-shadow: inset 5px 0 0 0 #2a2a2a;
+}
+.property-rows > .property-row.is-archived .c { color: #c0c0c0; }
+.property-rows > .property-row.is-archived a { color: #b0b0b0; }
+.row-archived-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(40, 40, 40, 0.55);
+  pointer-events: none;
+  z-index: 5;
+}
+.row-archived-overlay > span {
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 6px;
+  padding: 4px 24px;
+  border: 2px solid #ffffff;
+  border-radius: 4px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.25);
+}
 .property-rows > .property-row--head,
 .property-rows > .property-row--head-top { box-shadow: none; padding-left: 10px; }
 .property-row {

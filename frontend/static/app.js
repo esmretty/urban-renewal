@@ -668,13 +668,20 @@ function rowHTML(p) {
   const recommended = (_activeTab === "explore" && resistChips.length === 0) ? "is-recommended" : "";
 
   const analyzing = !!p.analysis_in_progress;
+  // archived=True：物件已被偵測下架（591 內容換戶 / 全部來源失效），整條深灰色 +
+  // 白色「已下架」覆蓋；用戶可點 ★ 從 watchlist 移除。
+  const archivedCls = p.archived ? "is-archived" : "";
+  const archivedOverlay = p.archived
+    ? '<div class="row-archived-overlay"><span>已下架</span></div>'
+    : "";
   return `
-  <div class="property-row ${isPending ? "is-pending" : ""} ${analyzing ? "is-analyzing" : ""} ${deprioritized} ${highValue} ${recommended}"
+  <div class="property-row ${isPending ? "is-pending" : ""} ${analyzing ? "is-analyzing" : ""} ${deprioritized} ${highValue} ${recommended} ${archivedCls}"
        id="card-${p.id}"
        ${(isPending || analyzing) ? "" : `onclick="selectProperty('${p.id}')"`}
        style="${(isPending || analyzing) ? "cursor:default" : ""}"
   >
     ${analyzing ? '<div class="row-loading"><div class="row-loading-bar"></div><div class="row-loading-text">分析中…請稍候</div></div>' : ''}
+    ${archivedOverlay}
     <div class="c c-src" data-label="來源">${srcLinksHTML(p)}</div>
     <div class="c c-type" data-label="類型">${typeIcon} ${esc(typeLabel)}</div>
     <div class="c c-city" data-label="縣市">${esc(p.city || "—")}</div>
@@ -1290,9 +1297,15 @@ function lookupFar(zoning, p) {
   if (district === "板橋區" && p.is_remote_area) {
     return NEW_TAIPEI_FAR_PCT["_banqiao_fujou"][zoning] ?? null;
   }
-  // 2) 新北市列名區（含子類別）
+  // 2) 新北市列名區（含子類別）— 子類別精確 match 優先，miss 才 fallback 到泛稱
+  // （ArcGIS 偶會回該區法規未明列的子類別，例如新店「第三種商業區」config 只到第二種）
   if (NEW_TAIPEI_FAR_PCT[district]) {
-    return NEW_TAIPEI_FAR_PCT[district][zoning] ?? null;
+    const subVal = NEW_TAIPEI_FAR_PCT[district][zoning];
+    if (subVal != null) return subVal;
+    // Fallback：含「商」→ 該區「商業區」泛稱；含「住」→「住宅區」泛稱
+    if (zoning.includes("商")) return NEW_TAIPEI_FAR_PCT[district]["商業區"] ?? null;
+    if (zoning.includes("住")) return NEW_TAIPEI_FAR_PCT[district]["住宅區"] ?? null;
+    return null;
   }
   // 3+4) 板橋/中和/永和/新莊/三重 5 區：法規只有「住宅區/商業區」泛稱無子類別。
   //     GeoServer 偶有怪字（「住宅區住」「第住種住宅區」「第一種住宅區」），用 contains 不嚴格 key match：

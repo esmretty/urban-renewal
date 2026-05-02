@@ -3463,9 +3463,12 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     # → 用 mobile photos[0]（已升級到 !2000x.water2.jpg）覆蓋主圖
                     if m591.get("photos"):
                         item["image_url"] = m591["photos"][0]
-                    # _community_raw / _raw_text 給法拍偵測用：title + remark 涵蓋「法拍 / 銀拍 / 【拍」
+                    # _community_raw 應該對應 desktop 詳情頁「社區」label 的 RAW value
+                    # （仲介在社區 label 寫「【店長推薦】XX」是法拍特徵），不是 title!
+                    # Mobile API community 欄位是屋主填的社區名（住宅大樓名），等價較弱但安全
+                    item["_community_raw"] = m591.get("community") or ""
+                    # _raw_text 給 detect_foreclosure rule 1（標題含 # + 代理人）
                     _fc_text_591 = (m591.get("title") or "") + "\n" + (m591.get("remark") or "")
-                    item["_community_raw"] = m591.get("title") or ""
                     if _fc_text_591.strip():
                         item["_raw_text"] = _fc_text_591
                     # 上架/更新時間
@@ -5291,14 +5294,14 @@ def _scrape_single_url_591_inner(url: str, src_id: str, is_reanalyze: bool = Fal
             _page_coords = (m.get("source_latitude"), m.get("source_longitude"))
             # 模擬 detail_ret 接口（下游 getattr(detail_ret, "addr_path", None) 等使用）
             from types import SimpleNamespace
-            # community_raw 給 detect_foreclosure 用 — title + remark 都含「【法拍」「銀拍」等關鍵字
-            _fc_text = (m.get("title") or "") + "\n" + (m.get("remark") or "")
+            # community_raw 對應 desktop 詳情頁「社區」label RAW value（仲介寫「【店長推薦】」
+            # 是法拍特徵），不是 title! mobile API community 欄位是屋主填的社區名，等價較弱但安全
             detail_ret = SimpleNamespace(
                 published_text=published_text,
                 updated_text=updated_text,
                 addr_path=None,
                 house_path=None,
-                community_raw=_fc_text,
+                community_raw=(m.get("community") or ""),
             )
             # 591 不存在 / 已下架：fetch_mobile_detail status≠1 已 return None → 進這裡的就還在線
         else:
