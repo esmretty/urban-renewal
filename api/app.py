@@ -3154,6 +3154,18 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
     skip_dup_count = 0
     total_to_analyze = len(new_items)
 
+    # ── 每個 item 的處理結果（給 batch_end log 用，讓 admin 看「無動作的 URL + 原因」）
+    _outcomes = []   # [{src_id, url, title, district, outcome, reason}, ...]
+    def _record_outcome(it: dict, outcome: str, reason: str = ""):
+        _outcomes.append({
+            "src_id": it.get("source_id") or "",
+            "url": it.get("url") or "",
+            "title": (it.get("title") or "")[:60],
+            "district": it.get("district") or "",
+            "outcome": outcome,    # new / enrich / dup_merged / delisted / skip_non_apartment / replaced / cancelled / error
+            "reason": reason[:120] if reason else "",
+        })
+
     # 預先載入既有所有記錄做 dedup 索引
     from database.models import doc_richness
     _dup_index = {}  # key (district, road_short, area_band, price_band) -> [doc_dict, ...]
@@ -3317,6 +3329,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                    source_id=src_id, doc_id=dup_sid,
                                    message=f"併入 {dup_sid}（{item.get('title','')[:25]}）",
                                    details=build_doc_log_details(item, None, merged_into=dup_sid))
+                        _record_outcome(item, "dup_merged", f"併入既有 doc {dup_sid}")
                         continue
 
                 action = "補資料" if is_enrich else "分析"
@@ -3434,6 +3447,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                    message=f"{_src_name} 新物件入庫：{yc_doc.get('address_inferred') or yc_doc.get('address') or ''}",
                                    details=build_doc_log_details(item, yc_doc, source=_src_name))
                     except Exception: pass
+                    _record_outcome(item, "new", f"{_src_name} 新物件 doc={yc_doc_id}")
                     continue   # 不走下面 591 OCR 流程
 
                 # 591：先試 mobile BFF API (純 JSON 無防爬，feature parity)
@@ -3511,6 +3525,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                    message=f"物件已下架（591 詳情頁回 404）：{(item.get('title') or '')[:25]}",
                                    details={"url": item.get("url"), "title": item.get("title"),
                                             "district": item.get("district")})
+                        _record_outcome(item, "delisted", "591 詳情頁回 404 — 已從 DB 移除")
                         continue
                     shot_path, community_addr, page_coords = _detail_ret[:3]
                     _addr_crop = getattr(_detail_ret, "addr_path", None)
@@ -3734,6 +3749,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                             f for f, v in (("price_ntd", item.get("price_ntd")),
                                                             ("district", item.get("district"))) if not v
                                         ]})
+                    _record_outcome(item, "scrape_failed", "詳情頁缺價格或行政區")
                     continue
 
                 # ─ 只用總樓層過濾（591 filter 已選公寓；OCR 建物類型不可靠，易誤判）──
@@ -3752,6 +3768,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                details={"url": item.get("url"), "title": item.get("title"),
                                         "district": item.get("district"),
                                         "total_floors": _total_f})
+                    _record_outcome(item, "non_apartment", f"總樓層 {_total_f}F ≥ 6")
                     continue
 
                 # ─ 重複物件偵測：同 district + road + 建坪 + 價格 ─
@@ -3814,6 +3831,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                        source_id=src_id, doc_id=best_old['_id'],
                                        message=f"併入 {best_old['_id']} 並補欄位",
                                        details=_bld_log(item, best_old, merged_into=best_old['_id']))
+                            _record_outcome(item, "dup_merged", f"併入 {best_old['_id']} 並補欄位")
                             continue
                         else:
                             if url_updates:
@@ -3834,6 +3852,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                        source_id=src_id, doc_id=best_old['_id'],
                                        message=f"併入 {best_old['_id']}（捨棄）",
                                        details=_bld_log(item, best_old, merged_into=best_old['_id'], discarded=True))
+                            _record_outcome(item, "dup_discarded", f"重複捨棄 → 併入 {best_old['_id']}")
                             continue
 
                 # ─ enrich 模式：用 merge 規則合併（用戶覆寫不動、衝突欄位 log）─
@@ -3895,11 +3914,13 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                    source_id=src_id, doc_id=existing_doc_id,
                                    message=f"補欄位{('（衝突: '+ ','.join(conflicts) + '）') if conflicts else ''}",
                                    details=_bld_log(item, merged, conflicts=conflicts))
+                        _record_outcome(item, "enrich", f"補欄位 → doc {existing_doc_id}")
                     else:
                         logger.error(f"enrich 找不到 doc id for source_id={src_id}，跳過")
                         log_action(trigger_label, "error", source_id=src_id,
                                    message="enrich 找不到 doc",
                                    details={"url": item.get("url"), "title": item.get("title")})
+                        _record_outcome(item, "error", "enrich 找不到 doc")
                     continue
 
                 # ─ 全新物件：呼叫共用 pipeline ─
@@ -3991,6 +4012,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                 pct,
                             )
                         skip_dup_count += 1
+                        _record_outcome(item, "replaced", f"換物件 → 內容併入 doc {new_dup_id}")
                         continue   # 不建新 doc
 
                     # 沒命中 → 走全新建 doc 流程（fall through to 全新物件 set 區塊）
@@ -4067,6 +4089,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                source_id=src_id, doc_id=target_doc_id,
                                message=f"新物件入庫：{(doc_data.get('address_inferred') or doc_data.get('address') or '')[:40]}",
                                details=build_doc_log_details(item, doc_data))
+                    _record_outcome(item, "new", f"新物件入庫 → doc {target_doc_id}")
                 _existing_items.append({
                     "id": target_doc_id,
                     "source_keys": list(doc_data.get("source_keys") or []),
@@ -4107,10 +4130,18 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
         f"完成：新增 {new_count} 筆，補資料 {enrich_count} 筆，重複捨棄 {skip_dup_count} 筆，價格變動 {len(price_updates)} 筆",
         100,
     )
+    # 即使新增/補資料都是 0，也把所有 attempted item 的 outcome（含 reason）寫進 details，
+    # 讓 admin「執行紀錄」能看到「分析了哪些 URL，為什麼都沒入庫」
+    _outcome_summary = {}
+    for o in _outcomes:
+        _outcome_summary[o["outcome"]] = _outcome_summary.get(o["outcome"], 0) + 1
     log_action(trigger_label, "batch_end",
                message=f"新 {new_count} / 補 {enrich_count} / 重複 {skip_dup_count} / 改價 {len(price_updates)}",
                details={"new_count": new_count, "enrich_count": enrich_count,
-                        "skip_dup_count": skip_dup_count, "price_update_count": len(price_updates)})
+                        "skip_dup_count": skip_dup_count, "price_update_count": len(price_updates),
+                        "outcome_summary": _outcome_summary,
+                        "outcomes": _outcomes[:200],   # 全部 attempted items；上限 200 防 Firestore 1MB doc 上限
+                        "total_attempted": len(_outcomes)})
     return {
         "new_count": new_count,
         "enrich_count": enrich_count,
