@@ -323,10 +323,17 @@ def fetch_mobile_detail(houseid: str, *, timeout: float = 20.0) -> Optional[dict
                         out["community_address"] = str(first[k]).strip()
                         break
 
-    # 圖片：取 maxphoto 第一張當主圖；photo 列拆成 list
+    # 圖片：591 支援最高 !2000x.water2.jpg（稍微大檔但避免前端放大糊掉）
+    # mobile API photo field 預設給 !1000x，主圖一律升到 2000x；thumb 保留小尺寸
     if d.get("photo"):
         photos_raw = str(d["photo"]).split("|*|")
-        photos = [p for p in photos_raw if p and p.startswith("http")]
+        photos = []
+        for p in photos_raw:
+            if not p or not p.startswith("http"):
+                continue
+            # 把 !1000x → !2000x（其他 size spec 也統一升到 2000）
+            p_hi = re.sub(r"!\d+x\.water\d?\.(jpg|png|webp)", r"!2000x.water2.\1", p)
+            photos.append(p_hi)
         if photos:
             out["photos"] = photos
             out["thumbnail_url"] = d.get("thumb") or photos[0]

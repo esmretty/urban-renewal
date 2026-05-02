@@ -3459,6 +3459,10 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     if page_coords[0] and page_coords[1]:
                         item["source_latitude"] = page_coords[0]
                         item["source_longitude"] = page_coords[1]
+                    # listing API photo_url 是 !400x300.jpg，前端詳情頁放大會糊
+                    # → 用 mobile photos[0]（已升級到 !2000x.water2.jpg）覆蓋主圖
+                    if m591.get("photos"):
+                        item["image_url"] = m591["photos"][0]
                     # _community_raw / _raw_text 給法拍偵測用：title + remark 涵蓋「法拍 / 銀拍 / 【拍」
                     _fc_text_591 = (m591.get("title") or "") + "\n" + (m591.get("remark") or "")
                     item["_community_raw"] = m591.get("title") or ""
@@ -5266,7 +5270,8 @@ def _scrape_single_url_591_inner(url: str, src_id: str, is_reanalyze: bool = Fal
                 "docTitle": m.get("title") or "",
                 "title": m.get("title") or "",
                 "bodyText": _body_text,
-                "image_url": m.get("thumbnail_url") or "",
+                # 用高解析主圖 (photos[0] = !1000x.water2.jpg)，不用 thumbnail (190x150 放大會糊)
+                "image_url": (m.get("photos") or [m.get("thumbnail_url") or ""])[0],
                 "community_address": m.get("community_address") or "",
                 "page_lat": m.get("source_latitude"),
                 "page_lng": m.get("source_longitude"),
