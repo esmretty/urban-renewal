@@ -622,6 +622,132 @@ def _wgs84_to_3857(lat: float, lng: float) -> tuple:
     return x, y
 
 
+def fetch_zoning_map_image_taipei(
+    lat: float, lng: float, output_path: str,
+    half_width_m: float = 130.5, half_height_m: float = 80.5,
+) -> bool:
+    """台北市：用 GeoServer WMS GetMap 直接 HTTP 取分區圖（取代 Playwright 截圖）。
+
+    bbox 261×161m（TWD97 / EPSG:3826），width=1920×height=1080
+    視野跟既有 Playwright zonemap.udd.gov.taipei UI 截圖大致對齊。
+
+    層次（兩次 WMS GetMap + PIL composite）：
+      主圖（一次 GetMap，transparent=false）：
+        - Taipei:ublock97-TWD97        分區色塊
+        - Taipei:LAND-ALL-TWD97        地籍線
+        - Taipei:LAND-ALL-TWD97-TEXT   地號文字
+        - Taipei:road101-TWD97         路網
+        - Taipei:roadsize-TWD97        路寬數字
+        - Taipei:ublock97-TWD97-text   分區文字（住三、商二…）
+      門牌（一次 GetMap，transparent=true，**單獨**打避開 GeoServer label conflict）：
+        - Taipei:address-WGS84
+      合成：將 address-WGS84 黑色文字 mask → 換成紅色 → alpha_composite 疊到主圖
+
+    Returns:
+        True = 至少主圖寫入成功；False = 主圖失敗（caller 走 fallback）
+    """
+    import io as _io
+    from pathlib import Path
+    try:
+        from PIL import Image
+        import numpy as np
+    except ImportError:
+        logger.warning("PIL/numpy 未安裝，無法合成台北 WMS 地籍圖")
+        return False
+
+    cx, cy = wgs84_to_twd97(lat, lng)
+    xmin, ymin = cx - half_width_m, cy - half_height_m
+    xmax, ymax = cx + half_width_m, cy + half_height_m
+    bbox = f"{xmin},{ymin},{xmax},{ymax}"
+    img_w, img_h = 1920, 1080
+
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    wms_url = "https://zonegeo.udd.gov.taipei/geoserver/Taipei/wms"
+
+    # ── 主圖（六層合成）───────────────────────────────────────────────────
+    main_layers = (
+        "Taipei:ublock97-TWD97,"
+        "Taipei:LAND-ALL-TWD97,"
+        "Taipei:LAND-ALL-TWD97-TEXT,"
+        "Taipei:road101-TWD97,"
+        "Taipei:roadsize-TWD97,"
+        "Taipei:ublock97-TWD97-text"
+    )
+    try:
+        r1 = httpx.get(
+            wms_url,
+            params={
+                "service": "WMS", "version": "1.1.1", "request": "GetMap",
+                "layers": main_layers, "bbox": bbox,
+                "width": img_w, "height": img_h,
+                "srs": "EPSG:3826", "format": "image/png",
+                "transparent": "false", "styles": "",
+            },
+            timeout=20, verify=False,
+        )
+        if r1.status_code != 200 or "image" not in r1.headers.get("content-type", "") or len(r1.content) < 1000:
+            logger.warning(
+                f"台北 WMS 主圖失敗 http={r1.status_code} ct={r1.headers.get('content-type')} size={len(r1.content)}"
+            )
+            return False
+        main_img = Image.open(_io.BytesIO(r1.content)).convert("RGBA")
+    except Exception as e:
+        logger.warning(f"台北 WMS 主圖例外: {e}")
+        return False
+
+    # ── 門牌層（單獨打 → 紅色 composite，避開 label conflict）─────────────
+    composed = main_img
+    try:
+        r2 = httpx.get(
+            wms_url,
+            params={
+                "service": "WMS", "version": "1.1.1", "request": "GetMap",
+                "layers": "Taipei:address-WGS84", "bbox": bbox,
+                "width": img_w, "height": img_h,
+                "srs": "EPSG:3826", "format": "image/png",
+                "transparent": "true", "styles": "",
+            },
+            timeout=20, verify=False,
+        )
+        if r2.status_code == 200 and "image" in r2.headers.get("content-type", "") and len(r2.content) > 200:
+            addr_arr = np.array(Image.open(_io.BytesIO(r2.content)).convert("RGBA"))
+            # 黑色文字 → 紅色（RGB < 100 且 alpha > 200）
+            mask = (
+                (addr_arr[..., 0] < 100)
+                & (addr_arr[..., 1] < 100)
+                & (addr_arr[..., 2] < 100)
+                & (addr_arr[..., 3] > 200)
+            )
+            if mask.any():
+                addr_arr[mask] = [220, 0, 0, 255]
+                red_addr = Image.fromarray(addr_arr)
+                composed = Image.alpha_composite(main_img, red_addr)
+                try: red_addr.close()
+                except Exception: pass
+        else:
+            logger.info(
+                f"台北 WMS 門牌層無資料/失敗（不影響主圖）http={r2.status_code} size={len(r2.content)}"
+            )
+    except Exception as e:
+        logger.info(f"台北 WMS 門牌層例外（不影響主圖）: {e}")
+
+    try:
+        rgb = composed.convert("RGB")
+        try: rgb.save(output_path, format="PNG")
+        finally: rgb.close()
+        return True
+    except Exception as e:
+        logger.warning(f"台北 WMS composed 寫檔失敗: {e}")
+        return False
+    finally:
+        try:
+            if composed is not main_img:
+                composed.close()
+        except Exception: pass
+        try: main_img.close()
+        except Exception: pass
+
+
 def fetch_zoning_map_image_newtaipei(
     lat: float, lng: float, output_path: str, half_radius_m: int = 150,
 ) -> bool:

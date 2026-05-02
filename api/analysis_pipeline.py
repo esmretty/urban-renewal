@@ -12,14 +12,13 @@ logger = logging.getLogger(__name__)
 
 def _scan_road_width_vision(*, lat, lng, addr, district, src_id, all_roads, browser_ctx=None, skip_vision=False):
     """
-    Playwright 開 zonemap → 開路寬圖層 → 門牌搜尋定位 → 截圖 → (可選) Vision 判斷。
+    取分區圖（WMS-first，Playwright fallback）→ (可選) Vision 判斷。
     skip_vision=True：只截圖不跑 Vision（用於規則已命中的 case，保留截圖供肉眼驗證）
                      → 回 {"screenshot": path}
     skip_vision=False：完整 Vision 判斷 → 回 {"road_width_m", "road_name", "reason", "screenshot"}
-    browser_ctx: 傳入現有的 BrowserContext 避免重複開瀏覽器。
+    browser_ctx: Playwright fallback 用的 BrowserContext，WMS 成功時不會用到。
     """
     from config import BASE_DIR
-    import json as _json
 
     addr_parsed = {}
     m = re.search(r"([\u4e00-\u9fa5]+(?:路|街|大道)(?:[一二三四五六七八九十]段)?)", addr)
@@ -40,9 +39,41 @@ def _scan_road_width_vision(*, lat, lng, addr, district, src_id, all_roads, brow
 
     screenshot_path = BASE_DIR / "data" / "screenshots" / f"{src_id}_roadwidth.png"
 
-    if not browser_ctx:
-        logger.warning("_scan_road_width_vision: 沒有 browser_ctx，跳過")
-        return None
+    # === WMS-first：用 GeoServer WMS GetMap 直接 HTTP 取圖（~0.5s，省 Playwright 50× 時間）
+    # 失敗才走 Playwright fallback（既有路徑完整保留）
+    wms_ok = False
+    try:
+        from analysis.gov_gis import fetch_zoning_map_image_taipei
+        wms_ok = fetch_zoning_map_image_taipei(lat, lng, str(screenshot_path))
+        if wms_ok:
+            logger.info(f"_scan_road_width_vision[{src_id}]: WMS GetMap 成功，跳過 Playwright")
+    except Exception as _wms_e:
+        logger.warning(f"_scan_road_width_vision[{src_id}]: WMS 例外，fallback Playwright: {_wms_e}")
+        wms_ok = False
+
+    if not wms_ok:
+        if not browser_ctx:
+            logger.warning("_scan_road_width_vision: WMS 失敗 + 沒有 browser_ctx，跳過")
+            return None
+        _scan_road_width_playwright(
+            lat=lat, lng=lng, addr_parsed=addr_parsed, addr_district=addr_district,
+            screenshot_path=screenshot_path, browser_ctx=browser_ctx,
+        )
+
+    # skip_vision：只截圖不跑 Vision
+    if skip_vision:
+        return {"screenshot": f"/data/screenshots/{src_id}_roadwidth.png"}
+
+    return _run_road_width_vision_judgement(
+        screenshot_path=screenshot_path, src_id=src_id, addr=addr,
+        all_roads=all_roads,
+    )
+
+
+def _scan_road_width_playwright(*, lat, lng, addr_parsed, addr_district,
+                                 screenshot_path, browser_ctx):
+    """Fallback：原 Playwright 開 zonemap → UI 操作 → 截圖（~22-26s）。"""
+    import time
     ctx = browser_ctx
     page = ctx.new_page()
     page.set_viewport_size({"width": 1920, "height": 1080})
@@ -50,7 +81,6 @@ def _scan_road_width_vision(*, lat, lng, addr, district, src_id, all_roads, brow
         "https://zonemap.udd.gov.taipei/ZoneMapOP/indexZoneMap_op.aspx",
         wait_until="networkidle", timeout=60000,
     )
-    import time
     time.sleep(6)
     # 開側欄 → 開圖層
     page.click(".fa-bars", timeout=15000)
@@ -123,11 +153,10 @@ def _scan_road_width_vision(*, lat, lng, addr, district, src_id, all_roads, brow
     page.screenshot(path=str(screenshot_path), full_page=False)
     page.close()
 
-    # skip_vision：只截圖不跑 Vision
-    if skip_vision:
-        return {"screenshot": f"/data/screenshots/{src_id}_roadwidth.png"}
 
-    # Vision 判斷
+def _run_road_width_vision_judgement(*, screenshot_path, src_id, addr, all_roads):
+    """讀截圖 → Claude Vision → 解析回 {"road_name", "road_width_m", "reason", ...}"""
+    import json as _json
     from analysis.claude_analyzer import _encode_image, client, MODEL_VISION
     img_b64, media_type = _encode_image(str(screenshot_path))
     if not img_b64:
