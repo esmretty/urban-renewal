@@ -649,7 +649,7 @@ def fetch_zoning_map_image_taipei(
     import io as _io
     from pathlib import Path
     try:
-        from PIL import Image, ImageChops
+        from PIL import Image, ImageChops, ImageFilter, ImageDraw, ImageFont
     except ImportError:
         logger.warning("PIL 未安裝，無法合成台北 WMS 地籍圖")
         return False
@@ -663,15 +663,14 @@ def fetch_zoning_map_image_taipei(
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     wms_url = "https://zonegeo.udd.gov.taipei/geoserver/Taipei/wms"
 
-    # ── 主圖（5 層；地號文字另外用自訂 SLD 縮小字體獨立打）─────────────────
-    # 拿掉 LAND-ALL-TWD97-TEXT（GeoServer 預設地號字太大）→ 改成獨立 GetMap 用
-    # SLD_BODY 自訂 size=9 italic（跟 roadsize-TWD97 風格對齊）
+    # ── 主圖（4 層；地號 + 分區文字都改 PIL 自繪以加白色 halo 增強對比）────
+    # 拿掉 LAND-ALL-TWD97-TEXT (地號) 跟 ublock97-TWD97-text (分區文字商3/住4)
+    # → 改用 WFS query + PIL draw with stroke (黑字 + 白外框，紅色商業區也讀得清楚)
     main_layers = (
         "Taipei:ublock97-TWD97,"
         "Taipei:LAND-ALL-TWD97,"
         "Taipei:road101-TWD97,"
-        "Taipei:roadsize-TWD97,"
-        "Taipei:ublock97-TWD97-text"
+        "Taipei:roadsize-TWD97"
     )
     try:
         r1 = httpx.get(
@@ -697,13 +696,30 @@ def fetch_zoning_map_image_taipei(
 
     composed = main_img
 
-    # ── 地號文字（WFS 抓 polygon centroid + PIL 自訂字體繪製）──────────────
-    # 為什麼自己畫：GeoServer 把 SLD_BODY 給忽略（disabled），無法調整字體大小，
-    # 預設 ~14px 字體太大太擠。改用 WFS 抓 land_no + 形狀，PIL 自己畫 size=12 italic
-    # 跟 roadsize-TWD97 風格對齊。
+    # ── 字體載入 helper（給地號 + 分區共用）────────────────────────────────
+    def _load_font(size: int):
+        for fp in (
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "C:/Windows/Fonts/msjhbd.ttc",     # Microsoft 正黑 Bold
+            "C:/Windows/Fonts/msjh.ttc",
+        ):
+            try: return ImageFont.truetype(fp, size)
+            except (OSError, IOError): continue
+        return ImageFont.load_default()
+
+    font_land = _load_font(12)
+    font_zone = _load_font(28)   # 分區商3/住4 字體較大
+
+    draw = ImageDraw.Draw(composed)
+    scale_x = img_w / (xmax - xmin)
+    scale_y = img_h / (ymax - ymin)
+    wfs_url = TAIPEI_WFS_URL   # 同 host /ows
+
+    # ── 地號文字（WFS 抓 polygon centroid + PIL 黑字 + 白色 1px 描邊）──────
     try:
-        from PIL import ImageDraw, ImageFont
-        wfs_url = TAIPEI_WFS_URL   # 同 host /ows
         rwfs = httpx.get(
             wfs_url,
             params={
@@ -717,25 +733,6 @@ def fetch_zoning_map_image_taipei(
         )
         if rwfs.status_code == 200:
             feats = (rwfs.json() or {}).get("features") or []
-            # 找系統可用字體（Linux production / Windows dev 都覆蓋）
-            font = None
-            for fp in (
-                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-                "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
-                "C:/Windows/Fonts/msjh.ttc",
-                "C:/Windows/Fonts/segoeuii.ttf",   # Segoe UI Italic
-            ):
-                try:
-                    font = ImageFont.truetype(fp, 12)
-                    break
-                except (OSError, IOError):
-                    continue
-            if font is None:
-                font = ImageFont.load_default()
-            draw = ImageDraw.Draw(composed)
-            scale_x = img_w / (xmax - xmin)
-            scale_y = img_h / (ymax - ymin)
             for f in feats:
                 p = f.get("properties") or {}
                 label = p.get("land_no") or ""
@@ -746,29 +743,67 @@ def fetch_zoning_map_image_taipei(
                 coords = geom.get("coordinates")
                 if not coords:
                     continue
-                # MultiPolygon: coords[0][0] = 第一個 polygon 第一個 ring；Polygon: coords[0]
                 ring = coords[0][0] if gtype == "MultiPolygon" else coords[0]
                 if not ring:
                     continue
-                xs = [c[0] for c in ring]
-                ys = [c[1] for c in ring]
-                cx = sum(xs) / len(xs)
-                cy = sum(ys) / len(ys)
-                # TWD97 → pixel (Y 軸翻轉，影像原點左上)
-                px = (cx - xmin) * scale_x
-                py = (ymax - cy) * scale_y
+                xs = [c[0] for c in ring]; ys = [c[1] for c in ring]
+                _cxw = sum(xs) / len(xs); _cyw = sum(ys) / len(ys)
+                px = (_cxw - xmin) * scale_x
+                py = (ymax - _cyw) * scale_y
                 if not (0 <= px < img_w and 0 <= py < img_h):
                     continue
-                # 文字置中：用 textbbox 算寬高
                 try:
-                    bbox_t = draw.textbbox((0, 0), label, font=font)
-                    tw = bbox_t[2] - bbox_t[0]
-                    th = bbox_t[3] - bbox_t[1]
+                    bbox_t = draw.textbbox((0, 0), label, font=font_land)
+                    tw = bbox_t[2] - bbox_t[0]; th = bbox_t[3] - bbox_t[1]
                 except Exception:
                     tw, th = 8 * len(label), 12
-                draw.text((px - tw / 2, py - th / 2), label, font=font, fill=(34, 34, 34, 255))
+                # Pillow 9.2+: stroke_width + stroke_fill 直接給白外框
+                draw.text(
+                    (px - tw / 2, py - th / 2), label, font=font_land,
+                    fill=(0, 0, 0, 255), stroke_width=2, stroke_fill=(255, 255, 255, 255),
+                )
     except Exception as e:
         logger.info(f"台北 WMS 地號文字層 (PIL) 例外（不影響主圖）: {e}")
+
+    # ── 分區文字「商3 / 住4 / 公」(WFS Point + PIL 大字 + 白外框) ──────────
+    try:
+        rwfs2 = httpx.get(
+            wfs_url,
+            params={
+                "service": "WFS", "version": "1.0.0", "request": "GetFeature",
+                "outputFormat": "json",
+                "typename": "Taipei:ublock97-TWD97-text",
+                "bbox": f"{xmin},{ymin},{xmax},{ymax},EPSG:3826",
+                "maxFeatures": 200,
+            },
+            timeout=15, verify=False,
+        )
+        if rwfs2.status_code == 200:
+            feats2 = (rwfs2.json() or {}).get("features") or []
+            for f in feats2:
+                p = f.get("properties") or {}
+                label = p.get("usenam") or p.get("usetxt") or ""
+                if not label:
+                    continue
+                geom = f.get("geometry") or {}
+                if geom.get("type") != "Point":
+                    continue
+                _cxw, _cyw = geom["coordinates"][0], geom["coordinates"][1]
+                px = (_cxw - xmin) * scale_x
+                py = (ymax - _cyw) * scale_y
+                if not (0 <= px < img_w and 0 <= py < img_h):
+                    continue
+                try:
+                    bbox_t = draw.textbbox((0, 0), label, font=font_zone)
+                    tw = bbox_t[2] - bbox_t[0]; th = bbox_t[3] - bbox_t[1]
+                except Exception:
+                    tw, th = 18 * len(label), 28
+                draw.text(
+                    (px - tw / 2, py - th / 2), label, font=font_zone,
+                    fill=(0, 0, 0, 255), stroke_width=3, stroke_fill=(255, 255, 255, 255),
+                )
+    except Exception as e:
+        logger.info(f"台北 WMS 分區文字層 (PIL) 例外（不影響主圖）: {e}")
 
     # ── 物件中心紅點（PIL 直接畫在 composed 上）────────────────────────────
     # WMS address-WGS84 給的是該街區所有門牌號，但用戶想看「這個物件」位置
@@ -802,27 +837,32 @@ def fetch_zoning_map_image_taipei(
         )
         if r2.status_code == 200 and "image" in r2.headers.get("content-type", "") and len(r2.content) > 200:
             addr_img = Image.open(_io.BytesIO(r2.content)).convert("RGBA")
-            # 黑色文字 → 紅色（RGB 三通道都 < 100 且 alpha > 200 視為文字像素）
-            # 純 PIL 做法：每通道做 threshold → ImageChops.multiply 串成最終 mask
+            # 黑色文字 mask（RGB<100 且 alpha>200）
             r_, g_, b_, a_ = addr_img.split()
             r_t = r_.point(lambda v: 255 if v < 100 else 0)
             g_t = g_.point(lambda v: 255 if v < 100 else 0)
             b_t = b_.point(lambda v: 255 if v < 100 else 0)
             a_t = a_.point(lambda v: 255 if v > 200 else 0)
-            # AND：兩兩相乘（因為值只有 0 / 255，相乘等於邏輯 AND）
             mask = ImageChops.multiply(
                 ImageChops.multiply(r_t, g_t),
                 ImageChops.multiply(b_t, a_t),
             )
-            # 用 mask 把純紅色 layer 疊到目前 composed（已含地號文字層）
-            red_layer = Image.new("RGBA", addr_img.size, (220, 0, 0, 255))
-            red_layer.putalpha(mask)
-            composed = Image.alpha_composite(composed, red_layer)
-            try: red_layer.close()
+            # 白色 halo：把 mask 用 MaxFilter(5) 膨脹 → halo 範圍 → 畫白色
+            halo_mask = mask.filter(ImageFilter.MaxFilter(5))
+            white_layer = Image.new("RGBA", addr_img.size, (255, 255, 255, 255))
+            white_layer.putalpha(halo_mask)
+            composed = Image.alpha_composite(composed, white_layer)
+            # 黑色文字：原始 mask 畫黑色疊到白 halo 上面
+            black_layer = Image.new("RGBA", addr_img.size, (0, 0, 0, 255))
+            black_layer.putalpha(mask)
+            composed = Image.alpha_composite(composed, black_layer)
+            try: white_layer.close()
+            except Exception: pass
+            try: black_layer.close()
             except Exception: pass
             try: addr_img.close()
             except Exception: pass
-            for _band in (r_, g_, b_, a_, r_t, g_t, b_t, a_t, mask):
+            for _band in (r_, g_, b_, a_, r_t, g_t, b_t, a_t, mask, halo_mask):
                 try: _band.close()
                 except Exception: pass
         else:
