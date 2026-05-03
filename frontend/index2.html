@@ -92,7 +92,7 @@
         <label class="v2-filter-label">物件樓層</label>
         <div class="v2-chip-row" id="v2-floor-chips">
           <label class="v2-chip v2-chip--all"><input type="checkbox" id="v2-floor-all" checked onchange="v2.toggleAllFloors(this)"><span>全部</span></label>
-          <label class="v2-chip"><input type="checkbox" value="B" data-floor onchange="v2.onFloorChange()"><span>B1</span></label>
+          <label class="v2-chip"><input type="checkbox" value="B" checked data-floor onchange="v2.onFloorChange()"><span>B1</span></label>
           <label class="v2-chip"><input type="checkbox" value="1" checked data-floor onchange="v2.onFloorChange()"><span>1</span></label>
           <label class="v2-chip"><input type="checkbox" value="2" checked data-floor onchange="v2.onFloorChange()"><span>2</span></label>
           <label class="v2-chip"><input type="checkbox" value="3" checked data-floor onchange="v2.onFloorChange()"><span>3</span></label>
@@ -129,7 +129,7 @@
           <label class="v2-toggle"><input type="checkbox" id="v2-hide-remote" checked onchange="v2.applySort()"><span>偏遠</span></label>
           <label class="v2-toggle"><input type="checkbox" id="v2-hide-unsuitable" checked onchange="v2.applySort()"><span>特殊</span></label>
           <label class="v2-toggle"><input type="checkbox" id="v2-hide-basement" onchange="v2.applySort()"><span>地下室</span></label>
-          <label class="v2-toggle"><input type="checkbox" id="v2-hide-foreclosure" checked onchange="v2.applySort()"><span>法拍</span></label>
+          <label class="v2-toggle"><input type="checkbox" id="v2-hide-foreclosure" onchange="v2.applySort()"><span>法拍</span></label>
         </div>
       </div>
 

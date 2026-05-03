@@ -875,14 +875,12 @@
     $('#v2-hide-remote').checked = true;
     $('#v2-hide-unsuitable').checked = true;
     $('#v2-hide-basement').checked = false;
-    $('#v2-hide-foreclosure').checked = true;
+    $('#v2-hide-foreclosure').checked = false;
     $$('.v2-filter-btype:not(:disabled)').forEach(c => { c.checked = c.value === '公寓'; });
-    // floor chips：B 不勾，1-5 勾
-    $$('#v2-floor-chips input[data-floor]').forEach(c => {
-      c.checked = c.value !== 'B';
-    });
+    // floor chips：B + 1-5 全勾
+    $$('#v2-floor-chips input[data-floor]').forEach(c => { c.checked = true; });
     const fa = $('#v2-floor-all');
-    if (fa) fa.checked = true; // master 對應 1-5 全勾
+    if (fa) fa.checked = true;
     $('#v2-sort').value = 'list_rank';
     state.sortDir = 'desc';
     const sd = $('#v2-sort-dir'); if (sd) sd.textContent = '↓';

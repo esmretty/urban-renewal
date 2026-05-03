@@ -178,6 +178,20 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* 用戶要求：menu 所有文字 12px (除了 action buttons 保留原大小) */
+  font-size: 12px;
+}
+/* sidebar 內所有 input/select/label 字體統一 12px */
+.v2-sidebar input,
+.v2-sidebar select,
+.v2-sidebar label,
+.v2-sidebar span,
+.v2-sidebar .v2-filter-label {
+  font-size: 12px;
+}
+/* 例外：action buttons 保留原本字體 (13px)，比較顯眼 */
+.v2-sidebar .v2-action-row .v2-btn {
+  font-size: 13px;
 }
 .v2-sidebar-backdrop {
   display: none;
