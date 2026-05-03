@@ -2638,6 +2638,39 @@ def _strip_for_list(d: dict) -> dict:
     return {k: v for k, v in d.items() if k not in LIST_DROP_FIELDS}
 
 
+def _query_districts_parallel(col, dist_list, max_price_wan, min_price_wan):
+    """繞過 Firestore `in [N values]` 的 fan-out 慢點：並行跑 N 個 `==` query。
+
+    背景：where("district", "in", [15 districts]) 在 Firestore 內部會 serialize 成
+    15 個 sub-query 依序跑，prod 實測 N=525 docs 要 1.8 秒。改成 ThreadPoolExecutor
+    並行 15 個 `where("district", "==", d)`，預計降到 ~200ms (max of single-district query).
+    """
+    from google.cloud.firestore_v1 import FieldFilter
+    import concurrent.futures as _cf
+
+    max_ntd = int(max_price_wan * 10000) if (max_price_wan and max_price_wan > 0) else None
+    min_ntd = int(min_price_wan * 10000) if (min_price_wan and min_price_wan > 0) else None
+
+    def _q_one(d):
+        q = col.where(filter=FieldFilter("district", "==", d))
+        if max_ntd is not None:
+            q = q.where(filter=FieldFilter("price_ntd", "<=", max_ntd))
+        if min_ntd is not None:
+            q = q.where(filter=FieldFilter("price_ntd", ">=", min_ntd))
+        return list(q.get())
+
+    docs = []
+    seen = set()
+    n_workers = min(len(dist_list), 16)
+    with _cf.ThreadPoolExecutor(max_workers=n_workers) as ex:
+        for sub in ex.map(_q_one, dist_list):
+            for d in sub:
+                if d.id not in seen:
+                    seen.add(d.id)
+                    docs.append(d)
+    return docs
+
+
 @app.get("/api/central_search")
 def central_search(
     response: Response,
@@ -2704,15 +2737,10 @@ def central_search(
     #       導致下面 `if q: kw = q.strip()` 拿到 Firestore Query 物件而 AttributeError）
     if dist_set is not None and 0 < len(dist_set) <= 30:
         try:
-            from google.cloud.firestore_v1 import FieldFilter
-            fs_q = col.where(filter=FieldFilter("district", "in", list(dist_set)))
-            if max_price_wan is not None and max_price_wan > 0:
-                fs_q = fs_q.where(filter=FieldFilter("price_ntd", "<=", int(max_price_wan * 10000)))
-            if min_price_wan is not None and min_price_wan > 0:
-                fs_q = fs_q.where(filter=FieldFilter("price_ntd", ">=", int(min_price_wan * 10000)))
-            docs = list(fs_q.get())
+            # 用並行 == query 取代 in [N values] (Firestore in 會 fan-out serialize)
+            docs = _query_districts_parallel(col, list(dist_set), max_price_wan, min_price_wan)
         except Exception as _e:
-            logger.warning(f"[central_search] where(district+price) 失敗，fallback 全收：{_e}")
+            logger.warning(f"[central_search] parallel district query 失敗，fallback 全收：{_e}")
             docs = list(col.get())
     else:
         docs = list(col.get())
