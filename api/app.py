@@ -1047,6 +1047,12 @@ async def root():
     return FileResponse(str(FRONTEND_DIR / "index.html"))
 
 
+@app.get("/v2")
+async def root_v2():
+    """新版前台（並行 beta）— 不影響舊版 /，路由完全獨立。"""
+    return FileResponse(str(FRONTEND_DIR / "index2.html"))
+
+
 @app.get("/api/target_regions")
 def api_target_regions():
     """回傳目標分析範圍（前端下拉選單用）— 含台北市跟新北市 4 區。"""
