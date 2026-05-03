@@ -346,7 +346,27 @@
     return [null, null];
   }
 
+  // 處理特殊 zoning 後綴 (特/遷/核/抄)，對齊 v1 effectiveZoning
+  // (特)/(遷) 商業區 → 優先用 zoning_original，否則剝掉後綴
+  // (特)/(遷) 住宅區 → 一律剝掉後綴用本身住宅區
+  function effectiveZoning(p) {
+    const z = p.zoning || '';
+    const orig = p.zoning_original || '';
+    const hasSpecial = /\((?:特|遷|核|抄)\)/.test(z);
+    const base = z.replace(/\((?:特|遷|核|抄)\)/g, '').trim();
+    if (hasSpecial && z.includes('商')) {
+      if (orig && lookupFar(orig, p) != null) return orig;
+      return lookupFar(base, p) != null ? base : z;
+    }
+    if (hasSpecial && z.includes('住')) {
+      return lookupFar(base, p) != null ? base : z;
+    }
+    if (orig && lookupFar(orig, p) != null) return orig;
+    return z;
+  }
+
   // 多分區加權 FAR — 對齊 v1 effectiveFarPctWeighted
+  // 注意：單分區走 effectiveZoning(p) 而非 raw p.zoning (處理特殊後綴 case)
   function effectiveFar(p) {
     const zList = p.zoning_list;
     if (zList && zList.length > 1) {
@@ -361,7 +381,7 @@
       }
       return Math.round(w);
     }
-    return lookupFar(p.zoning, p);
+    return lookupFar(effectiveZoning(p), p);
   }
 
   // 即時算倍數 — 跟 v1 computeRowMultiples 對齊：
