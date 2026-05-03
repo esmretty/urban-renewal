@@ -2626,8 +2626,9 @@ def list_properties(
 
 # slim=true 時不回給卡片列表的重欄位（用戶點開詳情才需要的）
 # 注意：lvr_records 不在這裡（用戶要求保留在卡片列表）
+# 注意：renewal_v2 不在這裡（卡片倍數計算需要 base_far_pct/share_ratio，這些都在 renewal_v2 裡）
+#       改成在 _strip_for_list 內只剝掉 renewal_v2.scenarios 子 dict（佔 ~63% 大小）
 LIST_DROP_FIELDS = {
-    "renewal_v2",                          # 試算結果（前端即時算，CLAUDE.md 規則 8）
     "road_width_all",                      # 周邊所有路寬清單（詳情頁用，卡片只用採用的 road_width_m）
     "ai_reason",                            # AI 分析推薦理由文字
     "ai_analysis",                          # AI 完整分析文字
@@ -2642,8 +2643,15 @@ LIST_DROP_FIELDS = {
 
 
 def _strip_for_list(d: dict) -> dict:
-    """slim=true 時把列表不需要的重欄位剝掉。"""
-    return {k: v for k, v in d.items() if k not in LIST_DROP_FIELDS}
+    """slim=true 時把列表不需要的重欄位剝掉。
+    renewal_v2 整個保留會帶 ~530B/doc，但只需要其中 base_far_pct/share_ratio/parking_value_wan
+    幾個小欄位給卡片倍數計算用 — scenarios 子 dict 佔 63% 大小，移除即可省 ~330B/doc。
+    """
+    out = {k: v for k, v in d.items() if k not in LIST_DROP_FIELDS}
+    rv2 = out.get("renewal_v2")
+    if isinstance(rv2, dict) and "scenarios" in rv2:
+        out["renewal_v2"] = {k: v for k, v in rv2.items() if k != "scenarios"}
+    return out
 
 
 def _query_districts_parallel(col, dist_list, max_price_wan, min_price_wan):

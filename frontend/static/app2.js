@@ -97,13 +97,18 @@
 
   // 取後端已存的「投入欄位」即時算倍數 — 對齊 calculate_renewal_scenarios 的核心邏輯
   // 注意：CLAUDE.md 規則 8，DB 不存 multiple，此處跟 app.js 同樣即時算
+  // farPct 來源優先序：
+  //   1) p.effective_far_pct (top-level，多分區加權後)
+  //   2) p.renewal_v2.effective_far_pct / base_far_pct (slim mode 下這 2 個還在)
+  //   3) p.base_far_pct (top-level fallback，舊 doc 可能有)
   function rowMultiple(p, prices) {
     if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal || isLandSuspicious(p)) {
       return null;
     }
     const land = Number(p.land_area_ping) || 0;
     const price = p.new_house_price_wan_override ?? prices[p.district];
-    const farPct = Number(p.effective_far_pct ?? p.base_far_pct);
+    const rv2 = p.renewal_v2 || {};
+    const farPct = Number(p.effective_far_pct ?? rv2.effective_far_pct ?? rv2.base_far_pct ?? p.base_far_pct ?? 0);
     if (!land || !farPct || !price) return null;
     const coeff = p.rebuild_coeff ?? 1.57;
     const ratio = lookupShareRatio(price)[0];
@@ -112,11 +117,11 @@
     const is1F = Number(p.floor) === 1 || Number(p.floor_range_min) === 1;
     const floorPremium = p.floor_premium ?? (is1F ? 0.20 : 0);
     const effectivePrice = price * (1 + floorPremium);
-    const bonus = 0.50;   // 都更 default
+    const bonus = p.bonus_dugen ?? 0.50;   // 都更 default
     const share = land * (farPct/100) * (1+bonus) * coeff * ratio;
     const total = share * effectivePrice + (share / 40) * parking;
     const listWan = (p.price_ntd || 0) / 10000;
-    const desired = listWan ? Math.round(listWan * 0.9 / 10) * 10 : 0;
+    const desired = p.desired_price_wan ?? (listWan ? Math.round(listWan * 0.9 / 10) * 10 : 0);
     if (!desired) return null;
     return total / desired;
   }
@@ -206,49 +211,47 @@
     const perBld = (p.price_ntd && p.building_area_ping)
       ? (p.price_ntd / 10000 / p.building_area_ping).toFixed(1) : null;
     const mult = rowMultiple(p, prices);
-    let multCls = 'v2-card__multi-num';
+    let multCls = 'v2-card__mult';
     if (mult != null) {
-      if (mult >= 3.0) multCls += ' v2-card__multi-num--good';
-      else if (mult >= 2.0) multCls += ' v2-card__multi-num--mid';
+      if (mult >= 3.0) multCls += ' v2-card__mult--good';
+      else if (mult >= 2.0) multCls += ' v2-card__mult--mid';
     }
     const chips = computeChips(p);
     const inWatchlist = !!(p.user_url || p.added_at_user);
     const archivedClass = p.archived ? 'v2-card--archived' : '';
 
+    // ── 2-line dense layout ──
+    // Line 1: icon + 區·地址 (ellipsis) | 總價 + 建單價 | 倍數 | ⭐
+    // Line 2: 建/地/齡/層/區/路 + chips + sources
     return `
       <article class="v2-card ${archivedClass}" data-id="${esc(id)}">
-        <div class="v2-card__head">
-          <div class="v2-card__title-line">
-            <span class="v2-card__type">${typeIcon(p.building_type)}</span>
-            <span class="v2-card__addr">
-              <span class="v2-card__district">${esc(p.district || '')}</span> · ${esc(addr)}
-            </span>
-          </div>
-          <div class="v2-card__price-line">
+        <div class="v2-card__line1">
+          <span class="v2-card__type">${typeIcon(p.building_type)}</span>
+          <span class="v2-card__addr">
+            <span class="v2-card__district">${esc(p.district || '')}</span>·${esc(addr)}
+          </span>
+          <span class="v2-card__price-block">
             <span class="v2-card__price">${priceWan ? fmt0(priceWan) : '—'}<small>萬</small></span>
-            ${perBld ? `<span class="v2-card__price-per">${perBld} 萬/建坪</span>` : ''}
-          </div>
-        </div>
-        <div class="v2-card__multi">
-          <div class="${multCls}">${mult != null ? mult.toFixed(1) : '—'}</div>
-          <div class="v2-card__multi-label">都更倍數</div>
-        </div>
-        <div class="v2-card__stats">
-          <span class="v2-stat"><span class="v2-stat__label">建</span><span class="v2-stat__value">${fmt1(p.building_area_ping)}</span></span>
-          <span class="v2-stat"><span class="v2-stat__label">地</span><span class="v2-stat__value">${fmt1(p.land_area_ping)}</span></span>
-          <span class="v2-stat"><span class="v2-stat__label">齡</span><span class="v2-stat__value">${p.building_age != null ? p.building_age : '—'}</span></span>
-          <span class="v2-stat"><span class="v2-stat__label">層</span><span class="v2-stat__value">${formatFloor(p)}</span></span>
-          <span class="v2-stat"><span class="v2-stat__label">區</span><span class="v2-stat__value">${esc((p.zoning || '—').replace('住宅區','住').replace('商業區','商'))}</span></span>
-          ${p.road_width_m ? `<span class="v2-stat"><span class="v2-stat__label">路</span><span class="v2-stat__value">${p.road_width_m}m</span></span>` : ''}
-        </div>
-        <div class="v2-card__footer">
-          ${chips.length ? `<div class="v2-card__chips">${chips.map(c => `<span class="v2-rchip ${c.cls}">${c.label}</span>`).join('')}</div>` : ''}
-          ${p.sources && p.sources.length ? `<div class="v2-card__sources">${srcBadgesHTML(p.sources)}</div>` : ''}
+            ${perBld ? `<span class="v2-card__price-per">${perBld}/建</span>` : ''}
+          </span>
+          <span class="${multCls}" title="都更倍數">
+            ${mult != null ? mult.toFixed(1) : '—'}<small>×</small>
+          </span>
           <button class="v2-card__star ${inWatchlist ? 'v2-card__star--active' : ''}" data-id="${esc(id)}" title="加入觀察清單">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
             </svg>
           </button>
+        </div>
+        <div class="v2-card__line2">
+          <span class="v2-stat" title="建坪"><b>建</b>${fmt1(p.building_area_ping)}</span>
+          <span class="v2-stat" title="地坪"><b>地</b>${fmt1(p.land_area_ping)}</span>
+          <span class="v2-stat" title="屋齡"><b>齡</b>${p.building_age != null ? p.building_age : '—'}</span>
+          <span class="v2-stat" title="樓層"><b>層</b>${formatFloor(p)}</span>
+          <span class="v2-stat" title="分區"><b>區</b>${esc((p.zoning || '—').replace('住宅區','住').replace('商業區','商'))}</span>
+          ${p.road_width_m ? `<span class="v2-stat" title="路寬"><b>路</b>${p.road_width_m}m</span>` : ''}
+          ${chips.length ? chips.map(c => `<span class="v2-rchip ${c.cls}">${c.label}</span>`).join('') : ''}
+          ${p.sources && p.sources.length ? `<span class="v2-card__sources">${srcBadgesHTML(p.sources)}</span>` : ''}
         </div>
       </article>`;
   }
@@ -311,18 +314,36 @@
   function renderDistrictChips() {
     const host = $('#v2-district-chips');
     if (!host) return;
-    const html = [];
-    Object.entries(state.targetRegions).forEach(([city, districts]) => {
-      districts.forEach(d => {
+    const cityList = Object.entries(state.targetRegions);
+    if (!cityList.length) { host.innerHTML = ''; return; }
+
+    // Build city columns
+    const renderCityCol = (city, districts) => {
+      const chipsHtml = districts.map(d => {
         const key = `${city}|${d}`;
         const checked = state.districtPicks.has(key) ? 'checked' : '';
-        html.push(`<label class="v2-chip">
+        return `<label class="v2-chip">
           <input type="checkbox" data-city="${esc(city)}" data-district="${esc(d)}" ${checked} onchange="v2.toggleDistrict('${esc(city)}','${esc(d)}', this.checked)">
           <span>${esc(d)}</span>
-        </label>`);
-      });
-    });
-    host.innerHTML = html.join('');
+        </label>`;
+      }).join('');
+      return `<div class="v2-city-col" data-city="${esc(city)}">
+        <div class="v2-city-col__title">${esc(city)}</div>
+        <div class="v2-city-col__chips">${chipsHtml}</div>
+      </div>`;
+    };
+
+    // Narrow toggle: city pill switcher (only one city visible at a time on narrow screens)
+    const togglePills = cityList.map(([city, _], i) => {
+      const active = (state.activeCityTab || cityList[0][0]) === city ? 'v2-city-pill--active' : '';
+      return `<button class="v2-city-pill ${active}" type="button" data-city="${esc(city)}" onclick="v2.switchCityTab('${esc(city)}')">${esc(city)}</button>`;
+    }).join('');
+
+    host.innerHTML = `
+      <div class="v2-city-toggle">${togglePills}</div>
+      <div class="v2-city-grid" data-active-city="${esc(state.activeCityTab || cityList[0][0])}">
+        ${cityList.map(([c, ds]) => renderCityCol(c, ds)).join('')}
+      </div>`;
   }
 
   // ── Filter + sort ────────────────────────────────────────────────────────
@@ -631,6 +652,16 @@
     }
   }
 
+  // ── City tab switch (narrow viewport) ────────────────────────────────────
+  function switchCityTab(city) {
+    state.activeCityTab = city;
+    const grid = $('#v2-district-chips .v2-city-grid');
+    if (grid) grid.dataset.activeCity = city;
+    $$('.v2-city-pill').forEach(p => {
+      p.classList.toggle('v2-city-pill--active', p.dataset.city === city);
+    });
+  }
+
   // ── Sidebar / view toggling ──────────────────────────────────────────────
   function switchView(view) {
     state.view = view;
@@ -701,6 +732,7 @@
     switchView, toggleDistrict, applyFilters, applySort, runSearch,
     resetFilters, gotoPage, openSidebar, closeSidebar,
     openDetail, closeDetail, toggleWatchlist, logout,
+    switchCityTab,
   };
 
   // Boot
