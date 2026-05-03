@@ -1032,7 +1032,12 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
-# 登入驗證 middleware（排在 CORS 之後才能正確處理 OPTIONS preflight）
+# Gzip 壓縮（1KB 以上才壓）— /api/central_search 的 1.6MB JSON 預計壓到 ~300KB
+# 注意：必須加在 CORS 之後（middleware stack LIFO），否則 OPTIONS preflight 會被 gzip 干擾
+from fastapi.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+# 登入驗證 middleware（排在 CORS/Gzip 之後才能正確處理 OPTIONS preflight）
 app.middleware("http")(_auth_middleware)
 
 FRONTEND_DIR = BASE_DIR / "frontend"
