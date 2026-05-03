@@ -54,10 +54,19 @@
         </button>
       </div>
 
-      <!-- Filter sections -->
+      <!-- Filter sections — defaults 全部對齊 v1 -->
       <div class="v2-filter-group">
         <label class="v2-filter-label">行政區</label>
         <div class="v2-chip-row" id="v2-district-chips"></div>
+      </div>
+
+      <div class="v2-filter-group">
+        <label class="v2-filter-label">類型</label>
+        <div class="v2-chip-row">
+          <label class="v2-chip"><input type="checkbox" class="v2-filter-btype" value="公寓" checked onchange="v2.applyFilters()"><span>公寓</span></label>
+          <label class="v2-chip v2-chip--disabled"><input type="checkbox" class="v2-filter-btype" value="透天厝" disabled><span>透天厝（未開放）</span></label>
+          <label class="v2-chip v2-chip--disabled"><input type="checkbox" class="v2-filter-btype" value="店面" disabled><span>店面（未開放）</span></label>
+        </div>
       </div>
 
       <div class="v2-filter-group">
@@ -78,7 +87,7 @@
         <label class="v2-filter-label">物件樓層</label>
         <div class="v2-chip-row" id="v2-floor-chips">
           <label class="v2-chip v2-chip--all"><input type="checkbox" id="v2-floor-all" checked onchange="v2.toggleAllFloors(this)"><span>全部</span></label>
-          <label class="v2-chip"><input type="checkbox" value="B" checked data-floor onchange="v2.onFloorChange()"><span>B1</span></label>
+          <label class="v2-chip"><input type="checkbox" value="B" data-floor onchange="v2.onFloorChange()"><span>B1</span></label>
           <label class="v2-chip"><input type="checkbox" value="1" checked data-floor onchange="v2.onFloorChange()"><span>1F</span></label>
           <label class="v2-chip"><input type="checkbox" value="2" checked data-floor onchange="v2.onFloorChange()"><span>2F</span></label>
           <label class="v2-chip"><input type="checkbox" value="3" checked data-floor onchange="v2.onFloorChange()"><span>3F</span></label>
@@ -106,20 +115,25 @@
         </div>
       </div>
 
+      <!-- 隱藏抗性物件 — defaults 對齊 v1：5F+/B 不勾(顯示)、偏遠/特殊/法拍勾(隱藏) -->
       <div class="v2-filter-group">
         <label class="v2-filter-label">隱藏抗性物件</label>
-        <label class="v2-toggle"><input type="checkbox" id="v2-hide-floors5plus" onchange="v2.applyFilters()"><span>五樓蓋以上</span></label>
-        <label class="v2-toggle"><input type="checkbox" id="v2-hide-remote" checked onchange="v2.applyFilters()"><span>偏遠路段</span></label>
-        <label class="v2-toggle"><input type="checkbox" id="v2-hide-unsuitable" checked onchange="v2.applyFilters()"><span>特殊土地</span></label>
-        <label class="v2-toggle"><input type="checkbox" id="v2-hide-basement" checked onchange="v2.applyFilters()"><span>地下室</span></label>
-        <label class="v2-toggle"><input type="checkbox" id="v2-hide-foreclosure" checked onchange="v2.applyFilters()"><span>法拍屋</span></label>
+        <label class="v2-toggle"><input type="checkbox" id="v2-hide-floors5plus" onchange="v2.applySort()"><span>五樓蓋+</span></label>
+        <label class="v2-toggle"><input type="checkbox" id="v2-hide-remote" checked onchange="v2.applySort()"><span>偏遠路段</span></label>
+        <label class="v2-toggle"><input type="checkbox" id="v2-hide-unsuitable" checked onchange="v2.applySort()"><span>特殊土地</span></label>
+        <label class="v2-toggle"><input type="checkbox" id="v2-hide-basement" onchange="v2.applySort()"><span>地下室</span></label>
+        <label class="v2-toggle"><input type="checkbox" id="v2-hide-foreclosure" checked onchange="v2.applySort()"><span>法拍屋</span></label>
       </div>
 
+      <!-- 最低獲利倍數 — 對齊 v1 (toggle off, value 3.0) -->
       <div class="v2-filter-group">
-        <label class="v2-filter-label">最低倍數</label>
-        <div class="v2-range">
-          <input class="v2-input v2-input--num" type="number" id="v2-min-multiple" min="0" step="0.1" value="0" oninput="v2.applyFilters()">
-          <span class="v2-num-row__suffix">倍</span>
+        <label class="v2-toggle">
+          <input type="checkbox" id="v2-min-mult-on" onchange="v2.applySort()">
+          <span>僅顯示獲利倍數</span>
+        </label>
+        <div class="v2-num-row v2-num-row--compact">
+          <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-min-mult-val" min="0" step="0.1" value="3.0" oninput="v2.applySort()">
+          <span class="v2-num-row__suffix">倍以上</span>
         </div>
       </div>
 
@@ -143,15 +157,18 @@
         <span class="v2-result-count" id="v2-result-count">— 筆</span>
       </div>
       <div class="v2-toolbar__right">
+        <!-- 8 排序選項對齊 v1，預設「新進優先」+ 降冪 -->
         <select class="v2-select" id="v2-sort" onchange="v2.applySort()">
-          <option value="multiple_desc">倍數 高→低</option>
-          <option value="multiple_asc">倍數 低→高</option>
-          <option value="price_asc">總價 低→高</option>
-          <option value="price_desc">總價 高→低</option>
-          <option value="age_desc">屋齡 老→新</option>
-          <option value="land_desc">地坪 大→小</option>
-          <option value="published_desc">上架時間 新→舊</option>
+          <option value="list_rank" selected>新進優先</option>
+          <option value="last_change_at">物件有變動</option>
+          <option value="published_at">原網刊登時間</option>
+          <option value="profit_multiple">獲利倍數</option>
+          <option value="price_per_building_ping">建坪單價</option>
+          <option value="price_per_land_ping">地坪單價</option>
+          <option value="price_ntd">總價</option>
+          <option value="building_age">屋齡</option>
         </select>
+        <button class="v2-btn v2-btn--ghost v2-btn--sm" id="v2-sort-dir" onclick="v2.toggleSortDir()" title="升冪/降冪">↓</button>
       </div>
     </div>
 

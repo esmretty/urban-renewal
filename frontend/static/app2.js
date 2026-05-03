@@ -18,6 +18,23 @@
     selectedId: null,
     targetRegions: {},
     districtPicks: new Set(),  // city|district 字串
+    sortDir: 'desc',           // 'asc' | 'desc'，跟 v1 toggleSortDir 對齊
+  };
+
+  // 跟 v1 hardcode 的 enabled/disabled district 對齊（v1 index.html 寫死的）
+  // 啟用：可勾選；停用：灰色不可選（先不爬 / 資料不足）
+  const V1_DISTRICTS = {
+    "台北市": {
+      enabled:  ["大安區", "信義區", "中山區", "中正區", "文山區"],
+      disabled: ["萬華區", "松山區", "大同區", "南港區"],
+      labels:   { "中山區": "中山", "大安區": "大安", "信義區": "信義", "中正區": "中正",
+                  "文山區": "文山", "萬華區": "萬華", "松山區": "松山", "大同區": "大同", "南港區": "南港" },
+    },
+    "新北市": {
+      enabled:  ["新店區", "永和區", "中和區", "板橋區"],
+      disabled: [],
+      labels:   { "新店區": "新店(市區)", "永和區": "永和", "中和區": "中和", "板橋區": "板橋(市區)" },
+    },
   };
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -412,44 +429,60 @@
     } catch (e) { console.warn('target_regions failed', e); }
   }
   function renderDistrictChips() {
+    // 對齊 v1：hardcode enabled/disabled 同樣的清單，不依賴 API target_regions
+    // 顯示順序：台北市 → 新北市，每行 [全部] + 啟用 chips + disabled 灰色 chips
     const host = $('#v2-district-chips');
     if (!host) return;
-    const cityList = Object.entries(state.targetRegions);
-    if (!cityList.length) { host.innerHTML = ''; return; }
-
-    // Build city columns — 隱藏沒資料的區（counts==0）
     const counts = state.districtCounts || {};
-    const renderCityCol = (city, districts) => {
-      const activeDistricts = districts.filter(d => (counts[`${city}|${d}`] || 0) > 0);
-      // 若 counts 完全沒拿到，仍顯示全部（避免空白）
-      const toShow = (Object.keys(counts).length === 0) ? districts : activeDistricts;
-      const chipsHtml = toShow.map(d => {
+
+    const cityRow = (city) => {
+      const cfg = V1_DISTRICTS[city];
+      if (!cfg) return '';
+      // 全部 master：勾起=該城所有 enabled districts 都選
+      const allChecked = cfg.enabled.every(d => state.districtPicks.has(`${city}|${d}`));
+      const enabledChips = cfg.enabled.map(d => {
         const key = `${city}|${d}`;
         const checked = state.districtPicks.has(key) ? 'checked' : '';
         const n = counts[key] || 0;
+        const label = cfg.labels[d] || d;
         return `<label class="v2-chip" title="${n} 筆物件">
           <input type="checkbox" data-city="${esc(city)}" data-district="${esc(d)}" ${checked} onchange="v2.toggleDistrict('${esc(city)}','${esc(d)}', this.checked)">
-          <span>${esc(d)}${n ? ` <em class="v2-chip__n">${n}</em>` : ''}</span>
+          <span>${esc(label)}${n ? ` <em class="v2-chip__n">${n}</em>` : ''}</span>
         </label>`;
       }).join('');
-      if (!toShow.length) return '';
-      return `<div class="v2-city-col" data-city="${esc(city)}">
-        <div class="v2-city-col__title">${esc(city)}</div>
-        <div class="v2-city-col__chips">${chipsHtml}</div>
+      const disabledChips = cfg.disabled.map(d => {
+        const label = cfg.labels[d] || d;
+        return `<label class="v2-chip v2-chip--disabled" title="尚未開放">
+          <input type="checkbox" disabled>
+          <span>${esc(label)}</span>
+        </label>`;
+      }).join('');
+      const cityShort = city.replace('市', '');
+      return `<div class="v2-dist-city-row">
+        <span class="v2-dist-city-label">${esc(cityShort)}</span>
+        <label class="v2-chip v2-chip--all">
+          <input type="checkbox" ${allChecked ? 'checked' : ''} onchange="v2.toggleAllInCity('${esc(city)}', this.checked)">
+          <span>全部</span>
+        </label>
+        ${enabledChips}
+        ${disabledChips}
       </div>`;
     };
 
-    // Narrow toggle: city pill switcher (only one city visible at a time on narrow screens)
-    const togglePills = cityList.map(([city, _], i) => {
-      const active = (state.activeCityTab || cityList[0][0]) === city ? 'v2-city-pill--active' : '';
-      return `<button class="v2-city-pill ${active}" type="button" data-city="${esc(city)}" onclick="v2.switchCityTab('${esc(city)}')">${esc(city)}</button>`;
-    }).join('');
+    host.innerHTML = cityRow('台北市') + cityRow('新北市');
+  }
 
-    host.innerHTML = `
-      <div class="v2-city-toggle">${togglePills}</div>
-      <div class="v2-city-grid" data-active-city="${esc(state.activeCityTab || cityList[0][0])}">
-        ${cityList.map(([c, ds]) => renderCityCol(c, ds)).join('')}
-      </div>`;
+  // 一鍵全選/取消當前城市的 enabled districts（對齊 v1 toggleAllDists）
+  function toggleAllInCity(city, on) {
+    const cfg = V1_DISTRICTS[city];
+    if (!cfg) return;
+    cfg.enabled.forEach(d => {
+      const key = `${city}|${d}`;
+      if (on) state.districtPicks.add(key);
+      else state.districtPicks.delete(key);
+    });
+    renderDistrictChips();
+    applyFilters();
   }
 
   // ── Filter + sort ────────────────────────────────────────────────────────
@@ -464,6 +497,13 @@
         const key = `${p.city}|${p.district}`;
         return state.districtPicks.has(key);
       });
+    }
+
+    // building_type — 對齊 v1：勾選的 type 才顯示（disabled 不算）
+    const btypePicks = $$('.v2-filter-btype:not(:disabled)').filter(c => c.checked).map(c => c.value);
+    const btypeAll = $$('.v2-filter-btype:not(:disabled)').length;
+    if (btypePicks.length > 0 && btypePicks.length < btypeAll) {
+      list = list.filter(p => btypePicks.includes(p.building_type));
     }
 
     // road
@@ -523,7 +563,7 @@
       list = list.filter(p => (p.land_area_ping || 0) >= landMin);
     }
 
-    // resistance
+    // resistance — 對齊 v1：hide-foreclosure / hide-resist-{floors5plus,remote,unsuitable,basement}
     if ($('#v2-hide-floors5plus').checked) {
       list = list.filter(p => !(p.total_floors >= 5 && p.building_type !== '透天厝'));
     }
@@ -536,45 +576,75 @@
     applySort();
   }
 
+  // 對齊 v1 sort 8 個選項 + 升降序按鈕
+  // list_rank: scrape_session_at desc + list_rank asc (新進優先)
+  // last_change_at: last_change_at desc fallback scrape_session_at
+  // published_at: published_at desc fallback scraped_at
+  // profit_multiple: rowMultiple desc/asc，None 沉底
+  // price_per_building_ping / price_per_land_ping / price_ntd / building_age: 數值 sort，None 沉底
   async function applySort() {
     const mode = $('#v2-sort').value;
+    const reverse = state.sortDir === 'desc';
     const prices = await getDistrictPrices();
     const list = state.filteredSorted.slice();
 
-    const minMult = Number($('#v2-min-multiple').value) || 0;
+    // 最低獲利倍數 toggle (對齊 v1 explore-min-profit)
+    const minMultOn = $('#v2-min-mult-on')?.checked;
+    const minMultVal = parseFloat($('#v2-min-mult-val')?.value);
     let workingList = list;
-    if (minMult > 0) {
+    if (minMultOn && !isNaN(minMultVal) && minMultVal > 0) {
       workingList = workingList.filter(p => {
         const m = rowMultiple(p, prices);
-        return m != null && m >= minMult;
+        return m != null && m >= minMultVal;
       });
     }
 
-    workingList.sort((a, b) => {
+    const valOf = (p) => {
       switch (mode) {
-        case 'multiple_desc': {
-          const ma = rowMultiple(a, prices) ?? -1;
-          const mb = rowMultiple(b, prices) ?? -1;
-          return mb - ma;
-        }
-        case 'multiple_asc': {
-          const ma = rowMultiple(a, prices) ?? Infinity;
-          const mb = rowMultiple(b, prices) ?? Infinity;
-          return ma - mb;
-        }
-        case 'price_asc': return (a.price_ntd || 0) - (b.price_ntd || 0);
-        case 'price_desc': return (b.price_ntd || 0) - (a.price_ntd || 0);
-        case 'age_desc': return (b.building_age || 0) - (a.building_age || 0);
-        case 'land_desc': return (b.land_area_ping || 0) - (a.land_area_ping || 0);
-        case 'published_desc':
-          return (b.published_at || '').localeCompare(a.published_at || '');
+        case 'list_rank': return null;   // 特殊處理在下方
+        case 'last_change_at': return p.last_change_at || p.scrape_session_at || p.scraped_at || '';
+        case 'published_at': return p.published_at || p.scraped_at || '';
+        case 'profit_multiple': return rowMultiple(p, prices);
+        case 'price_per_building_ping':
+          return (p.price_ntd && p.building_area_ping) ? (p.price_ntd / 10000 / p.building_area_ping) : null;
+        case 'price_per_land_ping':
+          return (p.price_ntd && p.land_area_ping) ? (p.price_ntd / 10000 / p.land_area_ping) : null;
+        case 'price_ntd': return p.price_ntd;
+        case 'building_age': return p.building_age;
       }
-      return 0;
-    });
+      return null;
+    };
+
+    if (mode === 'list_rank') {
+      // 對齊 v1：scrape_session_at desc + list_rank asc 為次（新進優先）
+      workingList.sort((a, b) =>
+        (a.list_rank ?? 9999) - (b.list_rank ?? 9999)
+      );
+      workingList.sort((a, b) =>
+        (b.scrape_session_at || '').localeCompare(a.scrape_session_at || '')
+      );
+    } else {
+      // 通用：None 永遠沉底
+      const has = workingList.filter(p => valOf(p) != null);
+      const noVal = workingList.filter(p => valOf(p) == null);
+      has.sort((a, b) => {
+        const va = valOf(a), vb = valOf(b);
+        if (typeof va === 'string') return reverse ? vb.localeCompare(va) : va.localeCompare(vb);
+        return reverse ? (vb - va) : (va - vb);
+      });
+      workingList = has.concat(noVal);
+    }
 
     state.filteredSorted = workingList;
     state.page = 1;
     renderGrid();
+  }
+
+  function toggleSortDir() {
+    state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
+    const btn = $('#v2-sort-dir');
+    if (btn) btn.textContent = state.sortDir === 'desc' ? '↓' : '↑';
+    applySort();
   }
 
   // ── Detail drawer ────────────────────────────────────────────────────────
@@ -795,20 +865,35 @@
     $('.v2-main').scrollTo?.({ top: 0, behavior: 'smooth' });
   }
   function resetFilters() {
+    // 對齊 v1 default：所有 enabled district 全勾，公寓勾，1F-5F 勾(B不勾)，
+    // 抗性 hide：偏遠/特殊/法拍勾，5F+/B 不勾
     state.districtPicks.clear();
+    Object.entries(V1_DISTRICTS).forEach(([city, cfg]) => {
+      cfg.enabled.forEach(d => state.districtPicks.add(`${city}|${d}`));
+    });
     $('#v2-road').value = '';
     $('#v2-price-min').value = 0;
     $('#v2-price-max').value = 5000;
     $('#v2-bld-price-max').value = 300;
     $('#v2-land-price-max').value = 600;
     $('#v2-land-min').value = 0;
-    $('#v2-min-multiple').value = 0;
+    $('#v2-min-mult-on') && ($('#v2-min-mult-on').checked = false);
+    $('#v2-min-mult-val') && ($('#v2-min-mult-val').value = 3.0);
     $('#v2-hide-floors5plus').checked = false;
     $('#v2-hide-remote').checked = true;
     $('#v2-hide-unsuitable').checked = true;
-    $('#v2-hide-basement').checked = true;
+    $('#v2-hide-basement').checked = false;
     $('#v2-hide-foreclosure').checked = true;
-    $$('#v2-floor-chips input').forEach(c => c.checked = true);
+    $$('.v2-filter-btype:not(:disabled)').forEach(c => { c.checked = c.value === '公寓'; });
+    // floor chips：B 不勾，1-5 勾
+    $$('#v2-floor-chips input[data-floor]').forEach(c => {
+      c.checked = c.value !== 'B';
+    });
+    const fa = $('#v2-floor-all');
+    if (fa) fa.checked = true; // master 對應 1-5 全勾
+    $('#v2-sort').value = 'list_rank';
+    state.sortDir = 'desc';
+    const sd = $('#v2-sort-dir'); if (sd) sd.textContent = '↓';
     renderDistrictChips();
     applyFilters();
   }
@@ -838,6 +923,10 @@
         document.addEventListener('auth:ready', resolve, { once: true });
       });
     }
+    // 預設勾選所有 enabled district (對齊 v1 default 全勾)
+    Object.entries(V1_DISTRICTS).forEach(([city, cfg]) => {
+      cfg.enabled.forEach(d => state.districtPicks.add(`${city}|${d}`));
+    });
     await loadDistricts();
     await loadProperties();
   }
@@ -862,7 +951,8 @@
     switchView, toggleDistrict, applyFilters, applySort, runSearch,
     resetFilters, gotoPage, openSidebar, closeSidebar,
     openDetail, closeDetail, toggleWatchlist, logout,
-    switchCityTab, toggleAllFloors, onFloorChange,
+    toggleAllFloors, onFloorChange,
+    toggleAllInCity, toggleSortDir,
   };
 
   // Boot
