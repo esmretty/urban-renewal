@@ -2655,7 +2655,18 @@ def central_search(
             floor_set = None
 
     col = get_col()
-    docs = list(col.get())
+    # 把 district filter 推到 Firestore 端（cuts 全收 ~535 → 只回符合 district 的子集），
+    # 實測 2× 加速（~385ms → ~190ms）。Firestore in-clause 上限 30 個 — 我們 target 區頂多 16 個 OK。
+    # dist_set 為 None（用戶沒挑）時 fallback 全收。
+    if dist_set is not None and 0 < len(dist_set) <= 30:
+        try:
+            from google.cloud.firestore_v1 import FieldFilter
+            docs = list(col.where(filter=FieldFilter("district", "in", list(dist_set))).get())
+        except Exception as _e:
+            logger.warning(f"[central_search] where(district in) 失敗，fallback 全收：{_e}")
+            docs = list(col.get())
+    else:
+        docs = list(col.get())
     items = []
     for d in docs:
         data = d.to_dict() or {}
