@@ -54,6 +54,12 @@
         </button>
       </div>
 
+      <!-- 主動作按鈕：搜尋 + 重置（同一列，緊跟 tab 下方） -->
+      <div class="v2-action-row">
+        <button class="v2-btn v2-btn--primary" onclick="v2.runSearch()">🔍 開始搜尋</button>
+        <button class="v2-btn v2-btn--ghost" onclick="v2.resetFilters()">重置</button>
+      </div>
+
       <!-- Filter sections — defaults 全部對齊 v1 -->
       <div class="v2-filter-group">
         <label class="v2-filter-label">行政區</label>
@@ -65,7 +71,6 @@
         <div class="v2-chip-row">
           <label class="v2-chip"><input type="checkbox" class="v2-filter-btype" value="公寓" checked onchange="v2.applyFilters()"><span>公寓</span></label>
           <label class="v2-chip v2-chip--disabled"><input type="checkbox" class="v2-filter-btype" value="透天厝" disabled><span>透天厝（未開放）</span></label>
-          <label class="v2-chip v2-chip--disabled"><input type="checkbox" class="v2-filter-btype" value="店面" disabled><span>店面（未開放）</span></label>
         </div>
       </div>
 
@@ -88,26 +93,26 @@
         <div class="v2-chip-row" id="v2-floor-chips">
           <label class="v2-chip v2-chip--all"><input type="checkbox" id="v2-floor-all" checked onchange="v2.toggleAllFloors(this)"><span>全部</span></label>
           <label class="v2-chip"><input type="checkbox" value="B" data-floor onchange="v2.onFloorChange()"><span>B1</span></label>
-          <label class="v2-chip"><input type="checkbox" value="1" checked data-floor onchange="v2.onFloorChange()"><span>1F</span></label>
-          <label class="v2-chip"><input type="checkbox" value="2" checked data-floor onchange="v2.onFloorChange()"><span>2F</span></label>
-          <label class="v2-chip"><input type="checkbox" value="3" checked data-floor onchange="v2.onFloorChange()"><span>3F</span></label>
-          <label class="v2-chip"><input type="checkbox" value="4" checked data-floor onchange="v2.onFloorChange()"><span>4F</span></label>
-          <label class="v2-chip"><input type="checkbox" value="5" checked data-floor onchange="v2.onFloorChange()"><span>5F</span></label>
+          <label class="v2-chip"><input type="checkbox" value="1" checked data-floor onchange="v2.onFloorChange()"><span>1</span></label>
+          <label class="v2-chip"><input type="checkbox" value="2" checked data-floor onchange="v2.onFloorChange()"><span>2</span></label>
+          <label class="v2-chip"><input type="checkbox" value="3" checked data-floor onchange="v2.onFloorChange()"><span>3</span></label>
+          <label class="v2-chip"><input type="checkbox" value="4" checked data-floor onchange="v2.onFloorChange()"><span>4</span></label>
+          <label class="v2-chip"><input type="checkbox" value="5" checked data-floor onchange="v2.onFloorChange()"><span>5</span></label>
         </div>
       </div>
 
       <div class="v2-filter-group v2-filter-group--num-compact">
         <label class="v2-filter-label">數字條件</label>
-        <div class="v2-num-row v2-num-row--compact">
-          <span class="v2-num-row__label">建單價&lt;</span>
+        <!-- 第 1 列：建單價 + 地單價 並排 -->
+        <div class="v2-num-row v2-num-row--compact v2-num-row--pair">
+          <span class="v2-num-row__label">建&lt;</span>
           <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-bld-price-max" min="0" step="5" value="300" oninput="v2.applyFilters()">
-          <span class="v2-num-row__suffix">萬/坪</span>
-        </div>
-        <div class="v2-num-row v2-num-row--compact">
-          <span class="v2-num-row__label">地單價&lt;</span>
+          <span class="v2-num-row__sep"></span>
+          <span class="v2-num-row__label">地&lt;</span>
           <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-land-price-max" min="0" step="10" value="600" oninput="v2.applyFilters()">
           <span class="v2-num-row__suffix">萬/坪</span>
         </div>
+        <!-- 第 2 列：地坪 ≥ -->
         <div class="v2-num-row v2-num-row--compact">
           <span class="v2-num-row__label">地坪≥</span>
           <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-land-min" min="0" step="1" value="0" oninput="v2.applyFilters()">
@@ -116,13 +121,16 @@
       </div>
 
       <!-- 隱藏抗性物件 — defaults 對齊 v1：5F+/B 不勾(顯示)、偏遠/特殊/法拍勾(隱藏) -->
+      <!-- 5 個 toggle 排成 3 欄 grid (2 列、最後一格空) -->
       <div class="v2-filter-group">
         <label class="v2-filter-label">隱藏抗性物件</label>
-        <label class="v2-toggle"><input type="checkbox" id="v2-hide-floors5plus" onchange="v2.applySort()"><span>五樓蓋+</span></label>
-        <label class="v2-toggle"><input type="checkbox" id="v2-hide-remote" checked onchange="v2.applySort()"><span>偏遠路段</span></label>
-        <label class="v2-toggle"><input type="checkbox" id="v2-hide-unsuitable" checked onchange="v2.applySort()"><span>特殊土地</span></label>
-        <label class="v2-toggle"><input type="checkbox" id="v2-hide-basement" onchange="v2.applySort()"><span>地下室</span></label>
-        <label class="v2-toggle"><input type="checkbox" id="v2-hide-foreclosure" checked onchange="v2.applySort()"><span>法拍屋</span></label>
+        <div class="v2-toggle-grid">
+          <label class="v2-toggle"><input type="checkbox" id="v2-hide-floors5plus" onchange="v2.applySort()"><span>五樓蓋+</span></label>
+          <label class="v2-toggle"><input type="checkbox" id="v2-hide-remote" checked onchange="v2.applySort()"><span>偏遠</span></label>
+          <label class="v2-toggle"><input type="checkbox" id="v2-hide-unsuitable" checked onchange="v2.applySort()"><span>特殊</span></label>
+          <label class="v2-toggle"><input type="checkbox" id="v2-hide-basement" onchange="v2.applySort()"><span>地下室</span></label>
+          <label class="v2-toggle"><input type="checkbox" id="v2-hide-foreclosure" checked onchange="v2.applySort()"><span>法拍</span></label>
+        </div>
       </div>
 
       <!-- 最低獲利倍數 — 對齊 v1 (toggle off, value 3.0) -->
@@ -136,11 +144,6 @@
           <span class="v2-num-row__suffix">倍以上</span>
         </div>
       </div>
-
-      <button class="v2-btn v2-btn--primary v2-btn--block" onclick="v2.runSearch()">
-        🔍 開始搜尋
-      </button>
-      <button class="v2-btn v2-btn--ghost v2-btn--block" onclick="v2.resetFilters()">重置條件</button>
 
     </div>
   </aside>

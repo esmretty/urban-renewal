@@ -283,36 +283,60 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-num-row .v2-input { flex: 1; min-width: 0; }
 
-/* Compact 數字輸入 (建單價/地單價/地坪≥) — 篇幅小一點 */
+/* Compact 數字輸入 — 篇幅小一點 */
 .v2-filter-group--num-compact { gap: 4px; }
 .v2-num-row--compact {
   gap: 6px;
   font-size: 12px;
+  align-items: center;
 }
 .v2-num-row--compact .v2-num-row__label {
   font-size: 11px;
-  width: 54px;
+  width: auto;
+  flex-shrink: 0;
+  color: var(--c-text-muted);
 }
 .v2-num-row--compact .v2-num-row__suffix {
   font-size: 11px;
 }
+.v2-num-row--pair {
+  /* 建單價 + 地單價 並排在同一列 */
+  display: flex;
+  flex-wrap: nowrap;
+}
+.v2-num-row--pair .v2-num-row__sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--c-border);
+  margin: 2px 4px;
+}
 .v2-input--xs {
-  padding: 4px 6px;
+  padding: 3px 5px;
   font-size: 12px;
-  flex: 0 0 60px;
+  flex: 1 1 0;
+  min-width: 0;
   text-align: right;
 }
 
-/* District chip 數量 badge */
-.v2-chip__n {
-  font-size: 10px;
-  font-style: normal;
-  color: var(--c-text-light);
-  margin-left: 2px;
-  font-weight: 500;
+/* 主動作按鈕 row：搜尋 + 重置同一列 */
+.v2-action-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 4px;
+  margin-bottom: 4px;
 }
-.v2-chip:has(input:checked) .v2-chip__n {
-  color: rgba(255,255,255,0.7);
+.v2-action-row .v2-btn { width: 100%; padding: 7px 10px; font-size: 13px; }
+
+/* 抗性 toggle grid (3 col × 2 row，最後一格空) */
+.v2-toggle-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 2px 6px;
+}
+.v2-toggle-grid .v2-toggle {
+  font-size: 11px;
+  padding: 0;
+  white-space: nowrap;
 }
 
 /* Floor「全部」master chip */

@@ -442,11 +442,10 @@
       const chipsHtml = cfg.enabled.map(d => {
         const key = `${city}|${d}`;
         const checked = state.districtPicks.has(key) ? 'checked' : '';
-        const n = counts[key] || 0;
         const label = cfg.labels[d] || d;
-        return `<label class="v2-chip" title="${n} 筆物件">
+        return `<label class="v2-chip">
           <input type="checkbox" data-city="${esc(city)}" data-district="${esc(d)}" ${checked} onchange="v2.toggleDistrict('${esc(city)}','${esc(d)}', this.checked)">
-          <span>${esc(label)}${n ? ` <em class="v2-chip__n">${n}</em>` : ''}</span>
+          <span>${esc(label)}</span>
         </label>`;
       }).join('');
       const cityShort = city.replace('市', '');
