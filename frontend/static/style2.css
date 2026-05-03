@@ -850,56 +850,64 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-text-light);
   letter-spacing: 0.5px;
 }
-.v2-rchip {
+/* 抗性 chip 統一紅色 outline (rose-50/200/800) — 5 個都用同款 */
+.v2-rchip,
+.v2-rchip--floors5plus,
+.v2-rchip--foreclosure {
   display: inline-flex;
   align-items: center;
   padding: 1px 6px;
   font-size: 11px;
   font-weight: 600;
   border-radius: var(--r-sm);
-  border: 1px solid;
-  background: var(--c-low-bg);
-  border-color: var(--c-border);
-  color: var(--c-text-muted);
+  border: 1px solid #fecdd3;     /* rose-200 */
+  background: #fff1f2;           /* rose-50 */
+  color: #9f1239;                /* rose-800 */
   line-height: 1.4;
 }
 
-/* 優勢 chip (TOD / 防災型 / 商業區) — 淡色 outline 風格、低調但有色彩區別 */
-.v2-achip {
+/* 優勢 chip (TOD / 防災型 / 商業區) — 統一綠色 outline + 反光掃過動畫 */
+.v2-achip,
+.v2-achip--tod,
+.v2-achip--fangzai,
+.v2-achip--commercial {
+  position: relative;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
-  padding: 1px 6px;
+  padding: 1px 7px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   border-radius: var(--r-sm);
-  border: 1px solid;
+  border: 1px solid #86efac;     /* green-300 */
+  background: #ecfdf5;           /* emerald-50 */
+  color: #14532d;                /* green-900 */
   line-height: 1.4;
   letter-spacing: 0.2px;
 }
-.v2-achip--tod {
-  background: #ecfeff;          /* cyan-50 */
-  border-color: #a5f3fc;        /* cyan-200 */
-  color: #0e7490;               /* cyan-700 */
+/* 反光掃過動畫 — 一道斜光從左掃到右，每 3.5 秒一次 */
+.v2-achip::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(134, 239, 172, 0.45) 40%,
+    rgba(255, 255, 255, 0.85) 50%,
+    rgba(134, 239, 172, 0.45) 60%,
+    transparent 100%
+  );
+  transform: skewX(-15deg);
+  animation: v2-achip-shimmer 3.5s ease-in-out infinite;
+  pointer-events: none;
 }
-.v2-achip--fangzai {
-  background: #fff1f2;          /* rose-50 */
-  border-color: #fecdd3;        /* rose-200 */
-  color: #9f1239;               /* rose-800 */
-}
-.v2-achip--commercial {
-  background: #fffbeb;          /* amber-50 */
-  border-color: #fde68a;        /* amber-200 */
-  color: #92400e;               /* amber-800 */
-}
-.v2-rchip--floors5plus {
-  background: var(--c-resist-yellow-bg);
-  border-color: var(--c-resist-yellow);
-  color: var(--c-resist-yellow);
-}
-.v2-rchip--foreclosure {
-  background: var(--c-danger-bg);
-  border-color: var(--c-danger);
-  color: var(--c-danger);
+@keyframes v2-achip-shimmer {
+  0% { left: -60%; }
+  60%, 100% { left: 160%; }
 }
 
 .v2-card__sources {
