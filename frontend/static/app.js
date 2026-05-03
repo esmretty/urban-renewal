@@ -266,18 +266,64 @@ window.runExploreSearch = async function () {
     alert("請至少勾選一個行政區。");
     return;
   }
+  // ── PERF TIMER：量「按下搜尋」到「畫面真的顯示」每步耗時 ──
+  // 開關：localStorage.setItem('debugPerf','1') 開；移除即關。
+  const _DBG = localStorage.getItem('debugPerf') === '1';
+  const _ts = {};
+  const _mark = (k) => { if (_DBG) _ts[k] = performance.now(); };
+  _mark('start');
   renderSkeleton(4);
+  _mark('skeleton_done');
   try {
     // slim=true：列表只回 row 用的欄位 (~40% smaller)；詳情 modal 已有 lazy fetch /api/properties/{id} 拿完整 doc
+    _mark('fetch_start');
     const r = await fetch("/api/central_search?slim=true&" + _buildExploreParams().toString());
+    _mark('fetch_headers');           // TTFB+headers received
     const data = await r.json();
+    _mark('json_parsed');             // body fully read + JSON parsed
+    const _bytes = +r.headers.get('content-length') || 0;
     _exploreResults = data.items || [];
     _exploreSearched = true;
     allProperties = _exploreResults.slice();
     _currentPage = 1;
     filterAndSort();
+    _mark('filter_sort_done');         // JS sort + render to innerHTML done
+    // 等下一個 paint 確認瀏覽器真的把 DOM 畫到螢幕上
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        _mark('painted');
+        if (_DBG) _logPerfBreakdown(_ts, data.items?.length || 0, _bytes);
+      });
+    });
   } catch (e) { alert("搜尋失敗：" + e.message); }
 };
+
+// ── 計時器 helper：把每個 step 印成表 ──
+function _logPerfBreakdown(ts, nItems, bytes) {
+  const T = (a, b) => Math.round(ts[b] - ts[a]);
+  const total = Math.round(ts.painted - ts.start);
+  const lines = [
+    [`skeleton 渲染`,         T('start',          'skeleton_done'),  '畫骨架佔位'],
+    [`fetch 送出+TTFB+headers`, T('skeleton_done', 'fetch_headers'),  '到 server 處理完拿到 response headers'],
+    [`body 下載+JSON parse`,   T('fetch_headers', 'json_parsed'),    `payload ${(bytes/1024).toFixed(0)} KB`],
+    [`filter+sort+render`,     T('json_parsed',   'filter_sort_done'),`${nItems} 筆 → DOM`],
+    [`browser paint`,          T('filter_sort_done', 'painted'),     '排版+繪製到螢幕'],
+  ];
+  console.groupCollapsed(`%c[搜尋計時器] 總共 ${total}ms`, 'font-weight:600;color:#0891b2');
+  console.table(lines.map(([step, ms, note]) => ({ step, ms, note })));
+  console.groupEnd();
+  // 同步顯示一個輕量 toast 在右下，用戶看得到
+  let toast = document.getElementById('_perf_toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = '_perf_toast';
+    toast.style.cssText = 'position:fixed;bottom:12px;right:12px;background:#0f172a;color:#fff;padding:10px 14px;border-radius:8px;font-size:12px;font-family:monospace;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.2);max-width:380px;line-height:1.5';
+    document.body.appendChild(toast);
+  }
+  toast.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">⏱ 搜尋計時 — 總 ${total}ms</div>` +
+    lines.map(([s, ms, n]) => `<div>${s}: <span style="color:#7dd3fc">${ms}ms</span> <span style="color:#94a3b8">(${n})</span></div>`).join('') +
+    `<div style="margin-top:6px;font-size:11px;color:#94a3b8;cursor:pointer" onclick="this.parentElement.remove()">點擊關閉</div>`;
+}
 
 window.toggleWatchlist = async function (id, btn) {
   const p = allProperties.find(x => x.id === id);
