@@ -194,6 +194,47 @@
     return tot ? `?/${tot}F` : '—';
   }
 
+  // ── 屋齡 helper (對齊 v1 currentAge) ─────────────────────────────────────
+  function currentAge(p) {
+    if (!p) return null;
+    const yc = p.building_age_completed_year;
+    if (yc && Number.isFinite(yc) && yc > 1900) {
+      return new Date().getFullYear() - yc;
+    }
+    return p.building_age ?? null;
+  }
+
+  // ── 商業區判定（對齊 v1 _isCommercialEffective）──────────────────────────
+  function _isCommercialEffective(p) {
+    const zList = p.zoning_list;
+    if (Array.isArray(zList) && zList.length > 1) {
+      const ratios = p.zoning_ratios || zList.map(() => 100 / zList.length);
+      for (let i = 0; i < zList.length; i++) {
+        const z = (typeof zList[i] === 'string') ? zList[i] : (zList[i].original_zone || zList[i].zone_name);
+        const r = Number(ratios[i]) || 0;
+        if (z && z.includes('商業區') && r > 0) return true;
+      }
+      return false;
+    }
+    return !!(p.zoning && p.zoning.includes('商業區'));
+  }
+
+  // ── 優勢 chip (對齊 v1 computeAdvantageChips) — TOD / 防災型 / 商業區 ────
+  function computeAdvantageChips(p) {
+    const chips = [];
+    if (p.nearest_mrt_dist_m != null && p.nearest_mrt_dist_m <= 500) {
+      chips.push({ label: 'ＴＯＤ', cls: 'v2-achip v2-achip--tod' });
+    }
+    const age = currentAge(p);
+    if (p.city === '台北市' && age && (new Date().getFullYear() - age) <= 1974) {
+      chips.push({ label: '防災型', cls: 'v2-achip v2-achip--fangzai' });
+    }
+    if (_isCommercialEffective(p)) {
+      chips.push({ label: '商業區', cls: 'v2-achip v2-achip--commercial' });
+    }
+    return chips;
+  }
+
   // ── Resistance chip computation ──────────────────────────────────────────
   function computeChips(p) {
     const chips = [];
@@ -442,6 +483,7 @@
       if (mult >= 3.0) multCls += ' v2-card__mult--good';
       else if (mult >= 2.0) multCls += ' v2-card__mult--mid';
     }
+    const advChips = computeAdvantageChips(p);
     const chips = computeChips(p);
     const inWatchlist = !!(p._in_watchlist || p.user_url || p.added_at_user);
     const archivedClass = p.archived ? 'v2-card--archived' : '';
@@ -482,6 +524,7 @@
           <span class="v2-stat" title="樓層"><b>層</b>${formatFloor(p)}</span>
           <span class="v2-stat" title="分區"><b>區</b>${esc((p.zoning || '—').replace('住宅區','住').replace('商業區','商'))}</span>
           ${p.road_width_m ? `<span class="v2-stat" title="路寬"><b>路</b>${p.road_width_m}m</span>` : ''}
+          ${advChips.length ? advChips.map(c => `<span class="${c.cls}">${c.label}</span>`).join('') : ''}
           ${chips.length ? chips.map(c => `<span class="v2-rchip ${c.cls}">${c.label}</span>`).join('') : ''}
           ${p.sources && p.sources.length ? `<span class="v2-card__sources">${srcBadgesHTML(p.sources)}</span>` : ''}
         </div>

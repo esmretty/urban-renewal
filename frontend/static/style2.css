@@ -877,6 +877,31 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-text-muted);
   line-height: 1.4;
 }
+
+/* 優勢 chip (TOD / 防災型 / 商業區) — 彩色搶眼，對齊 v1 adv-chip */
+.v2-achip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  line-height: 1.4;
+  letter-spacing: 0.3px;
+}
+.v2-achip--tod {
+  background: linear-gradient(135deg, #06b6d4, #0891b2);
+  color: white;
+}
+.v2-achip--fangzai {
+  background: linear-gradient(135deg, #f43f5e, #be123c);
+  color: white;
+}
+.v2-achip--commercial {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+}
 .v2-rchip--floors5plus {
   background: var(--c-resist-yellow-bg);
   border-color: var(--c-resist-yellow);
