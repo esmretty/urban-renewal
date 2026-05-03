@@ -439,15 +439,17 @@
     return Math.max(w, d);   // v2 顯示 max
   }
 
-  // ── Source badges ────────────────────────────────────────────────────────
-  function srcBadgesHTML(sources) {
+  // ── Source badges (size 可選 'sm' / 'big') ────────────────────────────
+  function srcBadgesHTML(sources, size) {
     if (!sources || !sources.length) return '';
+    const bigCls = size === 'big' ? ' v2-src-badge--big' : '';
     return sources.map(s => {
       const name = s.name || '';
       const alive = s.alive !== false;
-      const cls = alive ? 'v2-src-badge--alive' : 'v2-src-badge--dead';
+      const aliveCls = alive ? 'v2-src-badge--alive' : 'v2-src-badge--dead';
       const url = s.url ? esc(s.url) : '';
-      const inner = `<span class="v2-src-badge ${cls}">${esc(name)}</span>`;
+      const label = size === 'big' ? `${esc(name)} ↗` : esc(name);
+      const inner = `<span class="v2-src-badge ${aliveCls}${bigCls}">${label}</span>`;
       return url
         ? `<a href="${url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${inner}</a>`
         : inner;
@@ -968,18 +970,33 @@
       ? `<div class="v2-detail-image-wrap"><img class="v2-detail-image" src="${esc(p.image_url)}" alt=""></div>`
       : '';
 
-    // ── 推測地址候選清單 ──
+    // ── 推測地址候選清單 ── (badge 放下一行)
     const cands = Array.isArray(p.address_inferred_candidates_detail) ? p.address_inferred_candidates_detail : [];
     const inferredTag = p.address_inferred ? (
-      p.address_inferred_confidence === 'unique' ? '<span class="v2-inferred-tag">★實登</span>' :
-      p.address_inferred_confidence === 'multi' ? '<span class="v2-inferred-tag">推測</span>' :
-      '<span class="v2-inferred-tag">≈推測</span>'
+      p.address_inferred_confidence === 'unique' ? '<div class="v2-inferred-tag">★實登</div>' :
+      p.address_inferred_confidence === 'multi' ? '<div class="v2-inferred-tag">推測</div>' :
+      '<div class="v2-inferred-tag">≈推測</div>'
     ) : '';
 
-    // ── 附近捷運 ──
+    // ── 附近捷運 ── 一個一行
     const mrtList = Array.isArray(p.nearby_mrts) && p.nearby_mrts.length
-      ? p.nearby_mrts.map(m => `${esc(m.name)}（${Math.round(m.dist_m)}m）`).join(' / ')
+      ? p.nearby_mrts.map(m => `<div class="v2-mrt-line">${esc(m.name)}（${Math.round(m.dist_m)}m）</div>`).join('')
       : '—';
+
+    // ── 用戶可改欄位 (要在 watchlist 才能存) ──
+    const inWl = !!p._in_watchlist;
+    const dis = inWl ? '' : 'disabled';
+    const wlWarn = !inWl
+      ? `<div class="v2-d-wl-warn">
+           ⚠ 此物件尚未加入「最愛」，下方欄位可預覽但無法儲存個人覆寫。
+           <button class="v2-btn v2-btn--primary v2-btn--sm" onclick="v2.toggleWatchlist('${esc(id)}')">加入最愛</button>
+         </div>` : '';
+    const editIn = (field, val, step, suffix) =>
+      `<input type="number" class="v2-d-input" min="0" step="${step}" value="${val ?? ''}" ${dis}
+        onchange="v2.saveOverride('${esc(id)}','${field}',this.value)">${suffix ? `<span class="v2-d-hint"> ${suffix}</span>` : ''}`;
+    const editPct = (field, val) =>
+      `<input type="number" class="v2-d-input" min="0" max="100" step="5" value="${val != null ? Math.round(val*100) : ''}" ${dis}
+        onchange="v2.saveOverride('${esc(id)}','${field}',this.value/100)">% `;
 
     // ── LVR 實價登錄 (前 5 筆) ──
     const lvrRecs = Array.isArray(p.lvr_records) ? p.lvr_records.slice(0, 5) : [];
@@ -1011,21 +1028,25 @@
       : '';
 
     return `
-      <!-- 來源連結 row (法拍/偏遠/特殊 badge 已在卡片 chip 顯示，這裡只放來源) -->
-      ${p.sources && p.sources.length ? `<div class="v2-d-sources-bar">${srcBadgesHTML(p.sources)}</div>` : ''}
+      <!-- Header bar：物件資訊標題 (左) + 來源連結 (右上、字大) -->
+      <div class="v2-d-header">
+        <h5 class="v2-d-title">物件資訊</h5>
+        ${p.sources && p.sources.length ? `<div class="v2-d-sources-bar">${srcBadgesHTML(p.sources, 'big')}</div>` : ''}
+      </div>
 
-      <!-- Row 1: 物件資訊 (左 7) | 圖片 (右 5) — 對齊 v1 -->
+      ${wlWarn}
+
+      <!-- Row 1: 物件資訊 (左 7) | 圖片 (右 5) -->
       <div class="v2-d-row">
         <div class="v2-d-col v2-d-col--7">
-          <h6 class="v2-d-h">物件資訊</h6>
           <div class="v2-d-basic-grid">
             <table class="v2-d-tbl">
               <tr><td>原始地址</td><td>${esc(p.address || p.title || '—')}</td></tr>
-              <tr><td>推測地址${inferredTag}</td><td>${esc(p.address_inferred || '—')}${cands.length > 1 ? ` <span class="v2-d-hint">(${cands.length} 候選)</span>` : ''}</td></tr>
+              <tr><td>推測地址</td><td>${esc(p.address_inferred || '—')}${inferredTag}${cands.length > 1 ? `<div class="v2-d-hint">${cands.length} 候選</div>` : ''}</td></tr>
               <tr><td>類型 / 樓層</td><td>${esc(p.building_type || '—')} · ${formatFloor(p)}</td></tr>
               <tr><td>屋齡</td><td>${age != null ? age + ' 年' : '未知'}${p.building_age_completed_year ? ` <span class="v2-d-hint">(${p.building_age_completed_year} 完工)</span>` : ''}</td></tr>
               <tr><td>售價</td><td><b class="v2-d-price">${priceWan ? 'NT$ ' + fmt0(priceWan) + ' 萬' : '—'}</b>${lvrIcon}</td></tr>
-              <tr><td>欲出價</td><td>${desired ? fmt0(desired) + ' 萬' : '—'} <span class="v2-d-hint">(開價 ×0.9)</span></td></tr>
+              <tr><td>欲出價</td><td>${editIn('desired_price_wan', desired, 10, '萬')}</td></tr>
               <tr><td>建坪</td><td>${p.building_area_ping ? p.building_area_ping + ' 坪' : '—'}${perBld ? ` <span class="v2-d-hint">(${perBld} 萬/建坪)</span>` : ''}</td></tr>
               <tr><td>地坪</td><td>${p.land_area_ping ? p.land_area_ping + ' 坪' : '—'}${perLand ? ` <span class="v2-d-hint">(${perLand} 萬/地坪)</span>` : ''}${p.land_area_source === 'lvr' ? ' <span class="v2-d-hint">(實登)</span>' : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 地坪過大（&gt; 建坪），可能不可信</div>' : ''}</td></tr>
             </table>
@@ -1033,7 +1054,8 @@
               <tr><td>附近捷運</td><td>${mrtList}</td></tr>
               <tr><td>使用分區</td><td>${esc(p.zoning || '—')}${p.zoning_original && p.zoning_original !== p.zoning ? ` <span class="v2-d-hint">(原: ${esc(p.zoning_original)})</span>` : ''}</td></tr>
               <tr><td>容積率</td><td>${farPct ? farPct + '%' : '—'}</td></tr>
-              <tr><td>臨路寬度</td><td>${p.road_width_m ? p.road_width_m + ' m' : '—'}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">(寬度不明)</span>' : ''}</td></tr>
+              <tr><td>臨路寬度</td><td>${editIn('road_width_m_override', p.road_width_m_override ?? p.road_width_m, 0.5, 'm')}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">(寬度不明)</span>' : ''}</td></tr>
+              <tr><td>新成屋單價</td><td>${editIn('new_house_price_wan_override', p.new_house_price_wan_override ?? newPrice, 5, '萬/坪')}${p.new_house_price_wan_override ? ' <span class="v2-d-hint">(已覆寫)</span>' : ' <span class="v2-d-hint">(區域預設)</span>'}</td></tr>
             </table>
           </div>
           ${govLinks ? `<div class="v2-d-govlinks">${govLinks}</div>` : ''}
@@ -1043,7 +1065,7 @@
         </div>
       </div>
 
-      <!-- Row 2: 都更換回試算 (左 7) | 分析建議 (右 5) — 對齊 v1 -->
+      <!-- Row 2: 都更換回試算 (左 7) | 分析建議 (右 5) -->
       <div class="v2-d-row">
         <div class="v2-d-col v2-d-col--7">
           <h6 class="v2-d-h">都更換回試算</h6>
@@ -1056,9 +1078,16 @@
               ${scnHTML('危老', sW, bonusW)}
               ${scnHTML(isFangzai ? '防災都更' : '都更', sD, bonusD)}
             </div>
+            <table class="v2-d-tbl v2-d-tbl--params">
+              <tr><td>危老獎勵率</td><td>${editPct('bonus_weishau', bonusW)}</td>
+                  <td>都更獎勵率</td><td>${editPct('bonus_dugen', bonusD)}</td></tr>
+              <tr><td>樓層加成</td><td>${editPct('floor_premium', floorPremium)}</td>
+                  <td>建坪係數</td><td><input type="number" class="v2-d-input" min="1" max="2" step="0.01" value="${coeff}" ${dis}
+                    onchange="v2.saveOverride('${esc(id)}','rebuild_coeff',this.value)"></td></tr>
+            </table>
             <div class="v2-d-formula">
-              <div>土地 <b>${land || '—'}</b> 坪 × 容積率 <b>${farPct || '—'}</b>% × (1+獎勵) × 1.57 × 分回比例 <b>${ratio ? (ratio*100).toFixed(0)+'%' : '—'}</b></div>
-              <div>新成屋單價 <b>${newPrice || '—'} 萬/坪</b> ${p.new_house_price_wan_override ? '(已覆寫)' : '(區域預設)'} ／ 車位 <b>${parking ? parking+' 萬' : '—'}</b>${floorPremium > 0 ? ` ／ 樓層加成 <b>+${(floorPremium*100)|0}%</b>` : ''}</div>
+              <div>土地 <b>${land || '—'}</b> 坪 × 容積率 <b>${farPct || '—'}</b>% × (1+獎勵) × ${coeff} × 分回比例 <b>${ratio ? (ratio*100).toFixed(0)+'%' : '—'}</b></div>
+              <div>車位 <b>${parking ? parking+' 萬' : '—'}</b>${floorPremium > 0 ? ` ／ 樓層加成 <b>+${(floorPremium*100)|0}%</b>` : ''}</div>
             </div>
           `}
         </div>
@@ -1076,6 +1105,66 @@
         </button>
       </div>
     `;
+  }
+
+  // ── 個人 override 儲存 (對齊 v1 各 save handler，dispatcher 統一) ─────────
+  async function saveOverride(id, field, value) {
+    const p = state.allProperties.find(x => (x.source_id || x.id) === id);
+    if (!p) return;
+    if (!p._in_watchlist) {
+      toast('請先加入最愛才能儲存個人設定', 'error');
+      return;
+    }
+    const v = value === '' || value == null ? null : Number(value);
+    let endpoint, body;
+    switch (field) {
+      case 'desired_price_wan':
+        endpoint = `/api/properties/${encodeURIComponent(id)}/desired_price`;
+        body = { desired_price_wan: v };
+        break;
+      case 'bonus_weishau':
+        endpoint = `/api/properties/${encodeURIComponent(id)}/bonus`;
+        body = { which: 'weishau', value: v };
+        break;
+      case 'bonus_dugen':
+        endpoint = `/api/properties/${encodeURIComponent(id)}/bonus`;
+        body = { which: 'dugen', value: v };
+        break;
+      case 'rebuild_coeff':
+        endpoint = `/api/properties/${encodeURIComponent(id)}/rebuild_coeff`;
+        body = { value: v };
+        break;
+      case 'floor_premium':
+        endpoint = `/api/properties/${encodeURIComponent(id)}/floor_premium`;
+        body = { floor_premium: v };
+        break;
+      case 'road_width_m_override':
+        endpoint = `/api/properties/${encodeURIComponent(id)}/road_width`;
+        body = { road_width_m: v };
+        break;
+      case 'new_house_price_wan_override':
+        endpoint = `/api/properties/${encodeURIComponent(id)}/new_house_price`;
+        body = { value: v };
+        break;
+      default:
+        toast('未知欄位：' + field, 'error');
+        return;
+    }
+    try {
+      const r = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      // 寫回 local state，re-applyFilters 讓卡片倍數即時更新
+      p[field] = v;
+      applyFilters();
+      toast('已儲存', 'success');
+    } catch (e) {
+      console.error('saveOverride', e);
+      toast('儲存失敗：' + e.message, 'error');
+    }
   }
 
   // ── LVR popup helper (對齊 v1 showLvrPopup hover 行為) ───────────────────
@@ -1456,6 +1545,7 @@
     triggerScrapeUrl, triggerManualAnalyze, populateManualDistricts,
     switchGridCity,
     showLvrPopup, hideLvrPopup,
+    saveOverride,
   };
 
   // Boot
