@@ -95,15 +95,46 @@ def _extract_token(request: Request) -> Optional[str]:
     return h[7:].strip() or None
 
 
+# Token verify cache — Firebase token verify ~100-200ms 每次太貴 (RSA 簽章驗證 + JWKS lookup)。
+# Firebase ID token 預設 1 hr 有效；我們 cache token → user_dict 直到 token exp 為止 (or 5 min, 取小)。
+# Cache 命中時跳過 verify_id_token，省 ~100-150ms 每個 API call。
+# 安全 trade-off：若用戶在別處被強制登出/revoke，最久 5 分鐘才會失效。
+# 對 dev tool 場景可接受；未來要更嚴可加 ETag-style invalidation。
+_TOKEN_CACHE: dict = {}             # token_str -> (cache_until_ts, user_dict)
+_TOKEN_CACHE_MAX = 256
+_TOKEN_CACHE_TTL = 5 * 60           # 5 min
+_TOKEN_CACHE_HIT = 0
+_TOKEN_CACHE_MISS = 0
+
+
+def _get_token_cache_stats() -> dict:
+    return {"hit": _TOKEN_CACHE_HIT, "miss": _TOKEN_CACHE_MISS,
+            "size": len(_TOKEN_CACHE)}
+
+
 async def get_current_user(request: Request) -> dict:
     """
     FastAPI dependency：驗證 Firebase ID token，回 user 資料 dict。
     沒 token 或驗不過 → 401。
+    Cache 命中時跳過 verify_id_token (省 ~100-150ms)。
     """
+    global _TOKEN_CACHE_HIT, _TOKEN_CACHE_MISS
     _ensure_fb_initialized()   # 保險：firebase_admin.initialize_app 一定已跑過
     token = _extract_token(request)
     if not token:
         raise HTTPException(status_code=401, detail="缺少登入憑證")
+
+    import time as _t
+    now = _t.time()
+
+    # Cache hit：直接回 user_dict，跳過 RSA 驗證
+    cached = _TOKEN_CACHE.get(token)
+    if cached and cached[0] > now:
+        _TOKEN_CACHE_HIT += 1
+        return cached[1]
+
+    # Cache miss：跑完整 verify
+    _TOKEN_CACHE_MISS += 1
     try:
         decoded = fb_auth.verify_id_token(token, check_revoked=False, clock_skew_seconds=10)
     except Exception as e:
@@ -111,7 +142,7 @@ async def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="登入憑證無效")
     email = (decoded.get("email") or "").lower()
     tier = resolve_tier(email)
-    return {
+    user_dict = {
         "uid": decoded.get("uid") or decoded.get("user_id"),
         "email": email,
         "display_name": decoded.get("name"),
@@ -121,6 +152,19 @@ async def get_current_user(request: Request) -> dict:
         "tier_name_en": tier_name(tier, "en"),
         "is_admin": tier in ADMIN_PORTAL_TIERS,
     }
+
+    # Cache 寫回：min(token_exp, now + 5min)；exp 來自 token 本身的 'exp' claim (epoch sec)
+    token_exp = decoded.get("exp") or (now + _TOKEN_CACHE_TTL)
+    cache_until = min(float(token_exp), now + _TOKEN_CACHE_TTL)
+    if len(_TOKEN_CACHE) >= _TOKEN_CACHE_MAX:
+        # 簡單 evict：清掉所有過期的；若還滿，再清最舊一個
+        for k in [k for k, v in _TOKEN_CACHE.items() if v[0] <= now]:
+            _TOKEN_CACHE.pop(k, None)
+        if len(_TOKEN_CACHE) >= _TOKEN_CACHE_MAX:
+            oldest = min(_TOKEN_CACHE, key=lambda k: _TOKEN_CACHE[k][0])
+            _TOKEN_CACHE.pop(oldest, None)
+    _TOKEN_CACHE[token] = (cache_until, user_dict)
+    return user_dict
 
 
 async def require_admin(user: dict = Depends(get_current_user)) -> dict:

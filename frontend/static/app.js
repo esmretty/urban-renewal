@@ -360,6 +360,7 @@ function _logPerfBreakdown(ts, nItems, bytes) {
 }
 // 每個 server phase 的中文說明
 const _SERVER_PHASE_DESC = {
+  auth: 'Firebase token 驗證 (cache hit <1ms / miss ~150ms)',
   watchlist: '讀用戶 watchlist (Firestore)',
   firestore_query: 'col.where(...).get() / cache lookup',
   py_filter: 'Python 端 filter loop',

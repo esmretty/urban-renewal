@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from typing import Optional, AsyncGenerator, List
 
-from fastapi import FastAPI, Query, HTTPException, Depends, Response
+from fastapi import FastAPI, Query, HTTPException, Depends, Response, Request
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import os
@@ -62,13 +62,16 @@ async def _auth_middleware(request, call_next):
     if path in _PUBLIC_PATHS or any(path.startswith(p) for p in _PUBLIC_PREFIXES):
         return await call_next(request)
     if path.startswith("/api/") or path.startswith("/admin/"):
+        # Time auth verify (token cache hit 通常 <1ms; miss ~100-200ms)
+        import time as _at
+        _at0 = _at.perf_counter()
         try:
             user = await get_current_user(request)
         except HTTPException as e:
             from fastapi.responses import JSONResponse
             return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
-        # 把 user 塞進 request.state 給 handler 用
         request.state.user = user
+        request.state.auth_ms = (_at.perf_counter() - _at0) * 1000
     return await call_next(request)
 
 
@@ -2726,6 +2729,7 @@ def _query_districts_cached(col, dist_list, max_price_wan, min_price_wan):
 
 @app.get("/api/central_search")
 def central_search(
+    request: Request,
     response: Response,
     q: Optional[str] = Query(None),
     road: Optional[str] = Query(None),
@@ -2898,6 +2902,9 @@ def central_search(
     _was_cached = _phase_t.pop("cache_hit", 0)
     _st_parts = [f"{name};dur={ms:.0f}" for name, ms in _phase_t.items()]
     _cache_desc = "cache_HIT" if _was_cached else "cache_MISS"
+    # auth time (Firebase token verify) 從 middleware 帶過來
+    _auth_ms = getattr(request.state, "auth_ms", 0)
+    _st_parts.append(f"auth;dur={_auth_ms:.0f}")
     # 注意：dur 一律放第一個 param —— frontend regex 認 `name;dur=N` 在開頭
     _st_parts.append(f"cache;dur=0;desc=\"{_cache_desc}\"")
     _st_parts.append(f"docs;dur=0;desc=\"n={_docs_n}\"")
