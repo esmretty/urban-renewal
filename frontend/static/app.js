@@ -86,6 +86,9 @@ document.addEventListener("DOMContentLoaded", () => {
     // 從 server 拉 LVR 預售屋中位數覆寫 DISTRICT_NEW_HOUSE_PRICE（auth ready 後）
     fetchDistrictPrices();
   };
+  // v2 也會載 app.js 來共用 detail helpers — 但 v2 自己 manage explore 邏輯，
+  // 不要讓 app.js 的 auto runExploreSearch / loadStats 跑（會 alert + double fetch）
+  if (window.__skip_v1_init) return;
   if (window.__authReady) _start();
   else document.addEventListener("auth:ready", _start, { once: true });
 });

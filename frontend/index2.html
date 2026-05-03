@@ -7,8 +7,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap">
+  <!-- 載 v1 style.css 取得 detail page 的所有 class (renewal-table/rv2/ai-section/lvr-popup 等) -->
+  <link rel="stylesheet" href="/static/style.css" />
   <link rel="stylesheet" href="/static/style2.css?v=1" />
   <script type="module" src="/static/auth_gate.js"></script>
+  <!-- 把 v1 init 攔下；只用它的 detail helper 函式 (buildDetailHTML / renewalV2HTML / formatAiReason / save handlers...) -->
+  <script>window.__skip_v1_init = true;</script>
+  <script src="/static/app.js"></script>
 </head>
 <body class="v2">
 

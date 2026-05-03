@@ -881,36 +881,71 @@
     });
   }
 
-  // ── Detail drawer ────────────────────────────────────────────────────────
+  // ── Detail drawer (用 v1 的 buildDetailHTML，1:1 同視覺) ────────────────
   async function openDetail(id) {
     state.selectedId = id;
-    markRead(id);    // 點開即標已讀（共用 localStorage 跟 v1）
-    // 即時把 card 標 read class（不重整全部）
+    markRead(id);
     const card = document.querySelector(`.v2-card[data-id="${CSS.escape(id)}"]`);
     if (card) card.classList.add('v2-card--read');
     const slim = state.allProperties.find(x => (x.source_id || x.id) === id);
     if (!slim) return;
 
-    // 1) 先用 slim 資料立刻開抽屜 — 避免空白等待感
-    $('#v2-drawer-title').textContent = slim.address || slim.address_inferred || '物件詳情';
-    $('#v2-drawer-body').innerHTML = `<div style="padding:24px;color:var(--c-text-muted);text-align:center">載入中…</div>`;
+    // 立刻開抽屜
+    $('#v2-drawer-title').textContent = (slim.address_inferred || slim.address || '物件詳情');
+    $('#v2-drawer-body').innerHTML = `<div style="padding:24px;color:#666;text-align:center">載入中…</div>`;
     $('#v2-drawer').classList.add('v2-open');
     $('#v2-drawer-backdrop').classList.add('v2-open');
 
-    // 2) 背景 fetch 完整 doc（含 renewal_v2 / ai_reason / road_width_all 等重欄位）
+    // 背景 fetch 完整 doc 然後用 v1 helper 渲染
     try {
       const r = await fetch(`/api/properties/${encodeURIComponent(id)}`);
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const full = await r.json();
-      // 用戶可能在 fetch 期間已切到別的物件 → 過期 response 不渲染
       if (state.selectedId !== id) return;
-      const prices = await getDistrictPrices();
-      $('#v2-drawer-body').innerHTML = detailHTML(full, prices);
+      _renderDetailViaV1(full);
     } catch (e) {
       console.warn('openDetail full fetch failed', e);
-      // fallback：用 slim 資料渲染（少了試算/AI reason，但基本資料還在）
-      const prices = await getDistrictPrices();
-      $('#v2-drawer-body').innerHTML = detailHTML(slim, prices);
+      _renderDetailViaV1(slim);
+    }
+  }
+
+  // 用 v1 的 buildDetailHTML — v1 helper 都是 global function，可直接 call
+  // v1 的 renewalV2HTML 內部讀 _detailP，必須先 set
+  // v1 的 allProperties 也讀，先 push 進去讓 v1 helper 找得到
+  function _renderDetailViaV1(p) {
+    if (!p) return;
+    window._detailP = { ...p };
+    if (typeof window.allProperties !== 'undefined' && Array.isArray(window.allProperties)) {
+      const idx = window.allProperties.findIndex(x => x.id === p.id);
+      if (idx >= 0) window.allProperties[idx] = p;
+      else window.allProperties.push(p);
+    } else {
+      window.allProperties = [p];
+    }
+    // 標題 + 法拍/偏遠/特殊 badge
+    const titleEl = $('#v2-drawer-title');
+    if (titleEl) {
+      const titleText = (window.stripCityDist
+        ? window.stripCityDist(p.address_inferred || p.address || p.title || '')
+        : (p.address_inferred || p.address || p.title || ''));
+      titleEl.innerHTML = '';
+      titleEl.appendChild(document.createTextNode(titleText));
+      const addBadge = (text, bg = '#dc2626') => {
+        const el = document.createElement('span');
+        el.className = 'fc-badge';
+        el.style.cssText = `margin-left:8px;background:${bg}`;
+        el.textContent = text;
+        titleEl.appendChild(el);
+      };
+      if (p.is_foreclosure) addBadge('法拍屋');
+      if (p.is_remote_area) addBadge('偏遠路段', '#9aa0a6');
+      if (p.unsuitable_for_renewal) addBadge('特殊土地', '#9aa0a6');
+    }
+
+    if (typeof window.buildDetailHTML === 'function') {
+      $('#v2-drawer-body').innerHTML = window.buildDetailHTML(p);
+    } else {
+      $('#v2-drawer-body').innerHTML = '<div style="padding:24px;color:#888">v1 helpers 載入失敗，detail 無法顯示</div>';
     }
   }
   function closeDetail() {
@@ -1094,18 +1129,25 @@
       document.body.appendChild(pop);
     }
     // price_total 單位是「元」不是「萬」，需 / 10000
+    // 地址砍掉市/區前綴 (用戶一定知道目前在哪城)
+    const stripCD = (a) => {
+      if (!a) return '—';
+      if (window.stripCityDist) return window.stripCityDist(a);
+      return a.replace(/^(臺北市|台北市|新北市)/, '').replace(/^[一-龥]{1,3}區/, '');
+    };
     pop.innerHTML = `<div class="v2-lvr-popup__title">附近實價登錄 (${recs.length} 筆)</div>
       <table class="v2-lvr-tbl">
         <thead><tr><th>交易日</th><th>總價</th><th>建坪</th><th>單價</th><th>地址</th></tr></thead>
         <tbody>${recs.map(r => {
           const totalWan = r.price_total ? r.price_total / 10000 : null;
           const perPingWan = (totalWan && r.area_ping) ? (totalWan / r.area_ping) : null;
+          const shortAddr = stripCD(r.address);
           return `<tr>
             <td>${esc(r.txn_date || '—')}</td>
             <td>${totalWan != null ? fmt0(totalWan) + '萬' : '—'}</td>
             <td>${r.area_ping ? fmt1(r.area_ping) : '—'}</td>
             <td>${perPingWan != null ? perPingWan.toFixed(1) + '萬' : '—'}</td>
-            <td class="v2-lvr-addr" title="${esc(r.address || '')}">${esc(r.address || '—')}</td>
+            <td class="v2-lvr-addr" title="${esc(r.address || '')}">${esc(shortAddr)}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>`;
