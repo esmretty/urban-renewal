@@ -73,6 +73,89 @@
     _loadReadMap()[id] = new Date().toISOString();
     _saveReadMap();
   }
+
+  // ── Filter 偏好持久化 (per uid，僅 explore 用) ─────────────────────────────
+  function _filterKey() {
+    const uid = (window.currentUser && window.currentUser.uid) || 'anon';
+    return `explore-filters-v2:${uid}`;
+  }
+  function _saveFilters() {
+    const obj = {
+      road: $('#v2-road')?.value || '',
+      dists: Array.from(state.districtPicks),
+      btypes: $$('.v2-filter-btype:not(:disabled)').filter(c => c.checked).map(c => c.value),
+      floors: $$('#v2-floor-chips input[data-floor]').filter(c => c.checked).map(c => c.value),
+      pmin: $('#v2-price-min')?.value || '',
+      pmax: $('#v2-price-max')?.value || '',
+      maxBld: $('#v2-bld-price-max')?.value || '',
+      maxLand: $('#v2-land-price-max')?.value || '',
+      minLand: $('#v2-land-min')?.value || '',
+      sortBy: $('#v2-sort')?.value || 'list_rank',
+      sortDir: state.sortDir,
+      minMultOn: $('#v2-min-mult-on')?.checked || false,
+      minMultVal: $('#v2-min-mult-val')?.value || '3.0',
+      hideF5: $('#v2-hide-floors5plus')?.checked || false,
+      hideRem: $('#v2-hide-remote')?.checked || false,
+      hideUns: $('#v2-hide-unsuitable')?.checked || false,
+      hideBas: $('#v2-hide-basement')?.checked || false,
+      hideFc: $('#v2-hide-foreclosure')?.checked || false,
+    };
+    try { localStorage.setItem(_filterKey(), JSON.stringify(obj)); } catch {}
+  }
+  function _restoreFilters() {
+    let obj;
+    try { obj = JSON.parse(localStorage.getItem(_filterKey()) || 'null'); } catch {}
+    if (!obj) return;
+    const setVal = (id, v) => {
+      const el = $('#' + id);
+      if (el && v !== undefined && v !== null && v !== '') el.value = v;
+    };
+    const setChk = (id, v) => {
+      const el = $('#' + id);
+      if (el && typeof v === 'boolean') el.checked = v;
+    };
+    setVal('v2-road', obj.road);
+    setVal('v2-price-min', obj.pmin);
+    setVal('v2-price-max', obj.pmax);
+    setVal('v2-bld-price-max', obj.maxBld);
+    setVal('v2-land-price-max', obj.maxLand);
+    setVal('v2-land-min', obj.minLand);
+    setVal('v2-sort', obj.sortBy);
+    if (obj.sortDir === 'asc' || obj.sortDir === 'desc') {
+      state.sortDir = obj.sortDir;
+      const sd = $('#v2-sort-dir');
+      if (sd) sd.textContent = obj.sortDir === 'desc' ? '↓' : '↑';
+    }
+    if (typeof obj.minMultVal === 'string' || typeof obj.minMultVal === 'number') {
+      const el = $('#v2-min-mult-val'); if (el) el.value = obj.minMultVal;
+    }
+    setChk('v2-min-mult-on', obj.minMultOn);
+    setChk('v2-hide-floors5plus', obj.hideF5);
+    setChk('v2-hide-remote', obj.hideRem);
+    setChk('v2-hide-unsuitable', obj.hideUns);
+    setChk('v2-hide-basement', obj.hideBas);
+    setChk('v2-hide-foreclosure', obj.hideFc);
+    // 地區：寫進 state.districtPicks (chip render 之後才能 reflect)
+    if (Array.isArray(obj.dists) && obj.dists.length > 0) {
+      state.districtPicks.clear();
+      obj.dists.forEach(k => state.districtPicks.add(k));
+    }
+    // 類型 chips
+    if (Array.isArray(obj.btypes)) {
+      const set = new Set(obj.btypes);
+      $$('.v2-filter-btype:not(:disabled)').forEach(c => { c.checked = set.has(c.value); });
+    }
+    // 樓層 chips
+    if (Array.isArray(obj.floors)) {
+      const set = new Set(obj.floors);
+      $$('#v2-floor-chips input[data-floor]').forEach(c => { c.checked = set.has(c.value); });
+      const fa = $('#v2-floor-all');
+      if (fa) {
+        const all = $$('#v2-floor-chips input[data-floor]');
+        fa.checked = all.length > 0 && all.every(c => c.checked);
+      }
+    }
+  }
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
@@ -527,6 +610,7 @@
   //   5. 寫進 state.filteredSorted + render
   // 整條 pipeline idempotent，每次都從 raw 起跑 — 不會「第一次有效第二次無效」的累積 bug
   async function applyFilters() {
+    if (state.view === 'explore') _saveFilters();   // 自動存 explore filter 偏好
     const prices = await getDistrictPrices();
     let list = state.allProperties.filter(p =>
       !p.deleted && !p.analysis_error && !p.analysis_in_progress && p.archived !== true
@@ -1080,6 +1164,8 @@
     Object.entries(V1_DISTRICTS).forEach(([city, cfg]) => {
       cfg.enabled.forEach(d => state.districtPicks.add(`${city}|${d}`));
     });
+    // 還原上次 filter 偏好（覆蓋 default）— 必須在 loadDistricts 渲染 chips 之前
+    _restoreFilters();
     await loadDistricts();
     await loadProperties();
   }
