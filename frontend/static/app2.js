@@ -203,6 +203,8 @@
     const id = p.source_id || p.id || '';
     const addr = p.address || p.address_inferred || '—';
     const priceWan = p.price_ntd ? Math.round(p.price_ntd / 10000) : null;
+    const perBld = (p.price_ntd && p.building_area_ping)
+      ? (p.price_ntd / 10000 / p.building_area_ping).toFixed(1) : null;
     const mult = rowMultiple(p, prices);
     let multCls = 'v2-card__multi-num';
     if (mult != null) {
@@ -211,60 +213,42 @@
     }
     const chips = computeChips(p);
     const inWatchlist = !!(p.user_url || p.added_at_user);
-    const star = `<button class="v2-card__star ${inWatchlist ? 'v2-card__star--active' : ''}" data-id="${esc(id)}" title="加入觀察清單">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-      </svg>
-    </button>`;
     const archivedClass = p.archived ? 'v2-card--archived' : '';
-    const img = p.image_url
-      ? `<img class="v2-card__img" src="${esc(p.image_url)}" loading="lazy" alt="">`
-      : `<div class="v2-card__media-placeholder">${typeIcon(p.building_type)}</div>`;
 
     return `
       <article class="v2-card ${archivedClass}" data-id="${esc(id)}">
-        <div class="v2-card__media">
-          ${img}
-          <div class="v2-card__multi">
-            <div class="${multCls}">${mult != null ? mult.toFixed(1) : '—'}</div>
-            <div class="v2-card__multi-label">都更倍數</div>
-          </div>
-          ${star}
-        </div>
-        <div class="v2-card__body">
-          <div class="v2-card__title-row">
+        <div class="v2-card__head">
+          <div class="v2-card__title-line">
             <span class="v2-card__type">${typeIcon(p.building_type)}</span>
-            <div class="v2-card__addr">${esc(p.district || '')} · ${esc(addr)}</div>
+            <span class="v2-card__addr">
+              <span class="v2-card__district">${esc(p.district || '')}</span> · ${esc(addr)}
+            </span>
           </div>
-          <div class="v2-card__price">${priceWan ? fmt0(priceWan) : '—'}<small>萬</small></div>
+          <div class="v2-card__price-line">
+            <span class="v2-card__price">${priceWan ? fmt0(priceWan) : '—'}<small>萬</small></span>
+            ${perBld ? `<span class="v2-card__price-per">${perBld} 萬/建坪</span>` : ''}
+          </div>
+        </div>
+        <div class="v2-card__multi">
+          <div class="${multCls}">${mult != null ? mult.toFixed(1) : '—'}</div>
+          <div class="v2-card__multi-label">都更倍數</div>
+        </div>
+        <div class="v2-card__stats">
+          <span class="v2-stat"><span class="v2-stat__label">建</span><span class="v2-stat__value">${fmt1(p.building_area_ping)}</span></span>
+          <span class="v2-stat"><span class="v2-stat__label">地</span><span class="v2-stat__value">${fmt1(p.land_area_ping)}</span></span>
+          <span class="v2-stat"><span class="v2-stat__label">齡</span><span class="v2-stat__value">${p.building_age != null ? p.building_age : '—'}</span></span>
+          <span class="v2-stat"><span class="v2-stat__label">層</span><span class="v2-stat__value">${formatFloor(p)}</span></span>
+          <span class="v2-stat"><span class="v2-stat__label">區</span><span class="v2-stat__value">${esc((p.zoning || '—').replace('住宅區','住').replace('商業區','商'))}</span></span>
+          ${p.road_width_m ? `<span class="v2-stat"><span class="v2-stat__label">路</span><span class="v2-stat__value">${p.road_width_m}m</span></span>` : ''}
+        </div>
+        <div class="v2-card__footer">
           ${chips.length ? `<div class="v2-card__chips">${chips.map(c => `<span class="v2-rchip ${c.cls}">${c.label}</span>`).join('')}</div>` : ''}
-          <div class="v2-card__meta">
-            <div class="v2-card__meta-item">
-              <span class="v2-card__meta-label">建坪</span>
-              <span class="v2-card__meta-value">${fmt1(p.building_area_ping)}</span>
-            </div>
-            <div class="v2-card__meta-item">
-              <span class="v2-card__meta-label">地坪</span>
-              <span class="v2-card__meta-value">${fmt1(p.land_area_ping)}</span>
-            </div>
-            <div class="v2-card__meta-item">
-              <span class="v2-card__meta-label">屋齡</span>
-              <span class="v2-card__meta-value">${p.building_age != null ? p.building_age + '年' : '—'}</span>
-            </div>
-            <div class="v2-card__meta-item">
-              <span class="v2-card__meta-label">樓層</span>
-              <span class="v2-card__meta-value">${formatFloor(p)}</span>
-            </div>
-            <div class="v2-card__meta-item">
-              <span class="v2-card__meta-label">分區</span>
-              <span class="v2-card__meta-value">${esc(p.zoning || '—')}</span>
-            </div>
-            <div class="v2-card__meta-item">
-              <span class="v2-card__meta-label">路寬</span>
-              <span class="v2-card__meta-value">${p.road_width_m ? p.road_width_m + 'm' : '—'}</span>
-            </div>
-          </div>
           ${p.sources && p.sources.length ? `<div class="v2-card__sources">${srcBadgesHTML(p.sources)}</div>` : ''}
+          <button class="v2-card__star ${inWatchlist ? 'v2-card__star--active' : ''}" data-id="${esc(id)}" title="加入觀察清單">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+          </button>
         </div>
       </article>`;
   }
@@ -300,16 +284,17 @@
   function renderSkeletons(n) {
     const skel = `
       <article class="v2-card v2-skel">
-        <div class="v2-card__media"></div>
-        <div class="v2-card__body">
-          <div class="v2-card__addr">&nbsp;</div>
-          <div class="v2-card__price">&nbsp;</div>
-          <div class="v2-card__meta">
-            <div class="v2-card__meta-item"><span class="v2-card__meta-value">&nbsp;</span></div>
-            <div class="v2-card__meta-item"><span class="v2-card__meta-value">&nbsp;</span></div>
-            <div class="v2-card__meta-item"><span class="v2-card__meta-value">&nbsp;</span></div>
-          </div>
+        <div class="v2-card__head">
+          <div class="v2-card__title-line"><span class="v2-card__addr">&nbsp;</span></div>
+          <div class="v2-card__price-line"><span class="v2-card__price">&nbsp;</span></div>
         </div>
+        <div class="v2-card__multi"><span class="v2-card__multi-num">&nbsp;</span></div>
+        <div class="v2-card__stats">
+          <span class="v2-stat"><span class="v2-stat__value">&nbsp;</span></span>
+          <span class="v2-stat"><span class="v2-stat__value">&nbsp;</span></span>
+          <span class="v2-stat"><span class="v2-stat__value">&nbsp;</span></span>
+        </div>
+        <div class="v2-card__footer">&nbsp;</div>
       </article>`;
     $('#v2-grid').innerHTML = skel.repeat(n);
   }
@@ -459,13 +444,30 @@
   // ── Detail drawer ────────────────────────────────────────────────────────
   async function openDetail(id) {
     state.selectedId = id;
-    const p = state.allProperties.find(x => (x.source_id || x.id) === id);
-    if (!p) return;
-    $('#v2-drawer-title').textContent = p.address || p.address_inferred || '物件詳情';
-    const prices = await getDistrictPrices();
-    $('#v2-drawer-body').innerHTML = detailHTML(p, prices);
+    const slim = state.allProperties.find(x => (x.source_id || x.id) === id);
+    if (!slim) return;
+
+    // 1) 先用 slim 資料立刻開抽屜 — 避免空白等待感
+    $('#v2-drawer-title').textContent = slim.address || slim.address_inferred || '物件詳情';
+    $('#v2-drawer-body').innerHTML = `<div style="padding:24px;color:var(--c-text-muted);text-align:center">載入中…</div>`;
     $('#v2-drawer').classList.add('v2-open');
     $('#v2-drawer-backdrop').classList.add('v2-open');
+
+    // 2) 背景 fetch 完整 doc（含 renewal_v2 / ai_reason / road_width_all 等重欄位）
+    try {
+      const r = await fetch(`/api/properties/${encodeURIComponent(id)}`);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const full = await r.json();
+      // 用戶可能在 fetch 期間已切到別的物件 → 過期 response 不渲染
+      if (state.selectedId !== id) return;
+      const prices = await getDistrictPrices();
+      $('#v2-drawer-body').innerHTML = detailHTML(full, prices);
+    } catch (e) {
+      console.warn('openDetail full fetch failed', e);
+      // fallback：用 slim 資料渲染（少了試算/AI reason，但基本資料還在）
+      const prices = await getDistrictPrices();
+      $('#v2-drawer-body').innerHTML = detailHTML(slim, prices);
+    }
   }
   function closeDetail() {
     $('#v2-drawer').classList.remove('v2-open');
@@ -566,9 +568,11 @@
   async function loadProperties() {
     renderSkeletons(8);
     try {
+      // slim=true → server 不回 renewal_v2/ai_reason/road_width_all 等重欄位 (~80% 縮減)
+      // 點開詳情才 fetch 完整 doc
       const url = state.view === 'watchlist'
-        ? '/api/properties?limit=500'
-        : '/api/properties?limit=500';
+        ? '/api/properties?limit=500&slim=true'
+        : '/api/properties?limit=500&slim=true';
       const r = await fetch(url);
       const data = await r.json();
       state.allProperties = data.items || [];
@@ -600,6 +604,7 @@
       const pmax = Number($('#v2-price-max').value) || 0;
       if (pmin > 0) params.set('price_min_wan', String(pmin));
       if (pmax > 0) params.set('price_max_wan', String(pmax));
+      params.set('slim', 'true');   // 列表只要卡片用的欄位
       const r = await fetch('/api/central_search?' + params.toString());
       const data = await r.json();
       state.allProperties = data.items || [];

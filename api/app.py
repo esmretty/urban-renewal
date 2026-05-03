@@ -2533,6 +2533,7 @@ def list_properties(
     sort_dir: str = Query("asc"),
     limit: int = Query(200),
     offset: int = Query(0),
+    slim: bool = Query(False),                        # True: 卡片列表用，剝除重欄位
     user: dict = Depends(get_current_user),
 ):
     """
@@ -2609,7 +2610,32 @@ def list_properties(
         items = has_val + no_val
 
     total = len(items)
-    return {"total": total, "items": items[offset: offset + limit]}
+    out_items = items[offset: offset + limit]
+    if slim:
+        out_items = [_strip_for_list(it) for it in out_items]
+    return {"total": total, "items": out_items}
+
+
+# slim=true 時不回給卡片列表的重欄位（用戶點開詳情才需要的）
+# 注意：lvr_records 不在這裡（用戶要求保留在卡片列表）
+LIST_DROP_FIELDS = {
+    "renewal_v2",                          # 試算結果（前端即時算，CLAUDE.md 規則 8）
+    "road_width_all",                      # 周邊所有路寬清單（詳情頁用，卡片只用採用的 road_width_m）
+    "ai_reason",                            # AI 分析推薦理由文字
+    "ai_analysis",                          # AI 完整分析文字
+    "nearby_mrts",                          # 附近捷運站清單
+    "address_inferred_candidates_detail",   # 地址候選完整詳情（詳情頁修正地址用）
+    "screenshot_roadwidth",                 # 路寬判讀截圖
+    "screenshot_cadastral",                 # 地籍套繪截圖
+    "screenshot_zoning",                    # 分區圖截圖
+    "screenshot_renewal",                   # 都更案截圖
+    "road_width_vision_reason",             # 路寬 Vision 判讀說明文
+}
+
+
+def _strip_for_list(d: dict) -> dict:
+    """slim=true 時把列表不需要的重欄位剝掉。"""
+    return {k: v for k, v in d.items() if k not in LIST_DROP_FIELDS}
 
 
 @app.get("/api/central_search")
@@ -2625,6 +2651,7 @@ def central_search(
     max_land_price_per_ping: Optional[float] = Query(None),
     min_land_ping: Optional[float] = Query(None),
     limit: int = Query(1000),
+    slim: bool = Query(False),                        # True: 卡片列表用，剝除 ~470KB 重欄位
     user: dict = Depends(get_current_user),
 ):
     """
@@ -2759,7 +2786,10 @@ def central_search(
     # 與前端「新進優先」一致：scrape_session_at desc 為主、list_rank asc 為次
     items.sort(key=lambda x: (x.get("list_rank") if x.get("list_rank") is not None else 9999))
     items.sort(key=lambda x: x.get("scrape_session_at") or "", reverse=True)
-    return {"total": len(items), "items": items[:limit]}
+    out_items = items[:limit]
+    if slim:
+        out_items = [_strip_for_list(it) for it in out_items]
+    return {"total": len(items), "items": out_items}
 
 
 class WatchlistAddReq(BaseModel):
