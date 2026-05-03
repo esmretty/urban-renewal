@@ -215,6 +215,30 @@
     }).join('');
   }
 
+  // ── 分區縮寫 helper (對齊 v1 zoneAbbr 並擴充處理 (特)/(遷)/(核)/(抄) 後綴) ──
+  // 第一/二/三/四種住宅區 → 住一/住二/住三/住四
+  // 第三之一種住宅區 → 住三之一
+  // 第四種商業區 → 商四 / 第二種工業區 → 工二
+  // 住宅區/商業區/住宅用地 → 住/商/住地
+  // 後綴 (特)/(遷)/(核)/(抄) 保留貼在縮寫後面
+  function zoneAbbr(z) {
+    if (!z) return '—';
+    const suffixMatch = z.match(/(\((?:特|遷|核|抄)\))/);
+    const suffix = suffixMatch ? suffixMatch[1] : '';
+    const base = z.replace(/\((?:特|遷|核|抄)\)/g, '').trim();
+    const m = base.match(/^第([一二三四五六])(?:之([一二三四五六]))?種(住宅|商業|工業)區$/);
+    if (m) {
+      const [, n, sub, kind] = m;
+      const k = kind === '住宅' ? '住' : kind === '商業' ? '商' : '工';
+      return sub ? `${k}${n}之${sub}${suffix}` : `${k}${n}${suffix}`;
+    }
+    if (base === '住宅區') return '住' + suffix;
+    if (base === '商業區') return '商' + suffix;
+    if (base === '工業區') return '工' + suffix;
+    if (base === '住宅用地') return '住地' + suffix;
+    return base + suffix;
+  }
+
   // ── 屋齡 helper (對齊 v1 currentAge) ─────────────────────────────────────
   function currentAge(p) {
     if (!p) return null;
@@ -595,10 +619,9 @@
         ${p.title ? `<div class="v2-card__title-sub" title="${esc(p.title)}">${esc(p.title)}</div>` : ''}
         <div class="v2-card__line2">
           <span class="v2-stat" title="建坪"><b>建</b>${fmt1(p.building_area_ping)}</span>
-          <span class="v2-stat" title="地坪"><b>地</b>${fmt1(p.land_area_ping)}</span>
+          <span class="v2-stat" title="地坪 (原土地分區縮寫)"><b>地</b>${fmt1(p.land_area_ping)}${(p.zoning_original || p.zoning) ? ` <span class="v2-stat__zone">(${esc(zoneAbbr(p.zoning_original || p.zoning))})</span>` : ''}</span>
           <span class="v2-stat" title="屋齡"><b>齡</b>${p.building_age != null ? p.building_age : '—'}</span>
           <span class="v2-stat" title="樓層"><b>層</b>${formatFloor(p)}</span>
-          <span class="v2-stat" title="分區"><b>區</b>${esc((p.zoning || '—').replace('住宅區','住').replace('商業區','商'))}</span>
           ${p.road_width_m ? `<span class="v2-stat" title="路寬"><b>路</b>${p.road_width_m}m</span>` : ''}
           ${advChips.length ? advChips.map(c => `<span class="${c.cls}">${c.label}</span>`).join('') : ''}
           ${chips.length ? chips.map(c => `<span class="v2-rchip ${c.cls}">${c.label}</span>`).join('') : ''}
