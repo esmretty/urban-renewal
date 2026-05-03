@@ -215,7 +215,7 @@ a { color: inherit; text-decoration: none; }
 .v2-tab {
   padding: 5px 8px;
   border-radius: var(--r-sm);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--c-text-muted);
   display: inline-flex;
@@ -395,10 +395,10 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-text-light);
 }
 
-/* District 城市左右兩欄（台北 / 新北），中間一條分隔線 */
+/* District 城市左右兩欄：台北加寬 (每列容納 3 個 chip)，新北窄一點 */
 .v2-city-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 3fr 2fr;
   gap: 0;
 }
 .v2-city-grid .v2-city-col:first-child {
@@ -438,10 +438,10 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-city-col__chips .v2-chip {
   padding: 3px 7px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .v2-sidebar .v2-city-col__chips .v2-chip span {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* 窄螢幕 (≤1024px sidebar 變抽屜)：城市改成上下排 */
@@ -505,10 +505,10 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-city-col__chips .v2-chip {
   padding: 3px 7px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .v2-sidebar .v2-city-col__chips .v2-chip span {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* Narrow sidebar (sidebar width < ~260px or mobile drawer): 切到單欄 + city pills */
