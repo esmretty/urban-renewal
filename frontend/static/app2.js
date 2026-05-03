@@ -195,6 +195,26 @@
     return tot ? `?/${tot}F` : '—';
   }
 
+  // ── AI 分析文字 render (對齊 v1 formatAiReason，handle <chk-y> <chk-n> <red> markers) ──
+  function renderAiText(text) {
+    if (!text) return '';
+    return text.split(/\n\n+/).map(section => {
+      const m = section.match(/^【(.+?)】\s*([\s\S]*)/);
+      if (m) {
+        const title = m[1];
+        let body = esc(m[2].trim());
+        body = body.replace(/(\d+\.\d+)×/g, '$1倍').replace(/(\d+)×/g, '$1倍');
+        body = body.replace(/&lt;chk-y&gt;([\s\S]*?)&lt;\/chk-y&gt;/g, '<span style="color:#16a34a;font-weight:700">✓</span> $1');
+        body = body.replace(/&lt;chk-n&gt;([\s\S]*?)&lt;\/chk-n&gt;/g, '<span style="color:#dc2626;font-weight:700">✗</span> <span style="color:#9ca3af">$1</span>');
+        body = body.replace(/&lt;red&gt;([\s\S]*?)&lt;\/red&gt;/g, '<span style="color:#dc2626;font-weight:600">$1</span>');
+        body = body.replace(/&lt;bid_selector[^&]*&gt;/g, '');
+        body = body.replace(/\n/g, '<br>');
+        return `<div class="v2-ai-sec"><div class="v2-ai-sec__title">${esc(title)}</div><div class="v2-ai-sec__body">${body}</div></div>`;
+      }
+      return `<div class="v2-ai-sec"><div class="v2-ai-sec__body">${esc(section).replace(/\n/g, '<br>')}</div></div>`;
+    }).join('');
+  }
+
   // ── 屋齡 helper (對齊 v1 currentAge) ─────────────────────────────────────
   function currentAge(p) {
     if (!p) return null;
@@ -987,25 +1007,18 @@
     return `
       <div class="v2-d-grid">
 
-        <!-- 基本資料 -->
+        <!-- Row 1 左：基本資料 (跨 2 row) -->
         <div class="v2-d-card v2-d-card--basic">
           <div class="v2-d-card__title">基本資料</div>
           <table class="v2-d-tbl">
             <tr><td>原始地址</td><td>${esc(p.address || p.title || '—')}</td></tr>
             <tr><td>推測地址 ${inferredTag}</td><td>${esc(p.address_inferred || '—')}${cands.length > 1 ? ` <span class="v2-d-hint">(${cands.length} 候選)</span>` : ''}</td></tr>
-            <tr><td>類型／樓層</td><td>${typeIcon(p.building_type)} ${esc(p.building_type || '—')} · ${formatFloor(p)}</td></tr>
+            <tr><td>類型 / 樓層</td><td>${typeIcon(p.building_type)} ${esc(p.building_type || '—')} · ${formatFloor(p)}</td></tr>
             <tr><td>屋齡</td><td>${age != null ? age + '年' : '—'}${p.building_age_completed_year ? ` <span class="v2-d-hint">(${p.building_age_completed_year} 完工)</span>` : ''}</td></tr>
-            <tr><td>售價</td><td><b style="color:var(--c-warn)">${priceWan ? fmt0(priceWan) + '萬' : '—'}</b></td></tr>
-            <tr><td>欲出價</td><td>${desired ? fmt0(desired) + '萬' : '—'} <span class="v2-d-hint">(開價 ×0.9)</span></td></tr>
-            <tr><td>建坪</td><td>${p.building_area_ping ? p.building_area_ping + '坪' : '—'}${perBld ? ` <span class="v2-d-hint">(${perBld}萬/坪)</span>` : ''}</td></tr>
-            <tr><td>地坪</td><td>${p.land_area_ping ? p.land_area_ping + '坪' : '—'}${perLand ? ` <span class="v2-d-hint">(${perLand}萬/坪)</span>` : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 坪數大於建坪可能不可信</div>' : ''}</td></tr>
-          </table>
-        </div>
-
-        <!-- 環境資訊 -->
-        <div class="v2-d-card v2-d-card--env">
-          <div class="v2-d-card__title">環境資訊</div>
-          <table class="v2-d-tbl">
+            <tr><td>售價</td><td><b class="v2-d-price">${priceWan ? fmt0(priceWan) + '萬' : '—'}</b></td></tr>
+            <tr><td>欲出價</td><td>${desired ? fmt0(desired) + '萬' : '—'} <span class="v2-d-hint">(×0.9)</span></td></tr>
+            <tr><td>建坪</td><td>${p.building_area_ping ? p.building_area_ping + '坪' : '—'}${perBld ? ` <span class="v2-d-hint">${perBld}萬/坪</span>` : ''}</td></tr>
+            <tr><td>地坪</td><td>${p.land_area_ping ? p.land_area_ping + '坪' : '—'}${perLand ? ` <span class="v2-d-hint">${perLand}萬/坪</span>` : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 地坪 &gt; 建坪，可能不可信</div>' : ''}</td></tr>
             <tr><td>附近捷運</td><td>${mrtList}</td></tr>
             <tr><td>使用分區</td><td>${esc(p.zoning || '—')}${p.zoning_original && p.zoning_original !== p.zoning ? ` <span class="v2-d-hint">(原: ${esc(p.zoning_original)})</span>` : ''}</td></tr>
             <tr><td>容積率</td><td>${farPct ? farPct + '%' : '—'}</td></tr>
@@ -1014,42 +1027,40 @@
           ${govLinks ? `<div class="v2-d-govlinks">${govLinks}</div>` : ''}
         </div>
 
-        <!-- 都更試算 -->
+        <!-- Row 1 右：圖片 -->
+        ${img ? `<div class="v2-d-card v2-d-card--img">${img}</div>` : '<div></div>'}
+
+        <!-- Row 2 左：都更試算 -->
         <div class="v2-d-card v2-d-card--scn">
           <div class="v2-d-card__title">都更換回試算</div>
           <div class="v2-scn-grid">
             ${scnHTML('危老', sW, bonusW)}
             ${scnHTML(isFangzai ? '防災都更' : '都更', sD, bonusD)}
           </div>
-          <div class="v2-d-hint" style="margin-top:6px">
-            新成屋單價 ${newPrice || '—'} 萬/坪 ${p.new_house_price_wan_override ? '(覆寫)' : '(區域預設)'} ／ 分回比例 ${ratio ? (ratio*100).toFixed(0)+'%' : '—'} ／ 車位 ${parking ? parking+'萬' : '—'}
-            ${floorPremium > 0 ? ` ／ 樓層加成 +${(floorPremium*100)|0}%` : ''}
+          <div class="v2-d-hint" style="margin-top:8px;line-height:1.6">
+            新成屋單價 <b>${newPrice || '—'} 萬/坪</b> ${p.new_house_price_wan_override ? '(覆寫)' : '(區域預設)'}<br>
+            分回比例 <b>${ratio ? (ratio*100).toFixed(0)+'%' : '—'}</b> ／ 車位 <b>${parking ? parking+'萬' : '—'}</b>${floorPremium > 0 ? ` ／ 樓層加成 <b>+${(floorPremium*100)|0}%</b>` : ''}
           </div>
         </div>
 
-        <!-- AI 分析 -->
-        ${aiText ? `<div class="v2-d-card v2-d-card--ai">
+        <!-- Row 2 右：AI 分析 -->
+        <div class="v2-d-card v2-d-card--ai">
           <div class="v2-d-card__title">分析建議</div>
-          <div class="v2-d-ai-text">${esc(aiText).replace(/\n/g, '<br>')}</div>
-        </div>` : ''}
+          ${aiText ? `<div class="v2-d-ai-text">${renderAiText(aiText)}</div>` : '<div class="v2-detail-empty">尚無分析建議</div>'}
+        </div>
 
-        <!-- LVR 實價登錄 -->
+        <!-- Row 3：LVR 實價登錄 (full width) -->
         <div class="v2-d-card v2-d-card--lvr">
-          <div class="v2-d-card__title">實價登錄 ${lvrRecs.length ? `<small>(顯示前 ${lvrRecs.length} 筆)</small>` : ''}</div>
+          <div class="v2-d-card__title">附近實價登錄 ${lvrRecs.length ? `<small>(顯示前 ${lvrRecs.length} 筆)</small>` : ''}</div>
           ${lvrHTML}
         </div>
 
-        <!-- 圖片 -->
-        ${img ? `<div class="v2-d-card v2-d-card--img">${img}</div>` : ''}
-
-        <!-- 來源 + actions -->
+        <!-- Row 4：來源 + actions -->
         <div class="v2-d-card v2-d-card--actions">
-          <div class="v2-d-card__title">操作</div>
-          ${p.sources && p.sources.length
-            ? `<div class="v2-d-sources">${srcBadgesHTML(p.sources)}</div>` : ''}
+          ${p.sources && p.sources.length ? `<div class="v2-d-sources">${srcBadgesHTML(p.sources)}</div>` : ''}
           <div class="v2-drawer-actions">
             <button class="v2-btn v2-btn--ghost v2-btn--sm" onclick="window.open('/?focus=${esc(id)}', '_blank')">在舊版開啟</button>
-            <button class="v2-btn v2-btn--ghost v2-btn--sm" onclick="v2.toggleWatchlist('${esc(id)}')">
+            <button class="v2-btn v2-btn--primary v2-btn--sm" onclick="v2.toggleWatchlist('${esc(id)}')">
               ${p._in_watchlist ? '從最愛移除' : '加入最愛'}
             </button>
           </div>
