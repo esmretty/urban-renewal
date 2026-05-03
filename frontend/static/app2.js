@@ -578,7 +578,6 @@
           <span class="v2-card__addr">
             <span class="v2-card__district">${esc(p.district || '')}</span>·${esc(addr)}
           </span>
-          ${dateBadge}
           <span class="v2-card__price-block">
             <span class="v2-card__price">${priceWan ? fmt0(priceWan) : '—'}<small>萬</small></span>
             ${(p.lvr_records && p.lvr_records.length) ? `<span class="v2-lvr-icon v2-lvr-icon--sm" title="附近實價登錄" onmouseenter="v2.showLvrPopup(event, '${esc(id)}')" onmouseleave="v2.hideLvrPopup()" onclick="event.stopPropagation()">實</span>` : ''}
@@ -603,7 +602,7 @@
           ${p.road_width_m ? `<span class="v2-stat" title="路寬"><b>路</b>${p.road_width_m}m</span>` : ''}
           ${advChips.length ? advChips.map(c => `<span class="${c.cls}">${c.label}</span>`).join('') : ''}
           ${chips.length ? chips.map(c => `<span class="v2-rchip ${c.cls}">${c.label}</span>`).join('') : ''}
-          ${p.sources && p.sources.length ? `<span class="v2-card__sources">${srcBadgesHTML(p.sources)}</span>` : ''}
+          ${p.sources && p.sources.length ? `<span class="v2-card__sources">${srcBadgesHTML(p.sources)}${dateBadge}</span>` : (dateBadge ? `<span class="v2-card__sources">${dateBadge}</span>` : '')}
         </div>
       </article>`;
   }
