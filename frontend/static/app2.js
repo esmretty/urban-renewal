@@ -568,11 +568,25 @@
   async function loadProperties() {
     renderSkeletons(8);
     try {
-      // slim=true → server 不回 renewal_v2/ai_reason/road_width_all 等重欄位 (~80% 縮減)
-      // 點開詳情才 fetch 完整 doc
-      const url = state.view === 'watchlist'
-        ? '/api/properties?limit=500&slim=true'
-        : '/api/properties?limit=500&slim=true';
+      let url;
+      if (state.view === 'watchlist') {
+        // /api/properties = 用戶的觀察清單 (watchlist + manual)，server 端做 join
+        url = '/api/properties?limit=500&slim=true';
+      } else {
+        // explore = 中央 DB 搜尋 (帶當前 sidebar filter)；用 /api/central_search
+        const params = new URLSearchParams();
+        const districts = Array.from(state.districtPicks).map(k => k.split('|')[1]);
+        if (districts.length) params.set('districts', districts.join(','));
+        const road = ($('#v2-road').value || '').trim();
+        if (road) params.set('road', road);
+        const pmin = Number($('#v2-price-min').value) || 0;
+        const pmax = Number($('#v2-price-max').value) || 0;
+        if (pmin > 0) params.set('min_price_wan', String(pmin));
+        if (pmax > 0) params.set('max_price_wan', String(pmax));
+        params.set('slim', 'true');
+        params.set('limit', '500');
+        url = '/api/central_search?' + params.toString();
+      }
       const r = await fetch(url);
       const data = await r.json();
       state.allProperties = data.items || [];
