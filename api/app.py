@@ -2683,8 +2683,8 @@ def _query_districts_parallel(col, dist_list, max_price_wan, min_price_wan):
 # Key: 規範化 query params 的 hash；Value: (timestamp, list of (doc_id, doc_data) tuples)
 # TTL: 30 秒 — 用戶 refine 條件多按幾次直接命中；資料新鮮度可接受
 _FIRESTORE_QUERY_CACHE: dict = {}
-_FIRESTORE_QUERY_CACHE_TTL = 30   # seconds
-_FIRESTORE_QUERY_CACHE_MAX = 64    # 最多存 64 個 query；爆量 LRU evict
+_FIRESTORE_QUERY_CACHE_TTL = 120   # seconds — 用戶在頁面上瀏覽幾分鐘內都 cache HIT
+_FIRESTORE_QUERY_CACHE_MAX = 128    # 最多存 N 個 query；爆量 LRU evict
 
 
 def _cache_key_for_query(dist_list, max_price_wan, min_price_wan):
