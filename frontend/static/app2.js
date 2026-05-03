@@ -486,6 +486,24 @@
     const advChips = computeAdvantageChips(p);
     const chips = computeChips(p);
     const inWatchlist = !!(p._in_watchlist || p.user_url || p.added_at_user);
+
+    // 第一次抓進 DB 的日期 badge — scrape_session_at 是 batch session 時間 (preserve 不被 reanalyze 重寫，CLAUDE.md PREFER_NEW_FIELDS 註解)
+    // 24 小時內顯示紅色 NEW，更舊的顯示「M/D」灰色
+    let dateBadge = '';
+    if (p.scrape_session_at) {
+      const t = new Date(p.scrape_session_at);
+      if (!isNaN(t)) {
+        const ageMs = Date.now() - t.getTime();
+        const within24h = ageMs >= 0 && ageMs < 24 * 3600 * 1000;
+        const m = t.getMonth() + 1, d = t.getDate();
+        const yy = t.getFullYear();
+        const sameYr = yy === new Date().getFullYear();
+        const dateStr = sameYr ? `${m}/${d}` : `${yy.toString().slice(2)}/${m}/${d}`;
+        dateBadge = within24h
+          ? `<span class="v2-card__date v2-card__date--new" title="${t.toLocaleString('zh-TW')}">NEW</span>`
+          : `<span class="v2-card__date" title="第一次抓進 DB：${t.toLocaleString('zh-TW')}">${dateStr}</span>`;
+      }
+    }
     const archivedClass = p.archived ? 'v2-card--archived' : '';
     const readClass = isRead(id) ? 'v2-card--read' : '';
     // 高倍數紅框 (≥3.5x) — mult 上面已算
@@ -504,6 +522,7 @@
           <span class="v2-card__addr">
             <span class="v2-card__district">${esc(p.district || '')}</span>·${esc(addr)}
           </span>
+          ${dateBadge}
           <span class="v2-card__price-block">
             <span class="v2-card__price">${priceWan ? fmt0(priceWan) : '—'}<small>萬</small></span>
             ${perBld ? `<span class="v2-card__price-per">${perBld}/建</span>` : ''}
@@ -517,6 +536,7 @@
             </svg>
           </button>
         </div>
+        ${p.title ? `<div class="v2-card__title-sub" title="${esc(p.title)}">${esc(p.title)}</div>` : ''}
         <div class="v2-card__line2">
           <span class="v2-stat" title="建坪"><b>建</b>${fmt1(p.building_area_ping)}</span>
           <span class="v2-stat" title="地坪"><b>地</b>${fmt1(p.land_area_ping)}</span>

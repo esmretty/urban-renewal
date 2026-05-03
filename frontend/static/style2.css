@@ -917,6 +917,42 @@ a { color: inherit; text-decoration: none; }
   display: inline-flex;
   gap: 3px;
   flex-wrap: wrap;
+  margin-left: auto;   /* 推到 line2 最右邊 */
+}
+
+/* 第一次抓進 DB 的日期 badge — 在地址跟總價之間 */
+.v2-card__date {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  background: var(--c-hover);
+  color: var(--c-text-light);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.v2-card__date--new {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  letter-spacing: 0.5px;
+}
+
+/* 物件 title (591 賣家標題) — 地址下方一條小字 */
+.v2-card__title-sub {
+  font-size: 11.5px;
+  color: var(--c-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 22px;   /* 對齊地址 (icon 16px + gap 6px) */
+  line-height: 1.3;
+  margin-top: -2px;
+  margin-bottom: 2px;
+}
+.v2-card.v2-card--read .v2-card__title-sub {
+  color: #cbd5e1;
 }
 .v2-src-badge {
   font-size: 11px;
