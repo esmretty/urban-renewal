@@ -938,6 +938,15 @@
     }
   }
   function closeDetail() {
+    // 對齊 v1：關閉時若 ephemeral edit + 不在 watchlist → toast 提示沒儲存
+    const id = state.selectedId;
+    if (id) {
+      const p = state.allProperties.find(x => (x.source_id || x.id) === id);
+      if (p && p._ephemeral_edit_made && !p._in_watchlist) {
+        toast('您剛才的數字改動沒有自動儲存。請先把本物件加入最愛，之後改動會自動儲存。', 'error');
+      }
+      if (p) p._ephemeral_edit_made = false;
+    }
     $('#v2-drawer').classList.remove('v2-open');
     $('#v2-drawer-backdrop').classList.remove('v2-open');
     state.selectedId = null;
@@ -1005,19 +1014,13 @@
       ? p.nearby_mrts.map(m => `<div class="v2-mrt-line">${esc(m.name)}（${Math.round(m.dist_m)}m）</div>`).join('')
       : '—';
 
-    // ── 用戶可改欄位 (要在 watchlist 才能存) ──
-    const inWl = !!p._in_watchlist;
-    const dis = inWl ? '' : 'disabled';
-    const wlWarn = !inWl
-      ? `<div class="v2-d-wl-warn">
-           ⚠ 此物件尚未加入「最愛」，下方欄位可預覽但無法儲存個人覆寫。
-           <button class="v2-btn v2-btn--primary v2-btn--sm" onclick="v2.toggleWatchlist('${esc(id)}')">加入最愛</button>
-         </div>` : '';
+    // ── 用戶可改欄位 (對齊 v1 行為：永遠 editable，save 時若不在 watchlist
+    //    設 _ephemeral_edit_made flag，closeDetail 時提示) ──
     const editIn = (field, val, step, suffix) =>
-      `<input type="number" class="v2-d-input" min="0" step="${step}" value="${val ?? ''}" ${dis}
+      `<input type="number" class="v2-d-input" min="0" step="${step}" value="${val ?? ''}"
         onchange="v2.saveOverride('${esc(id)}','${field}',this.value)">${suffix ? `<span class="v2-d-hint"> ${suffix}</span>` : ''}`;
     const editPct = (field, val) =>
-      `<input type="number" class="v2-d-input" min="0" max="100" step="5" value="${val != null ? Math.round(val*100) : ''}" ${dis}
+      `<input type="number" class="v2-d-input" min="0" max="100" step="5" value="${val != null ? Math.round(val*100) : ''}"
         onchange="v2.saveOverride('${esc(id)}','${field}',this.value/100)">% `;
 
     // ── LVR 實價登錄 (前 5 筆) ──
@@ -1056,9 +1059,7 @@
         ${p.sources && p.sources.length ? `<div class="v2-d-sources-bar">${srcBadgesHTML(p.sources, 'big')}</div>` : ''}
       </div>
 
-      ${wlWarn}
-
-      <!-- Row 1: 物件資訊 (左 7) | 圖片 (右 5) -->
+      <!-- Row 1: 物件資訊 (左 7) | 圖片 (右 4) -->
       <div class="v2-d-row">
         <div class="v2-d-col v2-d-col--7">
           <div class="v2-d-basic-grid">
@@ -1067,10 +1068,10 @@
               <tr><td>推測地址</td><td>${esc(p.address_inferred || '—')}${inferredTag}${cands.length > 1 ? `<div class="v2-d-hint">${cands.length} 候選</div>` : ''}</td></tr>
               <tr><td>類型 / 樓層</td><td>${esc(p.building_type || '—')} · ${formatFloor(p)}</td></tr>
               <tr><td>屋齡</td><td>${age != null ? age + ' 年' : '未知'}${p.building_age_completed_year ? ` <span class="v2-d-hint">(${p.building_age_completed_year} 完工)</span>` : ''}</td></tr>
-              <tr><td>售價</td><td><b class="v2-d-price">${priceWan ? 'NT$ ' + fmt0(priceWan) + ' 萬' : '—'}</b>${lvrIcon}</td></tr>
+              <tr><td>售價</td><td><span class="v2-d-price">${priceWan ? fmt0(priceWan) + '萬' : '—'}</span>${lvrIcon}</td></tr>
               <tr><td>欲出價</td><td>${editIn('desired_price_wan', desired, 10, '萬')}</td></tr>
-              <tr><td>建坪</td><td>${p.building_area_ping ? p.building_area_ping + ' 坪' : '—'}${perBld ? ` <span class="v2-d-hint">(${perBld} 萬/建坪)</span>` : ''}</td></tr>
-              <tr><td>地坪</td><td>${p.land_area_ping ? p.land_area_ping + ' 坪' : '—'}${perLand ? ` <span class="v2-d-hint">(${perLand} 萬/地坪)</span>` : ''}${p.land_area_source === 'lvr' ? ' <span class="v2-d-hint">(實登)</span>' : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 地坪過大（&gt; 建坪），可能不可信</div>' : ''}</td></tr>
+              <tr><td>建坪</td><td>${p.building_area_ping ? p.building_area_ping + ' 坪' : '—'}${perBld ? `<div class="v2-d-hint">${perBld} 萬/建坪</div>` : ''}</td></tr>
+              <tr><td>地坪</td><td>${p.land_area_ping ? p.land_area_ping + ' 坪' : '—'}${perLand ? `<div class="v2-d-hint">${perLand} 萬/地坪</div>` : ''}${p.land_area_source === 'lvr' ? ' <span class="v2-d-hint">(實登)</span>' : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 地坪過大（&gt; 建坪），可能不可信</div>' : ''}</td></tr>
             </table>
             <table class="v2-d-tbl">
               <tr><td>附近捷運</td><td>${mrtList}</td></tr>
@@ -1129,14 +1130,13 @@
     `;
   }
 
-  // ── 個人 override 儲存 (對齊 v1 各 save handler，dispatcher 統一) ─────────
+  // ── 個人 override 儲存 (對齊 v1 行為) ─────────────────────────────────────
+  // v1: input 永遠 editable，save 永遠 POST。POST 寫到 user 的 watchlist 子文件，
+  //     不在 watchlist 就設 _ephemeral_edit_made flag。
+  // closeDetail 時 if flag && !inWatchlist → toast 「沒有自動儲存」警示
   async function saveOverride(id, field, value) {
     const p = state.allProperties.find(x => (x.source_id || x.id) === id);
     if (!p) return;
-    if (!p._in_watchlist) {
-      toast('請先加入最愛才能儲存個人設定', 'error');
-      return;
-    }
     const v = value === '' || value == null ? null : Number(value);
     let endpoint, body;
     switch (field) {
@@ -1172,6 +1172,14 @@
         toast('未知欄位：' + field, 'error');
         return;
     }
+    // 立刻寫回 local state + applyFilters → 卡片倍數即時連動
+    p[field] = v;
+    if (!p._in_watchlist) p._ephemeral_edit_made = true;   // 標 flag, closeDetail 時提示
+    applyFilters();
+    // 重新 render detail 讓試算數字更新
+    _renderDetailFromCurrent();
+
+    // POST 給後端 (永遠發；後端會寫到 user watchlist override，等同自動加入)
     try {
       const r = await fetch(endpoint, {
         method: 'POST',
@@ -1179,14 +1187,19 @@
         body: JSON.stringify(body),
       });
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      // 寫回 local state，re-applyFilters 讓卡片倍數即時更新
-      p[field] = v;
-      applyFilters();
-      toast('已儲存', 'success');
     } catch (e) {
       console.error('saveOverride', e);
-      toast('儲存失敗：' + e.message, 'error');
     }
+  }
+
+  // 重新 render 當前 detail (override 後試算 / 倍數要更新)
+  async function _renderDetailFromCurrent() {
+    const id = state.selectedId;
+    if (!id) return;
+    const p = state.allProperties.find(x => (x.source_id || x.id) === id);
+    if (!p) return;
+    const prices = await getDistrictPrices();
+    $('#v2-drawer-body').innerHTML = detailHTML(p, prices);
   }
 
   // ── LVR popup helper (對齊 v1 showLvrPopup hover 行為) ───────────────────
