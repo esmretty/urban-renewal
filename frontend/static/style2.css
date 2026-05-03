@@ -713,18 +713,8 @@ a { color: inherit; text-decoration: none; }
 .v2-card.v2-card--read .v2-card__price {
   color: var(--c-text-muted);
 }
-.v2-card.v2-card--read::before {
-  content: '';
-  position: absolute;
-  left: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 28px;
-  background: transparent;
-  border-radius: 2px;
-}
-.v2-card:not(.v2-card--read)::before {
+/* 城市色條（左側 3px）— 台北藍 / 新北綠 */
+.v2-card::before {
   content: '';
   position: absolute;
   left: 0;
@@ -732,9 +722,23 @@ a { color: inherit; text-decoration: none; }
   transform: translateY(-50%);
   width: 3px;
   height: 60%;
-  background: var(--c-accent);
   border-radius: 0 2px 2px 0;
   opacity: 0.7;
+  background: var(--c-accent);   /* default fallback */
+}
+.v2-card.v2-card--tpe::before { background: #0891b2; }      /* 青藍 (台北) */
+.v2-card.v2-card--ntpc::before { background: #16a34a; }     /* 綠 (新北) */
+.v2-card.v2-card--read::before { opacity: 0.25; }
+
+/* 高倍數 (≥3.5x) 紅框 — 引人注意 */
+.v2-card.v2-card--hot {
+  border: 2px solid var(--c-danger);
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.25);
+  padding: 7px 11px;   /* compensate +1px border */
+}
+.v2-card.v2-card--hot:hover {
+  border-color: var(--c-danger);
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.35), var(--sh-2);
 }
 .v2-card.v2-card--archived::after {
   content: '已下架';

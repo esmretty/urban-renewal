@@ -9,16 +9,21 @@
   'use strict';
 
   // ── State ────────────────────────────────────────────────────────────────
+  // 每個 view 的物件 cache 各自獨立 — 切 tab 不重抓
   const state = {
     view: 'explore',           // 'explore' | 'watchlist'
-    allProperties: [],
+    allProperties: [],         // 當前 view 用的（render 即從這個來）
+    exploreLoaded: false,      // explore 是否已抓過
+    watchlistLoaded: false,    // watchlist 是否已抓過
+    exploreItems: [],          // explore 抓的全部物件 (server 不再 filter，client 來 filter)
+    watchlistItems: [],        // 用戶觀察清單
     filteredSorted: [],
     page: 1,
     pageSize: 50,
     selectedId: null,
     targetRegions: {},
-    districtPicks: new Set(),  // city|district 字串
-    sortDir: 'desc',           // 'asc' | 'desc'，跟 v1 toggleSortDir 對齊
+    districtPicks: new Set(),
+    sortDir: 'desc',
   };
 
   // 跟 v1 hardcode 的 enabled/disabled district 對齊（v1 index.html 寫死的）
@@ -355,15 +360,20 @@
       else if (mult >= 2.0) multCls += ' v2-card__mult--mid';
     }
     const chips = computeChips(p);
-    const inWatchlist = !!(p.user_url || p.added_at_user);
+    const inWatchlist = !!(p._in_watchlist || p.user_url || p.added_at_user);
     const archivedClass = p.archived ? 'v2-card--archived' : '';
     const readClass = isRead(id) ? 'v2-card--read' : '';
+    // 高倍數紅框 (≥3.5x) — mult 上面已算
+    const hotClass = (mult != null && mult >= 3.5) ? 'v2-card--hot' : '';
+    // 城市色彩區別（左側色條）
+    const cityClass = p.city === '台北市' ? 'v2-card--tpe'
+                    : p.city === '新北市' ? 'v2-card--ntpc' : '';
 
     // ── 2-line dense layout ──
     // Line 1: icon + 區·地址 (ellipsis) | 總價 + 建單價 | 倍數 | ⭐
     // Line 2: 建/地/齡/層/區/路 + chips + sources
     return `
-      <article class="v2-card ${archivedClass} ${readClass}" data-id="${esc(id)}">
+      <article class="v2-card ${archivedClass} ${readClass} ${hotClass} ${cityClass}" data-id="${esc(id)}">
         <div class="v2-card__line1">
           <span class="v2-card__type">${typeIcon(p.building_type)}</span>
           <span class="v2-card__addr">
@@ -780,51 +790,78 @@
   async function toggleWatchlist(id) {
     const p = state.allProperties.find(x => (x.source_id || x.id) === id);
     if (!p) return;
-    const isIn = !!(p.user_url || p.added_at_user);
+    const isIn = !!(p._in_watchlist || p.user_url || p.added_at_user);
     try {
+      let r;
       if (isIn) {
-        await fetch(`/api/properties/${encodeURIComponent(id)}/hide`, { method: 'POST' });
+        r = await fetch(`/api/watchlist/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
         toast('已從觀察清單移除');
       } else {
-        await fetch(`/api/watchlist/${encodeURIComponent(id)}`, { method: 'POST' });
+        r = await fetch(`/api/watchlist/${encodeURIComponent(id)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        if (!r.ok) {
+          const txt = await r.text().catch(() => '');
+          throw new Error('HTTP ' + r.status + ' ' + txt.slice(0, 100));
+        }
         toast('已加入觀察清單', 'success');
       }
-      // refresh
-      await loadProperties();
+      // 即時更新 state + UI（不全部 reload，太慢）
+      p._in_watchlist = !isIn;
+      const card = document.querySelector(`.v2-card[data-id="${CSS.escape(id)}"] .v2-card__star`);
+      if (card) card.classList.toggle('v2-card__star--active', !isIn);
+      // 更新 watchlist tab 計數
+      const cnt = $('#v2-watchlist-count');
+      if (cnt) {
+        const n = state.exploreItems.filter(x => x._in_watchlist).length;
+        cnt.textContent = n > 0 ? String(n) : '';
+      }
+      // 觀察清單 tab cache 失效 (下次切過去會重抓)
+      state.watchlistLoaded = false;
     } catch (e) {
+      console.error('toggleWatchlist', e);
       toast('操作失敗：' + e.message, 'error');
     }
   }
 
   // ── Load properties ──────────────────────────────────────────────────────
+  // explore 不傳 districts 給 server (對齊用戶要求 #5: 一次抓全部、client 端 filter)
   async function loadProperties() {
     renderSkeletons(8);
     try {
       let url;
       if (state.view === 'watchlist') {
-        // /api/properties = 用戶的觀察清單 (watchlist + manual)，server 端做 join
         url = '/api/properties?limit=500&slim=true';
       } else {
-        // explore = 中央 DB 搜尋 (帶當前 sidebar filter)；用 /api/central_search
+        // 不再帶 districts/price 給 server — 全部交給 client filter
+        // 用 15 個目標區一起抓，client 再依用戶勾選 filter
         const params = new URLSearchParams();
-        const districts = Array.from(state.districtPicks).map(k => k.split('|')[1]);
-        if (districts.length) params.set('districts', districts.join(','));
-        const road = ($('#v2-road').value || '').trim();
-        if (road) params.set('road', road);
-        const pmin = Number($('#v2-price-min').value) || 0;
-        const pmax = Number($('#v2-price-max').value) || 0;
-        if (pmin > 0) params.set('min_price_wan', String(pmin));
-        if (pmax > 0) params.set('max_price_wan', String(pmax));
+        params.set('districts', Object.values(V1_DISTRICTS)
+          .flatMap(cfg => cfg.enabled).join(','));
         params.set('slim', 'true');
-        params.set('limit', '500');
+        params.set('limit', '1000');
         url = '/api/central_search?' + params.toString();
       }
       const r = await fetch(url);
       const data = await r.json();
-      state.allProperties = data.items || [];
+      const items = data.items || [];
+      if (state.view === 'watchlist') {
+        state.watchlistItems = items;
+        state.watchlistLoaded = true;
+      } else {
+        state.exploreItems = items;
+        state.exploreLoaded = true;
+      }
+      state.allProperties = items;
+      // 觀察清單計數：watchlist tab 直接用全部；explore tab 用 _in_watchlist
       const cnt = $('#v2-watchlist-count');
       if (cnt) {
-        const n = state.allProperties.filter(p => !p.deleted && (p.user_url || p.added_at_user)).length;
+        const n = state.view === 'watchlist'
+          ? items.filter(p => !p.deleted).length
+          : items.filter(p => p._in_watchlist).length;
         cnt.textContent = n > 0 ? String(n) : '';
       }
       applyFilters();
@@ -834,33 +871,12 @@
     }
   }
 
+  // 「重新搜尋」按鈕：強制重抓中央 (跳過 client cache)
+  // 用戶要求 #5：filter 純 client 端跑；只有此 button 才打 server
   async function runSearch() {
-    if (state.view !== 'explore') {
-      switchView('explore');
-    }
-    // 重新撈一次中央 search（透過 /api/central_search 帶條件）
-    renderSkeletons(8);
-    try {
-      const params = new URLSearchParams();
-      const districts = Array.from(state.districtPicks).map(k => k.split('|')[1]);
-      if (districts.length) params.set('districts', districts.join(','));
-      const road = ($('#v2-road').value || '').trim();
-      if (road) params.set('road', road);
-      const pmin = Number($('#v2-price-min').value) || 0;
-      const pmax = Number($('#v2-price-max').value) || 0;
-      if (pmin > 0) params.set('price_min_wan', String(pmin));
-      if (pmax > 0) params.set('price_max_wan', String(pmax));
-      params.set('slim', 'true');   // 列表只要卡片用的欄位
-      const r = await fetch('/api/central_search?' + params.toString());
-      const data = await r.json();
-      state.allProperties = data.items || [];
-      applyFilters();
-    } catch (e) {
-      console.error('runSearch', e);
-      toast('搜尋失敗', 'error');
-      // fallback: load watchlist
-      loadProperties();
-    }
+    if (state.view !== 'explore') switchView('explore');
+    state.exploreLoaded = false;     // force refetch
+    await loadProperties();
   }
 
   // ── City tab switch (narrow viewport) ────────────────────────────────────
@@ -874,15 +890,28 @@
   }
 
   // ── Sidebar / view toggling ──────────────────────────────────────────────
+  // 切 tab：sidebar swap (explore filter / watchlist capture) + 顯示對應 cache
+  // 不主動重抓 — 重抓只能透過「重新搜尋」按鈕 or 第一次進該 tab
   function switchView(view) {
     state.view = view;
     $$('.v2-tab').forEach(t => t.classList.toggle('v2-tab--active', t.dataset.view === view));
-    state.page = 1;
-    // 觀察清單 tab 才顯示 URL/manual capture 區
-    const cap = $('#v2-capture');
-    if (cap) cap.style.display = view === 'watchlist' ? '' : 'none';
+    // sidebar 區塊切換
+    const sxp = $('#v2-sidebar-explore');
+    const swl = $('#v2-sidebar-watchlist');
+    if (sxp) sxp.style.display = view === 'explore' ? '' : 'none';
+    if (swl) swl.style.display = view === 'watchlist' ? '' : 'none';
     if (view === 'watchlist') populateManualDistricts();
-    loadProperties();
+    state.page = 1;
+    // 用對應 view 的 cache，沒抓過才 fetch
+    if (view === 'explore') {
+      state.allProperties = state.exploreItems;
+      if (!state.exploreLoaded) loadProperties();
+      else applyFilters();
+    } else {
+      state.allProperties = state.watchlistItems;
+      if (!state.watchlistLoaded) loadProperties();
+      else applyFilters();
+    }
   }
 
   // ── URL / Manual analyze (v2 watchlist 專用) ────────────────────────────
