@@ -333,21 +333,50 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-text-light);
 }
 
-/* District 城市行（對齊 v1：台北：[全部] 大安 信義 ... 一行） */
-.v2-dist-city-row {
+/* District 城市左右兩欄（台北 / 新北），sidebar 寬度有限就直接 2 col 並排 */
+.v2-city-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.v2-city-col__title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--c-text-muted);
+  letter-spacing: 0.3px;
+  margin-bottom: 4px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--c-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.v2-city-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--c-text-light);
+  cursor: pointer;
+}
+.v2-city-all input { width: 12px; height: 12px; accent-color: var(--c-accent); }
+.v2-city-col__chips {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
   gap: 4px;
-  margin-bottom: 6px;
 }
-.v2-dist-city-row:last-child { margin-bottom: 0; }
-.v2-dist-city-label {
+.v2-city-col__chips .v2-chip {
+  padding: 3px 7px;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--c-text-muted);
-  width: 36px;
-  flex-shrink: 0;
+}
+
+/* 窄螢幕 (≤1024px sidebar 變抽屜)：城市改成上下排 */
+@media (max-width: 1024px) {
+  .v2-city-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Chip row */

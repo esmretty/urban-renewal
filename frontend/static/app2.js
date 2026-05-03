@@ -429,18 +429,17 @@
     } catch (e) { console.warn('target_regions failed', e); }
   }
   function renderDistrictChips() {
-    // 對齊 v1：hardcode enabled/disabled 同樣的清單，不依賴 API target_regions
-    // 顯示順序：台北市 → 新北市，每行 [全部] + 啟用 chips + disabled 灰色 chips
+    // 對齊 v1 enabled districts；layout 用「台北左欄 / 新北右欄」並排
+    // disabled districts 不顯示
     const host = $('#v2-district-chips');
     if (!host) return;
     const counts = state.districtCounts || {};
 
-    const cityRow = (city) => {
+    const cityCol = (city) => {
       const cfg = V1_DISTRICTS[city];
       if (!cfg) return '';
-      // 全部 master：勾起=該城所有 enabled districts 都選
       const allChecked = cfg.enabled.every(d => state.districtPicks.has(`${city}|${d}`));
-      const enabledChips = cfg.enabled.map(d => {
+      const chipsHtml = cfg.enabled.map(d => {
         const key = `${city}|${d}`;
         const checked = state.districtPicks.has(key) ? 'checked' : '';
         const n = counts[key] || 0;
@@ -450,26 +449,20 @@
           <span>${esc(label)}${n ? ` <em class="v2-chip__n">${n}</em>` : ''}</span>
         </label>`;
       }).join('');
-      const disabledChips = cfg.disabled.map(d => {
-        const label = cfg.labels[d] || d;
-        return `<label class="v2-chip v2-chip--disabled" title="尚未開放">
-          <input type="checkbox" disabled>
-          <span>${esc(label)}</span>
-        </label>`;
-      }).join('');
       const cityShort = city.replace('市', '');
-      return `<div class="v2-dist-city-row">
-        <span class="v2-dist-city-label">${esc(cityShort)}</span>
-        <label class="v2-chip v2-chip--all">
-          <input type="checkbox" ${allChecked ? 'checked' : ''} onchange="v2.toggleAllInCity('${esc(city)}', this.checked)">
-          <span>全部</span>
-        </label>
-        ${enabledChips}
-        ${disabledChips}
+      return `<div class="v2-city-col" data-city="${esc(city)}">
+        <div class="v2-city-col__title">
+          ${esc(cityShort)}
+          <label class="v2-city-all" title="全部 ${esc(cityShort)}">
+            <input type="checkbox" ${allChecked ? 'checked' : ''} onchange="v2.toggleAllInCity('${esc(city)}', this.checked)">
+            <span>全部</span>
+          </label>
+        </div>
+        <div class="v2-city-col__chips">${chipsHtml}</div>
       </div>`;
     };
 
-    host.innerHTML = cityRow('台北市') + cityRow('新北市');
+    host.innerHTML = `<div class="v2-city-grid">${cityCol('台北市')}${cityCol('新北市')}</div>`;
   }
 
   // 一鍵全選/取消當前城市的 enabled districts（對齊 v1 toggleAllDists）
