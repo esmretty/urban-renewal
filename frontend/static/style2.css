@@ -709,10 +709,10 @@ a { color: inherit; text-decoration: none; }
   opacity: 0.55;
   filter: grayscale(0.5);
 }
-/* 已讀：只地址變淡灰，其他不動 */
+/* 已讀：只地址變灰，其他不動。slate-400 比之前 slate-300 深一階較顯眼 */
 .v2-card.v2-card--read .v2-card__addr,
 .v2-card.v2-card--read .v2-card__district {
-  color: #cbd5e1 !important;   /* slate-300 — 淡到一眼能跟未讀區別 */
+  color: #94a3b8 !important;
 }
 /* 城市色條（左側 3px）— 台北藍 / 新北綠 */
 .v2-card::before {
