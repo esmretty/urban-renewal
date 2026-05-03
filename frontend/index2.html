@@ -112,10 +112,10 @@
           <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-land-price-max" min="0" step="10" value="600" oninput="v2.applyFilters()">
           <span class="v2-num-row__suffix">萬/坪</span>
         </div>
-        <!-- 第 2 列：地坪 ≥ -->
+        <!-- 第 2 列：地坪 ≥ (input 正常大小) -->
         <div class="v2-num-row v2-num-row--compact">
           <span class="v2-num-row__label">地坪≥</span>
-          <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-land-min" min="0" step="1" value="0" oninput="v2.applyFilters()">
+          <input class="v2-input v2-input--num" type="number" id="v2-land-min" min="0" step="1" value="0" oninput="v2.applyFilters()">
           <span class="v2-num-row__suffix">坪</span>
         </div>
       </div>
@@ -133,14 +133,14 @@
         </div>
       </div>
 
-      <!-- 最低獲利倍數 — 對齊 v1 (toggle off, value 3.0) -->
+      <!-- 最低獲利倍數 — toggle + input + 倍以上 同一列 -->
       <div class="v2-filter-group">
-        <label class="v2-toggle">
-          <input type="checkbox" id="v2-min-mult-on" onchange="v2.applySort()">
-          <span>僅顯示獲利倍數</span>
-        </label>
-        <div class="v2-num-row v2-num-row--compact">
-          <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-min-mult-val" min="0" step="0.1" value="3.0" oninput="v2.applySort()">
+        <div class="v2-min-mult-row">
+          <label class="v2-toggle v2-toggle--inline">
+            <input type="checkbox" id="v2-min-mult-on" onchange="v2.applySort()">
+            <span>僅顯示獲利倍數</span>
+          </label>
+          <input class="v2-input v2-input--num" type="number" id="v2-min-mult-val" min="0" step="0.1" value="3.0" oninput="v2.applySort()">
           <span class="v2-num-row__suffix">倍以上</span>
         </div>
       </div>

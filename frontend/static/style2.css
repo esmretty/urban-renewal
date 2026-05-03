@@ -327,6 +327,28 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-action-row .v2-btn { width: 100%; padding: 7px 10px; font-size: 13px; }
 
+/* 最低獲利倍數：toggle + input + 倍以上 同一列 */
+.v2-min-mult-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+.v2-min-mult-row .v2-toggle--inline {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+.v2-min-mult-row .v2-input {
+  flex: 0 0 56px;
+  text-align: right;
+}
+.v2-min-mult-row .v2-num-row__suffix {
+  font-size: 11px;
+  color: var(--c-text-muted);
+  flex-shrink: 0;
+}
+
 /* 抗性 toggle grid (3 col × 2 row，最後一格空) */
 .v2-toggle-grid {
   display: grid;
@@ -359,11 +381,18 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-text-light);
 }
 
-/* District 城市左右兩欄（台北 / 新北），sidebar 寬度有限就直接 2 col 並排 */
+/* District 城市左右兩欄（台北 / 新北），中間一條分隔線 */
 .v2-city-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 0;
+}
+.v2-city-grid .v2-city-col:first-child {
+  padding-right: 8px;
+  border-right: 1px solid var(--c-border);
+}
+.v2-city-grid .v2-city-col:last-child {
+  padding-left: 8px;
 }
 .v2-city-col__title {
   font-size: 12px;
