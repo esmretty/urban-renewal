@@ -14,7 +14,7 @@
     allProperties: [],
     filteredSorted: [],
     page: 1,
-    pageSize: 24,
+    pageSize: 50,
     selectedId: null,
     targetRegions: {},
     districtPicks: new Set(),  // city|district 字串
