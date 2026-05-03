@@ -154,6 +154,41 @@
   <!-- Main content area -->
   <main class="v2-main">
 
+    <!-- 觀察清單 tab 才顯示：貼網址 + 地址評估 capture 區 -->
+    <section class="v2-capture" id="v2-capture" style="display:none;">
+      <div class="v2-capture-card">
+        <div class="v2-capture-card__title">貼物件網址</div>
+        <div class="v2-capture-row">
+          <input id="v2-scrape-url" type="url" class="v2-input"
+                 placeholder="貼 591 / 永慶 / 信義 物件詳情頁 URL">
+          <button class="v2-btn v2-btn--primary" onclick="v2.triggerScrapeUrl()">送出</button>
+        </div>
+        <div class="v2-capture-card__hint">支援 591、永慶、信義；分析完加入觀察清單</div>
+      </div>
+      <div class="v2-capture-card">
+        <div class="v2-capture-card__title">未上架地址評估</div>
+        <div class="v2-capture-row">
+          <select id="v2-manual-city" class="v2-input v2-input--small" onchange="v2.populateManualDistricts()">
+            <option value="台北市">台北市</option>
+            <option value="新北市">新北市</option>
+          </select>
+          <select id="v2-manual-district" class="v2-input v2-input--small"></select>
+          <input id="v2-manual-address" type="text" class="v2-input"
+                 placeholder="例如：景興路102巷14號">
+        </div>
+        <div class="v2-capture-row v2-capture-row--num">
+          <span class="v2-num-row__label">建坪</span>
+          <input id="v2-manual-bld" type="number" min="0" step="0.01" class="v2-input v2-input--num" placeholder="(選填)">
+          <span class="v2-num-row__label">地坪</span>
+          <input id="v2-manual-land" type="number" min="0" step="0.01" class="v2-input v2-input--num" placeholder="(選填)">
+          <span class="v2-num-row__label">總價(萬)</span>
+          <input id="v2-manual-price" type="number" min="0" step="50" class="v2-input v2-input--num" placeholder="(選填)">
+          <button class="v2-btn v2-btn--primary" onclick="v2.triggerManualAnalyze()">送出分析</button>
+        </div>
+        <div class="v2-capture-card__hint">目前僅支援台北市與新北市地址</div>
+      </div>
+    </section>
+
     <!-- Toolbar above grid -->
     <div class="v2-toolbar">
       <div class="v2-toolbar__left">

@@ -594,6 +594,55 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
 }
 
+/* === 5.5 觀察清單 capture 區（URL / Manual 分析） =========================== */
+.v2-capture {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.v2-capture-card {
+  background: var(--c-card);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: 12px;
+}
+.v2-capture-card__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--c-text);
+  margin-bottom: 8px;
+}
+.v2-capture-card__hint {
+  font-size: 11px;
+  color: var(--c-text-light);
+  margin-top: 6px;
+}
+.v2-capture-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+.v2-capture-row + .v2-capture-row { margin-top: 6px; }
+.v2-capture-row .v2-input { padding: 6px 10px; font-size: 13px; }
+.v2-capture-row .v2-input--small { flex: 0 0 90px; }
+.v2-capture-row .v2-input--num { flex: 0 0 80px; text-align: right; }
+.v2-capture-row .v2-btn { padding: 6px 14px; flex-shrink: 0; }
+.v2-capture-row--num .v2-num-row__label {
+  font-size: 11px;
+  color: var(--c-text-muted);
+  flex-shrink: 0;
+}
+@media (max-width: 1024px) {
+  .v2-capture { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .v2-capture-row { flex-wrap: wrap; }
+  .v2-capture-row .v2-input { width: 100%; flex: 1 1 auto; }
+  .v2-capture-row--num .v2-input--num { flex: 1 1 60px; }
+}
+
 /* === 6. Card grid (台北左 / 新北右) ======================================== */
 /* 設計目標：每張卡兩行內塞完，城市分欄並排，第一畫面看到最多筆物件 */
 .v2-grid {
@@ -655,6 +704,37 @@ a { color: inherit; text-decoration: none; }
 .v2-card.v2-card--archived {
   opacity: 0.55;
   filter: grayscale(0.5);
+}
+/* 已讀：地址 / 倍數變灰、左邊有藍點 */
+.v2-card.v2-card--read .v2-card__addr,
+.v2-card.v2-card--read .v2-card__mult {
+  color: var(--c-text-muted);
+}
+.v2-card.v2-card--read .v2-card__price {
+  color: var(--c-text-muted);
+}
+.v2-card.v2-card--read::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 28px;
+  background: transparent;
+  border-radius: 2px;
+}
+.v2-card:not(.v2-card--read)::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--c-accent);
+  border-radius: 0 2px 2px 0;
+  opacity: 0.7;
 }
 .v2-card.v2-card--archived::after {
   content: '已下架';

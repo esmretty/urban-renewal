@@ -2812,3 +2812,17 @@ select.rv2-edit { text-align: left; padding-right: 18px; }
     flex: 0 0 60px;
   }
 }
+
+
+/* ── 已讀標記 (共用 localStorage urban_read_props key 跟 v2) ── */
+.property-card.is-read {
+  opacity: 0.6;
+}
+.property-card.is-read .card-title,
+.property-card.is-read .card-price,
+.property-card.is-read .score-num {
+  color: #888 !important;
+}
+.property-card.is-read.selected {
+  opacity: 1;   /* 選取時還是全亮 */
+}

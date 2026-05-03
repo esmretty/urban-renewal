@@ -40,6 +40,34 @@
   // ── Helpers ──────────────────────────────────────────────────────────────
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+  // ── 已讀紀錄 (localStorage 共用 key 'urban_read_props')，v1/v2 共用 ────────
+  // value = JSON object { source_id: timestamp_iso }, 上限 5000 筆 LRU evict
+  const READ_KEY = 'urban_read_props';
+  let _readMap = null;
+  function _loadReadMap() {
+    if (_readMap) return _readMap;
+    try { _readMap = JSON.parse(localStorage.getItem(READ_KEY) || '{}'); }
+    catch { _readMap = {}; }
+    return _readMap;
+  }
+  function _saveReadMap() {
+    if (!_readMap) return;
+    // 上限 5000 → 砍最舊的 1000 筆
+    const keys = Object.keys(_readMap);
+    if (keys.length > 5000) {
+      const sorted = keys.sort((a, b) => (_readMap[a] || '').localeCompare(_readMap[b] || ''));
+      sorted.slice(0, 1000).forEach(k => delete _readMap[k]);
+    }
+    try { localStorage.setItem(READ_KEY, JSON.stringify(_readMap)); }
+    catch (e) { console.warn('saveReadMap failed', e); }
+  }
+  function isRead(id) { return !!_loadReadMap()[id]; }
+  function markRead(id) {
+    if (!id) return;
+    _loadReadMap()[id] = new Date().toISOString();
+    _saveReadMap();
+  }
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
@@ -329,12 +357,13 @@
     const chips = computeChips(p);
     const inWatchlist = !!(p.user_url || p.added_at_user);
     const archivedClass = p.archived ? 'v2-card--archived' : '';
+    const readClass = isRead(id) ? 'v2-card--read' : '';
 
     // ── 2-line dense layout ──
     // Line 1: icon + 區·地址 (ellipsis) | 總價 + 建單價 | 倍數 | ⭐
     // Line 2: 建/地/齡/層/區/路 + chips + sources
     return `
-      <article class="v2-card ${archivedClass}" data-id="${esc(id)}">
+      <article class="v2-card ${archivedClass} ${readClass}" data-id="${esc(id)}">
         <div class="v2-card__line1">
           <span class="v2-card__type">${typeIcon(p.building_type)}</span>
           <span class="v2-card__addr">
@@ -643,6 +672,10 @@
   // ── Detail drawer ────────────────────────────────────────────────────────
   async function openDetail(id) {
     state.selectedId = id;
+    markRead(id);    // 點開即標已讀（共用 localStorage 跟 v1）
+    // 即時把 card 標 read class（不重整全部）
+    const card = document.querySelector(`.v2-card[data-id="${CSS.escape(id)}"]`);
+    if (card) card.classList.add('v2-card--read');
     const slim = state.allProperties.find(x => (x.source_id || x.id) === id);
     if (!slim) return;
 
@@ -845,7 +878,117 @@
     state.view = view;
     $$('.v2-tab').forEach(t => t.classList.toggle('v2-tab--active', t.dataset.view === view));
     state.page = 1;
+    // 觀察清單 tab 才顯示 URL/manual capture 區
+    const cap = $('#v2-capture');
+    if (cap) cap.style.display = view === 'watchlist' ? '' : 'none';
+    if (view === 'watchlist') populateManualDistricts();
     loadProperties();
+  }
+
+  // ── URL / Manual analyze (v2 watchlist 專用) ────────────────────────────
+  // 跟 v1 行為對齊：URL 支援 591/永慶/信義；manual 支援台北/新北
+  const _MANUAL_DISTRICTS = {
+    "台北市": ["大安區","信義區","中山區","中正區","文山區","松山區","萬華區","大同區","內湖區","南港區"],
+    "新北市": ["新店區","永和區","中和區","板橋區","新莊區"],
+  };
+  function populateManualDistricts() {
+    const city = $('#v2-manual-city')?.value;
+    const sel = $('#v2-manual-district');
+    if (!sel || !city) return;
+    sel.innerHTML = (_MANUAL_DISTRICTS[city] || []).map(d =>
+      `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  }
+
+  async function triggerScrapeUrl() {
+    const inp = $('#v2-scrape-url');
+    const url = (inp?.value || '').trim();
+    if (!url) { toast('請輸入網址', 'error'); return; }
+    const okPatterns = [
+      /sale\.591\.com\.tw\/.*\d{6,}/,
+      /buy\.yungching\.com\.tw\/house\/\d{6,8}/,
+      /sinyi\.com\.tw\/buy\/house\/[A-Z0-9]{4,8}/i,
+    ];
+    if (!okPatterns.some(re => re.test(url))) {
+      toast('看起來不是 591/永慶/信義 詳情頁網址', 'error');
+      return;
+    }
+    inp.disabled = true;
+    toast('URL 分析送出中…');
+    try {
+      const r = await fetch('/api/scrape_url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const data = await r.json();
+      if (data.status === 'ok') {
+        toast('處理完成', 'success');
+        inp.value = '';
+        loadProperties();
+      } else if (data.status === 'busy') {
+        toast('佇列繁忙：' + (data.message || ''), 'error');
+      } else if (data.status === 'skipped_non_apartment') {
+        toast('跳過：' + (data.message || '非公寓 (>5F)'), 'error');
+        inp.value = '';
+      } else if (data.status === 'error') {
+        toast('分析失敗：' + (data.message || data.detail || 'unknown'), 'error');
+      } else {
+        toast('未預期回應 (' + data.status + ')', 'error');
+      }
+    } catch (e) {
+      toast('失敗：' + e.message, 'error');
+    } finally {
+      inp.disabled = false;
+    }
+  }
+
+  async function triggerManualAnalyze() {
+    const city = $('#v2-manual-city')?.value || '';
+    const district = $('#v2-manual-district')?.value || '';
+    const address = ($('#v2-manual-address')?.value || '').trim();
+    const bld = parseFloat($('#v2-manual-bld')?.value);
+    const land = parseFloat($('#v2-manual-land')?.value);
+    const price = parseFloat($('#v2-manual-price')?.value);
+    if (!address) { toast('請輸入地址', 'error'); return; }
+    const nonTarget = /^(桃園|基隆|新竹|苗栗|台中|臺中|彰化|南投|雲林|嘉義|台南|臺南|高雄|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江)/;
+    if (!['台北市', '新北市'].includes(city) || nonTarget.test(address)) {
+      toast('目前僅支援台北/新北地址', 'error');
+      return;
+    }
+    toast('地址分析送出中…');
+    try {
+      const r = await fetch('/api/manual_analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          city, district, address,
+          building_area_ping: isNaN(bld) ? null : bld,
+          land_area_ping: isNaN(land) ? null : land,
+          price_wan: isNaN(price) ? null : price,
+          use_source: 'auto',
+        }),
+      });
+      const data = await r.json();
+      if (data.status === 'started') {
+        loadProperties();
+        toast('分析開始（後台處理中，數秒後重新整理）', 'success');
+        // 簡化版：不輪詢，10 秒後重抓清單
+        setTimeout(() => loadProperties(), 10000);
+      } else if (data.status === 'already_in_db') {
+        toast('該地址已在 DB（已加入觀察清單）', 'success');
+        loadProperties();
+      } else if (data.status === 'district_mismatch') {
+        toast('地址與所選區不符：' + (data.message || ''), 'error');
+      } else if (data.status === 'not_found') {
+        toast('找不到該地址：' + (data.message || ''), 'error');
+      } else if (data.status === 'lvr_mismatch') {
+        toast('LVR 對不到候選：' + (data.message || ''), 'error');
+      } else {
+        toast('回應 (' + data.status + ')：' + (data.message || ''), 'error');
+      }
+    } catch (e) {
+      toast('失敗：' + e.message, 'error');
+    }
   }
   function toggleDistrict(city, district, checked) {
     const key = `${city}|${district}`;
@@ -944,6 +1087,7 @@
     openDetail, closeDetail, toggleWatchlist, logout,
     toggleAllFloors, onFloorChange,
     toggleAllInCity, toggleSortDir,
+    triggerScrapeUrl, triggerManualAnalyze, populateManualDistricts,
   };
 
   // Boot

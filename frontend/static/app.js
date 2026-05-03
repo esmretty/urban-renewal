@@ -922,8 +922,15 @@ function cardHTML(p) {
   const typeLabel = p.building_type || "";
   const titleText = p.address || p.title || "地址未知";
 
+  // 已讀檢查 (localStorage 共用 v1/v2)
+  let _isRead = false;
+  try {
+    const m = JSON.parse(localStorage.getItem('urban_read_props') || '{}');
+    _isRead = !!m[p.id];
+  } catch {}
+
   return `
-  <div class="property-card ${selectedId === p.id ? "selected" : ""}"
+  <div class="property-card ${selectedId === p.id ? "selected" : ""} ${_isRead ? "is-read" : ""}"
        id="card-${p.id}"
        onclick="selectProperty('${p.id}')">
     ${imgStr}
@@ -1004,8 +1011,21 @@ async function selectProperty(id) {
   const card = document.getElementById(`card-${id}`);
   if (card) {
     card.classList.add("selected");
+    card.classList.add("is-read");   // 已讀標記（共用 localStorage 跟 v2）
     card.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
+  // 寫入已讀 localStorage
+  try {
+    const m = JSON.parse(localStorage.getItem('urban_read_props') || '{}');
+    m[id] = new Date().toISOString();
+    // 上限 5000
+    const keys = Object.keys(m);
+    if (keys.length > 5000) {
+      const sorted = keys.sort((a, b) => (m[a] || '').localeCompare(m[b] || ''));
+      sorted.slice(0, 1000).forEach(k => delete m[k]);
+    }
+    localStorage.setItem('urban_read_props', JSON.stringify(m));
+  } catch (e) { /* localStorage failed → silent */ }
   selectedId = id;
 
   // 地圖定位
