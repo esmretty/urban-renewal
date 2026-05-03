@@ -212,6 +212,12 @@
   <!-- Main content area -->
   <main class="v2-main">
 
+    <!-- Mobile-only city tab switcher (≤1024px 才顯示) -->
+    <div class="v2-grid-toggle" id="v2-grid-toggle">
+      <button class="v2-grid-toggle__pill v2-grid-toggle__pill--active" data-city="台北市" onclick="v2.switchGridCity('台北市')">台北市</button>
+      <button class="v2-grid-toggle__pill" data-city="新北市" onclick="v2.switchGridCity('新北市')">新北市</button>
+    </div>
+
     <!-- Toolbar above grid -->
     <div class="v2-toolbar">
       <div class="v2-toolbar__left">
@@ -253,8 +259,11 @@
   <!-- Right drawer: detail panel -->
   <aside class="v2-drawer" id="v2-drawer">
     <div class="v2-drawer__header">
-      <button class="v2-icon-btn" onclick="v2.closeDetail()" aria-label="關閉">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      <button class="v2-drawer__back" onclick="v2.closeDetail()" aria-label="返回">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        <span class="v2-drawer__back-label">返回</span>
       </button>
       <span class="v2-drawer__title" id="v2-drawer-title">物件詳情</span>
     </div>

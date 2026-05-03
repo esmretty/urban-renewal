@@ -24,6 +24,7 @@
     targetRegions: {},
     districtPicks: new Set(),
     sortDir: 'desc',
+    gridCity: '台北市',   // mobile 兩城切換用 (≤1024px)
   };
 
   // 跟 v1 hardcode 的 enabled/disabled district 對齊（v1 index.html 寫死的）
@@ -363,7 +364,10 @@
     return lookupFar(p.zoning, p);
   }
 
-  // 取後端已存的「投入欄位」即時算倍數 — DB 不存 multiple (CLAUDE.md 規則 8)
+  // 即時算倍數 — 跟 v1 computeRowMultiples 對齊：
+  //   - bonusW (危老) 0.30 / bonusD (都更或防災都更) 台北 1974 前 0.80，否則 0.50
+  //   - 回傳 max(危老, 都更) — v2 卡片只顯示一個倍數，取較高那個
+  // DB 不存 multiple (CLAUDE.md 規則 8)
   function rowMultiple(p, prices) {
     if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal || isLandSuspicious(p)) {
       return null;
@@ -378,13 +382,21 @@
     const is1F = Number(p.floor) === 1 || Number(p.floor_range_min) === 1;
     const floorPremium = p.floor_premium ?? (is1F ? 0.20 : 0);
     const effectivePrice = price * (1 + floorPremium);
-    const bonus = p.bonus_dugen ?? 0.50;
-    const share = land * (farPct/100) * (1+bonus) * coeff * ratio;
-    const total = share * effectivePrice + (share / 40) * parking;
+    // 防災型：台北市 1974 前蓋的，都更獎勵 0.80 (vs 一般 0.50)
+    const age = currentAge(p);
+    const isFangzai = p.city === '台北市' && age && (new Date().getFullYear() - age) <= 1974;
+    const bonusW = p.bonus_weishau ?? 0.30;            // 危老
+    const bonusD = p.bonus_dugen ?? (isFangzai ? 0.80 : 0.50);  // 都更/防災型
+    const calcVal = (b) => {
+      const share = land * (farPct/100) * (1+b) * coeff * ratio;
+      return share * effectivePrice + (share / 40) * (parking || 0);
+    };
     const listWan = (p.price_ntd || 0) / 10000;
     const desired = p.desired_price_wan ?? (listWan ? Math.round(listWan * 0.9 / 10) * 10 : 0);
     if (!desired) return null;
-    return total / desired;
+    const w = calcVal(bonusW) / desired;
+    const d = calcVal(bonusD) / desired;
+    return Math.max(w, d);   // v2 顯示 max
   }
 
   // ── Source badges ────────────────────────────────────────────────────────
@@ -450,6 +462,8 @@
       html += colHTML('其他', other, otherAll.length);
     }
     grid.innerHTML = html;
+    // mobile：依 state.gridCity 控制顯示哪一城（CSS 用 [data-active-city] 過濾）
+    grid.setAttribute('data-active-city', state.gridCity || '台北市');
     // 分頁基準取兩城市較多那邊（任一城市還有資料就能翻頁）
     renderPagination(Math.max(tpeAll.length, ntpAll.length, otherAll.length));
 
@@ -814,6 +828,16 @@
     const btn = $('#v2-sort-dir');
     if (btn) btn.textContent = state.sortDir === 'desc' ? '↓' : '↑';
     applyFilters();
+  }
+
+  // Mobile-only city tab 切換 (城市 cards 並排在窄螢幕擠不下時切換顯示)
+  function switchGridCity(city) {
+    state.gridCity = city;
+    const grid = $('#v2-grid');
+    if (grid) grid.setAttribute('data-active-city', city);
+    $$('.v2-grid-toggle__pill').forEach(p => {
+      p.classList.toggle('v2-grid-toggle__pill--active', p.dataset.city === city);
+    });
   }
 
   // ── Detail drawer ────────────────────────────────────────────────────────
@@ -1256,6 +1280,7 @@
     toggleAllFloors, onFloorChange,
     toggleAllInCity, toggleSortDir,
     triggerScrapeUrl, triggerManualAnalyze, populateManualDistricts,
+    switchGridCity,
   };
 
   // Boot

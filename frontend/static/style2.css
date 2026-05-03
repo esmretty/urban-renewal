@@ -486,20 +486,16 @@ a { color: inherit; text-decoration: none; }
 /* (舊的 .v2-city-grid 1fr 1fr 規則已刪除 — 跟前面 3fr 2fr 衝突 cascade)
    下面只留 city-col__chips 的內容樣式 */
 
-/* Narrow sidebar (sidebar width < ~260px or mobile drawer): 切到單欄 + city pills */
+/* sidebar 行政區：mobile 改成上下排，但兩城都要顯示 (修先前 bug 把 col 全 hide) */
 @media (max-width: 1024px) {
-  .v2-city-toggle { display: flex; }
-  .v2-city-grid { grid-template-columns: 1fr; }
-  .v2-city-grid .v2-city-col { display: none; }
-  .v2-city-grid .v2-city-col[data-city] { /* shown via JS data-active-city */ }
-  .v2-city-grid[data-active-city="台北市"] .v2-city-col[data-city="台北市"],
-  .v2-city-grid[data-active-city="新北市"] .v2-city-col[data-city="新北市"] {
-    display: block;
+  .v2-city-grid { grid-template-columns: 1fr; gap: 8px; }
+  .v2-city-grid .v2-city-col:first-child {
+    border-right: none;
+    border-bottom: 1px solid var(--c-border);
+    padding: 0 0 6px 0;
   }
-  .v2-city-col__title { display: none; }   /* pills 已標示城市，省空間 */
-  .v2-city-col__chips .v2-chip {
-    font-size: 13px;
-    padding: 5px 10px;
+  .v2-city-grid .v2-city-col:last-child {
+    padding: 0;
   }
 }
 .v2-chip {
@@ -1066,6 +1062,30 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: var(--sp-3);
 }
+/* 返回按鈕 (drawer 內，特別是 mobile 必須清楚可見) */
+.v2-drawer__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  background: var(--c-hover);
+  color: var(--c-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--t-fast);
+  flex-shrink: 0;
+}
+.v2-drawer__back:hover { background: var(--c-border); }
+.v2-drawer__back-label { font-size: 13px; }
+@media (max-width: 640px) {
+  .v2-drawer__back {
+    padding: 8px 14px;
+    font-size: 14px;
+  }
+  .v2-drawer__back-label { font-size: 14px; }
+}
 .v2-drawer__title {
   font-size: 14px;
   font-weight: 600;
@@ -1191,7 +1211,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* iPad / tablet (≤1024px): sidebar becomes drawer overlay; main full width
-   grid 折回單欄 (城市切換靠下方 sort dropdown 旁的 city pill) */
+   cards 兩城用 tab 切換 (省 scroll) */
 @media (max-width: 1024px) {
   .v2-shell {
     grid-template-columns: 1fr;
@@ -1208,21 +1228,49 @@ a { color: inherit; text-decoration: none; }
   }
   .v2-sidebar.v2-open { transform: translateX(0); }
   .v2-only-mobile { display: inline-flex !important; }
+  /* mobile city tab switcher 顯示 */
+  .v2-grid-toggle { display: flex !important; }
+  /* grid 變單欄；依 data-active-city 顯示對應 city col */
   .v2-grid {
     grid-template-columns: 1fr;
     gap: 8px;
   }
-  /* Narrow 螢幕：grid 變單欄；台北/新北 col title 加大當作 section header */
-  .v2-grid-col__title {
-    position: sticky;
-    top: -16px;
-    background: var(--c-bg);
-    z-index: 1;
-    padding-top: 8px;
-    margin-top: -8px;
-    font-size: 14px;
-    color: var(--c-accent);
+  .v2-grid .v2-grid-col { display: none; }
+  .v2-grid[data-active-city="台北市"] .v2-grid-col[data-city="台北市"],
+  .v2-grid[data-active-city="新北市"] .v2-grid-col[data-city="新北市"],
+  .v2-grid .v2-grid-col[data-city="其他"] {
+    display: flex;
   }
+  /* col title 隱藏 (因為 tab 已標示城市) */
+  .v2-grid-col__title { display: none; }
+}
+
+/* Mobile city tab switcher — desktop hide */
+.v2-grid-toggle {
+  display: none;
+  gap: 6px;
+  margin-bottom: 12px;
+  background: var(--c-card);
+  padding: 4px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--c-border);
+}
+.v2-grid-toggle__pill {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--r-sm);
+  border: none;
+  background: transparent;
+  color: var(--c-text-muted);
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+.v2-grid-toggle__pill:hover { color: var(--c-text); }
+.v2-grid-toggle__pill--active {
+  background: var(--c-accent);
+  color: white;
 }
 
 /* Mobile (≤640px): single column dense rows + bottom-sheet drawer */
