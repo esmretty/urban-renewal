@@ -76,14 +76,24 @@
 
   // ── Multiple computation (lightweight; matches scorer but only what we need) ──
   // Pull district→price mapping from API; cached on first load.
+  // API 回傳 { by_district: {大安區: 150, ...}, updated_at: '...' } — 必須拿 by_district 不能直接 [district]
+  // Fallback：API 失敗/格式異常時用寫死常數 (跟 v1 / config.py DISTRICT_NEW_HOUSE_PRICE_WAN 對齊)
+  const DISTRICT_PRICE_FALLBACK = {
+    "中正區":110,"大同區":95,"中山區":110,"松山區":130,"大安區":150,
+    "萬華區":80,"信義區":145,"內湖區":110,"南港區":110,"文山區":90,
+    "板橋區":75,"新莊區":65,"新店區":75,"中和區":70,"永和區":75,
+  };
   let DISTRICT_PRICE_CACHE = null;
   async function getDistrictPrices() {
     if (DISTRICT_PRICE_CACHE) return DISTRICT_PRICE_CACHE;
     try {
       const r = await fetch('/api/district_new_house_price');
-      DISTRICT_PRICE_CACHE = await r.json();
+      const data = await r.json();
+      const by = (data && data.by_district) || {};
+      // 合併 fallback：API 沒回的區用寫死常數兜底
+      DISTRICT_PRICE_CACHE = { ...DISTRICT_PRICE_FALLBACK, ...by };
     } catch {
-      DISTRICT_PRICE_CACHE = {};
+      DISTRICT_PRICE_CACHE = { ...DISTRICT_PRICE_FALLBACK };
     }
     return DISTRICT_PRICE_CACHE;
   }
@@ -235,33 +245,39 @@
     empty.style.display = 'none';
 
     const prices = await getDistrictPrices();
+
+    // 先按城市切，每個城市獨立分頁（每頁各取 pageSize 筆，兩邊不互相吃配額）
+    const tpeAll = list.filter(p => p.city === '台北市');
+    const ntpAll = list.filter(p => p.city === '新北市');
+    const otherAll = list.filter(p => p.city !== '台北市' && p.city !== '新北市');
+
     const start = (state.page - 1) * state.pageSize;
-    const slice = list.slice(start, start + state.pageSize);
+    const end = start + state.pageSize;
+    const tpe = tpeAll.slice(start, end);
+    const ntp = ntpAll.slice(start, end);
+    const other = otherAll.slice(start, end);
 
-    // 分城市
-    const tpe = slice.filter(p => p.city === '台北市');
-    const ntp = slice.filter(p => p.city === '新北市');
-    const other = slice.filter(p => p.city !== '台北市' && p.city !== '新北市');
-
-    const colHTML = (city, items) => {
+    const colHTML = (city, items, totalCount) => {
       if (!items.length) {
+        if (!totalCount) return ''; // 完全沒這城市的資料 → 不畫欄
         return `<div class="v2-grid-col" data-city="${esc(city)}">
-          <div class="v2-grid-col__title">${esc(city)} <span class="v2-grid-col__count">0</span></div>
-          <div class="v2-grid-col__empty">本頁無 ${esc(city)} 物件</div>
+          <div class="v2-grid-col__title">${esc(city)} <span class="v2-grid-col__count">本頁無</span></div>
         </div>`;
       }
+      const pageInfo = totalCount > items.length ? `${start + 1}-${start + items.length} / ${totalCount}` : `${totalCount} 筆`;
       return `<div class="v2-grid-col" data-city="${esc(city)}">
-        <div class="v2-grid-col__title">${esc(city)} <span class="v2-grid-col__count">${items.length}</span></div>
+        <div class="v2-grid-col__title">${esc(city)} <span class="v2-grid-col__count">${pageInfo}</span></div>
         <div class="v2-grid-col__cards">${items.map(p => cardHTML(p, prices)).join('')}</div>
       </div>`;
     };
 
-    let html = colHTML('台北市', tpe) + colHTML('新北市', ntp);
-    if (other.length) {
-      html += colHTML('其他', other);
+    let html = colHTML('台北市', tpe, tpeAll.length) + colHTML('新北市', ntp, ntpAll.length);
+    if (otherAll.length) {
+      html += colHTML('其他', other, otherAll.length);
     }
     grid.innerHTML = html;
-    renderPagination(total);
+    // 分頁基準取兩城市較多那邊（任一城市還有資料就能翻頁）
+    renderPagination(Math.max(tpeAll.length, ntpAll.length, otherAll.length));
 
     // bind clicks
     $$('.v2-card').forEach(el => {
