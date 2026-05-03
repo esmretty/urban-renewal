@@ -268,7 +268,8 @@ window.runExploreSearch = async function () {
   }
   renderSkeleton(4);
   try {
-    const r = await fetch("/api/central_search?" + _buildExploreParams().toString());
+    // slim=true：列表只回 row 用的欄位 (~40% smaller)；詳情 modal 已有 lazy fetch /api/properties/{id} 拿完整 doc
+    const r = await fetch("/api/central_search?slim=true&" + _buildExploreParams().toString());
     const data = await r.json();
     _exploreResults = data.items || [];
     _exploreSearched = true;
@@ -401,7 +402,8 @@ async function loadProperties() {
   renderSkeleton(8);
   try {
     const params = buildFilterParams();
-    const res = await fetch(`/api/properties?${params}&limit=500`);
+    // slim=true：列表只回 row 用的欄位；詳情 modal 已 lazy fetch 完整 doc
+    const res = await fetch(`/api/properties?${params}&limit=500&slim=true`);
     const data = await res.json();
     allProperties = data.items || [];
     // 更新觀察清單 tab 的計數
