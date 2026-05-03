@@ -307,12 +307,18 @@ function _logPerfBreakdown(ts, nItems, bytes) {
   const ttfb = T('skeleton_done', 'fetch_headers');
 
   // 解析 Server-Timing header 拆 server 內部 phase
-  // 格式：watchlist;dur=50, firestore_query;dur=220, py_filter;dur=80, sort_strip;dur=30
+  // 格式：name;dur=50, name;dur=0;desc="cache_HIT" 等
   const serverPhases = [];
+  let cacheStatus = '';
   if (ts._serverTiming) {
     ts._serverTiming.split(',').forEach(part => {
-      const m = part.trim().match(/^([a-z_]+);dur=(\d+(?:\.\d+)?)/i);
-      if (m) serverPhases.push([m[1], Math.round(+m[2])]);
+      const m = part.trim().match(/^([a-z_]+);dur=(\d+(?:\.\d+)?)(?:;desc="([^"]*)")?/i);
+      if (m) {
+        const name = m[1], ms = Math.round(+m[2]), desc = m[3] || '';
+        if (name === 'cache') cacheStatus = desc;
+        else if (name === 'docs') {/* skip — purely informational */}
+        else serverPhases.push([name, ms]);
+      }
     });
   }
   const serverTotal = serverPhases.reduce((sum, [_, ms]) => sum + ms, 0);
@@ -320,7 +326,7 @@ function _logPerfBreakdown(ts, nItems, bytes) {
 
   const lines = [
     [`skeleton 渲染`,         T('start',          'skeleton_done'),  '畫骨架佔位'],
-    [`fetch+TTFB+headers`,    ttfb,                                  `server ${serverTotal}ms + 網路/auth ${networkOverhead}ms`],
+    [`fetch+TTFB+headers`,    ttfb,                                  `server ${serverTotal}ms + 網路/auth ${networkOverhead}ms${cacheStatus ? ` [${cacheStatus}]` : ''}`],
   ];
   // 把 server 端各 phase 縮排顯示
   serverPhases.forEach(([name, ms]) => {
@@ -355,10 +361,11 @@ function _logPerfBreakdown(ts, nItems, bytes) {
 // 每個 server phase 的中文說明
 const _SERVER_PHASE_DESC = {
   watchlist: '讀用戶 watchlist (Firestore)',
-  firestore_query: 'col.where(...).get() Firestore 查詢',
-  py_filter: 'Python 端 filter loop + to_dict',
+  firestore_query: 'col.where(...).get() / cache lookup',
+  py_filter: 'Python 端 filter loop',
   sort_strip: 'sort + slim strip',
   docs: 'Firestore 回了幾筆',
+  cache: '30 秒 in-memory cache 狀態',
 };
 
 window.toggleWatchlist = async function (id, btn) {

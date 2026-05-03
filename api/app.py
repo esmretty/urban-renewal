@@ -2671,6 +2671,54 @@ def _query_districts_parallel(col, dist_list, max_price_wan, min_price_wan):
     return docs
 
 
+# Server-side in-memory cache for Firestore query results (NOT response — watchlist join is per-user)
+# Key: 規範化 query params 的 hash；Value: (timestamp, list of (doc_id, doc_data) tuples)
+# TTL: 30 秒 — 用戶 refine 條件多按幾次直接命中；資料新鮮度可接受
+_FIRESTORE_QUERY_CACHE: dict = {}
+_FIRESTORE_QUERY_CACHE_TTL = 30   # seconds
+_FIRESTORE_QUERY_CACHE_MAX = 64    # 最多存 64 個 query；爆量 LRU evict
+
+
+def _cache_key_for_query(dist_list, max_price_wan, min_price_wan):
+    """規範化成 cache key — 只跟 Firestore query 相關的參數，跟 user/uid 無關。"""
+    if dist_list:
+        ds = ",".join(sorted(dist_list))
+    else:
+        ds = "*"
+    return f"{ds}|{max_price_wan or 0}|{min_price_wan or 0}"
+
+
+def _query_districts_cached(col, dist_list, max_price_wan, min_price_wan):
+    """30 秒 TTL cache 包裝。回傳 (docs_data_list, cache_hit_flag)。
+    docs_data_list 是 [(doc_id, doc_dict), ...] tuple list — 已經 to_dict()。
+    cache hit 時跳過 to_dict() loop，直接拿 dict。
+    """
+    import time as _t
+    key = _cache_key_for_query(dist_list, max_price_wan, min_price_wan)
+    now = _t.time()
+
+    # cache hit
+    cached = _FIRESTORE_QUERY_CACHE.get(key)
+    if cached and (now - cached[0]) < _FIRESTORE_QUERY_CACHE_TTL:
+        return cached[1], True
+
+    # cache miss — do real query
+    if dist_list and 0 < len(dist_list) <= 30:
+        docs = _query_districts_parallel(col, dist_list, max_price_wan, min_price_wan)
+    else:
+        docs = list(col.get())
+    # to_dict 一次轉好存進 cache，後面 caller 不用再 to_dict
+    docs_data = [(d.id, d.to_dict() or {}) for d in docs]
+
+    # LRU-ish evict 防 memory 爆
+    if len(_FIRESTORE_QUERY_CACHE) >= _FIRESTORE_QUERY_CACHE_MAX:
+        oldest_key = min(_FIRESTORE_QUERY_CACHE, key=lambda k: _FIRESTORE_QUERY_CACHE[k][0])
+        _FIRESTORE_QUERY_CACHE.pop(oldest_key, None)
+
+    _FIRESTORE_QUERY_CACHE[key] = (now, docs_data)
+    return docs_data, False
+
+
 @app.get("/api/central_search")
 def central_search(
     response: Response,
@@ -2735,20 +2783,23 @@ def central_search(
     # dist_set 為 None（用戶沒挑）時 fallback 全收。
     # 注意：變數名 fs_q（不要叫 q —— 跟函式參數 q: Optional[str] 衝突會被 shadow，
     #       導致下面 `if q: kw = q.strip()` 拿到 Firestore Query 物件而 AttributeError）
-    if dist_set is not None and 0 < len(dist_set) <= 30:
-        try:
-            # 用並行 == query 取代 in [N values] (Firestore in 會 fan-out serialize)
-            docs = _query_districts_parallel(col, list(dist_set), max_price_wan, min_price_wan)
-        except Exception as _e:
-            logger.warning(f"[central_search] parallel district query 失敗，fallback 全收：{_e}")
-            docs = list(col.get())
-    else:
-        docs = list(col.get())
+    cache_hit = False
+    try:
+        # 30 秒 in-memory cache — 第 2 次起的 refinement 直接命中 ~5ms
+        # cache 存的是 to_dict() 後的 (doc_id, dict) tuple list，cache hit 時連 to_dict 都省
+        dist_list_for_cache = list(dist_set) if (dist_set and len(dist_set) <= 30) else None
+        docs_data, cache_hit = _query_districts_cached(col, dist_list_for_cache, max_price_wan, min_price_wan)
+    except Exception as _e:
+        logger.warning(f"[central_search] cached/parallel query 失敗，fallback 全收：{_e}")
+        docs_data = [(d.id, d.to_dict() or {}) for d in col.get()]
     _tick("firestore_query")
-    _phase_t["docs_n"] = len(docs)
+    _phase_t["docs_n"] = len(docs_data)
+    _phase_t["cache_hit"] = 1 if cache_hit else 0
     items = []
-    for d in docs:
-        data = d.to_dict() or {}
+    for doc_id, data in docs_data:
+        # cache hit 時 docs_data 是共用的（多用戶共享） — 後面要 mutate (加 _in_watchlist / id)
+        # → 必須 shallow copy 避免污染 cache 給下一個 request 的副作用
+        data = dict(data)
         # 「狀態」相關的隱藏（archived / analysis_error / analysis_in_progress / skipped）
         # 全部交給 client 過濾，admin 跟 client 看到的 API response 一致。
         # server 只保留隱私邊界：用戶貼 URL 送出的物件不該洩漏給其他用戶
@@ -2819,11 +2870,11 @@ def central_search(
             blob = " ".join(str(data.get(k) or "") for k in ("address", "title", "district")).lower()
             if kw not in blob:
                 continue
-        data["id"] = d.id
-        data["_in_watchlist"] = d.id in my_watchlist_ids
+        data["id"] = doc_id
+        data["_in_watchlist"] = doc_id in my_watchlist_ids
         if data["_in_watchlist"]:
-            data = merge_watchlist_with_central(data, my_watchlist.get(d.id, {}))
-            data["id"] = d.id
+            data = merge_watchlist_with_central(data, my_watchlist.get(doc_id, {}))
+            data["id"] = doc_id
             data["_in_watchlist"] = True
         items.append(data)
     _tick("py_filter")
@@ -2839,8 +2890,12 @@ def central_search(
     # 格式：name;dur=ms, name;dur=ms (W3C standard)
     # 順序：watchlist → firestore_query → py_filter → sort_strip
     _docs_n = _phase_t.pop("docs_n", 0)
+    _was_cached = _phase_t.pop("cache_hit", 0)
     _st_parts = [f"{name};dur={ms:.0f}" for name, ms in _phase_t.items()]
-    _st_parts.append(f"docs;desc=\"firestore returned {_docs_n} docs\";dur=0")
+    _cache_desc = "cache_HIT" if _was_cached else "cache_MISS"
+    # 注意：dur 一律放第一個 param —— frontend regex 認 `name;dur=N` 在開頭
+    _st_parts.append(f"cache;dur=0;desc=\"{_cache_desc}\"")
+    _st_parts.append(f"docs;dur=0;desc=\"n={_docs_n}\"")
     response.headers["Server-Timing"] = ", ".join(_st_parts)
     response.headers["Access-Control-Expose-Headers"] = "Server-Timing"
 
