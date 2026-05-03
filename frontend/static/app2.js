@@ -899,70 +899,161 @@
   }
 
   function detailHTML(p, prices) {
-    const mult = rowMultiple(p, prices);
+    const id = p.source_id || p.id || '';
     const priceWan = p.price_ntd ? Math.round(p.price_ntd / 10000) : null;
-    const desired = priceWan ? Math.round(priceWan * 0.9 / 10) * 10 : null;
+    const desired = p.desired_price_wan ?? (priceWan ? Math.round(priceWan * 0.9 / 10) * 10 : null);
     const newPrice = p.new_house_price_wan_override ?? prices[p.district];
-    const farPct = p.effective_far_pct ?? p.base_far_pct;
+    const farPct = effectiveFar(p);
+    const perBld = (p.price_ntd && p.building_area_ping)
+      ? (p.price_ntd / 10000 / p.building_area_ping).toFixed(1) : null;
+    const perLand = (p.price_ntd && p.land_area_ping)
+      ? (p.price_ntd / 10000 / p.land_area_ping).toFixed(1) : null;
+    const age = currentAge(p);
 
+    // ── 試算各情境 ──
+    const land = Number(p.land_area_ping) || 0;
+    const isLandSus = isLandSuspicious(p);
+    const skip = !!(p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal || isLandSus);
+    const coeff = p.rebuild_coeff ?? 1.57;
+    const [ratio, parking] = lookupShareRatio(newPrice);
+    const is1F = Number(p.floor) === 1 || Number(p.floor_range_min) === 1;
+    const floorPremium = p.floor_premium ?? (is1F ? 0.20 : 0);
+    const effectivePrice = (newPrice || 0) * (1 + floorPremium);
+    const isFangzai = p.city === '台北市' && age && (new Date().getFullYear() - age) <= 1974;
+    const bonusW = p.bonus_weishau ?? 0.30;
+    const bonusD = p.bonus_dugen ?? (isFangzai ? 0.80 : 0.50);
+    const calcScene = (b) => {
+      if (skip || !land || !farPct || !ratio) return null;
+      const share = land * (farPct/100) * (1+b) * coeff * (ratio || 0);
+      const total = share * effectivePrice + (share / 40) * (parking || 0);
+      return { share, total, mult: desired ? total / desired : null };
+    };
+    const sW = calcScene(bonusW);
+    const sD = calcScene(bonusD);
+    const scnHTML = (label, s, b) => {
+      if (!s) {
+        return `<div class="v2-scn"><div class="v2-scn__name">${label}</div>
+          <div class="v2-scn__mult v2-scn__mult--na">—</div>
+          <div class="v2-scn__detail">${skip ? (p.is_foreclosure?'法拍跳過':p.is_remote_area?'偏遠跳過':p.unsuitable_for_renewal?'特殊土地':isLandSus?'地坪可疑':'資料不足') : '資料不足'}</div></div>`;
+      }
+      const cls = s.mult >= 3.0 ? 'v2-scn__mult--good' : s.mult >= 2.0 ? 'v2-scn__mult--mid' : '';
+      return `<div class="v2-scn"><div class="v2-scn__name">${label} <small>+${(b*100)|0}%</small></div>
+        <div class="v2-scn__mult ${cls}">${s.mult ? s.mult.toFixed(2) : '—'}<small>×</small></div>
+        <div class="v2-scn__detail">分回 ${s.share.toFixed(1)} 坪 ／ 估值 ${fmt0(s.total)} 萬</div></div>`;
+    };
+
+    // ── 圖片 ──
     const img = p.image_url
-      ? `<img class="v2-detail-image" src="${esc(p.image_url)}" alt="">`
+      ? `<div class="v2-detail-image-wrap"><img class="v2-detail-image" src="${esc(p.image_url)}" alt=""></div>`
       : '';
 
-    // Scenarios — use stored if available, otherwise estimate
-    const scenarios = ['危老', '都更', '防災都更'].map(name => {
-      let m = null;
-      if (p.renewal_v2 && p.renewal_v2.scenarios && p.renewal_v2.scenarios[name]) {
-        m = p.renewal_v2.scenarios[name].multiple;
-      } else if (name === '都更') {
-        m = mult;
-      }
-      let cls = '';
-      if (m != null) {
-        if (m >= 3.0) cls = 'v2-scenario__multi--good';
-        else if (m >= 2.0) cls = 'v2-scenario__multi--mid';
-      }
-      return `<div class="v2-scenario">
-        <div class="v2-scenario__name">${name}</div>
-        <div class="v2-scenario__multi ${cls}">${m != null ? m.toFixed(2) : '—'}</div>
-      </div>`;
-    }).join('');
+    // ── 推測地址候選清單 ──
+    const cands = Array.isArray(p.address_inferred_candidates_detail) ? p.address_inferred_candidates_detail : [];
+    const inferredTag = p.address_inferred ? (
+      p.address_inferred_confidence === 'unique' ? '<span class="v2-inferred-tag">★實登</span>' :
+      p.address_inferred_confidence === 'multi' ? '<span class="v2-inferred-tag">推測</span>' :
+      '<span class="v2-inferred-tag">≈推測</span>'
+    ) : '';
+
+    // ── 附近捷運 ──
+    const mrtList = Array.isArray(p.nearby_mrts) && p.nearby_mrts.length
+      ? p.nearby_mrts.map(m => `${esc(m.name)}（${Math.round(m.dist_m)}m）`).join(' / ')
+      : '—';
+
+    // ── LVR 實價登錄 (前 5 筆) ──
+    const lvrRecs = Array.isArray(p.lvr_records) ? p.lvr_records.slice(0, 5) : [];
+    const lvrHTML = lvrRecs.length
+      ? `<table class="v2-lvr-tbl"><thead><tr><th>交易日</th><th>總價(萬)</th><th>建坪</th><th>單價</th><th>地址</th></tr></thead><tbody>${
+          lvrRecs.map(r => `<tr>
+            <td>${esc(r.txn_date || '—')}</td>
+            <td>${r.price_total ? fmt0(r.price_total) : '—'}</td>
+            <td>${r.area_ping ? fmt1(r.area_ping) : '—'}</td>
+            <td>${(r.price_total && r.area_ping) ? (r.price_total / r.area_ping).toFixed(1) : '—'}</td>
+            <td title="${esc(r.address || '')}">${esc((r.address || '').slice(0, 14))}</td>
+          </tr>`).join('')}</tbody></table>`
+      : '<div class="v2-detail-empty">無實價登錄記錄</div>';
+
+    // ── AI 分析 ──
+    const aiText = p.ai_reason || p.ai_analysis || '';
+
+    // ── 政府連結 ──
+    const govLinks = p.city === '台北市'
+      ? `<a class="v2-govlink" href="https://bim.udd.gov.taipei/UDDPlanMap/" target="_blank" rel="noopener">都市計畫圖 ↗</a>
+         <a class="v2-govlink" href="https://zonemap.udd.gov.taipei/ZoneMapOP/" target="_blank" rel="noopener">地籍套繪圖 ↗</a>`
+      : p.city === '新北市'
+        ? `<a class="v2-govlink" href="https://urban.planning.ntpc.gov.tw/NtpcURInfo/" target="_blank" rel="noopener">城鄉資訊 ↗</a>`
+        : '';
 
     return `
-      ${img}
-      <div class="v2-detail-section">
-        <div class="v2-detail-section__title">基本資料</div>
-        <div class="v2-detail-row"><span class="v2-detail-row__k">類型</span><span class="v2-detail-row__v">${typeIcon(p.building_type)} ${esc(p.building_type || '—')}</span></div>
-        <div class="v2-detail-row"><span class="v2-detail-row__k">地址</span><span class="v2-detail-row__v">${esc(p.address || p.address_inferred || '—')}</span></div>
-        <div class="v2-detail-row"><span class="v2-detail-row__k">總價</span><span class="v2-detail-row__v">${priceWan ? fmt0(priceWan) + '萬' : '—'}</span></div>
-        <div class="v2-detail-row"><span class="v2-detail-row__k">欲出價</span><span class="v2-detail-row__v">${desired ? fmt0(desired) + '萬' : '—'}</span></div>
-        <div class="v2-detail-row"><span class="v2-detail-row__k">建坪 / 地坪</span><span class="v2-detail-row__v">${fmt1(p.building_area_ping)} / ${fmt1(p.land_area_ping)}</span></div>
-        <div class="v2-detail-row"><span class="v2-detail-row__k">屋齡</span><span class="v2-detail-row__v">${p.building_age != null ? p.building_age + '年' : '—'}</span></div>
-        <div class="v2-detail-row"><span class="v2-detail-row__k">樓層</span><span class="v2-detail-row__v">${formatFloor(p)}</span></div>
-        <div class="v2-detail-row"><span class="v2-detail-row__k">分區</span><span class="v2-detail-row__v">${esc(p.zoning || '—')}</span></div>
-        <div class="v2-detail-row"><span class="v2-detail-row__k">容積率</span><span class="v2-detail-row__v">${farPct ? farPct + '%' : '—'}</span></div>
-        <div class="v2-detail-row"><span class="v2-detail-row__k">臨路寬</span><span class="v2-detail-row__v">${p.road_width_m ? p.road_width_m + 'm' : '—'}</span></div>
-      </div>
+      <div class="v2-d-grid">
 
-      <div class="v2-detail-section">
-        <div class="v2-detail-section__title">都更試算</div>
-        <div class="v2-scenarios">${scenarios}</div>
-        <div style="margin-top: var(--sp-3); font-size: 12px; color: var(--c-text-muted);">
-          新成屋單價 ${newPrice ? newPrice + ' 萬/坪' : '—'}（${p.new_house_price_wan_override ? '個人覆寫' : '區域預設'}）
+        <!-- 基本資料 -->
+        <div class="v2-d-card v2-d-card--basic">
+          <div class="v2-d-card__title">基本資料</div>
+          <table class="v2-d-tbl">
+            <tr><td>原始地址</td><td>${esc(p.address || p.title || '—')}</td></tr>
+            <tr><td>推測地址 ${inferredTag}</td><td>${esc(p.address_inferred || '—')}${cands.length > 1 ? ` <span class="v2-d-hint">(${cands.length} 候選)</span>` : ''}</td></tr>
+            <tr><td>類型／樓層</td><td>${typeIcon(p.building_type)} ${esc(p.building_type || '—')} · ${formatFloor(p)}</td></tr>
+            <tr><td>屋齡</td><td>${age != null ? age + '年' : '—'}${p.building_age_completed_year ? ` <span class="v2-d-hint">(${p.building_age_completed_year} 完工)</span>` : ''}</td></tr>
+            <tr><td>售價</td><td><b style="color:var(--c-warn)">${priceWan ? fmt0(priceWan) + '萬' : '—'}</b></td></tr>
+            <tr><td>欲出價</td><td>${desired ? fmt0(desired) + '萬' : '—'} <span class="v2-d-hint">(開價 ×0.9)</span></td></tr>
+            <tr><td>建坪</td><td>${p.building_area_ping ? p.building_area_ping + '坪' : '—'}${perBld ? ` <span class="v2-d-hint">(${perBld}萬/坪)</span>` : ''}</td></tr>
+            <tr><td>地坪</td><td>${p.land_area_ping ? p.land_area_ping + '坪' : '—'}${perLand ? ` <span class="v2-d-hint">(${perLand}萬/坪)</span>` : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 坪數大於建坪可能不可信</div>' : ''}</td></tr>
+          </table>
         </div>
-      </div>
 
-      ${p.sources && p.sources.length ? `
-      <div class="v2-detail-section">
-        <div class="v2-detail-section__title">來源</div>
-        <div class="v2-card__sources" style="border:none;padding:0;">${srcBadgesHTML(p.sources)}</div>
-      </div>` : ''}
+        <!-- 環境資訊 -->
+        <div class="v2-d-card v2-d-card--env">
+          <div class="v2-d-card__title">環境資訊</div>
+          <table class="v2-d-tbl">
+            <tr><td>附近捷運</td><td>${mrtList}</td></tr>
+            <tr><td>使用分區</td><td>${esc(p.zoning || '—')}${p.zoning_original && p.zoning_original !== p.zoning ? ` <span class="v2-d-hint">(原: ${esc(p.zoning_original)})</span>` : ''}</td></tr>
+            <tr><td>容積率</td><td>${farPct ? farPct + '%' : '—'}</td></tr>
+            <tr><td>臨路寬</td><td>${p.road_width_m ? p.road_width_m + 'm' : '—'}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">(寬度不明)</span>' : ''}</td></tr>
+          </table>
+          ${govLinks ? `<div class="v2-d-govlinks">${govLinks}</div>` : ''}
+        </div>
 
-      <div class="v2-drawer-actions">
-        <button class="v2-btn v2-btn--ghost v2-btn--sm" onclick="window.open('/?focus=${esc(p.source_id || '')}', '_blank')">在舊版開啟</button>
-        <button class="v2-btn v2-btn--ghost v2-btn--sm" onclick="v2.toggleWatchlist('${esc(p.source_id || p.id || '')}')">
-          ${p.user_url || p.added_at_user ? '從觀察清單移除' : '加入觀察清單'}
-        </button>
+        <!-- 都更試算 -->
+        <div class="v2-d-card v2-d-card--scn">
+          <div class="v2-d-card__title">都更換回試算</div>
+          <div class="v2-scn-grid">
+            ${scnHTML('危老', sW, bonusW)}
+            ${scnHTML(isFangzai ? '防災都更' : '都更', sD, bonusD)}
+          </div>
+          <div class="v2-d-hint" style="margin-top:6px">
+            新成屋單價 ${newPrice || '—'} 萬/坪 ${p.new_house_price_wan_override ? '(覆寫)' : '(區域預設)'} ／ 分回比例 ${ratio ? (ratio*100).toFixed(0)+'%' : '—'} ／ 車位 ${parking ? parking+'萬' : '—'}
+            ${floorPremium > 0 ? ` ／ 樓層加成 +${(floorPremium*100)|0}%` : ''}
+          </div>
+        </div>
+
+        <!-- AI 分析 -->
+        ${aiText ? `<div class="v2-d-card v2-d-card--ai">
+          <div class="v2-d-card__title">分析建議</div>
+          <div class="v2-d-ai-text">${esc(aiText).replace(/\n/g, '<br>')}</div>
+        </div>` : ''}
+
+        <!-- LVR 實價登錄 -->
+        <div class="v2-d-card v2-d-card--lvr">
+          <div class="v2-d-card__title">實價登錄 ${lvrRecs.length ? `<small>(顯示前 ${lvrRecs.length} 筆)</small>` : ''}</div>
+          ${lvrHTML}
+        </div>
+
+        <!-- 圖片 -->
+        ${img ? `<div class="v2-d-card v2-d-card--img">${img}</div>` : ''}
+
+        <!-- 來源 + actions -->
+        <div class="v2-d-card v2-d-card--actions">
+          <div class="v2-d-card__title">操作</div>
+          ${p.sources && p.sources.length
+            ? `<div class="v2-d-sources">${srcBadgesHTML(p.sources)}</div>` : ''}
+          <div class="v2-drawer-actions">
+            <button class="v2-btn v2-btn--ghost v2-btn--sm" onclick="window.open('/?focus=${esc(id)}', '_blank')">在舊版開啟</button>
+            <button class="v2-btn v2-btn--ghost v2-btn--sm" onclick="v2.toggleWatchlist('${esc(id)}')">
+              ${p._in_watchlist ? '從最愛移除' : '加入最愛'}
+            </button>
+          </div>
+        </div>
       </div>
     `;
   }
