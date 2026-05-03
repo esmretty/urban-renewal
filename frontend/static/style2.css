@@ -483,33 +483,8 @@ a { color: inherit; text-decoration: none; }
   color: white;
 }
 
-/* City grid: 桌面 2 欄並排（台北 / 新北），sidebar 夠寬就用此 layout */
-.v2-city-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.v2-city-col__title {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--c-text-muted);
-  margin-bottom: 4px;
-  letter-spacing: 0.3px;
-  border-bottom: 1px solid var(--c-border);
-  padding-bottom: 3px;
-}
-.v2-city-col__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.v2-city-col__chips .v2-chip {
-  padding: 3px 7px;
-  font-size: 12px;
-}
-.v2-sidebar .v2-city-col__chips .v2-chip span {
-  font-size: 12px;
-}
+/* (舊的 .v2-city-grid 1fr 1fr 規則已刪除 — 跟前面 3fr 2fr 衝突 cascade)
+   下面只留 city-col__chips 的內容樣式 */
 
 /* Narrow sidebar (sidebar width < ~260px or mobile drawer): 切到單欄 + city pills */
 @media (max-width: 1024px) {
@@ -713,16 +688,19 @@ a { color: inherit; text-decoration: none; }
 .v2-card__addr {
   flex: 1;
   min-width: 0;
-  font-size: 14px;
+  font-size: 22px;
   font-weight: 600;
   color: var(--c-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.1;
 }
 .v2-card__district {
+  font-size: 14px;
   color: var(--c-text-muted);
   font-weight: 500;
+  margin-right: 2px;
 }
 .v2-card__price-block {
   display: inline-flex;

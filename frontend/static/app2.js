@@ -315,7 +315,8 @@
 
   function cardHTML(p, prices) {
     const id = p.source_id || p.id || '';
-    const addr = p.address || p.address_inferred || '—';
+    // 用推測地址（LVR 推到巷弄/門牌）優先，591 raw address 只到路段不夠精確
+    const addr = p.address_inferred || p.address || '—';
     const priceWan = p.price_ntd ? Math.round(p.price_ntd / 10000) : null;
     const perBld = (p.price_ntd && p.building_area_ping)
       ? (p.price_ntd / 10000 / p.building_area_ping).toFixed(1) : null;
