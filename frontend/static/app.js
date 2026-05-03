@@ -279,9 +279,11 @@ window.runExploreSearch = async function () {
     _mark('fetch_start');
     const r = await fetch("/api/central_search?slim=true&" + _buildExploreParams().toString());
     _mark('fetch_headers');           // TTFB+headers received
+    const _serverTiming = r.headers.get('server-timing') || '';   // 後端各 phase 拆分
     const data = await r.json();
     _mark('json_parsed');             // body fully read + JSON parsed
     const _bytes = +r.headers.get('content-length') || 0;
+    if (_DBG) _ts._serverTiming = _serverTiming;
     _exploreResults = data.items || [];
     _exploreSearched = true;
     allProperties = _exploreResults.slice();
@@ -302,13 +304,36 @@ window.runExploreSearch = async function () {
 function _logPerfBreakdown(ts, nItems, bytes) {
   const T = (a, b) => Math.round(ts[b] - ts[a]);
   const total = Math.round(ts.painted - ts.start);
+  const ttfb = T('skeleton_done', 'fetch_headers');
+
+  // 解析 Server-Timing header 拆 server 內部 phase
+  // 格式：watchlist;dur=50, firestore_query;dur=220, py_filter;dur=80, sort_strip;dur=30
+  const serverPhases = [];
+  if (ts._serverTiming) {
+    ts._serverTiming.split(',').forEach(part => {
+      const m = part.trim().match(/^([a-z_]+);dur=(\d+(?:\.\d+)?)/i);
+      if (m) serverPhases.push([m[1], Math.round(+m[2])]);
+    });
+  }
+  const serverTotal = serverPhases.reduce((sum, [_, ms]) => sum + ms, 0);
+  const networkOverhead = Math.max(0, ttfb - serverTotal);  // = 網路 RTT + auth middleware
+
   const lines = [
     [`skeleton 渲染`,         T('start',          'skeleton_done'),  '畫骨架佔位'],
-    [`fetch 送出+TTFB+headers`, T('skeleton_done', 'fetch_headers'),  '到 server 處理完拿到 response headers'],
-    [`body 下載+JSON parse`,   T('fetch_headers', 'json_parsed'),    `payload ${(bytes/1024).toFixed(0)} KB`],
-    [`filter+sort+render`,     T('json_parsed',   'filter_sort_done'),`${nItems} 筆 → DOM`],
-    [`browser paint`,          T('filter_sort_done', 'painted'),     '排版+繪製到螢幕'],
+    [`fetch+TTFB+headers`,    ttfb,                                  `server ${serverTotal}ms + 網路/auth ${networkOverhead}ms`],
   ];
+  // 把 server 端各 phase 縮排顯示
+  serverPhases.forEach(([name, ms]) => {
+    lines.push([`  └─ ${name}`, ms, _SERVER_PHASE_DESC[name] || '']);
+  });
+  if (networkOverhead > 0) {
+    lines.push([`  └─ 網路+auth+JSON serialize`, networkOverhead, '剩下時間: RTT/Firebase token 驗證/json.dumps']);
+  }
+  lines.push(
+    [`body 下載+JSON parse`, T('fetch_headers', 'json_parsed'),    `payload ${(bytes/1024).toFixed(0)} KB`],
+    [`filter+sort+render`,   T('json_parsed',   'filter_sort_done'),`${nItems} 筆 → DOM`],
+    [`browser paint`,        T('filter_sort_done', 'painted'),     '排版+繪製到螢幕'],
+  );
   console.groupCollapsed(`%c[搜尋計時器] 總共 ${total}ms`, 'font-weight:600;color:#0891b2');
   console.table(lines.map(([step, ms, note]) => ({ step, ms, note })));
   console.groupEnd();
@@ -317,13 +342,24 @@ function _logPerfBreakdown(ts, nItems, bytes) {
   if (!toast) {
     toast = document.createElement('div');
     toast.id = '_perf_toast';
-    toast.style.cssText = 'position:fixed;bottom:12px;right:12px;background:#0f172a;color:#fff;padding:10px 14px;border-radius:8px;font-size:12px;font-family:monospace;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.2);max-width:380px;line-height:1.5';
+    toast.style.cssText = 'position:fixed;bottom:12px;right:12px;background:#0f172a;color:#fff;padding:10px 14px;border-radius:8px;font-size:12px;font-family:monospace;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.2);max-width:420px;line-height:1.5';
     document.body.appendChild(toast);
   }
   toast.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">⏱ 搜尋計時 — 總 ${total}ms</div>` +
-    lines.map(([s, ms, n]) => `<div>${s}: <span style="color:#7dd3fc">${ms}ms</span> <span style="color:#94a3b8">(${n})</span></div>`).join('') +
+    lines.map(([s, ms, n]) => {
+      const indented = s.startsWith('  └─');
+      return `<div${indented ? ' style="color:#cbd5e1;font-size:11px;padding-left:8px"' : ''}>${s}: <span style="color:#7dd3fc">${ms}ms</span> ${n ? `<span style="color:#94a3b8">(${n})</span>` : ''}</div>`;
+    }).join('') +
     `<div style="margin-top:6px;font-size:11px;color:#94a3b8;cursor:pointer" onclick="this.parentElement.remove()">點擊關閉</div>`;
 }
+// 每個 server phase 的中文說明
+const _SERVER_PHASE_DESC = {
+  watchlist: '讀用戶 watchlist (Firestore)',
+  firestore_query: 'col.where(...).get() Firestore 查詢',
+  py_filter: 'Python 端 filter loop + to_dict',
+  sort_strip: 'sort + slim strip',
+  docs: 'Firestore 回了幾筆',
+};
 
 window.toggleWatchlist = async function (id, btn) {
   const p = allProperties.find(x => x.id === id);

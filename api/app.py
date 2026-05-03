@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from typing import Optional, AsyncGenerator, List
 
-from fastapi import FastAPI, Query, HTTPException, Depends
+from fastapi import FastAPI, Query, HTTPException, Depends, Response
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import os
@@ -2640,6 +2640,7 @@ def _strip_for_list(d: dict) -> dict:
 
 @app.get("/api/central_search")
 def central_search(
+    response: Response,
     q: Optional[str] = Query(None),
     road: Optional[str] = Query(None),
     districts: Optional[str] = Query(None),           # 逗號分隔：中正區,大安區,...
@@ -2657,10 +2658,22 @@ def central_search(
     """
     探索 tab 的搜尋 API：所有條件在 server 端過濾後才回傳。
     每筆附 `_in_watchlist`(bool) 讓前端標記。
+
+    回傳 Server-Timing header 把 server 端各 phase 的耗時 surface 給前端 timer。
     """
+    import time as _t
+    _phase_t = {}
+    _t0 = _t.perf_counter()
+    def _tick(name):
+        nonlocal _t0
+        now = _t.perf_counter()
+        _phase_t[name] = (now - _t0) * 1000
+        _t0 = now
+
     uid = user["uid"]
     my_watchlist = {d.id: (d.to_dict() or {}) for d in get_user_watchlist(uid).get()}
     my_watchlist_ids = set(my_watchlist.keys())
+    _tick("watchlist")
 
     dist_set = {d.strip() for d in districts.split(",") if d.strip()} if districts else None
     btype_set = {t.strip() for t in building_types.split(",") if t.strip()} if building_types else None
@@ -2703,6 +2716,8 @@ def central_search(
             docs = list(col.get())
     else:
         docs = list(col.get())
+    _tick("firestore_query")
+    _phase_t["docs_n"] = len(docs)
     items = []
     for d in docs:
         data = d.to_dict() or {}
@@ -2783,12 +2798,24 @@ def central_search(
             data["id"] = d.id
             data["_in_watchlist"] = True
         items.append(data)
+    _tick("py_filter")
     # 與前端「新進優先」一致：scrape_session_at desc 為主、list_rank asc 為次
     items.sort(key=lambda x: (x.get("list_rank") if x.get("list_rank") is not None else 9999))
     items.sort(key=lambda x: x.get("scrape_session_at") or "", reverse=True)
     out_items = items[:limit]
     if slim:
         out_items = [_strip_for_list(it) for it in out_items]
+    _tick("sort_strip")
+
+    # Server-Timing header 把 server 端各 phase 耗時 surface 給前端 timer
+    # 格式：name;dur=ms, name;dur=ms (W3C standard)
+    # 順序：watchlist → firestore_query → py_filter → sort_strip
+    _docs_n = _phase_t.pop("docs_n", 0)
+    _st_parts = [f"{name};dur={ms:.0f}" for name, ms in _phase_t.items()]
+    _st_parts.append(f"docs;desc=\"firestore returned {_docs_n} docs\";dur=0")
+    response.headers["Server-Timing"] = ", ".join(_st_parts)
+    response.headers["Access-Control-Expose-Headers"] = "Server-Timing"
+
     return {"total": len(items), "items": out_items}
 
 
