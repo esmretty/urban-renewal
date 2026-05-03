@@ -438,7 +438,10 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-city-col__chips .v2-chip {
   padding: 3px 7px;
-  font-size: 12px;
+  font-size: 11px;
+}
+.v2-sidebar .v2-city-col__chips .v2-chip span {
+  font-size: 11px;
 }
 
 /* 窄螢幕 (≤1024px sidebar 變抽屜)：城市改成上下排 */
@@ -502,7 +505,10 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-city-col__chips .v2-chip {
   padding: 3px 7px;
-  font-size: 12px;
+  font-size: 11px;
+}
+.v2-sidebar .v2-city-col__chips .v2-chip span {
+  font-size: 11px;
 }
 
 /* Narrow sidebar (sidebar width < ~260px or mobile drawer): 切到單欄 + city pills */
