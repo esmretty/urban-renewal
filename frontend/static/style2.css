@@ -1186,29 +1186,40 @@ a { color: inherit; text-decoration: none; }
   margin-bottom: var(--sp-3);
 }
 
-/* === Detail v2：12-col grid 緊湊排版，字體加大可讀 ========================= */
-.v2-d-grid {
+/* === Detail v2：對齊 v1 layout，左 7 右 5 兩 row ============================ */
+.v2-d-row {
   display: grid;
-  grid-template-columns: 7fr 5fr;     /* 左 7 / 右 5，跟 v1 同比例 */
+  grid-template-columns: 7fr 5fr;
   gap: 12px;
+  margin-bottom: 12px;
 }
-.v2-d-card {
-  background: var(--c-card);
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-md);
-  padding: 12px 14px;
-  font-size: 14px;
-  min-width: 0;
-}
-.v2-d-card__title {
+.v2-d-col { min-width: 0; }
+.v2-d-h {
   font-size: 13px;
   font-weight: 700;
   color: var(--c-text);
-  margin-bottom: 8px;
-  padding-bottom: 6px;
+  margin: 0 0 6px;
+  padding-bottom: 4px;
   border-bottom: 1px solid var(--c-border);
 }
-.v2-d-card__title small { font-size: 11px; font-weight: 400; color: var(--c-text-muted); margin-left: 4px; }
+
+/* 物件資訊 2 個 table 並排 (對齊 v1 basic-info-grid) */
+.v2-d-basic-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  background: var(--c-card);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+}
+
+.v2-d-sources-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
 
 /* 基本資料 table */
 .v2-d-tbl {
@@ -1262,27 +1273,94 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-govlink:hover { background: var(--c-accent-light); }
 
-/* 圖片：放右上 (basic 旁邊)，固定高度避免 push 排版 */
-.v2-d-card--img {
-  padding: 0;
-  border: none;
-  background: transparent;
-}
+/* 圖片：右上，固定高度 */
 .v2-detail-image-wrap {
   width: 100%;
-  height: 100%;
-  min-height: 220px;
   background: var(--c-hover);
   border-radius: var(--r-md);
   overflow: hidden;
   border: 1px solid var(--c-border);
+  height: 100%;
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .v2-detail-image {
   width: 100%;
   height: 100%;
-  max-height: 360px;
+  max-height: 320px;
   object-fit: cover;
   display: block;
+}
+.v2-detail-image-empty {
+  color: var(--c-text-light);
+  font-size: 13px;
+  padding: 30px;
+}
+
+.v2-d-formula {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--c-bg);
+  border-radius: var(--r-sm);
+  font-size: 11.5px;
+  color: var(--c-text-muted);
+  line-height: 1.7;
+}
+.v2-d-formula b { color: var(--c-text); }
+.v2-d-alert {
+  background: var(--c-hover);
+  padding: 12px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  color: var(--c-text-muted);
+  text-align: center;
+}
+
+/* LVR 「實」icon — 對齊 v1 lvr-icon hover popup */
+.v2-lvr-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: help;
+  margin-left: 4px;
+  vertical-align: middle;
+  box-shadow: 0 1px 2px rgba(79, 70, 229, 0.35);
+}
+.v2-lvr-icon--sm { width: 14px; height: 14px; font-size: 8px; margin-left: 2px; }
+.v2-lvr-popup {
+  position: fixed;
+  background: white;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-3);
+  padding: 8px;
+  z-index: 1000;
+  max-width: 460px;
+  display: none;
+}
+.v2-lvr-popup__title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--c-text-muted);
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.v2-d-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 6px;
 }
 
 /* 試算 scenario boxes (左 7 欄第二排) */
@@ -1342,8 +1420,7 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-ai-sec__body { font-size: 13px; line-height: 1.6; }
 
-/* LVR 表 (full width) */
-.v2-d-card--lvr { grid-column: 1 / -1; }
+/* LVR 表 (popup 用) */
 .v2-lvr-tbl {
   width: 100%;
   border-collapse: collapse;
@@ -1383,10 +1460,14 @@ a { color: inherit; text-decoration: none; }
 
 /* Mobile：drawer 變單欄、縮 padding */
 @media (max-width: 1024px) {
-  .v2-d-grid { grid-template-columns: 1fr; gap: 10px; }
-  .v2-d-card { padding: 10px 12px; }
+  .v2-d-row { grid-template-columns: 1fr; gap: 10px; }
+  .v2-d-basic-grid { grid-template-columns: 1fr; gap: 0; }
   .v2-detail-image-wrap { min-height: 0; }
   .v2-detail-image { max-height: 240px; }
+}
+@media (max-width: 640px) {
+  .v2-d-row { gap: 8px; margin-bottom: 8px; }
+  .v2-lvr-popup { max-width: calc(100vw - 24px); left: 12px !important; }
 }
 .v2-detail-row {
   display: flex;
