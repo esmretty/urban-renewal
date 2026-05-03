@@ -77,29 +77,31 @@
       <div class="v2-filter-group">
         <label class="v2-filter-label">物件樓層</label>
         <div class="v2-chip-row" id="v2-floor-chips">
-          <label class="v2-chip"><input type="checkbox" value="1" checked onchange="v2.applyFilters()"><span>1F</span></label>
-          <label class="v2-chip"><input type="checkbox" value="2" checked onchange="v2.applyFilters()"><span>2F</span></label>
-          <label class="v2-chip"><input type="checkbox" value="3" checked onchange="v2.applyFilters()"><span>3F</span></label>
-          <label class="v2-chip"><input type="checkbox" value="4" checked onchange="v2.applyFilters()"><span>4F</span></label>
-          <label class="v2-chip"><input type="checkbox" value="5" checked onchange="v2.applyFilters()"><span>5F</span></label>
+          <label class="v2-chip v2-chip--all"><input type="checkbox" id="v2-floor-all" checked onchange="v2.toggleAllFloors(this)"><span>全部</span></label>
+          <label class="v2-chip"><input type="checkbox" value="B" checked data-floor onchange="v2.onFloorChange()"><span>B1</span></label>
+          <label class="v2-chip"><input type="checkbox" value="1" checked data-floor onchange="v2.onFloorChange()"><span>1F</span></label>
+          <label class="v2-chip"><input type="checkbox" value="2" checked data-floor onchange="v2.onFloorChange()"><span>2F</span></label>
+          <label class="v2-chip"><input type="checkbox" value="3" checked data-floor onchange="v2.onFloorChange()"><span>3F</span></label>
+          <label class="v2-chip"><input type="checkbox" value="4" checked data-floor onchange="v2.onFloorChange()"><span>4F</span></label>
+          <label class="v2-chip"><input type="checkbox" value="5" checked data-floor onchange="v2.onFloorChange()"><span>5F</span></label>
         </div>
       </div>
 
-      <div class="v2-filter-group">
+      <div class="v2-filter-group v2-filter-group--num-compact">
         <label class="v2-filter-label">數字條件</label>
-        <div class="v2-num-row">
+        <div class="v2-num-row v2-num-row--compact">
           <span class="v2-num-row__label">建單價&lt;</span>
-          <input class="v2-input v2-input--num" type="number" id="v2-bld-price-max" min="0" step="5" value="300" oninput="v2.applyFilters()">
+          <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-bld-price-max" min="0" step="5" value="300" oninput="v2.applyFilters()">
           <span class="v2-num-row__suffix">萬/坪</span>
         </div>
-        <div class="v2-num-row">
+        <div class="v2-num-row v2-num-row--compact">
           <span class="v2-num-row__label">地單價&lt;</span>
-          <input class="v2-input v2-input--num" type="number" id="v2-land-price-max" min="0" step="10" value="600" oninput="v2.applyFilters()">
+          <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-land-price-max" min="0" step="10" value="600" oninput="v2.applyFilters()">
           <span class="v2-num-row__suffix">萬/坪</span>
         </div>
-        <div class="v2-num-row">
+        <div class="v2-num-row v2-num-row--compact">
           <span class="v2-num-row__label">地坪≥</span>
-          <input class="v2-input v2-input--num" type="number" id="v2-land-min" min="0" step="1" value="0" oninput="v2.applyFilters()">
+          <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-land-min" min="0" step="1" value="0" oninput="v2.applyFilters()">
           <span class="v2-num-row__suffix">坪</span>
         </div>
       </div>

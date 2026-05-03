@@ -95,45 +95,56 @@
     return build > 0 && land > build;
   }
 
-  // 取後端已存的「投入欄位」即時算倍數 — 對齊 calculate_renewal_scenarios 的核心邏輯
-  // 注意：CLAUDE.md 規則 8，DB 不存 multiple，此處跟 app.js 同樣即時算
-  // farPct 來源優先序：
-  //   1) p.effective_far_pct (top-level，多分區加權後)
-  //   2) p.renewal_v2.effective_far_pct / base_far_pct (slim mode 下這 2 個還在)
-  //   3) p.base_far_pct (top-level fallback，舊 doc 可能有)
-  function rowMultiple(p, prices) {
-    if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal || isLandSuspicious(p)) {
+  // ── FAR / share-ratio 表（跟 app.js / config.py 對齊，CLAUDE.md 規則 8: DB 不存 → 前端即時算） ──
+  const SHARE_TABLE = [
+    [60,0.45,234],[65,0.47,241],[70,0.48,248],[75,0.49,255],[80,0.50,262],
+    [85,0.51,269],[90,0.52,276],[95,0.53,283],[100,0.54,290],[105,0.55,297],
+    [110,0.56,304],[115,0.57,311],[120,0.58,318],[130,0.60,332],[140,0.61,339],
+    [150,0.62,360],[160,0.63,374],[170,0.64,388],[180,0.65,402],
+  ];
+  const TAIPEI_FAR_PCT = {
+    "第一種住宅區":60,"第二種住宅區":120,"第三種住宅區":225,"第三種住宅區(特)":225,
+    "第三之一種住宅區":300,"第三之二種住宅區":400,"第四之一種住宅區":400,
+    "第四種住宅區":300,"住宅用地":200,
+    "第一種商業區":360,"第二種商業區":630,"第三種商業區":560,"第三種商業區(特)":560,
+    "第四種商業區":800,
+  };
+  const NEW_TAIPEI_FAR_PCT = {
+    "_banqiao_fujou": { "住宅區": 240, "住宅區(再)": 160, "商業區": 300 },
+    "新店區": {
+      "第二種住宅區": 120, "第三種住宅區": 280, "第四種住宅區": 300,
+      "第一種商業區": 420, "第二種商業區": 440,
+      "住宅區": 300, "商業區": 440,
+    },
+    "土城區": { "第一種住宅區": 180, "第二種住宅區": 240, "第一種商業區": 240, "第二種商業區": 320 },
+    "樹林區": { "第一種住宅區": 260, "第二種住宅區": 250, "商業區": 380 },
+    "汐止區": { "第一種住宅區": 200, "第二種住宅區": 240, "商業區": 320 },
+    "淡水區": { "第二種住宅區": 225, "第三種住宅區": 360, "第四種住宅區": 240, "第一種商業區": 360, "第二種商業區": 400 },
+    "八里區": { "第一種住宅區": 200, "第二種住宅區": 200, "第一種商業區": 300, "第二種商業區": 300 },
+  };
+  const _NTPC_5 = ["板橋區","新莊區","中和區","永和區","三重區"];
+
+  function lookupFar(zoning, p) {
+    if (!zoning || !p) return null;
+    const district = p.district;
+    if (district === "板橋區" && p.is_remote_area) {
+      return NEW_TAIPEI_FAR_PCT["_banqiao_fujou"][zoning] ?? null;
+    }
+    if (NEW_TAIPEI_FAR_PCT[district]) {
+      const sub = NEW_TAIPEI_FAR_PCT[district][zoning];
+      if (sub != null) return sub;
+      if (zoning.includes("商")) return NEW_TAIPEI_FAR_PCT[district]["商業區"] ?? null;
+      if (zoning.includes("住")) return NEW_TAIPEI_FAR_PCT[district]["住宅區"] ?? null;
       return null;
     }
-    const land = Number(p.land_area_ping) || 0;
-    const price = p.new_house_price_wan_override ?? prices[p.district];
-    const rv2 = p.renewal_v2 || {};
-    const farPct = Number(p.effective_far_pct ?? rv2.effective_far_pct ?? rv2.base_far_pct ?? p.base_far_pct ?? 0);
-    if (!land || !farPct || !price) return null;
-    const coeff = p.rebuild_coeff ?? 1.57;
-    const ratio = lookupShareRatio(price)[0];
-    const parking = lookupShareRatio(price)[1];
-    if (!ratio) return null;
-    const is1F = Number(p.floor) === 1 || Number(p.floor_range_min) === 1;
-    const floorPremium = p.floor_premium ?? (is1F ? 0.20 : 0);
-    const effectivePrice = price * (1 + floorPremium);
-    const bonus = p.bonus_dugen ?? 0.50;   // 都更 default
-    const share = land * (farPct/100) * (1+bonus) * coeff * ratio;
-    const total = share * effectivePrice + (share / 40) * parking;
-    const listWan = (p.price_ntd || 0) / 10000;
-    const desired = p.desired_price_wan ?? (listWan ? Math.round(listWan * 0.9 / 10) * 10 : 0);
-    if (!desired) return null;
-    return total / desired;
+    if (_NTPC_5.includes(district)) {
+      if (zoning.includes("商")) return district === "板橋區" ? 460 : 440;
+      if (zoning.includes("住")) return 300;
+      return null;
+    }
+    return TAIPEI_FAR_PCT[zoning] ?? null;
   }
 
-  // 簡化 share_ratio_table（從 share_ratio_table.py 抄常用區段；中間值線性內插）
-  const SHARE_TABLE = [
-    [60, 0.45, 234], [70, 0.42, 234], [80, 0.40, 234],
-    [90, 0.38, 234], [100, 0.36, 234], [110, 0.35, 234],
-    [120, 0.34, 234], [130, 0.33, 234], [140, 0.32, 234],
-    [150, 0.31, 234], [160, 0.30, 234], [170, 0.30, 240],
-    [180, 0.29, 250], [200, 0.28, 270],
-  ];
   function lookupShareRatio(price) {
     if (!price) return [null, null];
     if (price <= SHARE_TABLE[0][0]) return [SHARE_TABLE[0][1], SHARE_TABLE[0][2]];
@@ -148,6 +159,48 @@
       }
     }
     return [null, null];
+  }
+
+  // 多分區加權 FAR — 對齊 v1 effectiveFarPctWeighted
+  function effectiveFar(p) {
+    const zList = p.zoning_list;
+    if (zList && zList.length > 1) {
+      const ratios = p.zoning_ratios || zList.map(() => 100 / zList.length);
+      const total = ratios.reduce((a, b) => a + (Number(b) || 0), 0) || 1;
+      let w = 0;
+      for (let i = 0; i < zList.length; i++) {
+        const z = (typeof zList[i] === 'string') ? zList[i] : (zList[i].original_zone || zList[i].zone_name);
+        const f = lookupFar(z, p);
+        if (f == null) return null;
+        w += f * ((Number(ratios[i]) || 0) / total);
+      }
+      return Math.round(w);
+    }
+    return lookupFar(p.zoning, p);
+  }
+
+  // 取後端已存的「投入欄位」即時算倍數 — DB 不存 multiple (CLAUDE.md 規則 8)
+  function rowMultiple(p, prices) {
+    if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal || isLandSuspicious(p)) {
+      return null;
+    }
+    const land = Number(p.land_area_ping) || 0;
+    const price = p.new_house_price_wan_override ?? prices[p.district];
+    const farPct = effectiveFar(p);
+    if (!land || !farPct || !price) return null;
+    const coeff = p.rebuild_coeff ?? 1.57;
+    const [ratio, parking] = lookupShareRatio(price);
+    if (!ratio) return null;
+    const is1F = Number(p.floor) === 1 || Number(p.floor_range_min) === 1;
+    const floorPremium = p.floor_premium ?? (is1F ? 0.20 : 0);
+    const effectivePrice = price * (1 + floorPremium);
+    const bonus = p.bonus_dugen ?? 0.50;
+    const share = land * (farPct/100) * (1+bonus) * coeff * ratio;
+    const total = share * effectivePrice + (share / 40) * parking;
+    const listWan = (p.price_ntd || 0) / 10000;
+    const desired = p.desired_price_wan ?? (listWan ? Math.round(listWan * 0.9 / 10) * 10 : 0);
+    if (!desired) return null;
+    return total / desired;
   }
 
   // ── Source badges ────────────────────────────────────────────────────────
@@ -165,7 +218,7 @@
     }).join('');
   }
 
-  // ── Render: card ─────────────────────────────────────────────────────────
+  // ── Render: card grid，分台北/新北兩欄 ────────────────────────────────────
   async function renderGrid() {
     const grid = $('#v2-grid');
     const empty = $('#v2-empty');
@@ -184,14 +237,37 @@
     const prices = await getDistrictPrices();
     const start = (state.page - 1) * state.pageSize;
     const slice = list.slice(start, start + state.pageSize);
-    grid.innerHTML = slice.map(p => cardHTML(p, prices)).join('');
+
+    // 分城市
+    const tpe = slice.filter(p => p.city === '台北市');
+    const ntp = slice.filter(p => p.city === '新北市');
+    const other = slice.filter(p => p.city !== '台北市' && p.city !== '新北市');
+
+    const colHTML = (city, items) => {
+      if (!items.length) {
+        return `<div class="v2-grid-col" data-city="${esc(city)}">
+          <div class="v2-grid-col__title">${esc(city)} <span class="v2-grid-col__count">0</span></div>
+          <div class="v2-grid-col__empty">本頁無 ${esc(city)} 物件</div>
+        </div>`;
+      }
+      return `<div class="v2-grid-col" data-city="${esc(city)}">
+        <div class="v2-grid-col__title">${esc(city)} <span class="v2-grid-col__count">${items.length}</span></div>
+        <div class="v2-grid-col__cards">${items.map(p => cardHTML(p, prices)).join('')}</div>
+      </div>`;
+    };
+
+    let html = colHTML('台北市', tpe) + colHTML('新北市', ntp);
+    if (other.length) {
+      html += colHTML('其他', other);
+    }
+    grid.innerHTML = html;
     renderPagination(total);
 
     // bind clicks
     $$('.v2-card').forEach(el => {
       const id = el.dataset.id;
       el.addEventListener('click', (e) => {
-        if (e.target.closest('a')) return;       // source link clicks pass through
+        if (e.target.closest('a')) return;
         if (e.target.closest('.v2-card__star')) return;
         openDetail(id);
       });
@@ -303,11 +379,19 @@
   }
 
   // ── Districts: load + render chips ──────────────────────────────────────
+  // 用 with_counts=true 拿物件數量，前端隱藏「沒資料的區」
   async function loadDistricts() {
     try {
-      const r = await fetch('/api/target_regions');
+      const r = await fetch('/api/target_regions?with_counts=true');
       const data = await r.json();
-      state.targetRegions = data;
+      // 兼容兩種 response：with_counts 時是 {regions, counts}；否則是純 regions
+      if (data && data.regions) {
+        state.targetRegions = data.regions;
+        state.districtCounts = data.counts || {};
+      } else {
+        state.targetRegions = data;
+        state.districtCounts = {};
+      }
       renderDistrictChips();
     } catch (e) { console.warn('target_regions failed', e); }
   }
@@ -317,16 +401,22 @@
     const cityList = Object.entries(state.targetRegions);
     if (!cityList.length) { host.innerHTML = ''; return; }
 
-    // Build city columns
+    // Build city columns — 隱藏沒資料的區（counts==0）
+    const counts = state.districtCounts || {};
     const renderCityCol = (city, districts) => {
-      const chipsHtml = districts.map(d => {
+      const activeDistricts = districts.filter(d => (counts[`${city}|${d}`] || 0) > 0);
+      // 若 counts 完全沒拿到，仍顯示全部（避免空白）
+      const toShow = (Object.keys(counts).length === 0) ? districts : activeDistricts;
+      const chipsHtml = toShow.map(d => {
         const key = `${city}|${d}`;
         const checked = state.districtPicks.has(key) ? 'checked' : '';
-        return `<label class="v2-chip">
+        const n = counts[key] || 0;
+        return `<label class="v2-chip" title="${n} 筆物件">
           <input type="checkbox" data-city="${esc(city)}" data-district="${esc(d)}" ${checked} onchange="v2.toggleDistrict('${esc(city)}','${esc(d)}', this.checked)">
-          <span>${esc(d)}</span>
+          <span>${esc(d)}${n ? ` <em class="v2-chip__n">${n}</em>` : ''}</span>
         </label>`;
       }).join('');
+      if (!toShow.length) return '';
       return `<div class="v2-city-col" data-city="${esc(city)}">
         <div class="v2-city-col__title">${esc(city)}</div>
         <div class="v2-city-col__chips">${chipsHtml}</div>
@@ -374,13 +464,22 @@
       return w >= pmin && w <= pmax;
     });
 
-    // floor chips
-    const floorPicks = $$('#v2-floor-chips input:checked').map(c => c.value);
-    if (floorPicks.length > 0 && floorPicks.length < 5) {
+    // floor chips：B1 / 1F-5F；data-floor 屬性區分（不含「全部」master）
+    const floorInputs = $$('#v2-floor-chips input[data-floor]');
+    const floorPicks = floorInputs.filter(c => c.checked).map(c => c.value);
+    if (floorPicks.length > 0 && floorPicks.length < floorInputs.length) {
+      const wantsBasement = floorPicks.includes('B');
+      const intPicks = floorPicks.filter(v => v !== 'B');
       list = list.filter(p => {
+        if (p.is_basement) return wantsBasement;
+        if (intPicks.length === 0) return false;
+        const fmin = p.floor_range_min, fmax = p.floor_range_max;
+        if (fmin != null && fmax != null) {
+          return intPicks.some(v => fmin <= +v && +v <= fmax);
+        }
         const f = p.floor;
-        if (f == null) return false;
-        return floorPicks.includes(String(f));
+        if (f == null) return true;   // 缺資料 pass-through
+        return intPicks.includes(String(f));
       });
     }
 
@@ -728,11 +827,26 @@
   }
 
   // ── Public namespace (matches inline onclick handlers) ──────────────────
+  // Floor chip controls
+  function toggleAllFloors(masterCheckbox) {
+    const checked = masterCheckbox.checked;
+    $$('#v2-floor-chips input[data-floor]').forEach(c => { c.checked = checked; });
+    applyFilters();
+  }
+  function onFloorChange() {
+    // 同步「全部」master 狀態：所有 floor 都勾 → master 勾；任一沒勾 → master 不勾
+    const all = $$('#v2-floor-chips input[data-floor]');
+    const allChecked = all.every(c => c.checked);
+    const master = $('#v2-floor-all');
+    if (master) master.checked = allChecked;
+    applyFilters();
+  }
+
   window.v2 = {
     switchView, toggleDistrict, applyFilters, applySort, runSearch,
     resetFilters, gotoPage, openSidebar, closeSidebar,
     openDetail, closeDetail, toggleWatchlist, logout,
-    switchCityTab,
+    switchCityTab, toggleAllFloors, onFloorChange,
   };
 
   // Boot

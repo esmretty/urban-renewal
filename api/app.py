@@ -1062,10 +1062,30 @@ async def root_v2():
 
 
 @app.get("/api/target_regions")
-def api_target_regions():
-    """回傳目標分析範圍（前端下拉選單用）— 含台北市跟新北市 4 區。"""
+def api_target_regions(with_counts: bool = False):
+    """回傳目標分析範圍（前端下拉選單用）— 含台北市跟新北市。
+    with_counts=true → 多回每個區的物件數量，前端可隱藏「沒資料的區」。
+    """
     from config import target_regions_for_frontend
-    return target_regions_for_frontend()
+    regions = target_regions_for_frontend()
+    if not with_counts:
+        return regions
+
+    # 算每個 (city, district) 的物件數 — 只算 batch source（user_url 隱私不算進去）
+    from collections import Counter
+    counts: Counter = Counter()
+    for d in get_col().select(["city", "district", "source_origin"]).get():
+        data = d.to_dict() or {}
+        if data.get("source_origin") == "user_url":
+            continue
+        c = data.get("city")
+        ds = data.get("district")
+        if c and ds:
+            counts[(c, ds)] += 1
+    return {
+        "regions": regions,
+        "counts": {f"{c}|{d}": n for (c, d), n in counts.items()},
+    }
 
 
 @app.get("/api/district_new_house_price")
