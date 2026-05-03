@@ -1093,16 +1093,21 @@
       pop.addEventListener('mouseleave', hideLvrPopup);
       document.body.appendChild(pop);
     }
+    // price_total 單位是「元」不是「萬」，需 / 10000
     pop.innerHTML = `<div class="v2-lvr-popup__title">附近實價登錄 (${recs.length} 筆)</div>
       <table class="v2-lvr-tbl">
         <thead><tr><th>交易日</th><th>總價</th><th>建坪</th><th>單價</th><th>地址</th></tr></thead>
-        <tbody>${recs.map(r => `<tr>
-          <td>${esc(r.txn_date || '—')}</td>
-          <td>${r.price_total ? fmt0(r.price_total) + '萬' : '—'}</td>
-          <td>${r.area_ping ? fmt1(r.area_ping) : '—'}</td>
-          <td>${(r.price_total && r.area_ping) ? (r.price_total / r.area_ping).toFixed(1) + '萬' : '—'}</td>
-          <td title="${esc(r.address || '')}">${esc((r.address || '').slice(0, 18))}</td>
-        </tr>`).join('')}</tbody>
+        <tbody>${recs.map(r => {
+          const totalWan = r.price_total ? r.price_total / 10000 : null;
+          const perPingWan = (totalWan && r.area_ping) ? (totalWan / r.area_ping) : null;
+          return `<tr>
+            <td>${esc(r.txn_date || '—')}</td>
+            <td>${totalWan != null ? fmt0(totalWan) + '萬' : '—'}</td>
+            <td>${r.area_ping ? fmt1(r.area_ping) : '—'}</td>
+            <td>${perPingWan != null ? perPingWan.toFixed(1) + '萬' : '—'}</td>
+            <td class="v2-lvr-addr" title="${esc(r.address || '')}">${esc(r.address || '—')}</td>
+          </tr>`;
+        }).join('')}</tbody>
       </table>`;
     const rect = event.target.getBoundingClientRect();
     pop.style.top = (rect.bottom + 6) + 'px';
