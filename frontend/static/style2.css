@@ -878,29 +878,32 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.4;
 }
 
-/* 優勢 chip (TOD / 防災型 / 商業區) — 彩色搶眼，對齊 v1 adv-chip */
+/* 優勢 chip (TOD / 防災型 / 商業區) — 淡色 outline 風格、低調但有色彩區別 */
 .v2-achip {
   display: inline-flex;
   align-items: center;
-  padding: 1px 7px;
+  padding: 1px 6px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   border-radius: var(--r-sm);
-  border: 1px solid transparent;
+  border: 1px solid;
   line-height: 1.4;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
 }
 .v2-achip--tod {
-  background: linear-gradient(135deg, #06b6d4, #0891b2);
-  color: white;
+  background: #ecfeff;          /* cyan-50 */
+  border-color: #a5f3fc;        /* cyan-200 */
+  color: #0e7490;               /* cyan-700 */
 }
 .v2-achip--fangzai {
-  background: linear-gradient(135deg, #f43f5e, #be123c);
-  color: white;
+  background: #fff1f2;          /* rose-50 */
+  border-color: #fecdd3;        /* rose-200 */
+  color: #9f1239;               /* rose-800 */
 }
 .v2-achip--commercial {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: white;
+  background: #fffbeb;          /* amber-50 */
+  border-color: #fde68a;        /* amber-200 */
+  color: #92400e;               /* amber-800 */
 }
 .v2-rchip--floors5plus {
   background: var(--c-resist-yellow-bg);
