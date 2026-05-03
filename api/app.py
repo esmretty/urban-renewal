@@ -2655,23 +2655,15 @@ def central_search(
             floor_set = None
 
     col = get_col()
-    # 把 filter 推到 Firestore 端 (composite index: district + price_ntd)：
-    #   - district in [...]：cuts 全收 ~543 → 符合區的子集 (~200)，2× 加速
-    #   - price_ntd <= max_wan：再切一刀，full speedup 視 max 而定：
-    #       max=5000萬 (default): 3× 對 baseline；max=1500萬: 10×；max=1000萬: 26×
+    # 把 district filter 推到 Firestore 端（cuts 全收 ~535 → 只回符合 district 的子集），
+    # 實測 2× 加速（~385ms → ~190ms）。Firestore in-clause 上限 30 個 — 我們 target 區頂多 16 個 OK。
     # dist_set 為 None（用戶沒挑）時 fallback 全收。
-    # 安全性：本機 audit 100% docs 都有 district + price_ntd，filter 不會漏物件。
     if dist_set is not None and 0 < len(dist_set) <= 30:
         try:
             from google.cloud.firestore_v1 import FieldFilter
-            q = col.where(filter=FieldFilter("district", "in", list(dist_set)))
-            if max_price_wan is not None and max_price_wan > 0:
-                q = q.where(filter=FieldFilter("price_ntd", "<=", int(max_price_wan * 10000)))
-            if min_price_wan is not None and min_price_wan > 0:
-                q = q.where(filter=FieldFilter("price_ntd", ">=", int(min_price_wan * 10000)))
-            docs = list(q.get())
+            docs = list(col.where(filter=FieldFilter("district", "in", list(dist_set))).get())
         except Exception as _e:
-            logger.warning(f"[central_search] where(district+price) 失敗，fallback 全收：{_e}")
+            logger.warning(f"[central_search] where(district in) 失敗，fallback 全收：{_e}")
             docs = list(col.get())
     else:
         docs = list(col.get())
