@@ -594,53 +594,57 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
 }
 
-/* === 5.5 觀察清單 capture 區（URL / Manual 分析） =========================== */
-.v2-capture {
-  display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.v2-capture-card {
+/* === 5.5 最愛 tab sidebar capture 卡 ====================================== */
+/* 兩張卡 (URL / Manual)，每個 input 一行、有清楚 label、底下 hint 文字 */
+.v2-cap {
   background: var(--c-card);
   border: 1px solid var(--c-border);
   border-radius: var(--r-md);
   padding: 12px;
+  margin-bottom: 12px;
 }
-.v2-capture-card__title {
+.v2-cap__title {
   font-size: 13px;
   font-weight: 700;
   color: var(--c-text);
   margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--c-border);
 }
-.v2-capture-card__hint {
-  font-size: 11px;
-  color: var(--c-text-light);
-  margin-top: 6px;
-}
-.v2-capture-row {
+.v2-cap__row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: nowrap;
+  gap: 8px;
+  margin-bottom: 6px;
 }
-.v2-capture-row + .v2-capture-row { margin-top: 6px; }
-.v2-capture-row .v2-input { padding: 6px 10px; font-size: 13px; }
-.v2-capture-row .v2-input--small { flex: 0 0 90px; }
-.v2-capture-row .v2-input--num { flex: 0 0 80px; text-align: right; }
-.v2-capture-row .v2-btn { padding: 6px 14px; flex-shrink: 0; }
-.v2-capture-row--num .v2-num-row__label {
-  font-size: 11px;
+.v2-cap__label {
+  font-size: 12px;
   color: var(--c-text-muted);
+  width: 48px;
   flex-shrink: 0;
 }
-@media (max-width: 1024px) {
-  .v2-capture { grid-template-columns: 1fr; }
+.v2-cap__field {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 12px;
 }
-@media (max-width: 640px) {
-  .v2-capture-row { flex-wrap: wrap; }
-  .v2-capture-row .v2-input { width: 100%; flex: 1 1 auto; }
-  .v2-capture-row--num .v2-input--num { flex: 1 1 60px; }
+.v2-cap__input {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.v2-cap__btn {
+  margin-top: 4px;
+  font-size: 13px;
+  padding: 7px 12px;
+}
+.v2-cap__hint {
+  font-size: 10.5px;
+  color: var(--c-text-light);
+  margin-top: 6px;
+  line-height: 1.4;
 }
 
 /* === 6. Card grid (台北左 / 新北右) ======================================== */
@@ -730,15 +734,23 @@ a { color: inherit; text-decoration: none; }
 .v2-card.v2-card--ntpc::before { background: #16a34a; }     /* 綠 (新北) */
 .v2-card.v2-card--read::before { opacity: 0.25; }
 
-/* 高倍數 (≥3.5x) 紅框 — 引人注意 */
+/* 高倍數 (≥3.5x) — 用淡淡的金光漸層背景表示「值得注意」，不用粗框 */
 .v2-card.v2-card--hot {
-  border: 2px solid var(--c-danger);
-  box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.25);
-  padding: 7px 11px;   /* compensate +1px border */
+  background:
+    radial-gradient(circle at 92% 35%, rgba(251, 191, 36, 0.28) 0%, transparent 55%),
+    linear-gradient(135deg, rgba(254, 243, 199, 0.5) 0%, rgba(255, 255, 255, 1) 60%);
+  border-color: rgba(217, 119, 6, 0.35);
 }
 .v2-card.v2-card--hot:hover {
-  border-color: var(--c-danger);
-  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.35), var(--sh-2);
+  background:
+    radial-gradient(circle at 92% 35%, rgba(251, 191, 36, 0.4) 0%, transparent 55%),
+    linear-gradient(135deg, rgba(254, 243, 199, 0.65) 0%, rgba(255, 255, 255, 1) 60%);
+  border-color: rgba(217, 119, 6, 0.6);
+}
+.v2-card.v2-card--hot .v2-card__mult {
+  /* 高倍數用更醒目的金棕色 */
+  color: #b45309;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.8);
 }
 .v2-card.v2-card--archived::after {
   content: '已下架';

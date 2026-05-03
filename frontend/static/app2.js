@@ -518,41 +518,70 @@
   }
 
   // ── Filter + sort ────────────────────────────────────────────────────────
-  function applyFilters() {
+  // ── Filter + Sort 統一 pipeline ─────────────────────────────────────────
+  // 任何 filter/排序 input 變動都呼叫 applyFilters()。
+  //   1. 從 state.allProperties (raw) 起跑
+  //   2. 套用 view-specific filter (explore tab 才套 sidebar filter；watchlist 不套)
+  //   3. 套 min-mult filter
+  //   4. 排序
+  //   5. 寫進 state.filteredSorted + render
+  // 整條 pipeline idempotent，每次都從 raw 起跑 — 不會「第一次有效第二次無效」的累積 bug
+  async function applyFilters() {
+    const prices = await getDistrictPrices();
     let list = state.allProperties.filter(p =>
       !p.deleted && !p.analysis_error && !p.analysis_in_progress && p.archived !== true
     );
 
-    // district picks
-    if (state.districtPicks.size > 0) {
-      list = list.filter(p => {
-        const key = `${p.city}|${p.district}`;
-        return state.districtPicks.has(key);
-      });
+    // 探索 tab 才套 sidebar filter；最愛 tab 不套 (用戶明示)
+    if (state.view === 'explore') {
+      list = _applyExploreSidebarFilters(list);
     }
 
-    // building_type — 對齊 v1：勾選的 type 才顯示（disabled 不算）
+    // min-mult filter (跟 sidebar 同階；最愛 tab 也不套，因為 input 在 sidebar)
+    if (state.view === 'explore') {
+      const minMultOn = $('#v2-min-mult-on')?.checked;
+      const minMultVal = parseFloat($('#v2-min-mult-val')?.value);
+      if (minMultOn && !isNaN(minMultVal) && minMultVal > 0) {
+        list = list.filter(p => {
+          const m = rowMultiple(p, prices);
+          return m != null && m >= minMultVal;
+        });
+      }
+    }
+
+    // 排序 (兩個 view 都套；watchlist 走 v2-sort 的選擇 — 預設 list_rank)
+    list = _sortList(list, prices);
+
+    state.filteredSorted = list;
+    state.page = 1;
+    renderGrid();
+  }
+
+  // sidebar filter 一律從 list 起跑 → 不會有累積 bug
+  function _applyExploreSidebarFilters(list) {
+    // district picks
+    if (state.districtPicks.size > 0) {
+      list = list.filter(p => state.districtPicks.has(`${p.city}|${p.district}`));
+    }
+    // building_type
     const btypePicks = $$('.v2-filter-btype:not(:disabled)').filter(c => c.checked).map(c => c.value);
     const btypeAll = $$('.v2-filter-btype:not(:disabled)').length;
     if (btypePicks.length > 0 && btypePicks.length < btypeAll) {
       list = list.filter(p => btypePicks.includes(p.building_type));
     }
-
     // road
-    const road = ($('#v2-road').value || '').trim();
+    const road = ($('#v2-road')?.value || '').trim();
     if (road) {
       list = list.filter(p => (p.address || '').includes(road));
     }
-
     // price range
-    const pmin = Number($('#v2-price-min').value) || 0;
-    const pmax = Number($('#v2-price-max').value) || Infinity;
+    const pmin = Number($('#v2-price-min')?.value) || 0;
+    const pmax = Number($('#v2-price-max')?.value) || Infinity;
     list = list.filter(p => {
       const w = (p.price_ntd || 0) / 10000;
       return w >= pmin && w <= pmax;
     });
-
-    // floor chips：B1 / 1F-5F；data-floor 屬性區分（不含「全部」master）
+    // floor chips
     const floorInputs = $$('#v2-floor-chips input[data-floor]');
     const floorPicks = floorInputs.filter(c => c.checked).map(c => c.value);
     if (floorPicks.length > 0 && floorPicks.length < floorInputs.length) {
@@ -566,74 +595,48 @@
           return intPicks.some(v => fmin <= +v && +v <= fmax);
         }
         const f = p.floor;
-        if (f == null) return true;   // 缺資料 pass-through
+        if (f == null) return true;
         return intPicks.includes(String(f));
       });
     }
-
-    // bld price
-    const bldMax = Number($('#v2-bld-price-max').value);
+    // bld / land single price
+    const bldMax = Number($('#v2-bld-price-max')?.value);
     if (bldMax > 0) {
-      list = list.filter(p => {
-        if (!p.price_ntd || !p.building_area_ping) return true;
-        return (p.price_ntd / 10000 / p.building_area_ping) < bldMax;
-      });
+      list = list.filter(p => !p.price_ntd || !p.building_area_ping
+        || (p.price_ntd / 10000 / p.building_area_ping) < bldMax);
     }
-
-    // land price
-    const landMax = Number($('#v2-land-price-max').value);
+    const landMax = Number($('#v2-land-price-max')?.value);
     if (landMax > 0) {
-      list = list.filter(p => {
-        if (!p.price_ntd || !p.land_area_ping) return true;
-        return (p.price_ntd / 10000 / p.land_area_ping) < landMax;
-      });
+      list = list.filter(p => !p.price_ntd || !p.land_area_ping
+        || (p.price_ntd / 10000 / p.land_area_ping) < landMax);
     }
-
-    // land min
-    const landMin = Number($('#v2-land-min').value) || 0;
+    const landMin = Number($('#v2-land-min')?.value) || 0;
     if (landMin > 0) {
       list = list.filter(p => (p.land_area_ping || 0) >= landMin);
     }
-
-    // resistance — 對齊 v1：hide-foreclosure / hide-resist-{floors5plus,remote,unsuitable,basement}
-    if ($('#v2-hide-floors5plus').checked) {
+    // resistance
+    if ($('#v2-hide-floors5plus')?.checked) {
       list = list.filter(p => !(p.total_floors >= 5 && p.building_type !== '透天厝'));
     }
-    if ($('#v2-hide-remote').checked) list = list.filter(p => !p.is_remote_area);
-    if ($('#v2-hide-unsuitable').checked) list = list.filter(p => !p.unsuitable_for_renewal);
-    if ($('#v2-hide-basement').checked) list = list.filter(p => !p.is_basement);
-    if ($('#v2-hide-foreclosure').checked) list = list.filter(p => !p.is_foreclosure);
-
-    state.filteredSorted = list;
-    applySort();
+    if ($('#v2-hide-remote')?.checked) list = list.filter(p => !p.is_remote_area);
+    if ($('#v2-hide-unsuitable')?.checked) list = list.filter(p => !p.unsuitable_for_renewal);
+    if ($('#v2-hide-basement')?.checked) list = list.filter(p => !p.is_basement);
+    if ($('#v2-hide-foreclosure')?.checked) list = list.filter(p => !p.is_foreclosure);
+    return list;
   }
 
-  // 對齊 v1 sort 8 個選項 + 升降序按鈕
-  // list_rank: scrape_session_at desc + list_rank asc (新進優先)
-  // last_change_at: last_change_at desc fallback scrape_session_at
-  // published_at: published_at desc fallback scraped_at
-  // profit_multiple: rowMultiple desc/asc，None 沉底
-  // price_per_building_ping / price_per_land_ping / price_ntd / building_age: 數值 sort，None 沉底
-  async function applySort() {
-    const mode = $('#v2-sort').value;
+  // 排序：list_rank / last_change_at / published_at / profit_multiple / price_per_*
+  function _sortList(list, prices) {
+    const mode = $('#v2-sort')?.value || 'list_rank';
     const reverse = state.sortDir === 'desc';
-    const prices = await getDistrictPrices();
-    const list = state.filteredSorted.slice();
-
-    // 最低獲利倍數 toggle (對齊 v1 explore-min-profit)
-    const minMultOn = $('#v2-min-mult-on')?.checked;
-    const minMultVal = parseFloat($('#v2-min-mult-val')?.value);
-    let workingList = list;
-    if (minMultOn && !isNaN(minMultVal) && minMultVal > 0) {
-      workingList = workingList.filter(p => {
-        const m = rowMultiple(p, prices);
-        return m != null && m >= minMultVal;
-      });
+    list = list.slice();   // 不 mutate input
+    if (mode === 'list_rank') {
+      list.sort((a, b) => (a.list_rank ?? 9999) - (b.list_rank ?? 9999));
+      list.sort((a, b) => (b.scrape_session_at || '').localeCompare(a.scrape_session_at || ''));
+      return list;
     }
-
     const valOf = (p) => {
       switch (mode) {
-        case 'list_rank': return null;   // 特殊處理在下方
         case 'last_change_at': return p.last_change_at || p.scrape_session_at || p.scraped_at || '';
         case 'published_at': return p.published_at || p.scraped_at || '';
         case 'profit_multiple': return rowMultiple(p, prices);
@@ -646,37 +649,24 @@
       }
       return null;
     };
-
-    if (mode === 'list_rank') {
-      // 對齊 v1：scrape_session_at desc + list_rank asc 為次（新進優先）
-      workingList.sort((a, b) =>
-        (a.list_rank ?? 9999) - (b.list_rank ?? 9999)
-      );
-      workingList.sort((a, b) =>
-        (b.scrape_session_at || '').localeCompare(a.scrape_session_at || '')
-      );
-    } else {
-      // 通用：None 永遠沉底
-      const has = workingList.filter(p => valOf(p) != null);
-      const noVal = workingList.filter(p => valOf(p) == null);
-      has.sort((a, b) => {
-        const va = valOf(a), vb = valOf(b);
-        if (typeof va === 'string') return reverse ? vb.localeCompare(va) : va.localeCompare(vb);
-        return reverse ? (vb - va) : (va - vb);
-      });
-      workingList = has.concat(noVal);
-    }
-
-    state.filteredSorted = workingList;
-    state.page = 1;
-    renderGrid();
+    const has = list.filter(p => valOf(p) != null);
+    const noVal = list.filter(p => valOf(p) == null);
+    has.sort((a, b) => {
+      const va = valOf(a), vb = valOf(b);
+      if (typeof va === 'string') return reverse ? vb.localeCompare(va) : va.localeCompare(vb);
+      return reverse ? (vb - va) : (va - vb);
+    });
+    return has.concat(noVal);
   }
+
+  // 兼容名稱：讓既有 inline onchange="v2.applySort()" 不爆 (轉跑 applyFilters)
+  const applySort = applyFilters;
 
   function toggleSortDir() {
     state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
     const btn = $('#v2-sort-dir');
     if (btn) btn.textContent = state.sortDir === 'desc' ? '↓' : '↑';
-    applySort();
+    applyFilters();
   }
 
   // ── Detail drawer ────────────────────────────────────────────────────────

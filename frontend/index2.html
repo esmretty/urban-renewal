@@ -49,39 +49,63 @@
           <span class="v2-tab__icon">🔍</span>探索
         </button>
         <button class="v2-tab" data-view="watchlist" onclick="v2.switchView('watchlist')">
-          <span class="v2-tab__icon">⭐</span>觀察清單
+          <span class="v2-tab__icon">⭐</span>最愛
           <span class="v2-tab__count" id="v2-watchlist-count"></span>
         </button>
       </div>
 
-      <!-- 觀察清單 tab：URL / Manual 分析 capture (sidebar 內，省 main 空間) -->
+      <!-- 最愛 tab：URL / Manual 分析 capture (sidebar 內) -->
       <div class="v2-sidebar-section v2-sidebar-section--watchlist" id="v2-sidebar-watchlist" style="display:none">
-        <div class="v2-filter-group">
-          <label class="v2-filter-label">貼物件網址</label>
-          <input id="v2-scrape-url" type="url" class="v2-input"
-                 placeholder="591 / 永慶 / 信義 詳情頁">
-          <button class="v2-btn v2-btn--primary v2-btn--block" onclick="v2.triggerScrapeUrl()">送出 URL 分析</button>
+
+        <!-- 卡 1：貼物件網址 -->
+        <div class="v2-cap">
+          <div class="v2-cap__title">貼物件網址</div>
+          <input id="v2-scrape-url" type="url" class="v2-input v2-cap__input"
+                 placeholder="591 / 永慶 / 信義 詳情頁 URL">
+          <button class="v2-btn v2-btn--primary v2-btn--block v2-cap__btn"
+                  onclick="v2.triggerScrapeUrl()">送出</button>
+          <div class="v2-cap__hint">※ 支援 591 / 永慶 / 信義；分析完加入最愛</div>
         </div>
-        <div class="v2-filter-group">
-          <label class="v2-filter-label">未上架地址評估</label>
-          <select id="v2-manual-city" class="v2-input" onchange="v2.populateManualDistricts()">
-            <option value="台北市">台北市</option>
-            <option value="新北市">新北市</option>
-          </select>
-          <select id="v2-manual-district" class="v2-input"></select>
-          <input id="v2-manual-address" type="text" class="v2-input" placeholder="例如：景興路102巷14號">
-          <div class="v2-num-row v2-num-row--compact v2-num-row--pair">
-            <span class="v2-num-row__label">建</span>
-            <input id="v2-manual-bld" type="number" min="0" step="0.01" class="v2-input v2-input--num v2-input--xs" placeholder="">
-            <span class="v2-num-row__label">地</span>
-            <input id="v2-manual-land" type="number" min="0" step="0.01" class="v2-input v2-input--num v2-input--xs" placeholder="">
+
+        <!-- 卡 2：未上架地址評估 -->
+        <div class="v2-cap">
+          <div class="v2-cap__title">未上架地址評估</div>
+          <div class="v2-cap__row">
+            <label class="v2-cap__label">城市</label>
+            <select id="v2-manual-city" class="v2-input v2-cap__field" onchange="v2.populateManualDistricts()">
+              <option value="台北市">台北市</option>
+              <option value="新北市">新北市</option>
+            </select>
           </div>
-          <div class="v2-num-row v2-num-row--compact">
-            <span class="v2-num-row__label">總價</span>
-            <input id="v2-manual-price" type="number" min="0" step="50" class="v2-input v2-input--num" placeholder="(萬)">
+          <div class="v2-cap__row">
+            <label class="v2-cap__label">行政區</label>
+            <select id="v2-manual-district" class="v2-input v2-cap__field"></select>
           </div>
-          <button class="v2-btn v2-btn--primary v2-btn--block" onclick="v2.triggerManualAnalyze()">送出地址分析</button>
+          <div class="v2-cap__row v2-cap__row--full">
+            <label class="v2-cap__label">地址</label>
+            <input id="v2-manual-address" type="text" class="v2-input v2-cap__field"
+                   placeholder="例如：景興路102巷14號">
+          </div>
+          <div class="v2-cap__row">
+            <label class="v2-cap__label">建坪</label>
+            <input id="v2-manual-bld" type="number" min="0" step="0.01"
+                   class="v2-input v2-input--num v2-cap__field" placeholder="(選填)">
+          </div>
+          <div class="v2-cap__row">
+            <label class="v2-cap__label">地坪</label>
+            <input id="v2-manual-land" type="number" min="0" step="0.01"
+                   class="v2-input v2-input--num v2-cap__field" placeholder="(選填)">
+          </div>
+          <div class="v2-cap__row">
+            <label class="v2-cap__label">總價</label>
+            <input id="v2-manual-price" type="number" min="0" step="50"
+                   class="v2-input v2-input--num v2-cap__field" placeholder="萬 (選填)">
+          </div>
+          <button class="v2-btn v2-btn--primary v2-btn--block v2-cap__btn"
+                  onclick="v2.triggerManualAnalyze()">送出分析</button>
+          <div class="v2-cap__hint">※ 目前僅支援台北市與新北市地址</div>
         </div>
+
       </div>
 
       <!-- 探索 tab：filter 區 -->
