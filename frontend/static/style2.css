@@ -924,7 +924,7 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.4;
 }
 
-/* 優勢 chip (TOD / 防災型 / 商業區) — 統一綠色 outline + 反光掃過動畫 */
+/* 優勢 chip (TOD / 防災型 / 商業區) — 統一紫色 outline + 反光掃過動畫 */
 .v2-achip,
 .v2-achip--tod,
 .v2-achip--fangzai,
@@ -937,13 +937,13 @@ a { color: inherit; text-decoration: none; }
   font-size: 11px;
   font-weight: 700;
   border-radius: var(--r-sm);
-  border: 1px solid #86efac;     /* green-300 */
-  background: #f0fdf4;           /* green-50 */
-  color: #15803d;                /* green-700 */
+  border: 1px solid #d8b4fe;     /* purple-300 */
+  background: #faf5ff;           /* purple-50 */
+  color: #7e22ce;                /* purple-700 */
   line-height: 1.4;
   letter-spacing: 0.2px;
 }
-/* 反光掃過動畫 — 一道斜光從左掃到右，每 3.5 秒一次 (綠色系) */
+/* 反光掃過動畫 — 一道斜光從左掃到右，每 3.5 秒一次 (紫色系) */
 .v2-achip::before {
   content: '';
   position: absolute;
@@ -954,9 +954,9 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(
     100deg,
     transparent 0%,
-    rgba(134, 239, 172, 0.45) 40%,
+    rgba(216, 180, 254, 0.45) 40%,
     rgba(255, 255, 255, 0.9) 50%,
-    rgba(134, 239, 172, 0.45) 60%,
+    rgba(216, 180, 254, 0.45) 60%,
     transparent 100%
   );
   transform: skewX(-15deg);
@@ -989,16 +989,16 @@ a { color: inherit; text-decoration: none; }
   flex-shrink: 0;
 }
 
-/* NEW badge：低調款 — 淡橙底 + 橙字 + 細邊；無漸層、無陰影、無動畫 */
+/* NEW badge：飽和紅底 + 白字 pill — 顯眼但不刺眼，無動畫無高光 */
 .v2-card__date--new {
-  padding: 1px 7px;
+  padding: 1px 8px;
   font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.8px;
-  color: #c2410c;          /* orange-700 */
-  background: #fff7ed;     /* orange-50 */
-  border: 1px solid #fed7aa;  /* orange-200 */
-  border-radius: var(--r-sm);
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: white;
+  background: #dc2626;     /* red-600 */
+  border: none;
+  border-radius: 10px;     /* pill */
 }
 
 /* 物件 title (591 賣家標題) — 地址下方一條小字 */
@@ -1023,9 +1023,7 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-text-muted);
   line-height: 1.4;
 }
-/* 來源連結 (591/永慶/信義 等) — 統一用 accent 青藍底白字 (跟「重新搜尋」同色系) */
-.v2-src-badge--alive { background: var(--c-accent); color: white; }
-.v2-src-badge--alive:hover { background: var(--c-accent-hover); }
+.v2-src-badge--alive { background: var(--c-good-bg); color: var(--c-good); }
 .v2-src-badge--dead { background: var(--c-low-bg); color: var(--c-text-light); text-decoration: line-through; }
 
 .v2-card__star {
@@ -1171,7 +1169,7 @@ a { color: inherit; text-decoration: none; }
 .v2-drawer__back:hover { background: var(--c-border); }
 .v2-drawer__back-label { font-size: 13px; }
 
-/* 加入最愛按鈕 (drawer header，accent 青藍跟「重新搜尋」同色) */
+/* 加入最愛按鈕 (drawer header，對齊返回按鈕字體) */
 .v2-drawer__fav {
   display: inline-flex;
   align-items: center;
@@ -1179,8 +1177,8 @@ a { color: inherit; text-decoration: none; }
   padding: 6px 10px;
   margin-left: 6px;
   border-radius: var(--r-sm);
-  background: var(--c-accent);
-  color: white;
+  background: var(--c-hover);
+  color: var(--c-text);
   font-size: 13px;
   font-weight: 600;
   border: 1px solid transparent;
@@ -1188,11 +1186,16 @@ a { color: inherit; text-decoration: none; }
   transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
   flex-shrink: 0;
 }
-.v2-drawer__fav:hover { background: var(--c-accent-hover); }
-.v2-drawer__fav-star { font-size: 14px; color: rgba(255, 255, 255, 0.85); transition: color var(--t-fast); }
+.v2-drawer__fav:hover { background: var(--c-border); }
+.v2-drawer__fav-star { font-size: 14px; color: var(--c-text-light); transition: color var(--t-fast); }
 .v2-drawer__fav-label { font-size: 13px; }
-/* 已加入最愛狀態：金黃星 + 維持 accent 底 */
-.v2-drawer__fav--active .v2-drawer__fav-star { color: #fbbf24; }
+/* 已加入最愛狀態：金黃星 + 邊框 */
+.v2-drawer__fav.v2-drawer__fav--active {
+  background: #fef3c7;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+.v2-drawer__fav--active .v2-drawer__fav-star { color: #f59e0b; }
 /* Mobile：返回按鈕加大 + accent 藍底 + iOS safe-area inset */
 @media (max-width: 640px) {
   .v2-drawer__header {
@@ -1345,7 +1348,16 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-d-basic-grid .v2-d-tbl { height: auto; }
 
-/* 來源連結 — 放右上、字大、清楚 */
+/* 來源連結 — 放在 detail 照片下方、靠左 (跟首頁卡片同樣的 .v2-src-badge 樣式) */
+.v2-d-sources-under {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+  justify-content: flex-start;
+}
+
+/* 來源連結 — 放右上、字大、清楚 (舊位置，新版已不用，留著以防其他 caller) */
 .v2-d-sources-bar {
   display: flex;
   gap: 8px;

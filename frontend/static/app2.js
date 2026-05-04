@@ -1070,13 +1070,7 @@
       : '<span class="v2-d-hint">—</span>';
 
     return `
-      <!-- Header bar：物件資訊標題 + 來源連結 -->
-      <div class="v2-d-header">
-        <h5 class="v2-d-title">物件資訊</h5>
-        ${p.sources && p.sources.length ? `<div class="v2-d-sources-bar">${srcBadgesHTML(p.sources, 'big')}</div>` : ''}
-      </div>
-
-      <!-- Row 1: 物件資訊 (左 7) | 圖片 (右 4) -->
+      <!-- Row 1: 物件資訊 (左 7) | 圖片 + 來源連結 (右 4) -->
       <div class="v2-d-row">
         <div class="v2-d-col v2-d-col--7">
           <div class="v2-d-basic-grid">
@@ -1125,6 +1119,7 @@
         </div>
         <div class="v2-d-col v2-d-col--5">
           ${img || '<div class="v2-detail-image-wrap"><div class="v2-detail-image-empty">無照片</div></div>'}
+          ${p.sources && p.sources.length ? `<div class="v2-d-sources-under">${srcBadgesHTML(p.sources)}</div>` : ''}
         </div>
       </div>
 
