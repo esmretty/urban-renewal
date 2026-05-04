@@ -179,13 +179,16 @@
     return [null, null];
   }
 
-  // 屋齡：當年 - 完工年 (若 building_age 有就直接用)
+  // 屋齡：完工年優先 (有完工年就以當年 - 完工年為準)，沒有才回 building_age
+  // 對齊 v1 currentAge (app.js:10) — 順序很重要：因為 reanalyze 不會重抓 building_age，
+  // 但完工年是穩定資料，用完工年算才會跟著時間自動 +1
   function currentAge(p) {
-    if (p.building_age != null) return p.building_age;
-    if (p.building_age_completed_year) {
-      return new Date().getFullYear() - Number(p.building_age_completed_year);
+    if (!p) return null;
+    const yc = p.building_age_completed_year;
+    if (yc && Number.isFinite(yc) && yc > 1900) {
+      return new Date().getFullYear() - yc;
     }
-    return null;
+    return p.building_age ?? null;
   }
 
   // 土地坪數異常偵測：591 詳情頁有時誤抓 (極端例：建坪 23、土地 107)
