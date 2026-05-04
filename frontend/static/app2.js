@@ -915,24 +915,29 @@
     const slim = state.allProperties.find(x => (x.source_id || x.id) === id);
     if (!slim) return;
 
-    // 1) 先用 slim 資料立刻開抽屜 — 避免空白等待感
-    $('#v2-drawer-title').textContent = slim.address || slim.address_inferred || '物件詳情';
-    $('#v2-drawer-body').innerHTML = `<div style="padding:24px;color:var(--c-text-muted);text-align:center">載入中…</div>`;
+    // 1) 先用 slim 資料立刻開抽屜 — 開 drawer + 顯 loading
+    $('#v2-drawer-title').textContent = slim.address_inferred || slim.address || '物件詳情';
+    $('#v2-drawer-body').innerHTML = `<div class="v2-drawer__loading">載入中…</div>`;
     $('#v2-drawer').classList.add('v2-open');
     $('#v2-drawer-backdrop').classList.add('v2-open');
 
-    // 2) 背景 fetch 完整 doc（含 renewal_v2 / ai_reason / road_width_all 等重欄位）
+    // 2) 背景 fetch 完整 doc (含 lvr_records / nearby_mrts / 等)
     try {
       const r = await fetch(`/api/properties/${encodeURIComponent(id)}`);
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const full = await r.json();
-      // 用戶可能在 fetch 期間已切到別的物件 → 過期 response 不渲染
       if (state.selectedId !== id) return;
+      // 合併 full 到 state.allProperties[i] — 後續 saveOverride / _renderDetailFromCurrent
+      // 讀 state 時也能拿到 lvr_records / nearby_mrts 等 fat 欄位
+      const idx = state.allProperties.findIndex(x => (x.source_id || x.id) === id);
+      if (idx >= 0) {
+        state.allProperties[idx] = { ...state.allProperties[idx], ...full };
+      }
       const prices = await getDistrictPrices();
-      $('#v2-drawer-body').innerHTML = detailHTML(full, prices);
+      $('#v2-drawer-title').textContent = full.address_inferred || full.address || '物件詳情';
+      $('#v2-drawer-body').innerHTML = detailHTML(state.allProperties[idx] || full, prices);
     } catch (e) {
       console.warn('openDetail full fetch failed', e);
-      // fallback：用 slim 資料渲染（少了試算/AI reason，但基本資料還在）
       const prices = await getDistrictPrices();
       $('#v2-drawer-body').innerHTML = detailHTML(slim, prices);
     }
