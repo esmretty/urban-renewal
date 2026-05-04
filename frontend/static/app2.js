@@ -1064,9 +1064,14 @@
       <div class="v2-d-row">
         <div class="v2-d-col v2-d-col--7">
           <div class="v2-d-basic-grid">
+            <!-- 地址列：橫跨整個 grid 寬度，直接顯示推測地址 (有則顯示)；推測 ≠ 原始時加「推測」badge -->
+            <div class="v2-d-addr-row">
+              <span class="v2-d-addr-main">${inferredAddressCellHTML(p)}</span>
+              ${(p.address_inferred && p.address_inferred !== p.address) ? '<span class="v2-d-addr-inferred-badge">推測</span>' : ''}
+              ${p.address_road_fixed ? `<div class="v2-d-addr-fixed">已自動修正：${esc(p.address_road_fixed.from)} → ${esc(p.address_road_fixed.to)}</div>` : ''}
+              ${p.address_suspicious ? `<div class="v2-d-warn">⚠ 路名可能不存在於此行政區，請自行確認</div>` : ''}
+            </div>
             <table class="v2-d-tbl">
-              <tr><td>原始地址</td><td>${esc(p.address || p.title || '—')}${p.address_road_fixed ? `<div class="v2-d-addr-fixed">已自動修正：${esc(p.address_road_fixed.from)} → ${esc(p.address_road_fixed.to)}</div>` : ''}${p.address_suspicious ? `<div class="v2-d-warn">⚠ 路名可能不存在於此行政區，請自行確認</div>` : ''}</td></tr>
-              <tr><td>推測地址</td><td>${inferredAddressCellHTML(p)}${inferredTag}</td></tr>
               <tr><td>類型 / 樓層</td><td>${esc(p.building_type || '—')} · ${formatFloor(p)}</td></tr>
               <tr><td>屋齡</td><td>${age != null ? age + ' 年' : '未知'}${p.building_age_completed_year ? ` <span class="v2-d-hint">(${p.building_age_completed_year} 完工)</span>` : ''}</td></tr>
               <tr><td>售價</td><td><span class="v2-d-price">${priceWan ? fmt0(priceWan) + '萬' : '—'}</span>${lvrIcon}</td></tr>
