@@ -71,7 +71,7 @@ a { color: inherit; text-decoration: none; }
   /* Sizes */
   --topbar-h: 52px;
   --sidebar-w: 268px;
-  --drawer-w: 1140px;             /* 對齊 v1 Bootstrap .modal-xl 寬度 */
+  --drawer-w: 950px;              /* 縮到剛好讓照片填滿右 col (照片 4:3 ~395px) */
 
   /* Radii */
   --r-sm: 4px;
@@ -1949,9 +1949,9 @@ a { color: inherit; text-decoration: none; }
 .v2-d-tools-cell a:hover { background: var(--c-accent-hover); }
 
 /* 圖片：右上，固定高度 */
-/* 對齊 v1 .modal-photo 米色底 / 8px radius；改 4:3 比例 + 寬度減 20% */
+/* 對齊 v1 .modal-photo 米色底 / 8px radius；4:3 比例，撐滿右 col (drawer 寬已縮) */
 .v2-detail-image-wrap {
-  width: 80%;
+  width: 100%;
   aspect-ratio: 4 / 3;
   background: #f4efe0;
   border-radius: 8px;
