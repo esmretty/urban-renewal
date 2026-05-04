@@ -1072,62 +1072,52 @@
     return `
       ${p.sources && p.sources.length ? `<div class="v2-d-sources-topright">${srcBadgesHTML(p.sources)}</div>` : ''}
       <!-- Row 1: 物件資訊 (左 7) | 圖片 (右 4) -->
+      <!-- Row 1: 物件資訊 + 圖片 (對齊 v1) -->
       <div class="v2-d-row">
         <div class="v2-d-col v2-d-col--7">
-          <div class="v2-d-basic-grid">
-            <!-- 地址列：橫跨整個 grid 寬度。順序：地址 → 推測 badge → 📍 map link -->
-            <div class="v2-d-addr-row">
-              ${(() => {
-                const cands = Array.isArray(p.address_inferred_candidates_detail) ? p.address_inferred_candidates_detail : [];
-                const current = p.address_inferred || p.address || p.title || '';
-                const sid = esc(p.source_id || p.id || '');
-                const isInferred = p.address_inferred && p.address_inferred !== p.address;
-                let addrHTML;
-                if (cands.length <= 1) {
-                  addrHTML = `<span class="v2-d-addr-main">${esc(stripCityDist(current))}</span>`;
-                } else {
-                  const opts = cands.map(c => {
-                    const sel = c.address === current ? 'selected' : '';
-                    const label = stripCityDist(c.address) + (c.is_reverse_geo ? '（座標反查）' : '');
-                    return `<option value="${esc(c.address)}" ${sel}>${esc(label)}</option>`;
-                  }).join('');
-                  addrHTML = `<select class="v2-d-input v2-d-inferred-select" onchange="v2.saveInferredChoice('${sid}', this.value)">${opts}</select>`;
-                }
-                const badge = isInferred ? '<span class="v2-d-addr-inferred-badge">推測</span>' : '';
-                const mapLink = `<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener" class="v2-d-map-link" title="Google Maps">📍</a>`;
-                return addrHTML + badge + mapLink;
-              })()}
-              ${p.address_road_fixed ? `<div class="v2-d-addr-fixed">已自動修正：${esc(p.address_road_fixed.from)} → ${esc(p.address_road_fixed.to)}</div>` : ''}
-              ${p.address_suspicious ? `<div class="v2-d-warn">⚠ 路名可能不存在於此行政區，請自行確認</div>` : ''}
+          <h6 class="v2-d-h v2-d-h--left">物件資訊</h6>
+          <div class="v2-d-basic-grid v2-d-basic-grid--v1">
+            <div class="v2-d-basic-col">
+              <table class="v2-d-tbl">
+                <tr><td>原始地址</td><td>${esc(stripCityDist(p.address || p.title))}${p.address_road_fixed ? `<div class="v2-d-addr-fixed">已自動修正：${esc(p.address_road_fixed.from)} → ${esc(p.address_road_fixed.to)}</div>` : ''}${p.address_suspicious ? `<div class="v2-d-warn">⚠ 路名可能不存在於此行政區，請自行確認</div>` : ''}</td></tr>
+                <tr><td>推測地址 ${p.address_inferred ? `<span class="v2-inferred-tag">${p.address_inferred_confidence === 'unique' ? '★實登' : p.address_inferred_confidence === 'multi' ? '推測' : '≈推測'}</span>` : ''}</td><td>${inferredAddressCellHTML(p)}</td></tr>
+                <tr><td>類型 / 樓層</td><td>${esc(p.building_type || '—')} ・ ${formatFloor(p)}</td></tr>
+                <tr><td>屋齡</td><td>${age != null ? age + ' 年' + (p.building_age_completed_year ? ` <span class="v2-d-hint">（${p.building_age_completed_year} 年完工）</span>` : '') : '未知'}</td></tr>
+                <tr><td>售價</td><td class="v2-d-price-cell">${priceWan ? `NT$ ${fmt0(priceWan)} 萬` : '—'}${lvrIcon}</td></tr>
+                <tr><td>欲出價</td><td><input type="number" class="v2-d-input" min="0" step="10" value="${desired ?? ''}"
+                  onchange="v2.saveOverride('${esc(id)}','desired_price_wan',this.value)"> 萬</td></tr>
+                <tr><td>建坪</td><td>${p.building_area_ping ? p.building_area_ping + ' 坪' : '—'}${perBld ? ` <span class="v2-d-hint">(${perBld} 萬 / 建坪)</span>` : ''}</td></tr>
+                <tr><td>地坪</td><td>${p.land_area_ping ? p.land_area_ping + ' 坪' : '—'}${perLand ? ` <span class="v2-d-hint">(${perLand} 萬 / 地坪)</span>` : ''}${p.land_area_source === 'lvr' ? ' <span class="v2-d-hint">(實登)</span>' : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 坪數過大（大於建坪），可能不可信</div>' : ''}${p.land_area_inconsistent ? '<div class="v2-d-warn">⚠ 此物件的實登候選地坪差異大，可能不是同一棟建築；選擇後請務必驗證。</div>' : ''}</td></tr>
+              </table>
             </div>
-            <table class="v2-d-tbl">
-              <tr><td>類型 / 樓層</td><td>${esc(p.building_type || '—')} · ${formatFloor(p)}</td></tr>
-              <tr><td>屋齡</td><td>${age != null ? age + ' 年' : '未知'}${p.building_age_completed_year ? ` <span class="v2-d-hint">(${p.building_age_completed_year} 完工)</span>` : ''}</td></tr>
-              <tr><td>售價</td><td><span class="v2-d-price">${priceWan ? fmt0(priceWan) + '萬' : '—'}</span>${lvrIcon}</td></tr>
-              <tr><td>建坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.building_area_ping ?? '—'}</span><span class="v2-d-unit">坪</span><span class="v2-d-per-lbl">單價</span><span class="v2-d-num2">${perBld || '—'}</span></div></td></tr>
-              <tr><td>地坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.land_area_ping ?? '—'}</span><span class="v2-d-unit">坪</span><span class="v2-d-per-lbl">單價</span><span class="v2-d-num2">${perLand || '—'}</span></div>${p.land_area_source === 'lvr' ? ' <span class="v2-d-hint">(實登)</span>' : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 地坪過大（&gt; 建坪），可能不可信</div>' : ''}${p.land_area_inconsistent ? '<div class="v2-d-warn">⚠ 此物件的實登候選地坪差異大，可能不是同一棟建築；選擇後請務必驗證。</div>' : ''}</td></tr>
-            </table>
-            <table class="v2-d-tbl">
-              <tr><td>附近捷運</td><td>${mrtList}</td></tr>
-              <tr><td>臨路寬度</td><td><input type="number" class="v2-d-input v2-d-input--narrow" min="0" step="0.5" value="${(p.road_width_m_override ?? p.road_width_m) ?? ''}"
-                onchange="v2.saveOverride('${esc(id)}','road_width_m_override',this.value)"> m${roadShotBtn}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">（寬度不明，有可能為私巷或特窄巷弄）</span>' : ''}</td></tr>
-              <tr><td>優勢</td><td class="v2-d-chips-cell">${advChipsHTML}</td></tr>
-              <tr><td>抗性</td><td class="v2-d-chips-cell">${resistChipsHTML}</td></tr>
-            </table>
+            <div class="v2-d-basic-col">
+              <table class="v2-d-tbl">
+                <tr><td>附近捷運站</td><td>${
+                  Array.isArray(p.nearby_mrts) && p.nearby_mrts.length
+                    ? p.nearby_mrts.map(m => `${esc(m.name)}（${Math.round(m.dist_m)}m）`).join('<br>')
+                    : '—'
+                }</td></tr>
+                <tr><td>使用分區</td><td>${zoningCellHTML(p)}</td></tr>
+                <tr><td>臨路寬度</td><td><input type="number" class="v2-d-input v2-d-input--narrow" min="0" step="0.5" value="${(p.road_width_m_override ?? p.road_width_m) ?? ''}"
+                  onchange="v2.saveOverride('${esc(id)}','road_width_m_override',this.value)"> m${roadShotBtn}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">（寬度不明，有可能為私巷或特窄巷弄）</span>' : ''}</td></tr>
+                <tr><td>優勢</td><td class="v2-d-chips-cell">${advChipsHTML}</td></tr>
+                <tr><td>抗性</td><td class="v2-d-chips-cell">${resistChipsHTML}</td></tr>
+              </table>
+              ${p.city === '台北市' ? `
+              <div class="v2-d-tools">
+                <span class="v2-d-tools-city">台北市</span>
+                <a href="https://bim.udd.gov.taipei/UDDPlanMap/" target="_blank" rel="noopener noreferrer">都市計畫圖 ↗</a>
+                <a href="https://zonemap.udd.gov.taipei/ZoneMapOP/" target="_blank" rel="noopener noreferrer">地籍套繪圖 ↗</a>
+              </div>` : p.city === '新北市' ? `
+              <div class="v2-d-tools">
+                <span class="v2-d-tools-city">新北市</span>
+                <a href="https://urban.planning.ntpc.gov.tw/NtpcURInfo/" target="_blank" rel="noopener noreferrer">城鄉資訊 ↗</a>
+              </div>` : ''}
+            </div>
           </div>
         </div>
         <div class="v2-d-col v2-d-col--5">
           ${img || '<div class="v2-detail-image-wrap"><div class="v2-detail-image-empty">無照片</div></div>'}
-          ${p.city === '台北市' ? `
-          <div class="v2-d-tools">
-            <span class="v2-d-tools-city">台北市</span>
-            <a href="https://bim.udd.gov.taipei/UDDPlanMap/" target="_blank" rel="noopener noreferrer">都市計畫圖 ↗</a>
-            <a href="https://zonemap.udd.gov.taipei/ZoneMapOP/" target="_blank" rel="noopener noreferrer">地籍套繪圖 ↗</a>
-          </div>` : p.city === '新北市' ? `
-          <div class="v2-d-tools">
-            <span class="v2-d-tools-city">新北市</span>
-            <a href="https://urban.planning.ntpc.gov.tw/NtpcURInfo/" target="_blank" rel="noopener noreferrer">城鄉資訊 ↗</a>
-          </div>` : ''}
         </div>
       </div>
 
