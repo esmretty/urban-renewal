@@ -246,17 +246,18 @@
     };
   }
 
-  // 分區縮寫：第三種住宅區→住三、第四種商業區→商四…
+  // 分區縮寫：第三種住宅區→住三、第四種商業區→商四、第三之一種住宅區→住三之一…
+  // 後綴 (特)/(遷)/(核)/(抄) 保留貼在縮寫後面
   function zoneAbbr(z) {
     if (!z) return "—";
     const suffixMatch = z.match(/(\((?:特|遷|核|抄)\))/);
     const suffix = suffixMatch ? suffixMatch[1] : "";
     const base = z.replace(/\((?:特|遷|核|抄)\)/g, "").trim();
-    const numMap = { "一":"一","二":"二","三":"三","四":"四","五":"五" };
-    let m = base.match(/^第([一二三四五])(?:之([一二三四五]))?種(住宅|商業|工業)區$/);
+    const m = base.match(/^第([一二三四五六])(?:之([一二三四五六]))?種(住宅|商業|工業)區$/);
     if (m) {
-      const head = m[3] === "住宅" ? "住" : m[3] === "商業" ? "商" : "工";
-      return head + numMap[m[1]] + (m[2] ? "之" + numMap[m[2]] : "") + suffix;
+      const [, n, sub, kind] = m;
+      const k = kind === "住宅" ? "住" : kind === "商業" ? "商" : "工";
+      return sub ? `${k}${n}之${sub}${suffix}` : `${k}${n}${suffix}`;
     }
     if (base === "住宅區") return "住" + suffix;
     if (base === "商業區") return "商" + suffix;

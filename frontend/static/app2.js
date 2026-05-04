@@ -282,39 +282,10 @@
     return html;
   }
 
-  // ── 分區縮寫 helper (對齊 v1 zoneAbbr 並擴充處理 (特)/(遷)/(核)/(抄) 後綴) ──
-  // 第一/二/三/四種住宅區 → 住一/住二/住三/住四
-  // 第三之一種住宅區 → 住三之一
-  // 第四種商業區 → 商四 / 第二種工業區 → 工二
-  // 住宅區/商業區/住宅用地 → 住/商/住地
-  // 後綴 (特)/(遷)/(核)/(抄) 保留貼在縮寫後面
-  function zoneAbbr(z) {
-    if (!z) return '—';
-    const suffixMatch = z.match(/(\((?:特|遷|核|抄)\))/);
-    const suffix = suffixMatch ? suffixMatch[1] : '';
-    const base = z.replace(/\((?:特|遷|核|抄)\)/g, '').trim();
-    const m = base.match(/^第([一二三四五六])(?:之([一二三四五六]))?種(住宅|商業|工業)區$/);
-    if (m) {
-      const [, n, sub, kind] = m;
-      const k = kind === '住宅' ? '住' : kind === '商業' ? '商' : '工';
-      return sub ? `${k}${n}之${sub}${suffix}` : `${k}${n}${suffix}`;
-    }
-    if (base === '住宅區') return '住' + suffix;
-    if (base === '商業區') return '商' + suffix;
-    if (base === '工業區') return '工' + suffix;
-    if (base === '住宅用地') return '住地' + suffix;
-    return base + suffix;
-  }
-
-  // ── 屋齡 helper (對齊 v1 currentAge) ─────────────────────────────────────
-  function currentAge(p) {
-    if (!p) return null;
-    const yc = p.building_age_completed_year;
-    if (yc && Number.isFinite(yc) && yc > 1900) {
-      return new Date().getFullYear() - yc;
-    }
-    return p.building_age ?? null;
-  }
+  // ── 算式 / 常數抽到 frontend/static/shared.js (UrbanShared.X) ─────────────
+  // zoneAbbr / currentAge / 後面 lookupFar 等都是 alias，動算式請改 shared.js
+  const zoneAbbr    = UrbanShared.zoneAbbr;
+  const currentAge  = UrbanShared.currentAge;
 
   // ── 商業區判定（對齊 v1 _isCommercialEffective）──────────────────────────
   function _isCommercialEffective(p) {
@@ -384,175 +355,30 @@
     return DISTRICT_PRICE_CACHE;
   }
 
+  // 透天厝豁免：透天的土地永遠 > 建坪 (整塊地都自己的)，不算抓錯
   function isLandSuspicious(p) {
     if (p.building_type === '透天厝') return false;
-    const land = Number(p.land_area_ping) || 0;
-    const build = Number(p.building_area_ping) || 0;
-    return build > 0 && land > build;
+    return UrbanShared.isLandAreaSuspicious(p);
   }
 
-  // ── FAR / share-ratio 表（跟 app.js / config.py 對齊，CLAUDE.md 規則 8: DB 不存 → 前端即時算） ──
-  const SHARE_TABLE = [
-    [60,0.45,234],[65,0.47,241],[70,0.48,248],[75,0.49,255],[80,0.50,262],
-    [85,0.51,269],[90,0.52,276],[95,0.53,283],[100,0.54,290],[105,0.55,297],
-    [110,0.56,304],[115,0.57,311],[120,0.58,318],[130,0.60,332],[140,0.61,339],
-    [150,0.62,360],[160,0.63,374],[170,0.64,388],[180,0.65,402],
-  ];
-  const TAIPEI_FAR_PCT = {
-    "第一種住宅區":60,"第二種住宅區":120,"第三種住宅區":225,"第三種住宅區(特)":225,
-    "第三之一種住宅區":300,"第三之二種住宅區":400,"第四之一種住宅區":400,
-    "第四種住宅區":300,"住宅用地":200,
-    "第一種商業區":360,"第二種商業區":630,"第三種商業區":560,"第三種商業區(特)":560,
-    "第四種商業區":800,
-  };
-  const NEW_TAIPEI_FAR_PCT = {
-    "_banqiao_fujou": { "住宅區": 240, "住宅區(再)": 160, "商業區": 300 },
-    "新店區": {
-      "第二種住宅區": 120, "第三種住宅區": 280, "第四種住宅區": 300,
-      "第一種商業區": 420, "第二種商業區": 440,
-      "住宅區": 300, "商業區": 440,
-    },
-    "土城區": { "第一種住宅區": 180, "第二種住宅區": 240, "第一種商業區": 240, "第二種商業區": 320 },
-    "樹林區": { "第一種住宅區": 260, "第二種住宅區": 250, "商業區": 380 },
-    "汐止區": { "第一種住宅區": 200, "第二種住宅區": 240, "商業區": 320 },
-    "淡水區": { "第二種住宅區": 225, "第三種住宅區": 360, "第四種住宅區": 240, "第一種商業區": 360, "第二種商業區": 400 },
-    "八里區": { "第一種住宅區": 200, "第二種住宅區": 200, "第一種商業區": 300, "第二種商業區": 300 },
-  };
-  const _NTPC_5 = ["板橋區","新莊區","中和區","永和區","三重區"];
+  // ── 算式 / 常數全部抽到 shared.js (UrbanShared.X) — 改算式請動 shared.js ──
+  const SHARE_TABLE         = UrbanShared.SHARE_RATIO_TABLE;
+  const TAIPEI_FAR_PCT      = UrbanShared.TAIPEI_FAR_PCT;
+  const NEW_TAIPEI_FAR_PCT  = UrbanShared.NEW_TAIPEI_FAR_PCT;
+  const lookupFar           = UrbanShared.lookupFar;
+  const lookupShareRatio    = UrbanShared.lookupShareRatio;
+  const effectiveZoning     = UrbanShared.effectiveZoning;
+  const applyRoadCap        = UrbanShared.applyRoadCap;
+  const baseFar             = UrbanShared.baseFarPctWeighted;
+  const effectiveFar        = UrbanShared.effectiveFarPctWeighted;
 
-  function lookupFar(zoning, p) {
-    if (!zoning || !p) return null;
-    // 不可建築用地（道路、公共設施保留地、綠地、公園、河道、機關用地）→ FAR = 0%
-    // 不貢獻倍數但仍視為「合法值」(0 ≠ null)，讓多分區加權能繼續計算
-    if (/(道路用地|公共設施|保留地|綠地|公園|河道|機關用地)/.test(zoning)) return 0;
-    const district = p.district;
-    if (district === "板橋區" && p.is_remote_area) {
-      return NEW_TAIPEI_FAR_PCT["_banqiao_fujou"][zoning] ?? null;
-    }
-    if (NEW_TAIPEI_FAR_PCT[district]) {
-      const sub = NEW_TAIPEI_FAR_PCT[district][zoning];
-      if (sub != null) return sub;
-      if (zoning.includes("商")) return NEW_TAIPEI_FAR_PCT[district]["商業區"] ?? null;
-      if (zoning.includes("住")) return NEW_TAIPEI_FAR_PCT[district]["住宅區"] ?? null;
-      return null;
-    }
-    if (_NTPC_5.includes(district)) {
-      if (zoning.includes("商")) return district === "板橋區" ? 460 : 440;
-      if (zoning.includes("住")) return 300;
-      return null;
-    }
-    // 台北市
-    const direct = TAIPEI_FAR_PCT[zoning];
-    if (direct != null) return direct;
-    // 泛稱 fallback (GeoServer 偶會回沒子類別的「商業區」「住宅區」字串)
-    if (zoning === "商業區") return TAIPEI_FAR_PCT["第一種商業區"] ?? null;   // 取最保守
-    if (zoning === "住宅區") return TAIPEI_FAR_PCT["第二種住宅區"] ?? null;
-    return null;
-  }
-
-  function lookupShareRatio(price) {
-    if (!price) return [null, null];
-    if (price <= SHARE_TABLE[0][0]) return [SHARE_TABLE[0][1], SHARE_TABLE[0][2]];
-    if (price >= SHARE_TABLE[SHARE_TABLE.length-1][0])
-      return [SHARE_TABLE[SHARE_TABLE.length-1][1], SHARE_TABLE[SHARE_TABLE.length-1][2]];
-    for (let i = 0; i < SHARE_TABLE.length - 1; i++) {
-      const [p1, r1, k1] = SHARE_TABLE[i];
-      const [p2, r2, k2] = SHARE_TABLE[i+1];
-      if (price >= p1 && price <= p2) {
-        const t = (price - p1) / (p2 - p1);
-        return [r1 + (r2 - r1) * t, k1 + (k2 - k1) * t];
-      }
-    }
-    return [null, null];
-  }
-
-  // 處理特殊 zoning 後綴 (特/遷/核/抄)，對齊 v1 effectiveZoning
-  // (特)/(遷) 商業區 → 優先用 zoning_original，否則剝掉後綴
-  // (特)/(遷) 住宅區 → 一律剝掉後綴用本身住宅區
-  function effectiveZoning(p) {
-    const z = p.zoning || '';
-    const orig = p.zoning_original || '';
-    const hasSpecial = /\((?:特|遷|核|抄)\)/.test(z);
-    const base = z.replace(/\((?:特|遷|核|抄)\)/g, '').trim();
-    if (hasSpecial && z.includes('商')) {
-      if (orig && lookupFar(orig, p) != null) return orig;
-      return lookupFar(base, p) != null ? base : z;
-    }
-    if (hasSpecial && z.includes('住')) {
-      return lookupFar(base, p) != null ? base : z;
-    }
-    if (orig && lookupFar(orig, p) != null) return orig;
-    return z;
-  }
-
-  // 台北市路寬限縮：FAR 上限 = road_width_m × 50 (規則：容積率最多吃路寬的一半，% 表示)
-  // 新北市不限縮 (用戶設計：建商會擴基地吃旁邊路寬)
-  function applyRoadCap(baseFar, p) {
-    if (baseFar == null) return null;
-    if (p.city !== '台北市') return baseFar;
-    const roadW = p.road_width_m_override ?? p.road_width_m;
-    if (!roadW || roadW <= 0) return baseFar;
-    const cap = Math.round(roadW * 50);
-    return Math.min(baseFar, cap);
-  }
-
-  // base FAR (未套路寬限縮) — 用於 detail 「實際容積採」說明顯示原始 FAR
-  function baseFar(p) {
-    const zList = p.zoning_list;
-    if (zList && zList.length > 1) {
-      const ratios = p.zoning_ratios || zList.map(() => 100 / zList.length);
-      const total = ratios.reduce((a, b) => a + (Number(b) || 0), 0) || 1;
-      let w = 0;
-      for (let i = 0; i < zList.length; i++) {
-        const z = (typeof zList[i] === 'string') ? zList[i] : (zList[i].original_zone || zList[i].zone_name);
-        const f = lookupFar(z, p);
-        if (f == null) return null;
-        w += f * ((Number(ratios[i]) || 0) / total);
-      }
-      return Math.round(w);
-    }
-    return lookupFar(effectiveZoning(p), p);
-  }
-
-  // 多分區加權 FAR — 對齊 v1 effectiveFarPctWeighted，台北市套路寬 cap
-  // 注意：單分區走 effectiveZoning(p) 而非 raw p.zoning (處理特殊後綴 case)
-  function effectiveFar(p) {
-    return applyRoadCap(baseFar(p), p);
-  }
-
-  // 即時算倍數 — 跟 v1 computeRowMultiples 對齊：
-  //   - bonusW (危老) 0.30 / bonusD (都更或防災都更) 台北 1974 前 0.80，否則 0.50
-  //   - 回傳 max(危老, 都更) — v2 卡片只顯示一個倍數，取較高那個
-  // DB 不存 multiple (CLAUDE.md 規則 8)
+  // rowMultiple(p, prices) — v2 卡片顯示 max(危老, 都更) 一個數字
+  // 跟 v1 computeRowMultiples 用同一條 UrbanShared.computeMultiples，差只在
+  // v2 取 max、v1 回 {w, d} 兩個分開
   function rowMultiple(p, prices) {
-    if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal || isLandSuspicious(p)) {
-      return null;
-    }
-    const land = Number(p.land_area_ping) || 0;
-    const price = p.new_house_price_wan_override ?? prices[p.district];
-    const farPct = effectiveFar(p);
-    if (!land || !farPct || !price) return null;
-    const coeff = p.rebuild_coeff ?? 1.57;
-    const [ratio, parking] = lookupShareRatio(price);
-    if (!ratio) return null;
-    const is1F = Number(p.floor) === 1 || Number(p.floor_range_min) === 1;
-    const floorPremium = p.floor_premium ?? (is1F ? 0.20 : 0);
-    const effectivePrice = price * (1 + floorPremium);
-    // 防災型：台北市 1974 前蓋的，都更獎勵 0.80 (vs 一般 0.50)
-    const age = currentAge(p);
-    const isFangzai = p.city === '台北市' && age && (new Date().getFullYear() - age) <= 1974;
-    const bonusW = p.bonus_weishau ?? 0.30;            // 危老
-    const bonusD = p.bonus_dugen ?? (isFangzai ? 0.80 : 0.50);  // 都更/防災型
-    const calcVal = (b) => {
-      const share = land * (farPct/100) * (1+b) * coeff * ratio;
-      return share * effectivePrice + (share / 40) * (parking || 0);
-    };
-    const listWan = (p.price_ntd || 0) / 10000;
-    const desired = p.desired_price_wan ?? (listWan ? Math.round(listWan * 0.9 / 10) * 10 : 0);
-    if (!desired) return null;
-    const w = calcVal(bonusW) / desired;
-    const d = calcVal(bonusD) / desired;
-    return Math.max(w, d);   // v2 顯示 max
+    const r = UrbanShared.computeMultiples(p, prices[p.district]);
+    if (r.w == null || r.d == null) return null;
+    return Math.max(r.w, r.d);
   }
 
   // ── Source badges (size 可選 'sm' / 'big') ────────────────────────────
