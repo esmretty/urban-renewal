@@ -1156,9 +1156,12 @@
       : '';
 
     // ── 臨路寬度 cell — 地籍圖改成內部 overlay；說明文字放 overlay 內 ──
+    // 台北市 + 沒 screenshot → 顯示「重新掃描路寬」按鈕 (對齊 v1 scanRoadWidth)
     const roadShotBtn = p.screenshot_roadwidth
       ? ` <button class="v2-d-road-show" onclick="event.stopPropagation(); v2.openRoadOverlay('${esc(id)}')">地籍圖 ↗</button>`
-      : '';
+      : (p.city === '台北市'
+          ? ` <button class="v2-d-road-scan" onclick="event.stopPropagation(); v2.scanRoadWidth('${esc(id)}', this)">重新掃描路寬</button>`
+          : '');
 
     // LVR 「實」icon (v1 行為：hover 顯示彈窗)
     const lvrIcon = lvrRecs.length
@@ -1728,6 +1731,52 @@
     }, 200);
   }
 
+  // ── 重新掃描路寬 (對齊 v1 scanRoadWidth) — 台北市 + 沒 screenshot 時 ─────────
+  // POST /api/properties/{id}/scan_road_width，progress 模擬 + 完成後更新 state + re-render detail
+  async function scanRoadWidth(id, btn) {
+    btn.disabled = true;
+    btn.classList.add('v2-d-road-scan--scanning');
+    btn.textContent = '0%';
+    const steps = [
+      [1000, '10%'], [3000, '30%'], [5000, '50%'],
+      [8000, '70%'], [11000, '85%'],
+    ];
+    const timers = steps.map(([ms, label]) => setTimeout(() => {
+      if (btn.classList.contains('v2-d-road-scan--scanning')) btn.textContent = label;
+    }, ms));
+    try {
+      const res = await fetch(`/api/properties/${encodeURIComponent(id)}/scan_road_width`, { method: 'POST' });
+      const data = await res.json();
+      timers.forEach(clearTimeout);
+      if (data.road_width_m != null) {
+        const idx = state.allProperties.findIndex(x => (x.source_id || x.id) === id);
+        if (idx >= 0) {
+          Object.assign(state.allProperties[idx], {
+            road_width_m: data.road_width_m,
+            road_width_name: data.road_name || state.allProperties[idx].road_width_name,
+            screenshot_roadwidth: data.screenshot || state.allProperties[idx].screenshot_roadwidth,
+            road_width_vision_reason: data.reason || '',
+          });
+        }
+        toast(`已掃描：${data.road_name || ''} ${data.road_width_m}m`, 'success');
+        _renderDetailFromCurrent();   // 重 render 讓「地籍圖」按鈕替換掉「掃描中」
+        applyFilters();                // 卡片倍數重算
+      } else {
+        btn.classList.remove('v2-d-road-scan--scanning');
+        btn.classList.add('v2-d-road-scan--fail');
+        btn.textContent = data.error || '掃描失敗';
+        btn.disabled = true;
+      }
+    } catch (e) {
+      timers.forEach(clearTimeout);
+      btn.classList.remove('v2-d-road-scan--scanning');
+      btn.classList.add('v2-d-road-scan--fail');
+      btn.textContent = '掃描失敗';
+      btn.disabled = true;
+      console.error('scanRoadWidth', e);
+    }
+  }
+
   // ── 地籍圖 overlay (對齊 v1 openRoadOverlay 內部跳窗，不外開新分頁) ─────────
   function openRoadOverlay(id) {
     const existing = document.querySelector('.v2-road-overlay');
@@ -2151,7 +2200,7 @@
     switchGridCity,
     showLvrPopup, hideLvrPopup,
     saveOverride, saveInferredChoice, setZonePing,
-    openRoadOverlay,
+    openRoadOverlay, scanRoadWidth,
   };
 
   // Boot
