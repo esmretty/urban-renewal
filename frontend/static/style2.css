@@ -1233,11 +1233,11 @@ a { color: inherit; text-decoration: none; }
   overflow-y: auto;
   padding: var(--sp-4);
   position: relative;
-  /* detail body 米色底 + accent 黃褐色 (對齊 v1 modal-body 視覺) */
-  background: #fafaf6;
-  --c-accent: #c78a00;          /* v1 黃褐主色 */
+  /* drawer body 白底，內部 table / ai-sec 等區塊用 #fafaf6 米色才會浮出 (對齊 v1 modal-body 白 + table 米的對比) */
+  background: #ffffff;
+  --c-accent: #c78a00;
   --c-accent-hover: #b0790a;
-  --c-accent-light: #f4edd5;    /* v1 淡米色 */
+  --c-accent-light: #f4edd5;
 }
 .v2-drawer-backdrop {
   display: none;

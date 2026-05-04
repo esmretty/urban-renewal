@@ -1034,9 +1034,9 @@
             const totalWan = r.price_total ? r.price_total / 10000 : null;
             return `<tr>
               <td>${esc(r.txn_date || '—')}</td>
-              <td>${totalWan != null ? fmt0(totalWan) : '—'}</td>
-              <td>${r.area_ping ? fmt1(r.area_ping) : '—'}</td>
-              <td>${(totalWan != null && r.area_ping) ? (totalWan / r.area_ping).toFixed(1) : '—'}</td>
+              <td>${totalWan != null ? totalWan.toFixed(2) : '—'}</td>
+              <td>${r.area_ping ? r.area_ping.toFixed(2) : '—'}</td>
+              <td>${(totalWan != null && r.area_ping) ? (totalWan / r.area_ping).toFixed(2) : '—'}</td>
               <td title="${esc(r.address || '')}">${esc((r.address || '').slice(0, 14))}</td>
               <td>${r.is_special ? `<span class="v2-lvr-warn">⚠<span class="v2-lvr-tip">${esc(r.note || '特殊交易')}</span></span>` : ''}</td>
             </tr>`;
@@ -1698,10 +1698,10 @@
           const perPingWan = (totalWan && r.area_ping) ? (totalWan / r.area_ping) : null;
           return `<tr>
             <td>${esc(r.txn_date || '—')}</td>
-            <td>${totalWan != null ? fmt0(totalWan) + '萬' : '—'}</td>
-            <td>${r.area_ping ? fmt1(r.area_ping) : '—'}</td>
-            <td>${r.land_ping ? fmt1(r.land_ping) : '—'}</td>
-            <td>${perPingWan != null ? perPingWan.toFixed(1) + '萬' : '—'}</td>
+            <td>${totalWan != null ? totalWan.toFixed(2) + '萬' : '—'}</td>
+            <td>${r.area_ping ? r.area_ping.toFixed(2) : '—'}</td>
+            <td>${r.land_ping ? r.land_ping.toFixed(2) : '—'}</td>
+            <td>${perPingWan != null ? perPingWan.toFixed(2) + '萬' : '—'}</td>
             <td class="v2-lvr-addr" title="${esc(r.address || '')}">${esc(stripCD(r.address))}</td>
             <td>${r.is_special ? `<span class="v2-lvr-warn">⚠<span class="v2-lvr-tip">${esc(r.note || '特殊交易')}</span></span>` : ''}</td>
           </tr>`;
