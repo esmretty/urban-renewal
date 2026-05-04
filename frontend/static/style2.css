@@ -1430,11 +1430,10 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.4;
 }
 .v2-d-tbl td:first-child {
-  color: var(--c-text-muted);
+  color: #6b7280;
   white-space: nowrap;
   width: 88px;
-  /* 字體大小不另外設定 → inherit .v2-d-tbl 的 13px (mobile 自動 14px)，
-     避免 label/content/mrt-line 三邊不一致 */
+  font-weight: 500;            /* 對齊 v1 .renewal-table td:first-child medium */
 }
 .v2-d-tbl--params td:first-child { width: auto; }
 .v2-d-tbl--params tr { border-bottom: 1px dashed var(--c-border); }
@@ -1676,8 +1675,8 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* 用戶可改 input — 內文靠左 (對齊 v1) */
-/* 原始地址 / 推測地址 cell 字粗一點 (對齊 v1 視覺) */
-.v2-d-addr-val { font-weight: 600; color: #1a1a2e; }
+/* 原始地址 / 推測地址 cell — 跟其他欄位一樣不粗 */
+.v2-d-addr-val { font-weight: inherit; color: inherit; }
 
 /* 對齊 v1 .inline-edit (米色底 棕邊 右對齊) */
 .v2-d-input {
@@ -1852,33 +1851,33 @@ a { color: inherit; text-decoration: none; }
 .v2-road-overlay-close:hover { background: #fff; transform: scale(1.05); }
 
 /* 參考工具 row (政府連結) — 放在抗性下方 */
-/* 政府連結 — 字體小一點 + 一列內 (nowrap) */
+/* 政府連結 — 1:1 對齊 v1 .modal-tools (字體 14、padding、letter-spacing) */
 .v2-d-tools {
   margin-top: 10px;
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: nowrap;
   align-items: center;
   white-space: nowrap;
 }
 .v2-d-tools-city {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   color: #5c4a0a;
   background: #d8c88f;
-  padding: 2px 6px;
+  padding: 3px 8px;
   border-radius: 3px;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
   flex-shrink: 0;
 }
 .v2-d-tools a {
   display: inline-block;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   color: #b0790a;
   background: #fff8e5;
   border: 1px solid #d8b56a;
-  padding: 2px 8px;
+  padding: 4px 10px;
   border-radius: 4px;
   text-decoration: none;
   transition: background 0.12s;
@@ -2066,11 +2065,13 @@ a { color: inherit; text-decoration: none; }
   font-size: 14px;       /* 跟「推測地址」table cell 同大小 */
   text-align: center;
 }
-/* 土地持分內的 zone-badge：縮小到跟 td 字體一致 (14/600 不再 15/700) */
+/* 土地持分內的 zone-badge：字 14 但 weight + padding + 顏色對齊 v1 .zone-badge */
 .v2-rv2-land__zone-body .v2-d-zone-badge {
   font-size: 14px;
-  font-weight: 600;
-  padding: 1px 8px;
+  font-weight: 700;
+  padding: 2px 10px;
+  background: #eaf4ea;
+  color: #2e7d32;
 }
 .v2-rv2-land__abbr {
   display: inline-block;
