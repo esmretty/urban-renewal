@@ -808,7 +808,7 @@ a { color: inherit; text-decoration: none; }
   flex: 1;
   min-width: 0;
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--c-text);
   white-space: nowrap;
   overflow: hidden;
@@ -2166,14 +2166,16 @@ select.v2-rv2-edit {
 .v2-rv2-land__zone {
   display: flex;
   align-items: baseline;
+  justify-content: flex-end;     /* 整個分區靠右對齊 */
   gap: 10px;
   min-width: 0;
 }
 .v2-rv2-land__zone-body {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
-  font-size: 13px;
+  font-size: 13px;               /* 跟「附近捷運」label 同字體 */
   line-height: 1.5;
+  text-align: right;
 }
 .v2-rv2-land--top .v2-rv2-land__lbl { font-size: 13px; flex-shrink: 0; }
 .v2-rv2-land--top .v2-rv2-land__val { font-size: 26px; margin: 0; }
@@ -2206,13 +2208,16 @@ select.v2-rv2-edit {
   padding-top: 0;
   min-width: 0;
 }
+/* 危老/都更 結果框 — 強調區塊，字體 + 框體 + padding 都放大 */
 .v2-rv2-result--stack .v2-rv2-rcol {
   background: var(--c-card);
+  border-width: 2px;             /* 從預設 1px 加粗 */
+  border-color: var(--c-accent-light);
   text-align: left;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
+  gap: 8px;
+  padding: 12px 14px;             /* 從 8 10 加大 */
   min-width: 0;
 }
 .v2-rv2-result--stack .v2-rv2-rcol-head {
@@ -2225,32 +2230,35 @@ select.v2-rv2-edit {
   display: inline-block;
   width: max-content;
   flex-shrink: 0;
+  font-size: 13px;                /* 從 11 加大 */
+  padding: 3px 12px;
 }
 .v2-rv2-result--stack .v2-rv2-rval {
-  font-size: 17px;
+  font-size: 22px;                /* 從 17 加大 */
   margin: 0;
   text-align: right;
   font-weight: 800;
+  color: var(--c-accent);
 }
 .v2-rv2-result--stack .v2-rv2-circles {
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
+  gap: 6px;
 }
 .v2-rv2-result--stack .v2-rv2-circ {
   border-radius: var(--r-md);
   aspect-ratio: auto;
   flex-direction: column;
-  gap: 1px;
-  padding: 5px 4px;
+  gap: 2px;
+  padding: 8px 6px;               /* 從 5 4 加大 */
   justify-content: center;
   align-items: center;
   text-align: center;
   min-width: 0;
 }
-.v2-rv2-result--stack .v2-rv2-circ__lbl { margin-top: 1px; font-size: 10px; }
-.v2-rv2-result--stack .v2-rv2-circ__num { font-size: 13px; }
+.v2-rv2-result--stack .v2-rv2-circ__lbl { margin-top: 2px; font-size: 11px; }
+.v2-rv2-result--stack .v2-rv2-circ__num { font-size: 16px; }
 
 /* 出價建議 — Row 2 右欄獨立區塊 */
 .v2-bid-section {
@@ -2478,10 +2486,10 @@ select.v2-rv2-edit {
   align-items: center;
   gap: 6px;
   margin-top: 6px;
-  font-size: 13.5px;
+  font-size: 13px;
   flex-wrap: wrap;
 }
-.v2-bid-row--muted { color: var(--c-text-light); font-size: 12px; }
+.v2-bid-row--muted { color: var(--c-text-light); font-size: 13px; }
 .v2-bid-select {
   padding: 3px 8px;
   border: 1px solid var(--c-border);
@@ -2496,6 +2504,7 @@ select.v2-rv2-edit {
   color: var(--c-danger);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  font-size: 13px;
 }
 
 /* LVR 表 (popup 用) */

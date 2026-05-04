@@ -1128,7 +1128,7 @@
           ${renewalSectionHTML(p, prices)}
         </div>
         <div class="v2-d-col v2-d-col--5">
-          <h6 class="v2-d-h">出價建議</h6>
+          <h6 class="v2-d-h">出價試算</h6>
           ${bidSectionHTML(p, prices)}
         </div>
       </div>
@@ -1178,7 +1178,7 @@
         const v = toPing(ratios[i]).toFixed(2);
         const dis = locked ? 'disabled' : '';
         return `<div class="v2-d-zone-multi-row">
-          <span class="v2-d-zone-badge">${esc(eff)} (${far}%)</span>
+          <span class="v2-d-zone-badge">${esc(zoneAbbr(eff))} (${far}%)</span>
           <input type="number" class="v2-d-zone-ping" min="0" max="${totalLand}" step="0.01" value="${v}" ${dis}
             onchange="v2.setZonePing('${esc(id)}', ${i}, this.value)">坪
         </div>`;
@@ -1190,7 +1190,9 @@
     } else if (z) {
       // 分區條件色：商業區→紅、住宅/工業/其他→黃
       const cls = z.includes('商') ? 'v2-d-zone-badge--commercial' : 'v2-d-zone-badge--default';
-      badge = `<span class="v2-d-zone-badge ${cls}">${esc(z)}</span>`;
+      const far = lookupFar(z, p);
+      const farStr = far != null ? ` (${far}%)` : '';
+      badge = `<span class="v2-d-zone-badge ${cls}">${esc(zoneAbbr(z))}${farStr}</span>`;
       if (orig && orig !== z) {
         badge += `<div class="v2-d-zone-orig">原：${esc(orig)}</div>`;
       }
@@ -1444,7 +1446,6 @@
             <span class="v2-rv2-land__val">${land}<span class="v2-rv2-land__unit">坪</span></span>
           </div>
           <div class="v2-rv2-land__zone">
-            <span class="v2-rv2-land__lbl">使用分區</span>
             <div class="v2-rv2-land__zone-body">${zoningCellHTML(p)}</div>
           </div>
         </div>
@@ -1515,6 +1516,11 @@
           </div>
         </div>
         <div class="v2-rv2-right">
+          <div class="v2-bid-input-row">
+            <label class="v2-bid-input-lbl">出價設定</label>
+            <input type="number" class="v2-d-input" min="0" step="10" value="${desired ?? ''}"
+              onchange="v2.saveOverride('${esc(id)}','desired_price_wan',this.value)"> 萬
+          </div>
           <div class="v2-rv2-result v2-rv2-result--stack">
             ${renderResult('危老', valW, shareW)}
             ${renderResult('都更', valD, shareD)}
@@ -1524,19 +1530,10 @@
       </div>`;
   }
 
-  // 出價建議區塊 — Row 2 右欄獨立 render
+  // 出價建議區塊 — Row 2 右欄獨立 render (出價設定已移到都更換回試算右欄)
   function bidSectionHTML(p, prices) {
-    const id = p.source_id || p.id || '';
-    const desiredVal = p.desired_price_wan ?? (p.price_ntd ? Math.round(p.price_ntd / 10000 * 0.9 / 10) * 10 : '');
-    // 出價設定 input — 永遠顯示在頂部 (即使物件不適用試算，用戶仍可記錄出價)
-    const bidInputHTML = `<div class="v2-bid-input-row">
-      <label class="v2-bid-input-lbl">出價設定</label>
-      <input type="number" class="v2-d-input" min="0" step="10" value="${desiredVal ?? ''}"
-        onchange="v2.saveOverride('${esc(id)}','desired_price_wan',this.value)"> 萬
-    </div>`;
-
     if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal || isLandSuspicious(p)) {
-      return `<div class="v2-bid-section">${bidInputHTML}<div class="v2-d-alert v2-d-alert--soft">此物件不適用都更/危老試算，故無出價建議。</div></div>`;
+      return `<div class="v2-bid-section"><div class="v2-d-alert v2-d-alert--soft">此物件不適用都更/危老試算，故無出價建議。</div></div>`;
     }
     const land = p.land_area_ping;
     const zoning = effectiveZoning(p);
@@ -1569,14 +1566,12 @@
       `<option value="${v}" ${Math.abs(v - sel) < 0.01 ? 'selected' : ''}>${v.toFixed(1)} 倍</option>`).join('');
     if (desired <= 0) {
       return `<div class="v2-bid-section">
-        ${bidInputHTML}
-        <div class="v2-bid-row v2-bid-row--muted">尚未填入出價設定，無法給出價建議</div>
+        <div class="v2-bid-row v2-bid-row--muted">尚未填入出價設定，無法給出建議</div>
       </div>`;
     }
     return `<div class="v2-bid-section">
-      ${bidInputHTML}
-      ${valW > 0 ? `<div class="v2-bid-row">• 危老出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${wValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(wValRound / 3.2)} 萬</span></div>` : ''}
-      <div class="v2-bid-row">• 都更出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${dValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(dValRound / 3.2)} 萬</span></div>
+      ${valW > 0 ? `<div class="v2-bid-row">危老出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${wValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(wValRound / 3.2)} 萬</span></div>` : ''}
+      <div class="v2-bid-row">都更出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${dValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(dValRound / 3.2)} 萬</span></div>
     </div>`;
   }
 
