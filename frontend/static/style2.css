@@ -1649,6 +1649,17 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* 推測 badge — block 放下一行 */
+/* 分析建議區頂部的優勢/抗性 chips */
+.v2-d-ai-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 0 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px dashed #e3dfd2;
+}
+
 /* 推測 tag (★實登 / 推測 / ≈推測) — 對齊 v1 .inferred-tag 黃褐底棕字 */
 .v2-inferred-tag {
   display: inline-flex;

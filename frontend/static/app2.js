@@ -197,29 +197,29 @@
 
   // ── AI 分析文字 render (對齊 v1 formatAiReason) ──
   // 「分回價值」section 特殊處理 → renderBidSection (動態算分回值 + 出價建議 dropdown)
+  // skip 跟物件資訊 / 出價試算 col 重複的 section：
+  //   樓高 / 屋齡 → 左 table 已顯示，AI 補的 chk-y/n 對購屋判斷不關鍵 (拿掉減冗餘)
+  //   分回價值 → 出價試算 col-5 已專門處理，不要重複算
+  const _SKIP_AI_SECTIONS = new Set(['樓高', '屋齡', '分回價值']);
+
   function renderAiText(text, p, prices) {
     if (!text) return '';
     return text.split(/\n\n+/).map(section => {
       const m = section.match(/^【(.+?)】\s*([\s\S]*)/);
       if (m) {
         const title = m[1];
-        // 「分回價值」改用動態渲染 (從 input 欄位即時算)
-        if (title === '分回價值' && p && prices) {
-          return `<div class="v2-ai-sec"><div class="v2-ai-sec__title">${esc(title)}</div>
-            <div class="v2-ai-sec__body" id="v2-ai-bid-section">${renderBidSection(p, prices)}</div></div>`;
-        }
+        if (_SKIP_AI_SECTIONS.has(title)) return '';
         let body = esc(m[2].trim());
         body = body.replace(/(\d+\.\d+)×/g, '$1倍').replace(/(\d+)×/g, '$1倍');
         body = body.replace(/&lt;chk-y&gt;([\s\S]*?)&lt;\/chk-y&gt;/g, '<span style="color:#16a34a;font-weight:700">✓</span> $1');
         body = body.replace(/&lt;chk-n&gt;([\s\S]*?)&lt;\/chk-n&gt;/g, '<span style="color:#dc2626;font-weight:700">✗</span> <span style="color:#9ca3af">$1</span>');
         body = body.replace(/&lt;red&gt;([\s\S]*?)&lt;\/red&gt;/g, '<span style="color:#dc2626;font-weight:600">$1</span>');
-        // bid_selector tag 內含 &quot; (escaped quotes)，所以用 [\s\S]*? non-greedy 而不是 [^&]*
         body = body.replace(/&lt;bid_selector[\s\S]*?&gt;/g, '');
         body = body.replace(/\n/g, '<br>');
         return `<div class="v2-ai-sec"><div class="v2-ai-sec__title">${esc(title)}</div><div class="v2-ai-sec__body">${body}</div></div>`;
       }
       return `<div class="v2-ai-sec"><div class="v2-ai-sec__body">${esc(section).replace(/\n/g, '<br>')}</div></div>`;
-    }).join('');
+    }).filter(Boolean).join('');
   }
 
   // ── 「分回價值」section 動態渲染 (對齊 v1 renderBidSection) ─────────────────
@@ -1095,10 +1095,9 @@
                     ? p.nearby_mrts.map(m => `${esc(m.name)}（${Math.round(m.dist_m)}m）`).join('<br>')
                     : '—'
                 }</td></tr>
+                <tr><td>使用分區</td><td>${zoningCellHTML(p)}</td></tr>
                 <tr><td>臨路寬度</td><td><input type="number" class="v2-d-input v2-d-input--narrow" min="0" step="0.5" value="${(p.road_width_m_override ?? p.road_width_m) ?? ''}"
                   onchange="v2.saveOverride('${esc(id)}','road_width_m_override',this.value)"> m${roadShotBtn}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">（寬度不明，有可能為私巷或特窄巷弄）</span>' : ''}${roadNameHint(p) ? `<div class="v2-d-road-name-hint">${esc(roadNameHint(p))}</div>` : ''}</td></tr>
-                <tr><td>優勢</td><td class="v2-d-chips-cell">${advChipsHTML}</td></tr>
-                <tr><td>抗性</td><td class="v2-d-chips-cell">${resistChipsHTML}</td></tr>
               </table>
             </div>
           </div>
@@ -1116,6 +1115,12 @@
         </div>
         <div class="v2-d-col v2-d-col--5">
           <h6 class="v2-d-h">分析建議</h6>
+          <div class="v2-d-ai-chips">
+            ${(_adv.length || _resist.length)
+              ? `${_adv.map(c => `<span class="${c.cls}">${c.label}</span>`).join(' ')}
+                 ${_resist.map(c => `<span class="v2-rchip ${c.cls}">${c.label}</span>`).join(' ')}`
+              : '<span class="v2-d-hint">無特別優勢/抗性</span>'}
+          </div>
           ${aiText
             ? `<div class="v2-d-ai-text">${renderAiText(aiText, p, prices)}</div>`
             : '<div class="v2-detail-empty">尚無分析建議</div>'}
