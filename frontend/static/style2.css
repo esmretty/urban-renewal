@@ -1146,83 +1146,83 @@ a { color: inherit; text-decoration: none; }
 .v2-drawer.v2-open { transform: translateX(0); }
 .v2-drawer__header {
   padding: var(--sp-3) var(--sp-4);
-  border-bottom: none;
+  border-bottom: 1px solid #e3dfd2;
   display: flex;
   align-items: center;
   gap: var(--sp-3);
   flex-shrink: 0;
-  background: #2c3e50;          /* 對齊 v1 topbar--dark 深底 */
-  color: #fff;
+  background: #fafaf6;          /* 對齊 v1 .modal-header 米色底 */
+  color: #2a2a3e;
   position: sticky;
   top: 0;
   z-index: 10;
 }
-/* 返回按鈕 — 對齊 v1 .topbar--dark .tb-btn--ghost (透明 + 灰邊 + 白字) */
+/* 返回按鈕 — 對齊 v1 .tb-btn--ghost (透明 + 米邊 + 深字) */
 .v2-drawer__back {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 12px;
+  padding: 4px 12px;
   border-radius: 6px;
   background: transparent;
-  border: 1px solid #7f8c8d;
-  color: #fff;
-  font-size: 14px;
+  border: 1px solid #d8d2be;
+  color: #2a2a3e;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: background var(--t-fast);
   flex-shrink: 0;
 }
-.v2-drawer__back:hover { background: #34495e; }
-.v2-drawer__back-label { font-size: 14px; }
+.v2-drawer__back:hover { background: #f4efe0; }
+.v2-drawer__back-label { font-size: 13px; }
 
-/* 加入最愛按鈕 — 對齊 v1 .tb-btn--ghost 風 */
+/* 加入最愛按鈕 — 對齊 v1 .tb-btn--ghost 淺色版 */
 .v2-drawer__fav {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 12px;
+  padding: 4px 12px;
   margin-left: 6px;
   border-radius: 6px;
   background: transparent;
-  border: 1px solid #7f8c8d;
-  color: #fff;
-  font-size: 14px;
+  border: 1px solid #d8d2be;
+  color: #2a2a3e;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: background var(--t-fast);
   flex-shrink: 0;
 }
-.v2-drawer__fav:hover { background: #34495e; }
-.v2-drawer__fav-star { font-size: 15px; color: #d4d8dd; transition: color var(--t-fast); }
-.v2-drawer__fav-label { font-size: 14px; }
-/* 已加入最愛狀態：金黃星 + 邊框 (深底上仍醒目) */
+.v2-drawer__fav:hover { background: #f4efe0; }
+.v2-drawer__fav-star { font-size: 14px; color: #c8b478; transition: color var(--t-fast); }
+.v2-drawer__fav-label { font-size: 13px; }
 .v2-drawer__fav.v2-drawer__fav--active {
-  background: rgba(252, 211, 77, 0.18);
+  background: #fef3c7;
   border-color: #fcd34d;
+  color: #92400e;
 }
-.v2-drawer__fav--active .v2-drawer__fav-star { color: #fbbf24; }
+.v2-drawer__fav--active .v2-drawer__fav-star { color: #f59e0b; }
 
-/* drawer header 內 sources (591/永慶 連結) — 對齊 v1 .tb-btn--ghost */
+/* drawer header 內 sources (591/永慶 連結) — 靠最右 + 對齊 v1 ghost button */
 .v2-drawer__sources {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: 6px;
+  margin-left: auto;            /* push 到 header 最右 */
 }
 .v2-drawer__sources .v2-src-badge {
   background: transparent;
-  border: 1px solid #7f8c8d;
-  color: #fff;
-  padding: 5px 12px;
-  font-size: 14px;
+  border: 1px solid #d8d2be;
+  color: #2a2a3e;
+  padding: 4px 12px;
+  font-size: 13px;
   font-weight: 600;
   border-radius: 6px;
   text-decoration: none;
 }
-.v2-drawer__sources .v2-src-badge:hover { background: #34495e; }
+.v2-drawer__sources .v2-src-badge:hover { background: #f4efe0; }
 .v2-drawer__sources .v2-src-badge--dead {
-  color: #95a5a6;
+  color: #8b8680;
   text-decoration: line-through;
 }
 /* Mobile：返回按鈕加大 + accent 藍底 + iOS safe-area inset */
