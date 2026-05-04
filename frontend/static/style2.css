@@ -71,7 +71,7 @@ a { color: inherit; text-decoration: none; }
   /* Sizes */
   --topbar-h: 52px;
   --sidebar-w: 268px;
-  --drawer-w: 950px;              /* 縮到剛好讓照片填滿右 col (照片 4:3 ~395px) */
+  --drawer-w: 1080px;             /* 介於 modal-xl (1140) 跟 modal-lg (950) 之間 */
 
   /* Radii */
   --r-sm: 4px;
