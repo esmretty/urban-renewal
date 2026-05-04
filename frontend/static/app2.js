@@ -1116,7 +1116,23 @@
     // ── AI 分析 ──
     const aiText = p.ai_reason || p.ai_analysis || '';
 
-    // (政府連結 都市計畫圖 / 地籍套繪圖 / 城鄉資訊 已移除 — 用戶要求)
+    // ── 政府連結 (城市別) — 放在抗性 row 下方 ──
+    const govLinksHTML = p.city === '台北市'
+      ? `<tr><td>參考工具</td><td class="v2-d-tools-cell"><span class="v2-d-tools-city">台北市</span>
+          <a href="https://bim.udd.gov.taipei/UDDPlanMap/" target="_blank" rel="noopener noreferrer">都市計畫圖 ↗</a>
+          <a href="https://zonemap.udd.gov.taipei/ZoneMapOP/" target="_blank" rel="noopener noreferrer">地籍套繪圖 ↗</a></td></tr>`
+      : p.city === '新北市'
+      ? `<tr><td>參考工具</td><td class="v2-d-tools-cell"><span class="v2-d-tools-city">新北市</span>
+          <a href="https://urban.planning.ntpc.gov.tw/NtpcURInfo/" target="_blank" rel="noopener noreferrer">城鄉資訊 ↗</a></td></tr>`
+      : '';
+
+    // ── 臨路寬度 cell — 地籍圖改成內部 overlay；下方顯示 Vision 判讀說明 ──
+    const roadShotBtn = p.screenshot_roadwidth
+      ? ` <button class="v2-d-road-show" onclick="event.stopPropagation(); v2.openRoadOverlay('${esc(id)}')">地籍圖</button>`
+      : '';
+    const roadReasonLine = p.road_width_vision_reason
+      ? `<div class="v2-d-road-reason">${esc(p.road_width_vision_reason)}</div>`
+      : '';
 
     // LVR 「實」icon (v1 行為：hover 顯示彈窗)
     const lvrIcon = lvrRecs.length
@@ -1158,9 +1174,10 @@
               <tr><td>附近捷運</td><td>${mrtList}</td></tr>
               <tr><td>使用分區</td><td>${zoningCellHTML(p)}</td></tr>
               <tr><td>臨路寬度</td><td><input type="number" class="v2-d-input v2-d-input--narrow" min="0" step="0.5" value="${(p.road_width_m_override ?? p.road_width_m) ?? ''}"
-                onchange="v2.saveOverride('${esc(id)}','road_width_m_override',this.value)"> m${p.screenshot_roadwidth ? ` <a href="${esc(p.screenshot_roadwidth)}" target="_blank" rel="noopener" class="v2-d-screenshot-link">地籍圖 ↗</a>` : ''}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">(寬度不明)</span>' : ''}</td></tr>
+                onchange="v2.saveOverride('${esc(id)}','road_width_m_override',this.value)"> m${roadShotBtn}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">(寬度不明)</span>' : ''}${roadReasonLine}</td></tr>
               <tr><td>優勢</td><td class="v2-d-chips-cell">${advChipsHTML}</td></tr>
               <tr><td>抗性</td><td class="v2-d-chips-cell">${resistChipsHTML}</td></tr>
+              ${govLinksHTML}
             </table>
           </div>
         </div>
@@ -1661,6 +1678,28 @@
     }, 200);
   }
 
+  // ── 地籍圖 overlay (對齊 v1 openRoadOverlay 內部跳窗，不外開新分頁) ─────────
+  function openRoadOverlay(id) {
+    const existing = document.querySelector('.v2-road-overlay');
+    if (existing) { existing.remove(); return; }
+    const p = state.allProperties.find(x => (x.source_id || x.id) === id);
+    if (!p || !p.screenshot_roadwidth) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'v2-road-overlay';
+    const img = document.createElement('img');
+    img.src = p.screenshot_roadwidth;
+    overlay.appendChild(img);
+    const reason = p.road_width_vision_reason || '';
+    if (reason) {
+      const r = document.createElement('div');
+      r.className = 'v2-road-overlay-reason';
+      r.textContent = reason;
+      overlay.appendChild(r);
+    }
+    overlay.addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+  }
+
   // ── Watchlist add/remove ─────────────────────────────────────────────────
   async function toggleWatchlist(id) {
     const p = state.allProperties.find(x => (x.source_id || x.id) === id);
@@ -1997,6 +2036,7 @@
     switchGridCity,
     showLvrPopup, hideLvrPopup,
     saveOverride, saveInferredChoice, setZonePing,
+    openRoadOverlay,
   };
 
   // Boot

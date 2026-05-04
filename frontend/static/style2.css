@@ -1270,16 +1270,19 @@ a { color: inherit; text-decoration: none; }
   border-bottom: 1px solid var(--c-border);
 }
 
-/* 物件資訊 2 個 table 並排 */
+/* 物件資訊 2 個 table 並排 — 兩欄各自靠上 (不要拉滿到一樣高) */
 .v2-d-basic-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px 16px;
+  align-items: start;
   background: var(--c-card);
   border: 1px solid var(--c-border);
   border-radius: var(--r-md);
   padding: 12px 14px;
 }
+.v2-d-basic-grid > * { align-self: start; }
+.v2-d-basic-grid .v2-d-tbl { height: auto; }
 
 /* 來源連結 — 放右上、字大、清楚 */
 .v2-d-sources-bar {
@@ -1603,6 +1606,85 @@ a { color: inherit; text-decoration: none; }
   font-weight: 600;
 }
 .v2-d-screenshot-link:hover { background: var(--c-accent); color: white; }
+
+/* 地籍圖按鈕 — 點開內部 overlay (跟 v1 toggleRoadPreview/openRoadOverlay 行為一致) */
+.v2-d-road-show {
+  display: inline-block;
+  font-size: 12px;
+  padding: 2px 8px;
+  margin-left: 6px;
+  background: var(--c-accent-light);
+  color: var(--c-accent);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.v2-d-road-show:hover { background: var(--c-accent); color: white; }
+.v2-d-road-reason {
+  font-size: 12px;
+  color: #5c4a0a;
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+  padding: 4px 8px;
+  margin-top: 4px;
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  line-height: 1.4;
+}
+
+/* 地籍圖 overlay (內部跳窗，點任一處關閉) */
+.v2-road-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+.v2-road-overlay img {
+  max-width: 95vw;
+  max-height: 92vh;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  background: #fff;
+}
+.v2-road-overlay-reason {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  max-width: 80vw;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* 參考工具 row (政府連結) — 放在抗性下方 */
+.v2-d-tools-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+}
+.v2-d-tools-city {
+  color: var(--c-text-muted);
+  font-weight: 600;
+  margin-right: 2px;
+}
+.v2-d-tools-cell a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  padding: 1px 4px;
+  border-radius: var(--r-sm);
+}
+.v2-d-tools-cell a:hover { background: var(--c-accent-light); }
 
 /* 圖片：右上，固定高度 */
 .v2-detail-image-wrap {
