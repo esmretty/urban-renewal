@@ -1067,12 +1067,14 @@
       ? `<span class="v2-lvr-icon" onmouseenter="v2.showLvrPopup(event, '${esc(id)}')" onmouseleave="v2.hideLvrPopup()" onclick="event.stopPropagation()">實</span>`
       : '';
 
-    // 優勢 / 抗性 chip — 跟首頁卡片同款，detail 內以 row 形式顯示在臨路寬下面
-    const advChipsHTML = advChips.length
-      ? advChips.map(c => `<span class="${c.cls}">${c.label}</span>`).join(' ')
+    // 優勢 / 抗性 chip — 跟首頁卡片同款 (cardHTML 已 compute 過，detail 自己再算一次)
+    const _adv = computeAdvantageChips(p);
+    const _resist = computeChips(p);
+    const advChipsHTML = _adv.length
+      ? _adv.map(c => `<span class="${c.cls}">${c.label}</span>`).join(' ')
       : '<span class="v2-d-hint">—</span>';
-    const resistChipsHTML = chips.length
-      ? chips.map(c => `<span class="v2-rchip ${c.cls}">${c.label}</span>`).join(' ')
+    const resistChipsHTML = _resist.length
+      ? _resist.map(c => `<span class="v2-rchip ${c.cls}">${c.label}</span>`).join(' ')
       : '<span class="v2-d-hint">—</span>';
 
     return `
