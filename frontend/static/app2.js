@@ -203,7 +203,19 @@
   const _SKIP_AI_SECTIONS = new Set(['樓高', '屋齡', '其他']);
 
   function renderAiText(text, p, prices) {
-    if (!text) return '';
+    // 優勢/抗性 chips 追加到 ai-sec 列表最後 (對齊 v1 ai-section grid 結構)
+    const _adv = p ? computeAdvantageChips(p) : [];
+    const _res = p ? computeChips(p) : [];
+    const advSec = _adv.length
+      ? `<div class="v2-ai-sec"><div class="v2-ai-sec__title">優勢</div>
+          <div class="v2-ai-sec__body">${_adv.map(c => `<span class="${c.cls}">${c.label}</span>`).join(' ')}</div></div>`
+      : '';
+    const resSec = _res.length
+      ? `<div class="v2-ai-sec"><div class="v2-ai-sec__title">抗性</div>
+          <div class="v2-ai-sec__body">${_res.map(c => `<span class="v2-rchip ${c.cls}">${c.label}</span>`).join(' ')}</div></div>`
+      : '';
+    if (!text && !advSec && !resSec) return '<div class="v2-detail-empty">尚無分析建議</div>';
+    if (!text) return advSec + resSec;
     return text.split(/\n\n+/).map(section => {
       const m = section.match(/^【(.+?)】\s*([\s\S]*)/);
       if (m) {
@@ -224,7 +236,7 @@
         return `<div class="v2-ai-sec"><div class="v2-ai-sec__title">${esc(title)}</div><div class="v2-ai-sec__body">${body}</div></div>`;
       }
       return `<div class="v2-ai-sec"><div class="v2-ai-sec__body">${esc(section).replace(/\n/g, '<br>')}</div></div>`;
-    }).filter(Boolean).join('');
+    }).filter(Boolean).join('') + advSec + resSec;
   }
 
   // ── 「分回價值」section 動態渲染 (對齊 v1 renderBidSection) ─────────────────
@@ -1131,15 +1143,7 @@
         </div>
         <div class="v2-d-col v2-d-col--5">
           <h6 class="v2-d-h">其他資訊</h6>
-          <div class="v2-d-ai-chips">
-            ${(_adv.length || _resist.length)
-              ? `${_adv.map(c => `<span class="${c.cls}">${c.label}</span>`).join(' ')}
-                 ${_resist.map(c => `<span class="v2-rchip ${c.cls}">${c.label}</span>`).join(' ')}`
-              : '<span class="v2-d-hint">無特別優勢/抗性</span>'}
-          </div>
-          ${aiText
-            ? `<div class="v2-d-ai-text">${renderAiText(aiText, p, prices)}</div>`
-            : '<div class="v2-detail-empty">尚無分析建議</div>'}
+          <div class="v2-d-ai-text">${renderAiText(aiText || '', p, prices)}</div>
         </div>
       </div>
 
