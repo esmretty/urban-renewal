@@ -1157,14 +1157,14 @@
               <tr><td>屋齡</td><td>${age != null ? age + ' 年' : '未知'}${p.building_age_completed_year ? ` <span class="v2-d-hint">(${p.building_age_completed_year} 完工)</span>` : ''}</td></tr>
               <tr><td>售價</td><td><span class="v2-d-price">${priceWan ? fmt0(priceWan) + '萬' : '—'}</span>${lvrIcon}</td></tr>
               <tr><td>欲出價</td><td>${editIn('desired_price_wan', desired, 10, '萬')}</td></tr>
-              <tr><td>建坪</td><td>${p.building_area_ping ? p.building_area_ping + ' 坪' : '—'}${perBld ? ` <span class="v2-d-hint">${perBld} 萬/建坪</span>` : ''}</td></tr>
-              <tr><td>地坪</td><td>${p.land_area_ping ? p.land_area_ping + ' 坪' : '—'}${perLand ? ` <span class="v2-d-hint">${perLand} 萬/地坪</span>` : ''}${p.land_area_source === 'lvr' ? ' <span class="v2-d-hint">(實登)</span>' : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 地坪過大（&gt; 建坪），可能不可信</div>' : ''}</td></tr>
+              <tr><td>建坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.building_area_ping ?? '—'}</span><span class="v2-d-unit">坪</span><span class="v2-d-per">${perBld ? perBld + ' 萬/建坪' : ''}</span></div></td></tr>
+              <tr><td>地坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.land_area_ping ?? '—'}</span><span class="v2-d-unit">坪${p.land_area_source === 'lvr' ? '<small class="v2-d-hint">(實登)</small>' : ''}</span><span class="v2-d-per">${perLand ? perLand + ' 萬/地坪' : ''}</span></div>${isLandSus ? '<div class="v2-d-warn">⚠ 地坪過大（&gt; 建坪），可能不可信</div>' : ''}</td></tr>
             </table>
             <table class="v2-d-tbl">
               <tr><td>附近捷運</td><td>${mrtList}</td></tr>
               <tr><td>使用分區</td><td>${zoningCellHTML(p)}</td></tr>
               <tr><td>臨路寬度</td><td><input type="number" class="v2-d-input v2-d-input--narrow" min="0" step="0.5" value="${(p.road_width_m_override ?? p.road_width_m) ?? ''}"
-                onchange="v2.saveOverride('${esc(id)}','road_width_m_override',this.value)"> m${p.screenshot_roadwidth ? ` <a href="${esc(p.screenshot_roadwidth)}" target="_blank" rel="noopener" class="v2-d-screenshot-link">📷 地籍圖 ↗</a>` : ''}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">(寬度不明)</span>' : ''}</td></tr>
+                onchange="v2.saveOverride('${esc(id)}','road_width_m_override',this.value)"> m${p.screenshot_roadwidth ? ` <a href="${esc(p.screenshot_roadwidth)}" target="_blank" rel="noopener" class="v2-d-screenshot-link">地籍圖 ↗</a>` : ''}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">(寬度不明)</span>' : ''}</td></tr>
               <tr><td>優勢</td><td class="v2-d-chips-cell">${advChipsHTML}</td></tr>
               <tr><td>抗性</td><td class="v2-d-chips-cell">${resistChipsHTML}</td></tr>
             </table>
