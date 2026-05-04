@@ -1126,12 +1126,9 @@
           <a href="https://urban.planning.ntpc.gov.tw/NtpcURInfo/" target="_blank" rel="noopener noreferrer">城鄉資訊 ↗</a></td></tr>`
       : '';
 
-    // ── 臨路寬度 cell — 地籍圖改成內部 overlay；下方顯示 Vision 判讀說明 ──
+    // ── 臨路寬度 cell — 地籍圖改成內部 overlay；說明文字放 overlay 內 ──
     const roadShotBtn = p.screenshot_roadwidth
       ? ` <button class="v2-d-road-show" onclick="event.stopPropagation(); v2.openRoadOverlay('${esc(id)}')">地籍圖</button>`
-      : '';
-    const roadReasonLine = p.road_width_vision_reason
-      ? `<div class="v2-d-road-reason">${esc(p.road_width_vision_reason)}</div>`
       : '';
 
     // LVR 「實」icon (v1 行為：hover 顯示彈窗)
@@ -1161,20 +1158,20 @@
         <div class="v2-d-col v2-d-col--7">
           <div class="v2-d-basic-grid">
             <table class="v2-d-tbl">
-              <tr><td>原始地址</td><td>${esc(p.address || p.title || '—')}</td></tr>
+              <tr><td>原始地址</td><td>${esc(p.address || p.title || '—')}${p.address_road_fixed ? `<div class="v2-d-addr-fixed">已自動修正：${esc(p.address_road_fixed.from)} → ${esc(p.address_road_fixed.to)}</div>` : ''}${p.address_suspicious ? `<div class="v2-d-warn">⚠ 路名可能不存在於此行政區，請自行確認</div>` : ''}</td></tr>
               <tr><td>推測地址</td><td>${inferredAddressCellHTML(p)}${inferredTag}</td></tr>
               <tr><td>類型 / 樓層</td><td>${esc(p.building_type || '—')} · ${formatFloor(p)}</td></tr>
               <tr><td>屋齡</td><td>${age != null ? age + ' 年' : '未知'}${p.building_age_completed_year ? ` <span class="v2-d-hint">(${p.building_age_completed_year} 完工)</span>` : ''}</td></tr>
               <tr><td>售價</td><td><span class="v2-d-price">${priceWan ? fmt0(priceWan) + '萬' : '—'}</span>${lvrIcon}</td></tr>
               <tr><td>欲出價</td><td>${editIn('desired_price_wan', desired, 10, '萬')}</td></tr>
               <tr><td>建坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.building_area_ping ?? '—'}</span><span class="v2-d-unit">坪</span><span class="v2-d-per-lbl">單價</span><span class="v2-d-num2">${perBld || '—'}</span></div></td></tr>
-              <tr><td>地坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.land_area_ping ?? '—'}</span><span class="v2-d-unit">坪</span><span class="v2-d-per-lbl">單價</span><span class="v2-d-num2">${perLand || '—'}</span></div>${p.land_area_source === 'lvr' ? ' <span class="v2-d-hint">(實登)</span>' : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 地坪過大（&gt; 建坪），可能不可信</div>' : ''}</td></tr>
+              <tr><td>地坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.land_area_ping ?? '—'}</span><span class="v2-d-unit">坪</span><span class="v2-d-per-lbl">單價</span><span class="v2-d-num2">${perLand || '—'}</span></div>${p.land_area_source === 'lvr' ? ' <span class="v2-d-hint">(實登)</span>' : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 地坪過大（&gt; 建坪），可能不可信</div>' : ''}${p.land_area_inconsistent ? '<div class="v2-d-warn">⚠ 此物件的實登候選地坪差異大，可能不是同一棟建築；選擇後請務必驗證。</div>' : ''}</td></tr>
             </table>
             <table class="v2-d-tbl">
               <tr><td>附近捷運</td><td>${mrtList}</td></tr>
               <tr><td>使用分區</td><td>${zoningCellHTML(p)}</td></tr>
               <tr><td>臨路寬度</td><td><input type="number" class="v2-d-input v2-d-input--narrow" min="0" step="0.5" value="${(p.road_width_m_override ?? p.road_width_m) ?? ''}"
-                onchange="v2.saveOverride('${esc(id)}','road_width_m_override',this.value)"> m${roadShotBtn}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">(寬度不明)</span>' : ''}${roadReasonLine}</td></tr>
+                onchange="v2.saveOverride('${esc(id)}','road_width_m_override',this.value)"> m${roadShotBtn}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">（寬度不明，有可能為私巷或特窄巷弄）</span>' : ''}</td></tr>
               <tr><td>優勢</td><td class="v2-d-chips-cell">${advChipsHTML}</td></tr>
               <tr><td>抗性</td><td class="v2-d-chips-cell">${resistChipsHTML}</td></tr>
               ${govLinksHTML}
@@ -1186,15 +1183,11 @@
         </div>
       </div>
 
-      <!-- Row 2: 都更換回試算 (左 7) | 分析建議 (右 5) — 直式公式對齊 v1 -->
-      <div class="v2-d-row">
-        <div class="v2-d-col v2-d-col--7">
+      <!-- Row 2: 都更換回試算 (內部左右兩欄) — 「分析建議」整區已移除 -->
+      <div class="v2-d-row v2-d-row--full">
+        <div class="v2-d-col v2-d-col--12">
           <h6 class="v2-d-h">都更換回試算</h6>
           ${renewalSectionHTML(p, prices)}
-        </div>
-        <div class="v2-d-col v2-d-col--5">
-          <h6 class="v2-d-h">分析建議</h6>
-          ${aiText ? `<div class="v2-d-ai-text">${renderAiText(aiText, p, prices)}</div>` : '<div class="v2-detail-empty">尚無分析建議</div>'}
         </div>
       </div>
 
@@ -1265,15 +1258,6 @@
       }
     } else {
       badge = '<span class="v2-d-hint">—</span>';
-    }
-    if (z && /\((?:特|遷|核|抄)\)/.test(z)) {
-      const eff = effectiveZoning(p);
-      const effFar = lookupFar(eff, p);
-      if (effFar != null && eff !== z) {
-        badge += `<div class="v2-d-zone-special">實際容積採「${esc(eff)}」${effFar}% 計算。此地塊有(特)/(遷)加註，真實容積請查都發局都市計畫書。</div>`;
-      } else {
-        badge += `<div class="v2-d-zone-special">此地塊有(特)/(遷)加註，容積率逐案而定，請查都發局都市計畫書。</div>`;
-      }
     }
     const candsBlock = cands.length
       ? `<details class="v2-d-zone-cands">
@@ -1458,14 +1442,53 @@
         <span class="v2-rv2-val">${note ? `<span class="v2-rv2-note">${note}</span>` : ''}<span>${val}</span></span>
       </div>`;
 
+    // 出價建議 (從 renderBidSection 抽出 dropdown row 而已，不重複顯示「危老 X 萬 都更 X 萬」)
+    const bidOpts = [3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0, 4.2, 4.5, 5.0];
+    const mkBidOpts = (sel) => bidOpts.map(v =>
+      `<option value="${v}" ${Math.abs(v - sel) < 0.01 ? 'selected' : ''}>${v.toFixed(1)} 倍</option>`).join('');
+    const desiredForBid = parseFloat(p.desired_price_wan ?? (p.price_ntd ? Math.round(p.price_ntd / 10000 * 0.9 / 10) * 10 : 0)) || 0;
+    const fmtN = (n) => Math.round(n).toLocaleString('zh-TW');
+    const wValRound = Math.round(valW), dValRound = Math.round(valD);
+    const bidHTML = desiredForBid <= 0
+      ? `<div class="v2-bid-row v2-bid-row--muted">尚未填入欲出價，無法給出價建議</div>`
+      : `${valW > 0 ? `<div class="v2-bid-row">• 危老出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${wValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkBidOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(wValRound / 3.2)} 萬</span></div>` : ''}
+         <div class="v2-bid-row">• 都更出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${dValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkBidOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(dValRound / 3.2)} 萬</span></div>`;
+
+    // 結果欄 render — 「都更」一律寫「都更」(不寫「防災都更」)，但若是 1974 前台北仍套 0.80 獎勵
+    const renderResult = (tag, val, share) => {
+      const mult = desired ? (val / desired).toFixed(2) : '—';
+      const profit = desired ? (val - desired).toFixed(0) : '—';
+      const profitSign = desired && (val - desired) >= 0 ? '+' : '';
+      const negCls = desired && (val - desired) < 0 ? 'v2-rv2-circ--neg' : '';
+      return `
+        <div class="v2-rv2-rcol">
+          <div class="v2-rv2-rtag">${tag}</div>
+          <div class="v2-rv2-rval">${val.toFixed(0)} 萬</div>
+          <div class="v2-rv2-circles">
+            <div class="v2-rv2-circ">
+              <div class="v2-rv2-circ__num">${share.toFixed(2)}</div>
+              <div class="v2-rv2-circ__lbl">分回坪</div>
+            </div>
+            <div class="v2-rv2-circ">
+              <div class="v2-rv2-circ__num">${mult}×</div>
+              <div class="v2-rv2-circ__lbl">倍數</div>
+            </div>
+            <div class="v2-rv2-circ ${negCls}">
+              <div class="v2-rv2-circ__num">${profitSign}${profit}</div>
+              <div class="v2-rv2-circ__lbl">效益萬</div>
+            </div>
+          </div>
+        </div>`;
+    };
+
     return `
-      <div class="v2-rv2">
-        <div class="v2-rv2-land">
-          <div class="v2-rv2-land__lbl">土地持分</div>
-          <div class="v2-rv2-land__val">${land}<span class="v2-rv2-land__unit">坪</span></div>
-          <div class="v2-rv2-land__abbr">${esc(zoneAbbr(p.zoning_original || zoning))}</div>
-        </div>
-        <div class="v2-rv2-body">
+      <div class="v2-rv2 v2-rv2--2col">
+        <div class="v2-rv2-left">
+          <div class="v2-rv2-land">
+            <div class="v2-rv2-land__lbl">土地持分</div>
+            <div class="v2-rv2-land__val">${land}<span class="v2-rv2-land__unit">坪</span></div>
+            <div class="v2-rv2-land__abbr">${esc(zoneAbbr(p.zoning_original || zoning))}</div>
+          </div>
           <div class="v2-rv2-formula">
             ${r('×', '有效容積率', `${effFar}%`)}
             <div class="v2-rv2-r">
@@ -1521,36 +1544,17 @@
               </span>
             </div>
           </div>
-          <div class="v2-rv2-result">
-            ${[
-              { tag: '危老', val: valW, share: shareW },
-              { tag: isFangzai ? '防災都更' : '都更', val: valD, share: shareD },
-            ].map(s => {
-              const mult = desired ? (s.val / desired).toFixed(2) : '—';
-              const profit = desired ? (s.val - desired).toFixed(0) : '—';
-              const profitSign = desired && (s.val - desired) >= 0 ? '+' : '';
-              const negCls = desired && (s.val - desired) < 0 ? 'v2-rv2-circ--neg' : '';
-              return `
-                <div class="v2-rv2-rcol">
-                  <div class="v2-rv2-rtag">${s.tag}</div>
-                  <div class="v2-rv2-rval">${s.val.toFixed(0)} 萬</div>
-                  <div class="v2-rv2-circles">
-                    <div class="v2-rv2-circ">
-                      <div class="v2-rv2-circ__num">${s.share.toFixed(2)}</div>
-                      <div class="v2-rv2-circ__lbl">分回坪</div>
-                    </div>
-                    <div class="v2-rv2-circ">
-                      <div class="v2-rv2-circ__num">${mult}×</div>
-                      <div class="v2-rv2-circ__lbl">倍數</div>
-                    </div>
-                    <div class="v2-rv2-circ ${negCls}">
-                      <div class="v2-rv2-circ__num">${profitSign}${profit}</div>
-                      <div class="v2-rv2-circ__lbl">效益萬</div>
-                    </div>
-                  </div>
-                </div>`;
-            }).join('')}
+        </div>
+        <div class="v2-rv2-right">
+          <div class="v2-rv2-result v2-rv2-result--stack">
+            ${renderResult('危老', valW, shareW)}
+            ${renderResult('都更', valD, shareD)}
           </div>
+          <div class="v2-rv2-bid">
+            <div class="v2-rv2-bid__title">出價建議</div>
+            ${bidHTML}
+          </div>
+          <div class="v2-rv2-disclaimer">⚠ 試算假設：買方擁有全部土地持分。實際換回比例依持分調整。</div>
         </div>
       </div>`;
   }
@@ -1652,7 +1656,7 @@
     };
     pop.innerHTML = `<div class="v2-lvr-popup__title">附近實價登錄 (${recs.length} 筆)</div>
       <table class="v2-lvr-tbl">
-        <thead><tr><th>交易日</th><th>總價</th><th>建坪</th><th>地坪</th><th>單價</th><th>地址</th></tr></thead>
+        <thead><tr><th>交易日</th><th>總價</th><th>建坪</th><th>地坪</th><th>單價</th><th>地址</th><th></th></tr></thead>
         <tbody>${recs.map(r => {
           const totalWan = r.price_total ? r.price_total / 10000 : null;
           const perPingWan = (totalWan && r.area_ping) ? (totalWan / r.area_ping) : null;
@@ -1663,6 +1667,7 @@
             <td>${r.land_ping ? fmt1(r.land_ping) : '—'}</td>
             <td>${perPingWan != null ? perPingWan.toFixed(1) + '萬' : '—'}</td>
             <td class="v2-lvr-addr" title="${esc(r.address || '')}">${esc(stripCD(r.address))}</td>
+            <td>${r.is_special ? `<span class="v2-lvr-warn" title="${esc(r.note || '特殊交易')}">⚠</span>` : ''}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>`;
@@ -1686,16 +1691,31 @@
     if (!p || !p.screenshot_roadwidth) return;
     const overlay = document.createElement('div');
     overlay.className = 'v2-road-overlay';
+
+    // 內容容器 (圖 + 說明文字垂直排列；點 backdrop 才關閉)
+    const inner = document.createElement('div');
+    inner.className = 'v2-road-overlay-inner';
+    inner.addEventListener('click', (e) => e.stopPropagation());
     const img = document.createElement('img');
     img.src = p.screenshot_roadwidth;
-    overlay.appendChild(img);
+    inner.appendChild(img);
     const reason = p.road_width_vision_reason || '';
     if (reason) {
       const r = document.createElement('div');
       r.className = 'v2-road-overlay-reason';
       r.textContent = reason;
-      overlay.appendChild(r);
+      inner.appendChild(r);
     }
+    overlay.appendChild(inner);
+
+    // 右上角 X 關閉按鈕
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'v2-road-overlay-close';
+    closeBtn.setAttribute('aria-label', '關閉');
+    closeBtn.textContent = '×';
+    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); overlay.remove(); });
+    overlay.appendChild(closeBtn);
+
     overlay.addEventListener('click', () => overlay.remove());
     document.body.appendChild(overlay);
   }

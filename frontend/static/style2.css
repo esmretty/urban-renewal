@@ -1632,7 +1632,7 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.4;
 }
 
-/* 地籍圖 overlay (內部跳窗，點任一處關閉) */
+/* 地籍圖 overlay (內部跳窗，點 backdrop 或 X 關閉) */
 .v2-road-overlay {
   position: fixed;
   inset: 0;
@@ -1642,28 +1642,58 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   justify-content: center;
   cursor: zoom-out;
+  padding: 24px;
 }
-.v2-road-overlay img {
+.v2-road-overlay-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
   max-width: 95vw;
   max-height: 92vh;
+  cursor: default;
+}
+.v2-road-overlay-inner img {
+  max-width: 100%;
+  max-height: 75vh;
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   background: #fff;
+  object-fit: contain;
 }
 .v2-road-overlay-reason {
-  position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.75);
-  color: #fff;
-  padding: 6px 16px;
-  border-radius: 6px;
-  font-size: 14px;
-  max-width: 80vw;
+  background: rgba(255, 255, 255, 0.95);
+  color: #1f2937;
+  padding: 14px 28px;
+  border-radius: 10px;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.5;
+  max-width: 95vw;
   text-align: center;
-  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
+.v2-road-overlay-close {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  padding: 0;
+}
+.v2-road-overlay-close:hover { background: #fff; transform: scale(1.05); }
 
 /* 參考工具 row (政府連結) — 放在抗性下方 */
 .v2-d-tools-cell {
@@ -1981,9 +2011,98 @@ select.v2-rv2-edit {
 }
 .v2-rv2-circ--neg .v2-rv2-circ__num { color: var(--c-danger); }
 
+/* === 都更試算 — 左右兩欄 layout (左：土地+計算過程 / 右：危老+都更結果+出價建議) === */
+.v2-rv2--2col {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.v2-rv2--2col .v2-rv2-left {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.v2-rv2--2col .v2-rv2-left .v2-rv2-formula {
+  flex: 1;
+  min-width: 0;
+}
+.v2-rv2--2col .v2-rv2-right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+/* 危老/都更結果在右欄改成上下直排 (不再左右並列) */
+.v2-rv2-result--stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: none;
+  padding-top: 0;
+}
+.v2-rv2-result--stack .v2-rv2-rcol {
+  background: var(--c-card);
+  text-align: left;
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+}
+.v2-rv2-result--stack .v2-rv2-rtag {
+  display: inline-block;
+  width: max-content;
+}
+.v2-rv2-result--stack .v2-rv2-rval {
+  font-size: 18px;
+  margin: 0;
+  text-align: right;
+}
+.v2-rv2-result--stack .v2-rv2-circles {
+  grid-column: 1 / -1;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+.v2-rv2-result--stack .v2-rv2-circ {
+  border-radius: var(--r-md);
+  aspect-ratio: auto;
+  flex-direction: row;
+  gap: 6px;
+  padding: 6px 8px;
+  justify-content: space-between;
+}
+.v2-rv2-result--stack .v2-rv2-circ__lbl { margin-top: 0; font-size: 10.5px; }
+.v2-rv2-result--stack .v2-rv2-circ__num { font-size: 14px; }
+
+/* 出價建議 */
+.v2-rv2-bid {
+  background: #f9fafb;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+}
+.v2-rv2-bid__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--c-text);
+  margin-bottom: 6px;
+}
+
+/* 試算底部假設警語 */
+.v2-rv2-disclaimer {
+  font-size: 11.5px;
+  color: var(--c-text-muted);
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+  padding: 6px 10px;
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  line-height: 1.4;
+}
+
 /* 窄螢幕 row stack */
 @media (max-width: 1024px) {
-  .v2-rv2 { flex-direction: column; }
+  .v2-rv2--2col { grid-template-columns: 1fr; }
+  .v2-rv2--2col .v2-rv2-left { flex-direction: column; }
   .v2-rv2-land {
     flex: none;
     display: flex;
@@ -1994,6 +2113,23 @@ select.v2-rv2-edit {
   }
   .v2-rv2-land__lbl, .v2-rv2-land__abbr { margin: 0; }
   .v2-rv2-land__val { font-size: 22px; margin: 0; }
+}
+
+/* 警語通用 (原始地址 / 地坪 inline-block 紅字框) */
+.v2-d-addr-fixed {
+  font-size: 11.5px;
+  color: #6b7280;
+  background: #f3f4f6;
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
+  margin-top: 4px;
+  display: inline-block;
+}
+/* LVR 特殊交易警告 icon */
+.v2-lvr-warn {
+  color: #d97706;
+  font-weight: 700;
+  cursor: help;
 }
 
 /* 試算 scenario boxes — 字體 +2 */
