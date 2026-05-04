@@ -915,31 +915,29 @@
     const slim = state.allProperties.find(x => (x.source_id || x.id) === id);
     if (!slim) return;
 
-    // 1) 先用 slim 資料立刻開抽屜 — 開 drawer + 顯 loading
+    // 立刻用 slim 渲染 + 開抽屜 (不要 loading 等待感；slim 已含 lvr_records 等大部分欄位)
+    const prices = await getDistrictPrices();
     $('#v2-drawer-title').textContent = slim.address_inferred || slim.address || '物件詳情';
-    $('#v2-drawer-body').innerHTML = `<div class="v2-drawer__loading">載入中…</div>`;
+    $('#v2-drawer-body').innerHTML = detailHTML(slim, prices);
     $('#v2-drawer').classList.add('v2-open');
     $('#v2-drawer-backdrop').classList.add('v2-open');
 
-    // 2) 背景 fetch 完整 doc (含 lvr_records / nearby_mrts / 等)
+    // 背景升級成 full doc (含 ai_reason / address_inferred_candidates_detail 等 fat 欄位)
+    // 失敗也沒關係，slim 已經顯示
     try {
       const r = await fetch(`/api/properties/${encodeURIComponent(id)}`);
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (!r.ok) return;
       const full = await r.json();
-      if (state.selectedId !== id) return;
-      // 合併 full 到 state.allProperties[i] — 後續 saveOverride / _renderDetailFromCurrent
-      // 讀 state 時也能拿到 lvr_records / nearby_mrts 等 fat 欄位
+      if (state.selectedId !== id) return;   // 用戶已切到別物件，過期 response 不蓋
       const idx = state.allProperties.findIndex(x => (x.source_id || x.id) === id);
       if (idx >= 0) {
         state.allProperties[idx] = { ...state.allProperties[idx], ...full };
       }
-      const prices = await getDistrictPrices();
       $('#v2-drawer-title').textContent = full.address_inferred || full.address || '物件詳情';
       $('#v2-drawer-body').innerHTML = detailHTML(state.allProperties[idx] || full, prices);
     } catch (e) {
-      console.warn('openDetail full fetch failed', e);
-      const prices = await getDistrictPrices();
-      $('#v2-drawer-body').innerHTML = detailHTML(slim, prices);
+      console.warn('openDetail upgrade fetch failed', e);
+      // slim 已 render，不動
     }
   }
   function closeDetail() {
