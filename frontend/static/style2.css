@@ -924,7 +924,7 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.4;
 }
 
-/* 優勢 chip (TOD / 防災型 / 商業區) — 統一紫色 outline + 反光掃過動畫 */
+/* 優勢 chip (TOD / 防災型 / 商業區) — 統一藍色 outline + 反光掃過動畫 */
 .v2-achip,
 .v2-achip--tod,
 .v2-achip--fangzai,
@@ -937,13 +937,13 @@ a { color: inherit; text-decoration: none; }
   font-size: 11px;
   font-weight: 700;
   border-radius: var(--r-sm);
-  border: 1px solid #d8b4fe;     /* purple-300 */
-  background: #faf5ff;           /* purple-50 */
-  color: #7e22ce;                /* purple-700 */
+  border: 1px solid #a5f3fc;     /* cyan-200 */
+  background: #ecfeff;           /* cyan-50 */
+  color: #0e7490;                /* cyan-700 */
   line-height: 1.4;
   letter-spacing: 0.2px;
 }
-/* 反光掃過動畫 — 一道斜光從左掃到右，每 3.5 秒一次 (紫色系) */
+/* 反光掃過動畫 — 一道斜光從左掃到右，每 3.5 秒一次 */
 .v2-achip::before {
   content: '';
   position: absolute;
@@ -954,9 +954,9 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(
     100deg,
     transparent 0%,
-    rgba(216, 180, 254, 0.45) 40%,
+    rgba(125, 211, 252, 0.45) 40%,
     rgba(255, 255, 255, 0.9) 50%,
-    rgba(216, 180, 254, 0.45) 60%,
+    rgba(125, 211, 252, 0.45) 60%,
     transparent 100%
   );
   transform: skewX(-15deg);
@@ -2146,18 +2146,44 @@ select.v2-rv2-edit {
   gap: 12px 16px;
   align-items: start;
 }
-/* 土地持分搬到最上面跨整列 (3a)：水平 layout，標籤跟數字並排 */
+/* 土地持分頂部 colspan：左 = 持分坪數、右 = 使用分區 (多分區時各分區換行) */
 .v2-rv2-land--top {
   grid-column: 1 / -1;
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 24px;
+  align-items: start;
   padding: 10px 14px;
   text-align: left;
-  flex: none;             /* 取消舊 flex: 0 0 110px */
+  flex: none;
 }
-.v2-rv2-land--top .v2-rv2-land__lbl { font-size: 13px; }
+.v2-rv2-land__left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  white-space: nowrap;
+}
+.v2-rv2-land__zone {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.v2-rv2-land__zone-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.v2-rv2-land--top .v2-rv2-land__lbl { font-size: 13px; flex-shrink: 0; }
 .v2-rv2-land--top .v2-rv2-land__val { font-size: 26px; margin: 0; }
+/* 多分區時每分區換行排 */
+.v2-d-zone-multi-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
 .v2-rv2--2col .v2-rv2-left {
   display: block;
   min-width: 0;
@@ -2236,6 +2262,21 @@ select.v2-rv2-edit {
   flex-direction: column;
   gap: 8px;
   font-size: 13px;
+}
+/* 出價設定 input row — bid-section 頂部 (取代基本資訊「欲出價」row) */
+.v2-bid-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--c-border);
+  font-size: 13px;
+  font-weight: 600;
+}
+.v2-bid-input-lbl {
+  color: var(--c-text);
+  flex-shrink: 0;
 }
 
 /* 出價建議 (舊 .v2-rv2-bid 已不使用，保留 CSS 防破壞隱藏 caller) */

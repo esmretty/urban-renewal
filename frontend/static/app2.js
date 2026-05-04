@@ -1103,13 +1103,11 @@
               <tr><td>類型 / 樓層</td><td>${esc(p.building_type || '—')} · ${formatFloor(p)}</td></tr>
               <tr><td>屋齡</td><td>${age != null ? age + ' 年' : '未知'}${p.building_age_completed_year ? ` <span class="v2-d-hint">(${p.building_age_completed_year} 完工)</span>` : ''}</td></tr>
               <tr><td>售價</td><td><span class="v2-d-price">${priceWan ? fmt0(priceWan) + '萬' : '—'}</span>${lvrIcon}</td></tr>
-              <tr><td>欲出價</td><td>${editIn('desired_price_wan', desired, 10, '萬')}</td></tr>
               <tr><td>建坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.building_area_ping ?? '—'}</span><span class="v2-d-unit">坪</span><span class="v2-d-per-lbl">單價</span><span class="v2-d-num2">${perBld || '—'}</span></div></td></tr>
               <tr><td>地坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.land_area_ping ?? '—'}</span><span class="v2-d-unit">坪</span><span class="v2-d-per-lbl">單價</span><span class="v2-d-num2">${perLand || '—'}</span></div>${p.land_area_source === 'lvr' ? ' <span class="v2-d-hint">(實登)</span>' : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 地坪過大（&gt; 建坪），可能不可信</div>' : ''}${p.land_area_inconsistent ? '<div class="v2-d-warn">⚠ 此物件的實登候選地坪差異大，可能不是同一棟建築；選擇後請務必驗證。</div>' : ''}</td></tr>
             </table>
             <table class="v2-d-tbl">
               <tr><td>附近捷運</td><td>${mrtList}</td></tr>
-              <tr><td>使用分區</td><td>${zoningCellHTML(p)}</td></tr>
               <tr><td>臨路寬度</td><td><input type="number" class="v2-d-input v2-d-input--narrow" min="0" step="0.5" value="${(p.road_width_m_override ?? p.road_width_m) ?? ''}"
                 onchange="v2.saveOverride('${esc(id)}','road_width_m_override',this.value)"> m${roadShotBtn}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">（寬度不明，有可能為私巷或特窄巷弄）</span>' : ''}</td></tr>
               <tr><td>優勢</td><td class="v2-d-chips-cell">${advChipsHTML}</td></tr>
@@ -1179,10 +1177,12 @@
         const far = lookupFar(eff, p) ?? '?';
         const v = toPing(ratios[i]).toFixed(2);
         const dis = locked ? 'disabled' : '';
-        return `<span class="v2-d-zone-badge">${esc(eff)} (${far}%)</span>
+        return `<div class="v2-d-zone-multi-row">
+          <span class="v2-d-zone-badge">${esc(eff)} (${far}%)</span>
           <input type="number" class="v2-d-zone-ping" min="0" max="${totalLand}" step="0.01" value="${v}" ${dis}
-            onchange="v2.setZonePing('${esc(id)}', ${i}, this.value)">坪`;
-      }).join(' / ');
+            onchange="v2.setZonePing('${esc(id)}', ${i}, this.value)">坪
+        </div>`;
+      }).join('');
       badge += `<div class="v2-d-zone-err" id="v2-zone-err-${esc(id)}" style="display:none"></div>`;
       badge += locked
         ? `<div class="v2-d-zone-note">依謄本登錄坪數鎖定（總 ${totalLand} 坪）</div>`
@@ -1439,8 +1439,14 @@
     return `
       <div class="v2-rv2 v2-rv2--2col">
         <div class="v2-rv2-land v2-rv2-land--top">
-          <span class="v2-rv2-land__lbl">土地持分</span>
-          <span class="v2-rv2-land__val">${land}<span class="v2-rv2-land__unit">坪</span></span>
+          <div class="v2-rv2-land__left">
+            <span class="v2-rv2-land__lbl">土地持分</span>
+            <span class="v2-rv2-land__val">${land}<span class="v2-rv2-land__unit">坪</span></span>
+          </div>
+          <div class="v2-rv2-land__zone">
+            <span class="v2-rv2-land__lbl">使用分區</span>
+            <div class="v2-rv2-land__zone-body">${zoningCellHTML(p)}</div>
+          </div>
         </div>
         <div class="v2-rv2-left">
           <div class="v2-rv2-formula">
@@ -1518,10 +1524,19 @@
       </div>`;
   }
 
-  // 出價建議區塊 — Row 2 右欄獨立 render (從原本 renewalSection 右欄抽出)
+  // 出價建議區塊 — Row 2 右欄獨立 render
   function bidSectionHTML(p, prices) {
+    const id = p.source_id || p.id || '';
+    const desiredVal = p.desired_price_wan ?? (p.price_ntd ? Math.round(p.price_ntd / 10000 * 0.9 / 10) * 10 : '');
+    // 出價設定 input — 永遠顯示在頂部 (即使物件不適用試算，用戶仍可記錄出價)
+    const bidInputHTML = `<div class="v2-bid-input-row">
+      <label class="v2-bid-input-lbl">出價設定</label>
+      <input type="number" class="v2-d-input" min="0" step="10" value="${desiredVal ?? ''}"
+        onchange="v2.saveOverride('${esc(id)}','desired_price_wan',this.value)"> 萬
+    </div>`;
+
     if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal || isLandSuspicious(p)) {
-      return `<div class="v2-d-alert v2-d-alert--soft">此物件不適用都更/危老試算，故無出價建議。</div>`;
+      return `<div class="v2-bid-section">${bidInputHTML}<div class="v2-d-alert v2-d-alert--soft">此物件不適用都更/危老試算，故無出價建議。</div></div>`;
     }
     const land = p.land_area_ping;
     const zoning = effectiveZoning(p);
@@ -1554,10 +1569,12 @@
       `<option value="${v}" ${Math.abs(v - sel) < 0.01 ? 'selected' : ''}>${v.toFixed(1)} 倍</option>`).join('');
     if (desired <= 0) {
       return `<div class="v2-bid-section">
-        <div class="v2-bid-row v2-bid-row--muted">尚未填入欲出價，無法給出價建議</div>
+        ${bidInputHTML}
+        <div class="v2-bid-row v2-bid-row--muted">尚未填入出價設定，無法給出價建議</div>
       </div>`;
     }
     return `<div class="v2-bid-section">
+      ${bidInputHTML}
       ${valW > 0 ? `<div class="v2-bid-row">• 危老出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${wValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(wValRound / 3.2)} 萬</span></div>` : ''}
       <div class="v2-bid-row">• 都更出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${dValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(dValRound / 3.2)} 萬</span></div>
     </div>`;
