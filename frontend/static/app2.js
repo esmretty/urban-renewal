@@ -1100,7 +1100,6 @@
 
       <!-- Row 3: 操作 -->
       <div class="v2-d-actions">
-        <button class="v2-btn v2-btn--ghost v2-btn--sm" onclick="window.open('/?focus=${esc(id)}', '_blank')">在舊版開啟</button>
         <button class="v2-btn v2-btn--primary v2-btn--sm" onclick="v2.toggleWatchlist('${esc(id)}')">
           ${p._in_watchlist ? '從最愛移除' : '加入最愛'}
         </button>
