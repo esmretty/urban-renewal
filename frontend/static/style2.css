@@ -130,8 +130,46 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-text-light);
   padding: 6px 10px;
   border-radius: var(--r-sm);
+  border: none;
+  background: transparent;
+  cursor: pointer;
 }
 .v2-text-btn:hover { background: rgba(255,255,255,0.08); color: white; }
+
+/* 常用連結 dropdown (hover 展開) */
+.v2-useful-links { position: relative; }
+.v2-useful-links__dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 260px;
+  background: #fffdf7;
+  border: 1px solid #d6c68a;
+  border-radius: var(--r-md);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+  padding: 6px 0;
+  z-index: 1050;
+  display: none;
+  flex-direction: column;
+}
+.v2-useful-links:hover .v2-useful-links__dropdown,
+.v2-useful-links__dropdown:hover {
+  display: flex;
+}
+.v2-useful-links__dropdown a {
+  padding: 8px 14px;
+  color: #5c4a0a;
+  text-decoration: none;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.v2-useful-links__dropdown a:hover {
+  background: #f4e5b5;
+  color: #b0790a;
+}
+@media (max-width: 640px) {
+  .v2-useful-links__dropdown { right: auto; left: 0; min-width: 220px; }
+}
 .v2-icon-btn {
   width: 36px; height: 36px;
   display: inline-flex;
