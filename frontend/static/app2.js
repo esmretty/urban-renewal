@@ -1313,7 +1313,11 @@
     }
     const ratios = pings.map(pp => total > 0 ? (pp / total) * 100 : 0);
     p.zoning_ratios = ratios;
-    if (!p._in_watchlist) p._ephemeral_edit_made = true;
+    if (!p._in_watchlist) {
+      p._ephemeral_edit_made = true;
+      p._pending_overrides = p._pending_overrides || {};
+      p._pending_overrides.zoning_ratios = ratios;
+    }
     document.querySelectorAll('.v2-d-zone-ping').forEach((el, i) => {
       if (i !== idx && i < pings.length) el.value = pings[i].toFixed(2);
     });
@@ -1375,6 +1379,11 @@
           patch.land_area_sqm = null;
         }
         Object.assign(state.allProperties[idx], patch);
+        // 不在 watchlist 時：後端 NoopRef 吃掉，標 flag 讓 closeDetail 提示
+        if (!state.allProperties[idx]._in_watchlist) {
+          state.allProperties[idx]._ephemeral_edit_made = true;
+          state.allProperties[idx]._pending_inferred_choice = address;
+        }
       }
       // 重新 render detail (含試算 — land 變了倍數要重算) + 重 applyFilters 讓首頁卡片更新
       _renderDetailFromCurrent();
@@ -1603,7 +1612,13 @@
     }
     // 立刻寫回 local state + applyFilters → 卡片倍數即時連動
     p[field] = v;
-    if (!p._in_watchlist) p._ephemeral_edit_made = true;   // 標 flag, closeDetail 時提示
+    if (!p._in_watchlist) {
+      p._ephemeral_edit_made = true;   // 標 flag, closeDetail 時提示
+      // 紀錄 pending override 給「加入 watchlist 後 backfill」用
+      // (後端 _user_override_ref 在不在 watchlist 時走 NoopRef，POST 會被丟棄)
+      p._pending_overrides = p._pending_overrides || {};
+      p._pending_overrides[field] = v;
+    }
     applyFilters();
     // 重新 render detail 讓試算數字更新
     _renderDetailFromCurrent();
@@ -1742,6 +1757,56 @@
           throw new Error('HTTP ' + r.status + ' ' + txt.slice(0, 100));
         }
         toast('已加入觀察清單', 'success');
+
+        // Backfill：加 watchlist 之前用戶改的 override 全部被 NoopRef 吃掉，
+        // 加入後重新 POST 一次讓它們真正寫進 watchlist sub-doc
+        if (p._pending_overrides && Object.keys(p._pending_overrides).length) {
+          const fieldToEndpoint = {
+            desired_price_wan:           [`/api/properties/${encodeURIComponent(id)}/desired_price`,    (v) => ({ desired_price_wan: v })],
+            bonus_weishau:               [`/api/properties/${encodeURIComponent(id)}/bonus`,            (v) => ({ which: 'weishau', value: v })],
+            bonus_dugen:                 [`/api/properties/${encodeURIComponent(id)}/bonus`,            (v) => ({ which: 'dugen', value: v })],
+            rebuild_coeff:               [`/api/properties/${encodeURIComponent(id)}/rebuild_coeff`,    (v) => ({ value: v })],
+            floor_premium:               [`/api/properties/${encodeURIComponent(id)}/floor_premium`,    (v) => ({ floor_premium: v })],
+            road_width_m_override:       [`/api/properties/${encodeURIComponent(id)}/road_width`,        (v) => ({ road_width_m: v })],
+            new_house_price_wan_override:[`/api/properties/${encodeURIComponent(id)}/new_house_price`,   (v) => ({ value: v })],
+            zoning_ratios:               [`/api/properties/${encodeURIComponent(id)}/zoning_ratios`,     (v) => ({ zoning_ratios: v })],
+          };
+          for (const [field, val] of Object.entries(p._pending_overrides)) {
+            const ep = fieldToEndpoint[field];
+            if (!ep) continue;
+            try {
+              await fetch(ep[0], {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(ep[1](val)),
+              });
+            } catch (e) { console.error('backfill', field, e); }
+          }
+          // 推測地址特殊路徑
+          if (p._pending_inferred_choice) {
+            try {
+              await fetch(`/api/properties/${encodeURIComponent(id)}/inferred_choice`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: p._pending_inferred_choice }),
+              });
+            } catch (e) { console.error('backfill inferred_choice', e); }
+            delete p._pending_inferred_choice;
+          }
+          delete p._pending_overrides;
+          p._ephemeral_edit_made = false;
+          toast('剛才的數字改動已補存到觀察清單', 'success');
+        } else if (p._pending_inferred_choice) {
+          try {
+            await fetch(`/api/properties/${encodeURIComponent(id)}/inferred_choice`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ address: p._pending_inferred_choice }),
+            });
+          } catch (e) { console.error('backfill inferred_choice', e); }
+          delete p._pending_inferred_choice;
+          p._ephemeral_edit_made = false;
+        }
       }
       // 即時更新 state + UI（不全部 reload，太慢）
       p._in_watchlist = !isIn;
