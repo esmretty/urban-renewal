@@ -510,11 +510,49 @@
     const cityClass = p.city === '台北市' ? 'v2-card--tpe'
                     : p.city === '新北市' ? 'v2-card--ntpc' : '';
 
+    // ── 事件 badge (B4 audit 對齊 v1)：latest_event 7 天內顯示 ─────────────────
+    // 漲價 / 降價 / 改價 / cross_source 新上架；type='new' 不打 (NEW badge 已處理)
+    let evBadge = '';
+    const ev = p.latest_event;
+    if (ev && ev.at) {
+      const ageMs = Date.now() - new Date(ev.at).getTime();
+      const within7Days = ageMs >= 0 && ageMs < 7 * 24 * 3600 * 1000;
+      if (within7Days) {
+        if (ev.type === 'price_change') {
+          const fromW = Math.round((ev.from || 0) / 10000);
+          const toW = Math.round((ev.to || 0) / 10000);
+          if (ev.direction === 'up') {
+            evBadge = `<span class="v2-event-badge v2-event-badge--up" title="從 ${fromW}萬 漲到 ${toW}萬">漲價</span>`;
+          } else if (ev.direction === 'down') {
+            evBadge = `<span class="v2-event-badge v2-event-badge--down" title="從 ${fromW}萬 降到 ${toW}萬">降價</span>`;
+          } else {
+            evBadge = `<span class="v2-event-badge v2-event-badge--down">改價</span>`;
+          }
+        } else if (ev.type === 'cross_source') {
+          evBadge = `<span class="v2-event-badge v2-event-badge--cross">${esc(ev.source || '')}新上架</span>`;
+        }
+      }
+    }
+    // B5 fallback：沒 latest_event 但有舊版 is_price_changed 旗標 → 仍顯示降價
+    if (!evBadge && p.is_price_changed) {
+      evBadge = `<span class="v2-event-badge v2-event-badge--down">降價</span>`;
+    }
+    // B6: 中央 DB 封存 (admin 清掉的物件) — 跟「已下架 overlay」是不同事
+    const archivedBadge = p.archived
+      ? `<span class="v2-event-badge v2-event-badge--archived" title="此物件已從中央資料庫封存（admin 清理過）">已封存</span>`
+      : '';
+
     // ── 2-line dense layout ──
     // Line 1: icon + 區·地址 (ellipsis) | 總價 + 建單價 | 倍數 | ⭐
     // Line 2: 建/地/齡/層/區/路 + chips + sources
+    // B6: 591 偵測下架的物件 → 整卡灰 + 蓋層「已下架」(article 要 position:relative)
+    const archivedOverlay = p.archived
+      ? '<div class="v2-card__archived-overlay"><span>已下架</span></div>'
+      : '';
+
     return `
       <article class="v2-card ${archivedClass} ${readClass} ${hotClass} ${cityClass}" data-id="${esc(id)}">
+        ${archivedOverlay}
         <div class="v2-card__line1">
           <span class="v2-card__type">${typeIcon(p.building_type)}</span>
           <span class="v2-card__addr">
@@ -543,6 +581,7 @@
           ${p.road_width_m ? `<span class="v2-stat" title="路寬"><b>路</b>${p.road_width_m}m</span>` : ''}
           ${advChips.length ? advChips.map(c => `<span class="${c.cls}">${c.label}</span>`).join('') : ''}
           ${chips.length ? chips.map(c => `<span class="v2-rchip ${c.cls}">${c.label}</span>`).join('') : ''}
+          ${evBadge}${archivedBadge}
           ${p.sources && p.sources.length ? `<span class="v2-card__sources">${srcBadgesHTML(p.sources)}${dateBadge}</span>` : (dateBadge ? `<span class="v2-card__sources">${dateBadge}</span>` : '')}
         </div>
       </article>`;
