@@ -197,8 +197,10 @@
 
   // ── AI 分析文字 render (對齊 v1 formatAiReason) ──
   // 「分回價值」section 特殊處理 → renderBidSection (動態算分回值 + 出價建議 dropdown)
-  // skip 跟物件資訊重複的 section：樓高 / 屋齡 (左 table 已顯示)
-  const _SKIP_AI_SECTIONS = new Set(['樓高', '屋齡']);
+  // skip 跟物件資訊重複的 section：樓高 / 屋齡 (左 table 已顯示) + 其他
+  // (其他 section 主要是地段/捷運說明，跟物件資訊地址欄已知；優勢/抗性 chips 在
+  //  「其他資訊」區頂部已顯示，不需 ai 補述)
+  const _SKIP_AI_SECTIONS = new Set(['樓高', '屋齡', '其他']);
 
   function renderAiText(text, p, prices) {
     if (!text) return '';

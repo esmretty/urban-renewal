@@ -1949,24 +1949,25 @@ a { color: inherit; text-decoration: none; }
 .v2-d-tools-cell a:hover { background: var(--c-accent-hover); }
 
 /* 圖片：右上，固定高度 */
-/* 對齊 v1 .modal-photo 米色底 / 8px radius / max-height 220 */
+/* 對齊 v1 .modal-photo 米色底 / 8px radius；改 4:3 比例 + 寬度減 20% */
 .v2-detail-image-wrap {
-  width: 100%;
+  width: 80%;
+  aspect-ratio: 4 / 3;
   background: #f4efe0;
   border-radius: 8px;
   overflow: hidden;
   border: 0;
   height: auto;
   min-height: 0;
-  max-height: 220px;
+  max-height: none;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .v2-detail-image {
   width: 100%;
-  height: auto;
-  max-height: 220px;
+  height: 100%;
+  max-height: none;
   object-fit: cover;
   display: block;
 }
