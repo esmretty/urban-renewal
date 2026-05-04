@@ -71,7 +71,7 @@ a { color: inherit; text-decoration: none; }
   /* Sizes */
   --topbar-h: 52px;
   --sidebar-w: 268px;
-  --drawer-w: 1080px;             /* 介於 modal-xl (1140) 跟 modal-lg (950) 之間 */
+  --drawer-w: 972px;              /* 1080 × 0.9 (照片同步縮 10%) */
 
   /* Radii */
   --r-sm: 4px;
