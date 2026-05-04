@@ -1233,6 +1233,10 @@ a { color: inherit; text-decoration: none; }
   overflow-y: auto;
   padding: var(--sp-4);
   position: relative;        /* 讓 .v2-d-sources-topright absolute 對齊 body 右上 */
+  /* detail body 內的 accent 色從青藍切換成土黃色系 (drawer header / 首頁不受影響) */
+  --c-accent: #b45309;        /* amber-700 (土黃) */
+  --c-accent-hover: #92400e;  /* amber-800 */
+  --c-accent-light: #fef3c7;  /* amber-100 (淡土黃) */
 }
 .v2-drawer-backdrop {
   display: none;
@@ -1297,6 +1301,7 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-text);
   margin: 0 0 8px;
   padding-bottom: 5px;
+  text-align: right;
   border-bottom: 1px solid var(--c-border);
 }
 
@@ -1623,7 +1628,7 @@ a { color: inherit; text-decoration: none; }
   font-size: 14px;
 }
 .v2-rv2-edit, select.v2-rv2-edit {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* 推測 badge — block 放下一行 */
@@ -2004,7 +2009,7 @@ a { color: inherit; text-decoration: none; }
   line-height: 1;
 }
 .v2-rv2-lbl {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-text);
   font-weight: 500;
 }
@@ -2022,7 +2027,7 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-text);
 }
 .v2-rv2-val--bonus {
@@ -2042,14 +2047,14 @@ a { color: inherit; text-decoration: none; }
   gap: 2px;
 }
 .v2-rv2-note {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--c-text-light);
 }
 .v2-rv2-tag {
   display: inline-block;
   background: var(--c-hover);
   color: var(--c-text-muted);
-  font-size: 10.5px;
+  font-size: 11.5px;
   padding: 1px 6px;
   border-radius: var(--r-sm);
   font-weight: 600;
@@ -2058,7 +2063,7 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid var(--c-border);
   border-radius: var(--r-sm);
   padding: 3px 6px;
-  font-size: 13px;
+  font-size: 14px;
   width: 64px;
   text-align: left;
   background: var(--c-card);
@@ -2084,7 +2089,7 @@ select.v2-rv2-edit {
   font-variant-numeric: tabular-nums;
 }
 .v2-rv2-parking__cnt {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--c-text-light);
 }
 
@@ -2164,7 +2169,7 @@ select.v2-rv2-edit {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 8px 24px;
-  align-items: start;
+  align-items: center;          /* 左右兩塊上下置中 */
   padding: 10px 14px;
   text-align: left;
   flex: none;
@@ -2281,7 +2286,7 @@ select.v2-rv2-edit {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 13px;
+  font-size: 14px;
 }
 /* 出價設定 input row — bid-section 頂部 (取代基本資訊「欲出價」row) */
 .v2-bid-input-row {
@@ -2291,7 +2296,7 @@ select.v2-rv2-edit {
   padding-bottom: 8px;
   margin-bottom: 4px;
   border-bottom: 1px solid var(--c-border);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 .v2-bid-input-lbl {
@@ -2498,15 +2503,15 @@ select.v2-rv2-edit {
   align-items: center;
   gap: 6px;
   margin-top: 6px;
-  font-size: 13px;
+  font-size: 14px;
   flex-wrap: wrap;
 }
-.v2-bid-row--muted { color: var(--c-text-light); font-size: 13px; }
+.v2-bid-row--muted { color: var(--c-text-light); font-size: 14px; }
 .v2-bid-select {
   padding: 3px 8px;
   border: 1px solid var(--c-border);
   border-radius: var(--r-sm);
-  font-size: 13px;
+  font-size: 14px;
   background: var(--c-card);
   cursor: pointer;
   font-variant-numeric: tabular-nums;
@@ -2516,7 +2521,7 @@ select.v2-rv2-edit {
   color: var(--c-danger);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* LVR 表 (popup 用) */
