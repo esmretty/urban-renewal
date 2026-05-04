@@ -1411,7 +1411,7 @@ a { color: inherit; text-decoration: none; }
 .v2-d-tbl {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 14px;
   table-layout: fixed;
 }
 .v2-d-tbl tr { border-bottom: 1px solid var(--c-border); }
@@ -1454,11 +1454,11 @@ a { color: inherit; text-decoration: none; }
 @keyframes v2-loading-spin {
   to { transform: rotate(360deg); }
 }
-.v2-d-hint { color: var(--c-text-light); font-size: 13px; }
-/* 售價 — 13px tabular-nums，跟其他 table cell 同字級 */
+.v2-d-hint { color: var(--c-text-light); font-size: 14px; }
+/* 售價 — 跟其他 table cell 同字級 */
 .v2-d-price {
   color: var(--c-accent);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -1469,7 +1469,7 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-d-warn-inline {
   color: var(--c-danger);
-  font-size: 13px;
+  font-size: 14px;
 }
 /* 使用分區 cell — 多分區編輯 + 候選展開 + (特)/(遷) 警示 */
 /* 使用分區 badge — 扁平標籤式 (不可點)；用淡底 + 細邊框 + 字重 500 跟可點按鈕區分 */
@@ -1603,24 +1603,24 @@ a { color: inherit; text-decoration: none; }
 .v2-d-num, .v2-d-num2 {
   font-weight: 600;
   text-align: left;
-  font-size: 13px;
+  font-size: 14px;
 }
 .v2-d-num2 { color: var(--c-text); }
 .v2-d-unit {
   color: var(--c-text-muted);
-  font-size: 12px;
+  font-size: 13px;
   text-align: left;
 }
 .v2-d-per-lbl {
   color: var(--c-text-muted);
-  font-size: 11.5px;
+  font-size: 12.5px;
   text-align: left;
 }
 
 /* 統一 input/select 字體 13px (有些 v1-port 預設 14px 留下來太大) */
 .v2-d-tbl input,
 .v2-d-tbl select {
-  font-size: 13px;
+  font-size: 14px;
 }
 .v2-rv2-edit, select.v2-rv2-edit {
   font-size: 13px;
@@ -1641,7 +1641,7 @@ a { color: inherit; text-decoration: none; }
 
 /* 附近捷運每行一個 */
 .v2-mrt-line {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
   color: var(--c-text);
 }
