@@ -1166,7 +1166,7 @@
             </table>
             <table class="v2-d-tbl">
               <tr><td>附近捷運</td><td>${mrtList}</td></tr>
-              <tr><td>使用分區</td><td>${esc(p.zoning || '—')}${p.zoning_original && p.zoning_original !== p.zoning ? ` <span class="v2-d-hint">(原: ${esc(p.zoning_original)})</span>` : ''}</td></tr>
+              <tr><td>使用分區</td><td>${zoningCellHTML(p)}</td></tr>
               <tr><td>容積率</td><td>${farPct ? farPct + '%' : '—'}</td></tr>
               <tr><td>臨路寬度</td><td>${editIn('road_width_m_override', p.road_width_m_override ?? p.road_width_m, 0.5, 'm')}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">(寬度不明)</span>' : ''}${p.screenshot_roadwidth ? ` <a href="${esc(p.screenshot_roadwidth)}" target="_blank" rel="noopener" class="v2-d-screenshot-link">📷 地籍圖 ↗</a>` : ''}</td></tr>
               <tr><td>優勢</td><td class="v2-d-chips-cell">${advChipsHTML}</td></tr>
@@ -1200,6 +1200,139 @@
         </button>
       </div>
     `;
+  }
+
+  // ── 使用分區 cell (對齊 v1 zoningCellHTML — 多分區編輯 + (特)/(遷) 警示 + 候選展開) ──
+  function zoningCellHTML(p) {
+    const z = p.zoning;
+    const cands = p.zoning_candidates || [];
+    if (!z && !cands.length) return '<span class="v2-d-hint">待查</span>';
+
+    const sourceLabel = {
+      'arcgis_taipei': '北市都市計畫 GeoServer',
+      'arcgis_newtaipei': '新北市 GeoServer',
+      'not_found': 'GeoServer 查無相符多邊形',
+      'no_coord': '缺座標，無法查詢',
+      'unsupported_city': '城市暫未支援（請手動）',
+      '5168': '5168 實價登錄',
+      'tcd_via_5168': '北市地籍套繪圖（5168）',
+      'tcd_via_reverse_geo': '北市地籍套繪圖（反查）',
+      'tcd_vision_failed': '舊版 OCR 失敗',
+      'coord_mismatch': '座標與地址不匹配',
+      'lookup_failed': '查詢失敗',
+    }[p.zoning_source] || p.zoning_source || '';
+    const srcLink = p.zoning_source_url
+      ? `<a href="${encodeURI(p.zoning_source_url)}" target="_blank" rel="noopener" class="v2-d-zone-srclink">↗</a>`
+      : '';
+    const errorLine = p.zoning_error
+      ? `<div class="v2-d-zone-error">${esc(p.zoning_error)}</div>` : '';
+
+    const orig = p.zoning_original;
+    const zoneList = p.zoning_list;
+    const id = p.source_id || p.id || '';
+    let badge;
+    if (zoneList && zoneList.length > 1) {
+      const locked = !!p.zoning_ratios_locked;
+      const n = zoneList.length;
+      const totalLand = Number(p.land_area_ping) || 0;
+      const ratios = p.zoning_ratios || zoneList.map(() => 100 / n);
+      const toPing = (r) => totalLand > 0 ? (totalLand * (Number(r) || 0) / 100) : 0;
+      badge = zoneList.map((zl, i) => {
+        const eff = (typeof zl === 'string') ? zl : (zl.original_zone || zl.zone_name);
+        const far = lookupFar(eff, p) ?? '?';
+        const v = toPing(ratios[i]).toFixed(2);
+        const dis = locked ? 'disabled' : '';
+        return `<span class="v2-d-zone-badge">${esc(eff)} (${far}%)</span>
+          <input type="number" class="v2-d-zone-ping" min="0" max="${totalLand}" step="0.01" value="${v}" ${dis}
+            onchange="v2.setZonePing('${esc(id)}', ${i}, this.value)">坪`;
+      }).join(' / ');
+      badge += `<div class="v2-d-zone-err" id="v2-zone-err-${esc(id)}" style="display:none"></div>`;
+      badge += locked
+        ? `<div class="v2-d-zone-note">依謄本登錄坪數鎖定（總 ${totalLand} 坪）</div>`
+        : `<div class="v2-d-zone-note">總土地 ${totalLand} 坪。請依實際坪數輸入（任一改動，其他自動同步）</div>`;
+    } else if (z) {
+      badge = `<span class="v2-d-zone-badge">${esc(z)}</span>`;
+      if (orig && orig !== z) {
+        badge += ` <span class="v2-d-zone-orig">原：${esc(orig)}</span>`;
+      }
+    } else {
+      badge = '<span class="v2-d-hint">—</span>';
+    }
+    if (z && /\((?:特|遷|核|抄)\)/.test(z)) {
+      const eff = effectiveZoning(p);
+      const effFar = lookupFar(eff, p);
+      if (effFar != null && eff !== z) {
+        badge += `<div class="v2-d-zone-special">實際容積採「${esc(eff)}」${effFar}% 計算。此地塊有(特)/(遷)加註，真實容積請查都發局都市計畫書。</div>`;
+      } else {
+        badge += `<div class="v2-d-zone-special">此地塊有(特)/(遷)加註，容積率逐案而定，請查都發局都市計畫書。</div>`;
+      }
+    }
+    const candsBlock = cands.length
+      ? `<details class="v2-d-zone-cands">
+          <summary>展開 ${cands.length} 個候選</summary>
+          <table class="v2-d-zone-cands-tbl">
+            ${cands.map(c => `
+              <tr class="${c.is_most_likely ? 'v2-d-zone-cands-tbl__top' : ''}">
+                <td>${c.is_most_likely ? '★ ' : ''}${esc(c.address || '')}</td>
+                <td>${esc(c.zoning || '—')}</td>
+                <td>${c.distance_m != null ? c.distance_m + ' m' : '—'}</td>
+              </tr>`).join('')}
+          </table>
+        </details>` : '';
+    const sourceHint = sourceLabel
+      ? `<div class="v2-d-hint v2-d-zone-source">來源：${esc(sourceLabel)}${srcLink}</div>` : '';
+    return `${badge}${errorLine}${sourceHint}${candsBlock}`;
+  }
+
+  // 多分區 改坪數 → 同步調整其他區 + POST zoning_ratios (對齊 v1 setZonePing)
+  function setZonePing(id, idx, val) {
+    const p = state.allProperties.find(x => (x.source_id || x.id) === id);
+    if (!p || !p.zoning_list || p.zoning_ratios_locked) return;
+    const total = Number(p.land_area_ping) || 0;
+    if (total <= 0) return;
+    const n = p.zoning_list.length;
+    let v = parseFloat(val);
+    if (isNaN(v) || v < 0) v = 0;
+
+    const errEl = document.getElementById(`v2-zone-err-${id}`);
+    if (v > total) {
+      if (errEl) {
+        errEl.textContent = `⚠ 單一分區坪數 ${v.toFixed(2)} 超過總土地 ${total} 坪`;
+        errEl.style.display = '';
+      }
+      return;
+    }
+    if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+
+    const pings = p.zoning_list.map((_, i) => {
+      const r = (p.zoning_ratios || p.zoning_list.map(() => 100 / n))[i];
+      return total * (Number(r) || 0) / 100;
+    });
+    pings[idx] = v;
+    if (n === 2) {
+      pings[1 - idx] = total - v;
+    } else {
+      const rest = total - v;
+      const otherSum = pings.reduce((a, b, i) => i === idx ? a : a + b, 0);
+      if (otherSum > 0) {
+        for (let i = 0; i < n; i++) if (i !== idx) pings[i] = pings[i] / otherSum * rest;
+      } else {
+        for (let i = 0; i < n; i++) if (i !== idx) pings[i] = rest / (n - 1);
+      }
+    }
+    const ratios = pings.map(pp => total > 0 ? (pp / total) * 100 : 0);
+    p.zoning_ratios = ratios;
+    if (!p._in_watchlist) p._ephemeral_edit_made = true;
+    document.querySelectorAll('.v2-d-zone-ping').forEach((el, i) => {
+      if (i !== idx && i < pings.length) el.value = pings[i].toFixed(2);
+    });
+    applyFilters();
+    _renderDetailFromCurrent();
+    fetch(`/api/properties/${encodeURIComponent(id)}/zoning_ratios`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ zoning_ratios: ratios }),
+    }).catch(e => console.error('setZonePing', e));
   }
 
   // ── 推測地址 helper (對齊 v1 inferredAddressCellHTML + saveInferredChoice) ──
@@ -1512,7 +1645,7 @@
     };
     pop.innerHTML = `<div class="v2-lvr-popup__title">附近實價登錄 (${recs.length} 筆)</div>
       <table class="v2-lvr-tbl">
-        <thead><tr><th>交易日</th><th>總價</th><th>建坪</th><th>單價</th><th>地址</th></tr></thead>
+        <thead><tr><th>交易日</th><th>總價</th><th>建坪</th><th>地坪</th><th>單價</th><th>地址</th></tr></thead>
         <tbody>${recs.map(r => {
           const totalWan = r.price_total ? r.price_total / 10000 : null;
           const perPingWan = (totalWan && r.area_ping) ? (totalWan / r.area_ping) : null;
@@ -1520,6 +1653,7 @@
             <td>${esc(r.txn_date || '—')}</td>
             <td>${totalWan != null ? fmt0(totalWan) + '萬' : '—'}</td>
             <td>${r.area_ping ? fmt1(r.area_ping) : '—'}</td>
+            <td>${r.land_ping ? fmt1(r.land_ping) : '—'}</td>
             <td>${perPingWan != null ? perPingWan.toFixed(1) + '萬' : '—'}</td>
             <td class="v2-lvr-addr" title="${esc(r.address || '')}">${esc(stripCD(r.address))}</td>
           </tr>`;
@@ -1872,7 +2006,7 @@
     triggerScrapeUrl, triggerManualAnalyze, populateManualDistricts,
     switchGridCity,
     showLvrPopup, hideLvrPopup,
-    saveOverride, saveInferredChoice,
+    saveOverride, saveInferredChoice, setZonePing,
   };
 
   // Boot
