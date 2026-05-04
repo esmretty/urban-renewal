@@ -1114,32 +1114,11 @@
         </div>
       </div>
 
-      <!-- Row 2: 都更換回試算 (左 7) | 分析建議 (右 5) -->
+      <!-- Row 2: 都更換回試算 (左 7) | 分析建議 (右 5) — 直式公式對齊 v1 -->
       <div class="v2-d-row">
         <div class="v2-d-col v2-d-col--7">
           <h6 class="v2-d-h">都更換回試算</h6>
-          ${skip ? `
-            <div class="v2-d-alert">
-              此物件標記為「${p.is_foreclosure?'法拍屋':p.is_remote_area?'新北偏遠路段':p.unsuitable_for_renewal?'特殊土地分區（非住商工）':'地坪可疑'}」，
-              都更倍數試算不適用，故不顯示。
-            </div>` : `
-            <div class="v2-scn-grid">
-              ${scnHTML('危老', sW, bonusW)}
-              ${scnHTML(isFangzai ? '防災都更' : '都更', sD, bonusD)}
-            </div>
-            <table class="v2-d-tbl v2-d-tbl--params">
-              <tr><td>新成屋單價</td><td colspan="3">${editIn('new_house_price_wan_override', p.new_house_price_wan_override ?? newPrice, 5, '萬/坪')}${p.new_house_price_wan_override ? ' <span class="v2-d-hint">(已覆寫)</span>' : ' <span class="v2-d-hint">(區域預設)</span>'}</td></tr>
-              <tr><td>危老獎勵率</td><td>${editPct('bonus_weishau', bonusW)}</td>
-                  <td>都更獎勵率</td><td>${editPct('bonus_dugen', bonusD)}</td></tr>
-              <tr><td>樓層加成</td><td>${editPct('floor_premium', floorPremium)}</td>
-                  <td>建坪係數</td><td><input type="number" class="v2-d-input" min="1" max="2" step="0.01" value="${coeff}"
-                    onchange="v2.saveOverride('${esc(id)}','rebuild_coeff',this.value)"></td></tr>
-            </table>
-            <div class="v2-d-formula">
-              <div>土地 <b>${land || '—'}</b> 坪 × 容積率 <b>${farPct || '—'}</b>% × (1+獎勵) × ${coeff} × 分回比例 <b>${ratio ? (ratio*100).toFixed(0)+'%' : '—'}</b></div>
-              <div>車位 <b>${parking ? parking+' 萬' : '—'}</b>${floorPremium > 0 ? ` ／ 樓層加成 <b>+${(floorPremium*100)|0}%</b>` : ''}</div>
-            </div>
-          `}
+          ${renewalSectionHTML(p, prices)}
         </div>
         <div class="v2-d-col v2-d-col--5">
           <h6 class="v2-d-h">分析建議</h6>
@@ -1155,6 +1134,159 @@
         </button>
       </div>
     `;
+  }
+
+  // ── 都更換回試算 visual (對齊 v1 renewalV2HTML 直式公式 + 結果 col) ─────
+  // 結構：[土地持分大塊 + 分區abbr]  [直式公式 (×/× ... +)]
+  //                                  [危老 col: 總值 + 分回坪 + 倍數 + 損益]
+  //                                  [都更 col: ...]
+  function renewalSectionHTML(p, prices) {
+    if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal || isLandSuspicious(p)) {
+      const reason = p.is_foreclosure ? '法拍屋'
+        : p.is_remote_area ? '新北偏遠路段'
+        : p.unsuitable_for_renewal ? '特殊土地分區（非住商工）'
+        : '土地坪數可能不可信（大於建坪）';
+      return `<div class="v2-d-alert">此物件標記為「${reason}」，都更倍數試算不適用，故不顯示。</div>`;
+    }
+    const id = p.source_id || p.id || '';
+    const land = p.land_area_ping;
+    const zoning = effectiveZoning(p);
+    const zoneList = p.zoning_list;
+    const multiZone = zoneList && zoneList.length > 1;
+    const baseFar = multiZone ? effectiveFar(p) : lookupFar(zoning, p);
+    const effFar = baseFar;   // 用戶設計不實作路寬限縮
+    const coeff = p.rebuild_coeff ?? 1.57;
+    const newPrice = p.new_house_price_wan_override ?? prices[p.district];
+    if (!land || !zoning || !newPrice) {
+      const missing = [
+        !land ? '土地坪數' : null,
+        !zoning ? '使用分區' : null,
+        !newPrice ? '新成屋房價' : null,
+      ].filter(Boolean).join(' / ');
+      return `<div class="v2-d-alert">⚠ 缺資料：${esc(missing)}，無法試算。</div>`;
+    }
+    const [ratio, parking] = lookupShareRatio(newPrice);
+    const isFangzai = p.city === '台北市' && currentAge(p) && (new Date().getFullYear() - currentAge(p)) <= 1974;
+    const bonusW = p.bonus_weishau ?? 0.30;
+    const bonusD = p.bonus_dugen ?? (isFangzai ? 0.80 : 0.50);
+    const is1F = Number(p.floor) === 1 || Number(p.floor_range_min) === 1;
+    const floorPremium = p.floor_premium ?? (is1F ? 0.20 : 0);
+    const effectivePrice = newPrice * (1 + floorPremium);
+    const calcShare = (b) => land * (effFar / 100) * (1 + b) * coeff * (ratio || 0);
+    const parkingCount = (b) => calcShare(b) / 40;
+    const parkingValue = (b) => parkingCount(b) * (parking || 0);
+    const calcVal = (b) => calcShare(b) * effectivePrice + parkingValue(b);
+    const shareW = calcShare(bonusW), valW = calcVal(bonusW);
+    const shareD = calcShare(bonusD), valD = calcVal(bonusD);
+    const desired = parseFloat(p.desired_price_wan ?? (p.price_ntd ? Math.round(p.price_ntd / 10000 * 0.9 / 10) * 10 : 0)) || 0;
+
+    const bonusOptsW = (sel) => [0.10, 0.20, 0.30, 0.40].map(b =>
+      `<option value="${b}" ${Math.abs(sel - b) < 0.001 ? 'selected' : ''}>${(b * 100).toFixed(0)}%</option>`).join('');
+    const bonusOptsD = (sel) => [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00].map(b =>
+      `<option value="${b}" ${Math.abs(sel - b) < 0.001 ? 'selected' : ''}>${(b * 100).toFixed(0)}%</option>`).join('');
+
+    const r = (op, lbl, val, note = '') => `
+      <div class="v2-rv2-r">
+        <span class="v2-rv2-op">${op}</span>
+        <span class="v2-rv2-lbl">${lbl}</span>
+        <span class="v2-rv2-val">${note ? `<span class="v2-rv2-note">${note}</span>` : ''}<span>${val}</span></span>
+      </div>`;
+
+    return `
+      <div class="v2-rv2">
+        <div class="v2-rv2-land">
+          <div class="v2-rv2-land__lbl">土地持分</div>
+          <div class="v2-rv2-land__val">${land}<span class="v2-rv2-land__unit">坪</span></div>
+          <div class="v2-rv2-land__abbr">${esc(zoneAbbr(p.zoning_original || zoning))}</div>
+        </div>
+        <div class="v2-rv2-body">
+          <div class="v2-rv2-formula">
+            ${r('×', '有效容積率', `${effFar}%`)}
+            <div class="v2-rv2-r">
+              <span class="v2-rv2-op">×</span>
+              <span class="v2-rv2-lbl">容積獎勵</span>
+              <span class="v2-rv2-val v2-rv2-val--bonus">
+                <span class="v2-rv2-tag">危老</span>
+                <select class="v2-rv2-edit" onchange="v2.saveOverride('${esc(id)}','bonus_weishau',this.value)">${bonusOptsW(bonusW)}</select>
+                <span class="v2-rv2-tag">都更</span>
+                <select class="v2-rv2-edit" onchange="v2.saveOverride('${esc(id)}','bonus_dugen',this.value)">${bonusOptsD(bonusD)}</select>
+              </span>
+            </div>
+            <div class="v2-rv2-r">
+              <span class="v2-rv2-op">×</span>
+              <span class="v2-rv2-lbl">都更係數</span>
+              <span class="v2-rv2-val">
+                <input type="number" class="v2-rv2-edit" step="0.01" value="${coeff}"
+                  onchange="v2.saveOverride('${esc(id)}','rebuild_coeff',this.value)">
+              </span>
+            </div>
+            ${r('×', '分回比例', ratio != null ? (ratio * 100).toFixed(1) + '%' : '—')}
+            <div class="v2-rv2-r">
+              <span class="v2-rv2-op">×</span>
+              <span class="v2-rv2-lbl">新成屋房價<span class="v2-rv2-lbl-unit">(萬/坪)</span></span>
+              <span class="v2-rv2-val">
+                <input type="number" class="v2-rv2-edit" step="5" value="${newPrice}"
+                  onchange="v2.saveOverride('${esc(id)}','new_house_price_wan_override',this.value)">
+                <span class="v2-rv2-note">${p.new_house_price_wan_override ? '(已覆寫)' : '(區域平均，可改)'}</span>
+              </span>
+            </div>
+            <div class="v2-rv2-r">
+              <span class="v2-rv2-op">×</span>
+              <span class="v2-rv2-lbl">樓層加成${is1F ? '<span class="v2-rv2-lbl-unit">(1F 預設20%)</span>' : ''}</span>
+              <span class="v2-rv2-val">
+                <input type="number" class="v2-rv2-edit" min="0" max="80" step="5" value="${Math.round(floorPremium * 100)}"
+                  onchange="v2.saveOverride('${esc(id)}','floor_premium',this.value/100)"> %
+              </span>
+            </div>
+            <div class="v2-rv2-r">
+              <span class="v2-rv2-op">+</span>
+              <span class="v2-rv2-lbl">分回車位</span>
+              <span class="v2-rv2-val v2-rv2-val--bonus">
+                <span class="v2-rv2-tag">危老</span>
+                <span class="v2-rv2-parking">
+                  <span class="v2-rv2-parking__val">${parkingValue(bonusW).toFixed(0)} 萬</span>
+                  <span class="v2-rv2-parking__cnt">(${parkingCount(bonusW).toFixed(2)} 位)</span>
+                </span>
+                <span class="v2-rv2-tag">都更</span>
+                <span class="v2-rv2-parking">
+                  <span class="v2-rv2-parking__val">${parkingValue(bonusD).toFixed(0)} 萬</span>
+                  <span class="v2-rv2-parking__cnt">(${parkingCount(bonusD).toFixed(2)} 位)</span>
+                </span>
+              </span>
+            </div>
+          </div>
+          <div class="v2-rv2-result">
+            ${[
+              { tag: '危老', val: valW, share: shareW },
+              { tag: isFangzai ? '防災都更' : '都更', val: valD, share: shareD },
+            ].map(s => {
+              const mult = desired ? (s.val / desired).toFixed(2) : '—';
+              const profit = desired ? (s.val - desired).toFixed(0) : '—';
+              const profitSign = desired && (s.val - desired) >= 0 ? '+' : '';
+              const negCls = desired && (s.val - desired) < 0 ? 'v2-rv2-circ--neg' : '';
+              return `
+                <div class="v2-rv2-rcol">
+                  <div class="v2-rv2-rtag">${s.tag}</div>
+                  <div class="v2-rv2-rval">${s.val.toFixed(0)} 萬</div>
+                  <div class="v2-rv2-circles">
+                    <div class="v2-rv2-circ">
+                      <div class="v2-rv2-circ__num">${s.share.toFixed(2)}</div>
+                      <div class="v2-rv2-circ__lbl">分回坪</div>
+                    </div>
+                    <div class="v2-rv2-circ">
+                      <div class="v2-rv2-circ__num">${mult}×</div>
+                      <div class="v2-rv2-circ__lbl">倍數</div>
+                    </div>
+                    <div class="v2-rv2-circ ${negCls}">
+                      <div class="v2-rv2-circ__num">${profitSign}${profit}</div>
+                      <div class="v2-rv2-circ__lbl">效益萬</div>
+                    </div>
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>`;
   }
 
   // ── 個人 override 儲存 (對齊 v1 行為) ─────────────────────────────────────
