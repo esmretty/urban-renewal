@@ -1437,15 +1437,15 @@ a { color: inherit; text-decoration: none; }
 .v2-d-tbl tr:last-child { border-bottom: none; }
 .v2-d-tbl td {
   padding: 6px 6px;
-  vertical-align: middle;        /* 跟 input/select 中對齊 */
+  vertical-align: top;           /* 多行內容文字向上靠 */
   line-height: 1.4;
-  /* row 高度自然 (隨內容)，不強制 height */
 }
 .v2-d-tbl td:first-child {
   color: var(--c-text-muted);
   white-space: nowrap;
   width: 88px;
-  font-size: 12.5px;
+  /* 字體大小不另外設定 → inherit .v2-d-tbl 的 13px (mobile 自動 14px)，
+     避免 label/content/mrt-line 三邊不一致 */
 }
 .v2-d-tbl--params td:first-child { width: auto; }
 .v2-d-tbl--params tr { border-bottom: 1px dashed var(--c-border); }

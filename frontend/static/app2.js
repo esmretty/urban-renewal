@@ -1090,10 +1090,28 @@
       <div class="v2-d-row">
         <div class="v2-d-col v2-d-col--7">
           <div class="v2-d-basic-grid">
-            <!-- 地址列：橫跨整個 grid 寬度，直接顯示推測地址 (有則顯示)；推測 ≠ 原始時加「推測」badge -->
+            <!-- 地址列：橫跨整個 grid 寬度。順序：地址 → 推測 badge → 📍 map link -->
             <div class="v2-d-addr-row">
-              <span class="v2-d-addr-main">${inferredAddressCellHTML(p)}</span>
-              ${(p.address_inferred && p.address_inferred !== p.address) ? '<span class="v2-d-addr-inferred-badge">推測</span>' : ''}
+              ${(() => {
+                const cands = Array.isArray(p.address_inferred_candidates_detail) ? p.address_inferred_candidates_detail : [];
+                const current = p.address_inferred || p.address || p.title || '';
+                const sid = esc(p.source_id || p.id || '');
+                const isInferred = p.address_inferred && p.address_inferred !== p.address;
+                let addrHTML;
+                if (cands.length <= 1) {
+                  addrHTML = `<span class="v2-d-addr-main">${esc(stripCityDist(current))}</span>`;
+                } else {
+                  const opts = cands.map(c => {
+                    const sel = c.address === current ? 'selected' : '';
+                    const label = stripCityDist(c.address) + (c.is_reverse_geo ? '（座標反查）' : '');
+                    return `<option value="${esc(c.address)}" ${sel}>${esc(label)}</option>`;
+                  }).join('');
+                  addrHTML = `<select class="v2-d-input v2-d-inferred-select" onchange="v2.saveInferredChoice('${sid}', this.value)">${opts}</select>`;
+                }
+                const badge = isInferred ? '<span class="v2-d-addr-inferred-badge">推測</span>' : '';
+                const mapLink = `<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener" class="v2-d-map-link" title="Google Maps">📍</a>`;
+                return addrHTML + badge + mapLink;
+              })()}
               ${p.address_road_fixed ? `<div class="v2-d-addr-fixed">已自動修正：${esc(p.address_road_fixed.from)} → ${esc(p.address_road_fixed.to)}</div>` : ''}
               ${p.address_suspicious ? `<div class="v2-d-warn">⚠ 路名可能不存在於此行政區，請自行確認</div>` : ''}
             </div>
