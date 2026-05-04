@@ -1997,10 +1997,13 @@ a { color: inherit; text-decoration: none; }
   font-weight: 500;
 }
 .v2-rv2-lbl-unit {
+  display: block;        /* 換行：(萬/坪) (1F 預設20%) 等不再 inline 接在標籤後 */
   font-size: 10.5px;
   color: var(--c-text-light);
-  margin-left: 3px;
+  margin-left: 0;
+  margin-top: 1px;
   font-weight: 400;
+  line-height: 1;
 }
 .v2-rv2-val {
   display: flex;
@@ -2010,7 +2013,22 @@ a { color: inherit; text-decoration: none; }
   font-size: 13px;
   color: var(--c-text);
 }
-.v2-rv2-val--bonus { gap: 4px; }
+.v2-rv2-val--bonus {
+  flex-direction: column;     /* 危老 / 都更 兩塊上下排 */
+  align-items: flex-start;
+  gap: 3px;
+}
+.v2-rv2-bonus-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+/* 新成屋單價這類「input + note 換行」的 val cell */
+.v2-rv2-val--col {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
 .v2-rv2-note {
   font-size: 11px;
   color: var(--c-text-light);
@@ -2151,50 +2169,76 @@ select.v2-rv2-edit {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;          /* 防止 grid 子項溢出父容器 */
 }
-/* 危老/都更結果在右欄改成上下直排 (不再左右並列) */
+/* 危老/都更結果在右欄改成上下直排 (不再左右並列)；窄欄內也不溢出 */
 .v2-rv2-result--stack {
   display: flex;
   flex-direction: column;
   gap: 8px;
   border-top: none;
   padding-top: 0;
+  min-width: 0;
 }
 .v2-rv2-result--stack .v2-rv2-rcol {
   background: var(--c-card);
   text-align: left;
-  display: grid;
-  grid-template-columns: 60px 1fr;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  min-width: 0;
+}
+.v2-rv2-result--stack .v2-rv2-rcol-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
 }
 .v2-rv2-result--stack .v2-rv2-rtag {
   display: inline-block;
   width: max-content;
+  flex-shrink: 0;
 }
 .v2-rv2-result--stack .v2-rv2-rval {
-  font-size: 18px;
+  font-size: 17px;
   margin: 0;
   text-align: right;
+  font-weight: 800;
 }
 .v2-rv2-result--stack .v2-rv2-circles {
   grid-column: 1 / -1;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
 }
 .v2-rv2-result--stack .v2-rv2-circ {
   border-radius: var(--r-md);
   aspect-ratio: auto;
-  flex-direction: row;
-  gap: 6px;
-  padding: 6px 8px;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 4px;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  min-width: 0;
 }
-.v2-rv2-result--stack .v2-rv2-circ__lbl { margin-top: 0; font-size: 10.5px; }
-.v2-rv2-result--stack .v2-rv2-circ__num { font-size: 14px; }
+.v2-rv2-result--stack .v2-rv2-circ__lbl { margin-top: 1px; font-size: 10px; }
+.v2-rv2-result--stack .v2-rv2-circ__num { font-size: 13px; }
 
-/* 出價建議 */
+/* 出價建議 — Row 2 右欄獨立區塊 */
+.v2-bid-section {
+  background: #f9fafb;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+
+/* 出價建議 (舊 .v2-rv2-bid 已不使用，保留 CSS 防破壞隱藏 caller) */
 .v2-rv2-bid {
   background: #f9fafb;
   border: 1px solid var(--c-border);

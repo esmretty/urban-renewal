@@ -1123,11 +1123,15 @@
         </div>
       </div>
 
-      <!-- Row 2: 都更換回試算 (內部左右兩欄) — 「分析建議」整區已移除 -->
-      <div class="v2-d-row v2-d-row--full">
-        <div class="v2-d-col v2-d-col--12">
+      <!-- Row 2: 都更換回試算 (左 7) | 出價建議 (右 5) -->
+      <div class="v2-d-row">
+        <div class="v2-d-col v2-d-col--7">
           <h6 class="v2-d-h">都更換回試算</h6>
           ${renewalSectionHTML(p, prices)}
+        </div>
+        <div class="v2-d-col v2-d-col--5">
+          <h6 class="v2-d-h">出價建議</h6>
+          ${bidSectionHTML(p, prices)}
         </div>
       </div>
 
@@ -1411,8 +1415,10 @@
       const negCls = desired && (val - desired) < 0 ? 'v2-rv2-circ--neg' : '';
       return `
         <div class="v2-rv2-rcol">
-          <div class="v2-rv2-rtag">${tag}</div>
-          <div class="v2-rv2-rval">${val.toFixed(0)} 萬</div>
+          <div class="v2-rv2-rcol-head">
+            <span class="v2-rv2-rtag">${tag}</span>
+            <span class="v2-rv2-rval">${val.toFixed(0)} 萬</span>
+          </div>
           <div class="v2-rv2-circles">
             <div class="v2-rv2-circ">
               <div class="v2-rv2-circ__num">${share.toFixed(2)}</div>
@@ -1444,10 +1450,14 @@
               <span class="v2-rv2-op">乘以</span>
               <span class="v2-rv2-lbl">容積獎勵</span>
               <span class="v2-rv2-val v2-rv2-val--bonus">
-                <span class="v2-rv2-tag">危老</span>
-                <select class="v2-rv2-edit" onchange="v2.saveOverride('${esc(id)}','bonus_weishau',this.value)">${bonusOptsW(bonusW)}</select>
-                <span class="v2-rv2-tag">都更</span>
-                <select class="v2-rv2-edit" onchange="v2.saveOverride('${esc(id)}','bonus_dugen',this.value)">${bonusOptsD(bonusD)}</select>
+                <span class="v2-rv2-bonus-line">
+                  <span class="v2-rv2-tag">危老</span>
+                  <select class="v2-rv2-edit" onchange="v2.saveOverride('${esc(id)}','bonus_weishau',this.value)">${bonusOptsW(bonusW)}</select>
+                </span>
+                <span class="v2-rv2-bonus-line">
+                  <span class="v2-rv2-tag">都更</span>
+                  <select class="v2-rv2-edit" onchange="v2.saveOverride('${esc(id)}','bonus_dugen',this.value)">${bonusOptsD(bonusD)}</select>
+                </span>
               </span>
             </div>
             <div class="v2-rv2-r">
@@ -1461,8 +1471,8 @@
             ${r('乘以', '分回比例', ratio != null ? (ratio * 100).toFixed(1) + '%' : '—')}
             <div class="v2-rv2-r">
               <span class="v2-rv2-op">乘以</span>
-              <span class="v2-rv2-lbl">新成屋房價<span class="v2-rv2-lbl-unit">(萬/坪)</span></span>
-              <span class="v2-rv2-val">
+              <span class="v2-rv2-lbl">新成屋單價<span class="v2-rv2-lbl-unit">(萬/坪)</span></span>
+              <span class="v2-rv2-val v2-rv2-val--col">
                 <input type="number" class="v2-rv2-edit" step="5" value="${newPrice}"
                   onchange="v2.saveOverride('${esc(id)}','new_house_price_wan_override',this.value)">
                 <span class="v2-rv2-note">${p.new_house_price_wan_override ? '(已覆寫)' : '(區域平均，可改)'}</span>
@@ -1480,15 +1490,19 @@
               <span class="v2-rv2-op">+</span>
               <span class="v2-rv2-lbl">分回車位</span>
               <span class="v2-rv2-val v2-rv2-val--bonus">
-                <span class="v2-rv2-tag">危老</span>
-                <span class="v2-rv2-parking">
-                  <span class="v2-rv2-parking__val">${parkingValue(bonusW).toFixed(0)} 萬</span>
-                  <span class="v2-rv2-parking__cnt">(${parkingCount(bonusW).toFixed(2)} 位)</span>
+                <span class="v2-rv2-bonus-line">
+                  <span class="v2-rv2-tag">危老</span>
+                  <span class="v2-rv2-parking">
+                    <span class="v2-rv2-parking__val">${parkingValue(bonusW).toFixed(0)} 萬</span>
+                    <span class="v2-rv2-parking__cnt">(${parkingCount(bonusW).toFixed(2)} 位)</span>
+                  </span>
                 </span>
-                <span class="v2-rv2-tag">都更</span>
-                <span class="v2-rv2-parking">
-                  <span class="v2-rv2-parking__val">${parkingValue(bonusD).toFixed(0)} 萬</span>
-                  <span class="v2-rv2-parking__cnt">(${parkingCount(bonusD).toFixed(2)} 位)</span>
+                <span class="v2-rv2-bonus-line">
+                  <span class="v2-rv2-tag">都更</span>
+                  <span class="v2-rv2-parking">
+                    <span class="v2-rv2-parking__val">${parkingValue(bonusD).toFixed(0)} 萬</span>
+                    <span class="v2-rv2-parking__cnt">(${parkingCount(bonusD).toFixed(2)} 位)</span>
+                  </span>
                 </span>
               </span>
             </div>
@@ -1499,13 +1513,54 @@
             ${renderResult('危老', valW, shareW)}
             ${renderResult('都更', valD, shareD)}
           </div>
-          <div class="v2-rv2-bid">
-            <div class="v2-rv2-bid__title">出價建議</div>
-            ${bidHTML}
-          </div>
           <div class="v2-rv2-disclaimer">⚠ 試算假設：買方擁有全部土地持分。實際換回比例依持分調整。</div>
         </div>
       </div>`;
+  }
+
+  // 出價建議區塊 — Row 2 右欄獨立 render (從原本 renewalSection 右欄抽出)
+  function bidSectionHTML(p, prices) {
+    if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal || isLandSuspicious(p)) {
+      return `<div class="v2-d-alert v2-d-alert--soft">此物件不適用都更/危老試算，故無出價建議。</div>`;
+    }
+    const land = p.land_area_ping;
+    const zoning = effectiveZoning(p);
+    const newPrice = p.new_house_price_wan_override ?? prices[p.district];
+    if (!land || !zoning || !newPrice) {
+      return `<div class="v2-d-alert v2-d-alert--soft">缺資料，無法給出價建議。</div>`;
+    }
+    const farPct = effectiveFar(p);
+    if (!farPct) return `<div class="v2-d-alert v2-d-alert--soft">缺有效容積率，無法給出價建議。</div>`;
+    const coeff = p.rebuild_coeff ?? 1.57;
+    const [ratio, parking] = lookupShareRatio(newPrice);
+    if (!ratio) return `<div class="v2-d-alert v2-d-alert--soft">缺分回比例，無法給出價建議。</div>`;
+    const isFangzai = p.city === '台北市' && currentAge(p) && (new Date().getFullYear() - currentAge(p)) <= 1974;
+    const bonusW = p.bonus_weishau ?? 0.30;
+    const bonusD = p.bonus_dugen ?? (isFangzai ? 0.80 : 0.50);
+    const is1F = Number(p.floor) === 1 || Number(p.floor_range_min) === 1;
+    const floorPremium = p.floor_premium ?? (is1F ? 0.20 : 0);
+    const effectivePrice = newPrice * (1 + floorPremium);
+    const calcVal = (b) => {
+      const share = land * (farPct / 100) * (1 + b) * coeff * ratio;
+      return share * effectivePrice + (share / 40) * (parking || 0);
+    };
+    const valW = calcVal(bonusW);
+    const valD = calcVal(bonusD);
+    const wValRound = Math.round(valW), dValRound = Math.round(valD);
+    const desired = parseFloat(p.desired_price_wan ?? (p.price_ntd ? Math.round(p.price_ntd / 10000 * 0.9 / 10) * 10 : 0)) || 0;
+    const fmtN = (n) => Math.round(n).toLocaleString('zh-TW');
+    const opts = [3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0, 4.2, 4.5, 5.0];
+    const mkOpts = (sel) => opts.map(v =>
+      `<option value="${v}" ${Math.abs(v - sel) < 0.01 ? 'selected' : ''}>${v.toFixed(1)} 倍</option>`).join('');
+    if (desired <= 0) {
+      return `<div class="v2-bid-section">
+        <div class="v2-bid-row v2-bid-row--muted">尚未填入欲出價，無法給出價建議</div>
+      </div>`;
+    }
+    return `<div class="v2-bid-section">
+      ${valW > 0 ? `<div class="v2-bid-row">• 危老出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${wValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(wValRound / 3.2)} 萬</span></div>` : ''}
+      <div class="v2-bid-row">• 都更出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${dValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(dValRound / 3.2)} 萬</span></div>
+    </div>`;
   }
 
   // ── 個人 override 儲存 (對齊 v1 行為) ─────────────────────────────────────
