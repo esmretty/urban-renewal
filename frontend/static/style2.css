@@ -2174,22 +2174,30 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-rv2-lbl { color: #6b7280; font-size: 14px; font-weight: 400; }   /* 對齊 v1 default normal */
 .v2-rv2-lbl-unit {
-  display: inline;        /* 對齊 v1：(萬/坪) inline 跟「新成屋房價」同一行 */
+  display: block;          /* (萬/坪)、(1F 預設20%) 換行到標籤下方 */
   font-size: 10.5px;
   color: var(--c-text-light);
-  margin-left: 2px;
+  margin-left: 0;
+  margin-top: 1px;
   font-weight: 400;
+  line-height: 1;
 }
 .v2-rv2-val {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 6px;
+  gap: 6px 8px;
+  row-gap: 2px;
   font-size: 17px;
   font-weight: 700;
   color: #1a1a2e;
   font-variant-numeric: tabular-nums;
   flex-wrap: wrap;
+}
+/* note 整行單獨佔一列 (上方換行) — 對齊 v1 視覺 */
+.v2-rv2-val > .v2-rv2-note {
+  flex: 0 0 100%;
+  text-align: right;
 }
 .v2-rv2-val--bonus {
   flex-direction: row;        /* 危老 / 都更 強制同一列 */
@@ -2222,34 +2230,34 @@ a { color: inherit; text-decoration: none; }
   padding: 0;
 }
 
-/* 可編輯 input — 米黃淡底 + 虛線下緣 */
+/* 試算內所有 input/select 統一 — 跟「出價設定」.v2-d-input 同樣的米色底棕邊外框 */
 .v2-rv2-edit {
-  background: #fffaeb;
-  border: none;
-  border-bottom: 1.5px dashed #c78a00;
-  padding: 1px 6px;
-  font-size: 16px;
-  font-weight: 700;
+  background: #fffdf6;
+  border: 1px solid #d8d2be;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 14px;
+  font-weight: normal;
   color: #1a1a2e;
   font-variant-numeric: tabular-nums;
   outline: none;
-  width: 78px;
+  width: 80px;
   text-align: right;
-  cursor: pointer;
-  border-radius: 0;
+  cursor: text;
 }
-select.v2-rv2-edit { text-align: left; padding-right: 18px; }
+select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
 .v2-rv2-edit:focus {
-  background: #fff5d6;
-  border-bottom-color: #b0790a;
+  background: #ffffff;
+  border-color: #c78a00;
   box-shadow: none;
 }
-.v2-rv2-edit:hover { background: #fff5d6; }
+.v2-rv2-edit:hover { background: #fffdf6; }
+/* 容積獎勵 dropdown 對齊 v1 (.rv2-val--bonus .rv2-edit { font 14, width 60 }) */
 .v2-rv2-val--bonus .v2-rv2-edit {
-  font-size: 12px;
-  font-weight: 600;
-  width: 52px;
-  padding: 1px 3px;
+  font-size: 14px;
+  font-weight: 700;
+  width: 60px;
+  padding: 1px 4px;
 }
 
 .v2-rv2-parking {
