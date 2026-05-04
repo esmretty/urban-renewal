@@ -1367,10 +1367,10 @@ a { color: inherit; text-decoration: none; }
   to { transform: rotate(360deg); }
 }
 .v2-d-hint { color: var(--c-text-light); font-size: 13px; }
-/* 售價跟首頁卡片同款：accent 藍 17px tabular-nums */
+/* 售價 — 13px tabular-nums，跟其他 table cell 同字級 */
 .v2-d-price {
   color: var(--c-accent);
-  font-size: 17px;
+  font-size: 13px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -1386,13 +1386,20 @@ a { color: inherit; text-decoration: none; }
 /* 使用分區 cell — 多分區編輯 + 候選展開 + (特)/(遷) 警示 */
 .v2-d-zone-badge {
   display: inline-block;
-  background: var(--c-accent-light);
-  color: var(--c-accent);
   font-size: 13px;
   font-weight: 600;
   padding: 2px 8px;
   border-radius: var(--r-sm);
   margin-right: 4px;
+}
+/* 商業區 → 紅；其他 (住宅/工業/...) → 黃 */
+.v2-d-zone-badge--commercial {
+  background: #fee2e2;     /* red-100 */
+  color: #991b1b;          /* red-800 */
+}
+.v2-d-zone-badge--default {
+  background: #fef3c7;     /* amber-100 */
+  color: #92400e;          /* amber-800 */
 }
 .v2-d-zone-orig {
   font-size: 12px;
@@ -1498,8 +1505,8 @@ a { color: inherit; text-decoration: none; }
 
 /* 附近捷運每行一個 */
 .v2-mrt-line {
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--c-text);
 }
 
@@ -1508,12 +1515,13 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid var(--c-border);
   border-radius: var(--r-sm);
   padding: 3px 7px;
-  font-size: 14px;
-  width: 80px;
+  font-size: 13px;
+  width: 70px;
   text-align: right;
   background: var(--c-card);
   font-variant-numeric: tabular-nums;
 }
+.v2-d-input--narrow { width: 56px; }
 .v2-d-input:focus {
   outline: none;
   border-color: var(--c-accent);

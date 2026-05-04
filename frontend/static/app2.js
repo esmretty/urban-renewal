@@ -1157,14 +1157,14 @@
               <tr><td>屋齡</td><td>${age != null ? age + ' 年' : '未知'}${p.building_age_completed_year ? ` <span class="v2-d-hint">(${p.building_age_completed_year} 完工)</span>` : ''}</td></tr>
               <tr><td>售價</td><td><span class="v2-d-price">${priceWan ? fmt0(priceWan) + '萬' : '—'}</span>${lvrIcon}</td></tr>
               <tr><td>欲出價</td><td>${editIn('desired_price_wan', desired, 10, '萬')}</td></tr>
-              <tr><td>建坪</td><td>${p.building_area_ping ? p.building_area_ping + ' 坪' : '—'}${perBld ? `<div class="v2-d-hint">${perBld} 萬/建坪</div>` : ''}</td></tr>
-              <tr><td>地坪</td><td>${p.land_area_ping ? p.land_area_ping + ' 坪' : '—'}${perLand ? `<div class="v2-d-hint">${perLand} 萬/地坪</div>` : ''}${p.land_area_source === 'lvr' ? ' <span class="v2-d-hint">(實登)</span>' : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 地坪過大（&gt; 建坪），可能不可信</div>' : ''}</td></tr>
+              <tr><td>建坪</td><td>${p.building_area_ping ? p.building_area_ping + ' 坪' : '—'}${perBld ? ` <span class="v2-d-hint">${perBld} 萬/建坪</span>` : ''}</td></tr>
+              <tr><td>地坪</td><td>${p.land_area_ping ? p.land_area_ping + ' 坪' : '—'}${perLand ? ` <span class="v2-d-hint">${perLand} 萬/地坪</span>` : ''}${p.land_area_source === 'lvr' ? ' <span class="v2-d-hint">(實登)</span>' : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 地坪過大（&gt; 建坪），可能不可信</div>' : ''}</td></tr>
             </table>
             <table class="v2-d-tbl">
               <tr><td>附近捷運</td><td>${mrtList}</td></tr>
               <tr><td>使用分區</td><td>${zoningCellHTML(p)}</td></tr>
-              <tr><td>容積率</td><td>${farPct ? farPct + '%' : '—'}</td></tr>
-              <tr><td>臨路寬度</td><td>${editIn('road_width_m_override', p.road_width_m_override ?? p.road_width_m, 0.5, 'm')}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">(寬度不明)</span>' : ''}${p.screenshot_roadwidth ? ` <a href="${esc(p.screenshot_roadwidth)}" target="_blank" rel="noopener" class="v2-d-screenshot-link">📷 地籍圖 ↗</a>` : ''}</td></tr>
+              <tr><td>臨路寬度</td><td><input type="number" class="v2-d-input v2-d-input--narrow" min="0" step="0.5" value="${(p.road_width_m_override ?? p.road_width_m) ?? ''}"
+                onchange="v2.saveOverride('${esc(id)}','road_width_m_override',this.value)"> m${p.screenshot_roadwidth ? ` <a href="${esc(p.screenshot_roadwidth)}" target="_blank" rel="noopener" class="v2-d-screenshot-link">📷 地籍圖 ↗</a>` : ''}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">(寬度不明)</span>' : ''}</td></tr>
               <tr><td>優勢</td><td class="v2-d-chips-cell">${advChipsHTML}</td></tr>
               <tr><td>抗性</td><td class="v2-d-chips-cell">${resistChipsHTML}</td></tr>
             </table>
@@ -1247,7 +1247,9 @@
         ? `<div class="v2-d-zone-note">依謄本登錄坪數鎖定（總 ${totalLand} 坪）</div>`
         : `<div class="v2-d-zone-note">總土地 ${totalLand} 坪。請依實際坪數輸入（任一改動，其他自動同步）</div>`;
     } else if (z) {
-      badge = `<span class="v2-d-zone-badge">${esc(z)}</span>`;
+      // 分區條件色：商業區→紅、住宅/工業/其他→黃
+      const cls = z.includes('商') ? 'v2-d-zone-badge--commercial' : 'v2-d-zone-badge--default';
+      badge = `<span class="v2-d-zone-badge ${cls}">${esc(z)}</span>`;
       if (orig && orig !== z) {
         badge += ` <span class="v2-d-zone-orig">原：${esc(orig)}</span>`;
       }
@@ -1275,9 +1277,8 @@
               </tr>`).join('')}
           </table>
         </details>` : '';
-    const sourceHint = sourceLabel
-      ? `<div class="v2-d-hint v2-d-zone-source">來源：${esc(sourceLabel)}${srcLink}</div>` : '';
-    return `${badge}${errorLine}${sourceHint}${candsBlock}`;
+    // 用戶要求拿掉「來源：…」整段 (sourceLabel/srcLink 仍 build 但不 render)
+    return `${badge}${errorLine}${candsBlock}`;
   }
 
   // 多分區 改坪數 → 同步調整其他區 + POST zoning_ratios (對齊 v1 setZonePing)
