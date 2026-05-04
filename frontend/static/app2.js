@@ -1329,16 +1329,22 @@
           patch.land_area_sqm = null;
         }
         Object.assign(state.allProperties[idx], patch);
-        // 不在 watchlist 時：後端 NoopRef 吃掉，標 flag 讓 closeDetail 提示
-        if (!state.allProperties[idx]._in_watchlist) {
-          state.allProperties[idx]._ephemeral_edit_made = true;
-          state.allProperties[idx]._pending_inferred_choice = address;
-        }
+      }
+      // 不在 watchlist 時：後端 NoopRef 吃掉，標 flag 讓 closeDetail 提示
+      const stillNotInWl = idx >= 0 && !state.allProperties[idx]._in_watchlist;
+      if (stillNotInWl) {
+        state.allProperties[idx]._ephemeral_edit_made = true;
+        state.allProperties[idx]._pending_inferred_choice = address;
       }
       // 重新 render detail (含試算 — land 變了倍數要重算) + 重 applyFilters 讓首頁卡片更新
       _renderDetailFromCurrent();
       applyFilters();
-      toast('已儲存', 'success');
+      // toast：在 watchlist 才真的存進 DB；否則顯示「暫時套用」而不是「已儲存」
+      if (stillNotInWl) {
+        toast('已暫時套用 (尚未加入最愛 → 不會儲存)', 'info');
+      } else {
+        toast('已儲存', 'success');
+      }
     } catch (e) {
       console.error('saveInferredChoice', e);
       toast('儲存失敗：' + e.message, 'error');
