@@ -331,6 +331,8 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <!-- Auth gate 必須在 app.js 之前執行；取得 ID token 後才讓 app.js 跑 -->
 <script type="module" src="/static/auth_gate.js"></script>
+<!-- shared.js: v1/v2 共用算式 (lookupFar / effectiveFar / computeMultiples 等) — 必須在 app.js 之前 -->
+<script src="/static/shared.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
