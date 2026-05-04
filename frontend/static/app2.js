@@ -1530,7 +1530,7 @@
               <span class="v2-rv2-op">×</span>
               <span class="v2-rv2-lbl">樓層加成${is1F ? '<span class="v2-rv2-lbl-unit">(1F 預設20%)</span>' : ''}</span>
               <span class="v2-rv2-val">
-                <input type="number" class="v2-rv2-edit" min="0" max="80" step="5" value="${Math.round(floorPremium * 100)}"
+                <input type="number" class="v2-rv2-edit v2-rv2-edit--narrow" min="0" max="80" step="5" value="${Math.round(floorPremium * 100)}"
                   onchange="v2.saveOverride('${esc(id)}','floor_premium',this.value/100)"> %
               </span>
             </div>

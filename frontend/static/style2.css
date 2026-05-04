@@ -1730,6 +1730,8 @@ a { color: inherit; text-decoration: none; }
   font-variant-numeric: tabular-nums;
 }
 .v2-d-input--narrow { width: 56px; }
+/* select 變體 — 內容地址 / 文字 一律靠左 */
+select.v2-d-input { text-align: left; }
 .v2-d-input:focus {
   outline: none;
   border-color: #c78a00;          /* v1 inline-edit:focus */
@@ -2281,6 +2283,8 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   width: 60px;
   padding: 1px 4px;
 }
+/* 樓層加成 input 縮窄 (0-80 整數，不需要 80px) */
+.v2-rv2-edit--narrow { width: 50px; }
 
 .v2-rv2-parking {
   display: inline-flex;
