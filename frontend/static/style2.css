@@ -1240,9 +1240,11 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-d-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 15px;          /* 跟 .v2-d-h (都更換回試算/分析建議) 同款 */
   font-weight: 700;
   color: var(--c-text);
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--c-border);
 }
 
 /* detail 內 優勢/抗性 chips cell — 跟首頁卡片同款 chip (.v2-achip / .v2-rchip) */
@@ -1319,24 +1321,24 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-d-wl-warn .v2-btn { flex-shrink: 0; }
 
-/* 基本資料 table — 對齊 v1 .renewal-table 行間有 border 分隔 */
+/* 基本資料 table — 緊湊版 (字體跟 .v2-d-zone-badge 同 13px) */
 .v2-d-tbl {
   width: 100%;
   border-collapse: collapse;
-  font-size: 15px;
+  font-size: 13px;
 }
 .v2-d-tbl tr { border-bottom: 1px solid var(--c-border); }
 .v2-d-tbl tr:last-child { border-bottom: none; }
 .v2-d-tbl td {
-  padding: 7px 8px;
+  padding: 4px 6px;
   vertical-align: top;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 .v2-d-tbl td:first-child {
   color: var(--c-text-muted);
   white-space: nowrap;
-  width: 96px;
-  font-size: 14px;
+  width: 88px;
+  font-size: 12.5px;
 }
 .v2-d-tbl--params td:first-child { width: auto; }
 .v2-d-tbl--params tr { border-bottom: 1px dashed var(--c-border); }

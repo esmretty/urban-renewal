@@ -1084,11 +1084,7 @@
 
     // ── 推測地址候選清單 ── (badge 放下一行)
     const cands = Array.isArray(p.address_inferred_candidates_detail) ? p.address_inferred_candidates_detail : [];
-    const inferredTag = p.address_inferred ? (
-      p.address_inferred_confidence === 'unique' ? '<div class="v2-inferred-tag">★實登</div>' :
-      p.address_inferred_confidence === 'multi' ? '<div class="v2-inferred-tag">推測</div>' :
-      '<div class="v2-inferred-tag">≈推測</div>'
-    ) : '';
+    const inferredTag = '';   // (用戶要求拿掉「推測」/「≈推測」/「★實登」標籤)
 
     // ── 附近捷運 ── 一個一行
     const mrtList = Array.isArray(p.nearby_mrts) && p.nearby_mrts.length
