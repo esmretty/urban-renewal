@@ -521,9 +521,20 @@ def calculate_renewal_scenarios(
         out["note"] = f"未知分區 {zoning!r}（{district}），無法試算。"
         return out
     out["base_far_pct"] = base_far_pct
+
+    # 路寬限縮 (台北市規則：FAR 上限 = 路寬(m) × 50%)
+    # 新北市不限縮（用戶設計：建商會擴基地吃旁邊路寬）
+    from config import TAIPEI_DISTRICTS
+    is_taipei = bool(district) and district in TAIPEI_DISTRICTS
     far_pct = base_far_pct
+    road_capped = False
+    if is_taipei and road_width_m and road_width_m > 0:
+        cap = round(road_width_m * 50)
+        if cap < base_far_pct:
+            far_pct = cap
+            road_capped = True
     out["effective_far_pct"] = far_pct
-    out["road_width_capped"] = False   # 永遠 False（用戶設計不縮減）
+    out["road_width_capped"] = road_capped
     out["multi_zone_weighted"] = multi_zone_used
 
     # 2. 新成屋單價（優先序：用戶覆寫 > Firestore 預售屋中位數 > config 寫死常數）

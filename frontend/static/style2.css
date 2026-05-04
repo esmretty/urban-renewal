@@ -2088,6 +2088,19 @@ select.v2-rv2-edit {
   margin-bottom: 6px;
 }
 
+/* 路寬限縮警語 (台北市) */
+.v2-rv2-warn {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #b45309;
+  background: #fef3c7;
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  cursor: help;
+}
+
 /* 試算底部假設警語 */
 .v2-rv2-disclaimer {
   font-size: 11.5px;
@@ -2127,9 +2140,36 @@ select.v2-rv2-edit {
 }
 /* LVR 特殊交易警告 icon */
 .v2-lvr-warn {
+  position: relative;
+  display: inline-block;
   color: #d97706;
   font-weight: 700;
   cursor: help;
+}
+.v2-lvr-tip {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  background: #1f2937;
+  color: #fff;
+  font-weight: 500;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  white-space: normal;
+  width: max-content;
+  max-width: 320px;
+  z-index: 1100;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  line-height: 1.4;
+  transition: opacity 0.15s;
+}
+.v2-lvr-warn:hover .v2-lvr-tip {
+  visibility: visible;
+  opacity: 1;
 }
 
 /* 試算 scenario boxes — 字體 +2 */

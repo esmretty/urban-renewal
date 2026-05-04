@@ -257,6 +257,11 @@ def lookup_far(zoning, district, lat=None, lng=None):
     """
     if not zoning:
         return None
+    # 0) 不可建築用地（道路、公共設施保留地、綠地、公園、河道、機關用地）→ FAR = 0%
+    #    不貢獻倍數但仍視為「合法值」(0 ≠ None)，讓多分區加權能繼續計算
+    import re as _re
+    if _re.search(r"道路用地|公共設施|保留地|綠地|公園|河道|機關用地", zoning):
+        return 0
     # 1) 浮洲（板橋偏遠 polygon 內）
     if district == "板橋區" and lat is not None and lng is not None:
         try:
@@ -265,22 +270,17 @@ def lookup_far(zoning, district, lat=None, lng=None):
                 return NEW_TAIPEI_FAR_PCT["_banqiao_fujou"].get(zoning)
         except Exception:
             pass
-    # 2) 新北市列名區（含子類別）— 子類別精確 match 優先，miss 才 fallback 到泛稱
-    # （ArcGIS 偶會回該區法規未明列的子類別，例如新店「第三種商業區」config 只到第二種）
+    # 2) 新北市列名區（含子類別）
     if district in NEW_TAIPEI_FAR_PCT and not district.startswith("_"):
         sub_val = NEW_TAIPEI_FAR_PCT[district].get(zoning)
         if sub_val is not None:
             return sub_val
-        # Fallback：含「商」→ 該區「商業區」泛稱；含「住」→ 「住宅區」泛稱
         if "商" in zoning:
             return NEW_TAIPEI_FAR_PCT[district].get("商業區")
         if "住" in zoning:
             return NEW_TAIPEI_FAR_PCT[district].get("住宅區")
         return None
-    # 3+4) 板橋/中和/永和/新莊/三重 5 區：法規上只有「住宅區/商業區」泛稱無子類別。
-    #     GeoServer 偶會回怪字（「住宅區住」「第住種住宅區」「第一種住宅區」等），不嚴格 key match：
-    #     contains「商」→ 商業區 → 440（板橋特例 460）
-    #     contains「住」→ 住宅區 → 300
+    # 3+4) 板橋/中和/永和/新莊/三重 5 區
     if district in _NEW_TAIPEI_5_DISTRICTS:
         if "商" in zoning:
             return 460 if district == "板橋區" else 440
@@ -288,7 +288,15 @@ def lookup_far(zoning, district, lat=None, lng=None):
             return 300
         return None
     # 5) 台北市
-    return TAIPEI_BASE_FAR_PCT.get(zoning)
+    direct = TAIPEI_BASE_FAR_PCT.get(zoning)
+    if direct is not None:
+        return direct
+    # 泛稱 fallback (GeoServer 偶會回沒子類別的「商業區」「住宅區」字串)
+    if zoning == "商業區":
+        return TAIPEI_BASE_FAR_PCT.get("第一種商業區")
+    if zoning == "住宅區":
+        return TAIPEI_BASE_FAR_PCT.get("第二種住宅區")
+    return None
 # 重建建坪係數：計入容積 1 + 免計容積估計 0.57（保守）
 REBUILD_BUILD_COEFF = 1.57
 # 容積獎勵情境

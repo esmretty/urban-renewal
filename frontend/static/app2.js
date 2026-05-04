@@ -422,6 +422,9 @@
 
   function lookupFar(zoning, p) {
     if (!zoning || !p) return null;
+    // 不可建築用地（道路、公共設施保留地、綠地、公園、河道、機關用地）→ FAR = 0%
+    // 不貢獻倍數但仍視為「合法值」(0 ≠ null)，讓多分區加權能繼續計算
+    if (/(道路用地|公共設施|保留地|綠地|公園|河道|機關用地)/.test(zoning)) return 0;
     const district = p.district;
     if (district === "板橋區" && p.is_remote_area) {
       return NEW_TAIPEI_FAR_PCT["_banqiao_fujou"][zoning] ?? null;
@@ -438,7 +441,13 @@
       if (zoning.includes("住")) return 300;
       return null;
     }
-    return TAIPEI_FAR_PCT[zoning] ?? null;
+    // 台北市
+    const direct = TAIPEI_FAR_PCT[zoning];
+    if (direct != null) return direct;
+    // 泛稱 fallback (GeoServer 偶會回沒子類別的「商業區」「住宅區」字串)
+    if (zoning === "商業區") return TAIPEI_FAR_PCT["第一種商業區"] ?? null;   // 取最保守
+    if (zoning === "住宅區") return TAIPEI_FAR_PCT["第二種住宅區"] ?? null;
+    return null;
   }
 
   function lookupShareRatio(price) {
@@ -476,9 +485,19 @@
     return z;
   }
 
-  // 多分區加權 FAR — 對齊 v1 effectiveFarPctWeighted
-  // 注意：單分區走 effectiveZoning(p) 而非 raw p.zoning (處理特殊後綴 case)
-  function effectiveFar(p) {
+  // 台北市路寬限縮：FAR 上限 = road_width_m × 50 (規則：容積率最多吃路寬的一半，% 表示)
+  // 新北市不限縮 (用戶設計：建商會擴基地吃旁邊路寬)
+  function applyRoadCap(baseFar, p) {
+    if (baseFar == null) return null;
+    if (p.city !== '台北市') return baseFar;
+    const roadW = p.road_width_m_override ?? p.road_width_m;
+    if (!roadW || roadW <= 0) return baseFar;
+    const cap = Math.round(roadW * 50);
+    return Math.min(baseFar, cap);
+  }
+
+  // base FAR (未套路寬限縮) — 用於 detail 「實際容積採」說明顯示原始 FAR
+  function baseFar(p) {
     const zList = p.zoning_list;
     if (zList && zList.length > 1) {
       const ratios = p.zoning_ratios || zList.map(() => 100 / zList.length);
@@ -493,6 +512,12 @@
       return Math.round(w);
     }
     return lookupFar(effectiveZoning(p), p);
+  }
+
+  // 多分區加權 FAR — 對齊 v1 effectiveFarPctWeighted，台北市套路寬 cap
+  // 注意：單分區走 effectiveZoning(p) 而非 raw p.zoning (處理特殊後綴 case)
+  function effectiveFar(p) {
+    return applyRoadCap(baseFar(p), p);
   }
 
   // 即時算倍數 — 跟 v1 computeRowMultiples 對齊：
@@ -1103,14 +1128,18 @@
     // ── LVR 實價登錄 (前 5 筆) ──
     const lvrRecs = Array.isArray(p.lvr_records) ? p.lvr_records.slice(0, 5) : [];
     const lvrHTML = lvrRecs.length
-      ? `<table class="v2-lvr-tbl"><thead><tr><th>交易日</th><th>總價(萬)</th><th>建坪</th><th>單價</th><th>地址</th></tr></thead><tbody>${
-          lvrRecs.map(r => `<tr>
-            <td>${esc(r.txn_date || '—')}</td>
-            <td>${r.price_total ? fmt0(r.price_total) : '—'}</td>
-            <td>${r.area_ping ? fmt1(r.area_ping) : '—'}</td>
-            <td>${(r.price_total && r.area_ping) ? (r.price_total / r.area_ping).toFixed(1) : '—'}</td>
-            <td title="${esc(r.address || '')}">${esc((r.address || '').slice(0, 14))}</td>
-          </tr>`).join('')}</tbody></table>`
+      ? `<table class="v2-lvr-tbl"><thead><tr><th>交易日</th><th>總價(萬)</th><th>建坪</th><th>單價</th><th>地址</th><th></th></tr></thead><tbody>${
+          lvrRecs.map(r => {
+            const totalWan = r.price_total ? r.price_total / 10000 : null;
+            return `<tr>
+              <td>${esc(r.txn_date || '—')}</td>
+              <td>${totalWan != null ? fmt0(totalWan) : '—'}</td>
+              <td>${r.area_ping ? fmt1(r.area_ping) : '—'}</td>
+              <td>${(totalWan != null && r.area_ping) ? (totalWan / r.area_ping).toFixed(1) : '—'}</td>
+              <td title="${esc(r.address || '')}">${esc((r.address || '').slice(0, 14))}</td>
+              <td>${r.is_special ? `<span class="v2-lvr-warn">⚠<span class="v2-lvr-tip">${esc(r.note || '特殊交易')}</span></span>` : ''}</td>
+            </tr>`;
+          }).join('')}</tbody></table>`
       : '<div class="v2-detail-empty">無實價登錄記錄</div>';
 
     // ── AI 分析 ──
@@ -1128,7 +1157,7 @@
 
     // ── 臨路寬度 cell — 地籍圖改成內部 overlay；說明文字放 overlay 內 ──
     const roadShotBtn = p.screenshot_roadwidth
-      ? ` <button class="v2-d-road-show" onclick="event.stopPropagation(); v2.openRoadOverlay('${esc(id)}')">地籍圖</button>`
+      ? ` <button class="v2-d-road-show" onclick="event.stopPropagation(); v2.openRoadOverlay('${esc(id)}')">地籍圖 ↗</button>`
       : '';
 
     // LVR 「實」icon (v1 行為：hover 顯示彈窗)
@@ -1410,10 +1439,10 @@
     const id = p.source_id || p.id || '';
     const land = p.land_area_ping;
     const zoning = effectiveZoning(p);
-    const zoneList = p.zoning_list;
-    const multiZone = zoneList && zoneList.length > 1;
-    const baseFar = multiZone ? effectiveFar(p) : lookupFar(zoning, p);
-    const effFar = baseFar;   // 用戶設計不實作路寬限縮
+    const baseFarPct = baseFar(p);
+    const effFar = effectiveFar(p);
+    const roadCapped = (baseFarPct != null && effFar != null && effFar < baseFarPct);
+    const roadW = p.road_width_m_override ?? p.road_width_m;
     const coeff = p.rebuild_coeff ?? 1.57;
     const newPrice = p.new_house_price_wan_override ?? prices[p.district];
     if (!land || !zoning || !newPrice) {
@@ -1499,7 +1528,8 @@
             <div class="v2-rv2-land__abbr">${esc(zoneAbbr(p.zoning_original || zoning))}</div>
           </div>
           <div class="v2-rv2-formula">
-            ${r('×', '有效容積率', `${effFar}%`)}
+            ${r('×', '有效容積率', `${effFar}%`,
+                roadCapped ? `<span class="v2-rv2-warn" title="台北市規則：FAR 上限 = 路寬 × 50%">⚠ 受路寬 ${roadW}m 限縮 (原 ${baseFarPct}%)</span>` : '')}
             <div class="v2-rv2-r">
               <span class="v2-rv2-op">×</span>
               <span class="v2-rv2-lbl">容積獎勵</span>
@@ -1682,7 +1712,7 @@
             <td>${r.land_ping ? fmt1(r.land_ping) : '—'}</td>
             <td>${perPingWan != null ? perPingWan.toFixed(1) + '萬' : '—'}</td>
             <td class="v2-lvr-addr" title="${esc(r.address || '')}">${esc(stripCD(r.address))}</td>
-            <td>${r.is_special ? `<span class="v2-lvr-warn" title="${esc(r.note || '特殊交易')}">⚠</span>` : ''}</td>
+            <td>${r.is_special ? `<span class="v2-lvr-warn">⚠<span class="v2-lvr-tip">${esc(r.note || '特殊交易')}</span></span>` : ''}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>`;

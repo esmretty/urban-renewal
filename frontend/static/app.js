@@ -1404,32 +1404,35 @@ const _NEW_TAIPEI_5_DISTRICTS = ["板橋區", "新莊區", "中和區", "永和�
 // p 提供 district + is_remote_area（浮洲判定）— 跟 backend config.lookup_far 對齊（CLAUDE.md rule 8）
 function lookupFar(zoning, p) {
   if (!zoning || !p) return null;
+  // 不可建築用地（道路、公共設施保留地、綠地、公園、河道、機關用地）→ FAR = 0%
+  // 不貢獻倍數但仍視為「合法值」(0 ≠ null)，讓多分區加權能繼續計算
+  if (/(道路用地|公共設施|保留地|綠地|公園|河道|機關用地)/.test(zoning)) return 0;
   const district = p.district;
   // 1) 浮洲（板橋偏遠 polygon 內，doc 已有 is_remote_area 旗標 — pipeline 寫入時判過）
   if (district === "板橋區" && p.is_remote_area) {
     return NEW_TAIPEI_FAR_PCT["_banqiao_fujou"][zoning] ?? null;
   }
   // 2) 新北市列名區（含子類別）— 子類別精確 match 優先，miss 才 fallback 到泛稱
-  // （ArcGIS 偶會回該區法規未明列的子類別，例如新店「第三種商業區」config 只到第二種）
   if (NEW_TAIPEI_FAR_PCT[district]) {
     const subVal = NEW_TAIPEI_FAR_PCT[district][zoning];
     if (subVal != null) return subVal;
-    // Fallback：含「商」→ 該區「商業區」泛稱；含「住」→「住宅區」泛稱
     if (zoning.includes("商")) return NEW_TAIPEI_FAR_PCT[district]["商業區"] ?? null;
     if (zoning.includes("住")) return NEW_TAIPEI_FAR_PCT[district]["住宅區"] ?? null;
     return null;
   }
-  // 3+4) 板橋/中和/永和/新莊/三重 5 區：法規只有「住宅區/商業區」泛稱無子類別。
-  //     GeoServer 偶有怪字（「住宅區住」「第住種住宅區」「第一種住宅區」），用 contains 不嚴格 key match：
-  //       含「商」→ 商業區 → 440（板橋特例 460）
-  //       含「住」→ 住宅區 → 300
+  // 3+4) 板橋/中和/永和/新莊/三重 5 區
   if (_NEW_TAIPEI_5_DISTRICTS.includes(district)) {
     if (zoning.includes("商")) return district === "板橋區" ? 460 : 440;
     if (zoning.includes("住")) return 300;
     return null;
   }
   // 5) 台北市
-  return TAIPEI_FAR_PCT[zoning] ?? null;
+  const direct = TAIPEI_FAR_PCT[zoning];
+  if (direct != null) return direct;
+  // 泛稱 fallback (GeoServer 偶會回沒子類別的「商業區」「住宅區」字串)
+  if (zoning === "商業區") return TAIPEI_FAR_PCT["第一種商業區"] ?? null;
+  if (zoning === "住宅區") return TAIPEI_FAR_PCT["第二種住宅區"] ?? null;
+  return null;
 }
 // fallback 預設值（萬/坪）— 當 API 還沒回 / 失敗時用
 // 啟動後 fetchDistrictPrices() 會從 /api/district_new_house_price 拿 LVR 預售屋中位數覆寫
@@ -1497,17 +1500,27 @@ function effectiveZoning(p) {
   return z;
 }
 
-// 用戶設計：新北市路寬 < 8m 縮減規則不實作（建商會擴基地吃旁邊路寬）
-// 所以函式 signature drop roadWidthM 參數，純粹用 lookupFar(zoning, p)
-function effectiveFarPctWeighted(p) {
+// 路寬限縮 FAR：
+//   台北市：FAR 上限 = 路寬(m) × 50 (%)。基準 FAR > 上限時被限縮。
+//   新北市：用戶設計不限縮（建商會擴基地吃旁邊路寬，路寬限制無實務意義）
+// p 提供 city + road_width_m_override + road_width_m
+function _applyRoadCap(baseFar, p) {
+  if (baseFar == null) return null;
+  if (p.city !== "台北市") return baseFar;
+  const roadW = p.road_width_m_override ?? p.road_width_m;
+  if (!roadW || roadW <= 0) return baseFar;
+  const cap = Math.round(roadW * 50);
+  return Math.min(baseFar, cap);
+}
+
+// base FAR (未套路寬限縮) — detail 顯示「原 N%」用
+function baseFarPctWeighted(p) {
   const zoneList = p.zoning_list;
   if (zoneList && zoneList.length > 1) {
-    // ratios 存為百分比 (0-100)；預設平均分配
     const ratiosPct = p.zoning_ratios || zoneList.map(() => 100 / zoneList.length);
     const total = ratiosPct.reduce((a, b) => a + (Number(b) || 0), 0) || 1;
     let weighted = 0;
     for (let i = 0; i < zoneList.length; i++) {
-      // zoning_list 可能是 string list（ArcGIS 點查回傳）或 object list（舊永慶 schema）
       const zItem = zoneList[i];
       const z = (typeof zItem === "string") ? zItem : (zItem.original_zone || zItem.zone_name);
       const far = lookupFar(z, p);
@@ -1519,8 +1532,13 @@ function effectiveFarPctWeighted(p) {
   return lookupFar(effectiveZoning(p), p);
 }
 
+// effective FAR (已套路寬限縮) — 倍數試算用
+function effectiveFarPctWeighted(p) {
+  return _applyRoadCap(baseFarPctWeighted(p), p);
+}
+
 function effectiveFarPct(zoning, p) {
-  return lookupFar(zoning, p);
+  return _applyRoadCap(lookupFar(zoning, p), p);
 }
 
 function desiredPriceWan(p) {
