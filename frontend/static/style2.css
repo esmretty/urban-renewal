@@ -1491,21 +1491,26 @@ a { color: inherit; text-decoration: none; }
   font-size: 13px;
 }
 /* 使用分區 cell — 多分區編輯 + 候選展開 + (特)/(遷) 警示 */
+/* 使用分區 badge — 扁平標籤式 (不可點)；用淡底 + 細邊框 + 字重 500 跟可點按鈕區分 */
 .v2-d-zone-badge {
   display: inline-block;
   font-size: 13px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: var(--r-sm);
+  font-weight: 500;
+  padding: 1px 7px;
+  border: 1px solid transparent;
+  border-radius: 3px;
   margin-right: 4px;
+  cursor: default;
 }
 /* 商業區 → 紅；其他 (住宅/工業/...) → 黃 */
 .v2-d-zone-badge--commercial {
-  background: #fee2e2;     /* red-100 */
+  background: #fef2f2;     /* red-50 (淡) */
+  border-color: #fecaca;   /* red-200 */
   color: #991b1b;          /* red-800 */
 }
 .v2-d-zone-badge--default {
-  background: #fef3c7;     /* amber-100 */
+  background: #fffbeb;     /* amber-50 (淡) */
+  border-color: #fde68a;   /* amber-200 */
   color: #92400e;          /* amber-800 */
 }
 .v2-d-zone-orig {
