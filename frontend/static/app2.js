@@ -1610,7 +1610,7 @@
         break;
       case 'new_house_price_wan_override':
         endpoint = `/api/properties/${encodeURIComponent(id)}/new_house_price`;
-        body = { value: v };
+        body = { new_house_price_wan_per_ping: v };
         break;
       default:
         toast('未知欄位：' + field, 'error');
