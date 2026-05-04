@@ -1079,13 +1079,11 @@
           <div class="v2-d-basic-grid v2-d-basic-grid--v1">
             <div class="v2-d-basic-col">
               <table class="v2-d-tbl">
-                <tr><td>原始地址</td><td>${esc(stripCityDist(p.address || p.title))}${p.address_road_fixed ? `<div class="v2-d-addr-fixed">已自動修正：${esc(p.address_road_fixed.from)} → ${esc(p.address_road_fixed.to)}</div>` : ''}${p.address_suspicious ? `<div class="v2-d-warn">⚠ 路名可能不存在於此行政區，請自行確認</div>` : ''}</td></tr>
-                <tr><td>推測地址 ${p.address_inferred ? `<span class="v2-inferred-tag">${p.address_inferred_confidence === 'unique' ? '★實登' : p.address_inferred_confidence === 'multi' ? '推測' : '≈推測'}</span>` : ''}</td><td>${inferredAddressCellHTML(p)}</td></tr>
+                <tr><td>原始地址</td><td class="v2-d-addr-val">${esc(stripCityDist(p.address || p.title))}${p.address_road_fixed ? `<div class="v2-d-addr-fixed">已自動修正：${esc(p.address_road_fixed.from)} → ${esc(p.address_road_fixed.to)}</div>` : ''}${p.address_suspicious ? `<div class="v2-d-warn">⚠ 路名可能不存在於此行政區，請自行確認</div>` : ''}</td></tr>
+                <tr><td>推測地址</td><td class="v2-d-addr-val">${inferredAddressCellHTML(p)}</td></tr>
                 <tr><td>類型 / 樓層</td><td>${esc(p.building_type || '—')} ・ ${formatFloor(p)}</td></tr>
                 <tr><td>屋齡</td><td>${age != null ? age + ' 年' + (p.building_age_completed_year ? ` <span class="v2-d-hint">（${p.building_age_completed_year} 年完工）</span>` : '') : '未知'}</td></tr>
                 <tr><td>售價</td><td class="v2-d-price-cell">${priceWan ? `NT$ ${fmt0(priceWan)} 萬` : '—'}${lvrIcon}</td></tr>
-                <tr><td>欲出價</td><td><input type="number" class="v2-d-input" min="0" step="10" value="${desired ?? ''}"
-                  onchange="v2.saveOverride('${esc(id)}','desired_price_wan',this.value)"> 萬</td></tr>
                 <tr><td>建坪</td><td>${p.building_area_ping ? p.building_area_ping + ' 坪' : '—'}${perBld ? ` <span class="v2-d-hint">(${perBld} 萬 / 建坪)</span>` : ''}</td></tr>
                 <tr><td>地坪</td><td>${p.land_area_ping ? p.land_area_ping + ' 坪' : '—'}${perLand ? ` <span class="v2-d-hint">(${perLand} 萬 / 地坪)</span>` : ''}${p.land_area_source === 'lvr' ? ' <span class="v2-d-hint">(實登)</span>' : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 坪數過大（大於建坪），可能不可信</div>' : ''}${p.land_area_inconsistent ? '<div class="v2-d-warn">⚠ 此物件的實登候選地坪差異大，可能不是同一棟建築；選擇後請務必驗證。</div>' : ''}</td></tr>
               </table>
@@ -1097,9 +1095,8 @@
                     ? p.nearby_mrts.map(m => `${esc(m.name)}（${Math.round(m.dist_m)}m）`).join('<br>')
                     : '—'
                 }</td></tr>
-                <tr><td>使用分區</td><td>${zoningCellHTML(p)}</td></tr>
                 <tr><td>臨路寬度</td><td><input type="number" class="v2-d-input v2-d-input--narrow" min="0" step="0.5" value="${(p.road_width_m_override ?? p.road_width_m) ?? ''}"
-                  onchange="v2.saveOverride('${esc(id)}','road_width_m_override',this.value)"> m${roadShotBtn}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">（寬度不明，有可能為私巷或特窄巷弄）</span>' : ''}</td></tr>
+                  onchange="v2.saveOverride('${esc(id)}','road_width_m_override',this.value)"> m${roadShotBtn}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">（寬度不明，有可能為私巷或特窄巷弄）</span>' : ''}${roadNameHint(p) ? `<div class="v2-d-road-name-hint">${esc(roadNameHint(p))}</div>` : ''}</td></tr>
                 <tr><td>優勢</td><td class="v2-d-chips-cell">${advChipsHTML}</td></tr>
                 <tr><td>抗性</td><td class="v2-d-chips-cell">${resistChipsHTML}</td></tr>
               </table>
@@ -1291,6 +1288,23 @@
       .replace(/^[一-龥]{1,3}(?:區|鄉|鎮|市)/, '')
       .trim();
   }
+  // 路名 hint — 對齊 v1 roadNameHint：優先 road_width_name，再從 road_width_all 列表找最接近地址路名的
+  function roadNameHint(p) {
+    if (!p) return '';
+    if (p.road_width_name) return p.road_width_name;
+    const allRoads = p.road_width_all || [];
+    if (!allRoads.length) return '';
+    const addr = p.address_inferred || p.address || '';
+    const addrRoad = (addr.match(/([一-龥]+(?:路|街|大道)[一-龥]*段?(?:\d+巷)?(?:\d+弄)?)/) || [])[1] || '';
+    if (addrRoad) {
+      const exact = allRoads.find(r => r.road_name === addrRoad);
+      if (exact) return exact.road_name;
+      const fuzzy = allRoads.find(r => r.road_name && r.road_name.includes(addrRoad.replace(/\d+巷$/, '').replace(/\d+弄$/, '')));
+      if (fuzzy) return fuzzy.road_name;
+    }
+    return (allRoads[0] && allRoads[0].road_name) || '';
+  }
+
   function fullAddress(p) {
     const base = p.address_inferred || p.address || '';
     if (!base) return '';

@@ -1675,6 +1675,9 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* 用戶可改 input — 內文靠左 (對齊 v1) */
+/* 原始地址 / 推測地址 cell 字粗一點 (對齊 v1 視覺) */
+.v2-d-addr-val { font-weight: 600; color: #1a1a2e; }
+
 /* 對齊 v1 .inline-edit (米色底 棕邊 右對齊) */
 .v2-d-input {
   border: 1px solid #d8d2be;
@@ -1726,34 +1729,41 @@ a { color: inherit; text-decoration: none; }
 .v2-d-screenshot-link:hover { background: var(--c-accent); color: white; }
 
 /* 地籍圖按鈕 — 點開內部 overlay (跟 v1 toggleRoadPreview/openRoadOverlay 行為一致) */
+/* 地籍圖按鈕 — 對齊 v1 .btn-show-map (米黃底棕字 14/600) */
 .v2-d-road-show {
   display: inline-block;
-  font-size: 12px;
-  padding: 2px 8px;
-  margin-left: 6px;
-  background: var(--c-accent);
-  color: white;
-  border: 1px solid transparent;
-  border-radius: var(--r-sm);
+  font-size: 14px;
   font-weight: 600;
-  cursor: pointer;
-}
-.v2-d-road-show:hover { background: var(--c-accent-hover); }
-
-/* 重新掃描路寬按鈕 (台北市 + 沒 screenshot 時) — 對齊 v1 .btn-scan-road */
-.v2-d-road-scan {
-  display: inline-block;
-  font-size: 12px;
   padding: 2px 10px;
   margin-left: 6px;
-  background: var(--c-accent);
-  color: white;
-  border: 1px solid transparent;
-  border-radius: var(--r-sm);
-  font-weight: 600;
+  background: #fff8e5;
+  color: #b0790a;
+  border: 1px solid #d8b56a;
+  border-radius: 4px;
   cursor: pointer;
 }
-.v2-d-road-scan:hover { background: var(--c-accent-hover); }
+.v2-d-road-show:hover { background: #f4e5b5; }
+/* 路名 hint — 對齊 v1 .road-name-hint-line */
+.v2-d-road-name-hint {
+  font-size: 12px;
+  color: #8b7c4a;
+  margin-top: 4px;
+}
+
+/* 重新掃描路寬按鈕 — 同 .v2-d-road-show 米黃 button 風 */
+.v2-d-road-scan {
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 2px 10px;
+  margin-left: 6px;
+  background: #fff8e5;
+  color: #b0790a;
+  border: 1px solid #d8b56a;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.v2-d-road-scan:hover { background: #f4e5b5; }
 .v2-d-road-scan--scanning {
   background: var(--c-accent-light);
   color: var(--c-accent);
@@ -1841,34 +1851,37 @@ a { color: inherit; text-decoration: none; }
 .v2-road-overlay-close:hover { background: #fff; transform: scale(1.05); }
 
 /* 參考工具 row (政府連結) — 放在抗性下方 */
-/* 政府連結 (右 col table 下方) — 1:1 對齊 v1 .modal-tools 視覺 */
+/* 政府連結 — 字體小一點 + 一列內 (nowrap) */
 .v2-d-tools {
   margin-top: 10px;
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
   align-items: center;
+  white-space: nowrap;
 }
 .v2-d-tools-city {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
   color: #5c4a0a;
   background: #d8c88f;
-  padding: 3px 8px;
+  padding: 2px 6px;
   border-radius: 3px;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
 }
 .v2-d-tools a {
   display: inline-block;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   color: #b0790a;
   background: #fff8e5;
   border: 1px solid #d8b56a;
-  padding: 4px 10px;
+  padding: 2px 8px;
   border-radius: 4px;
   text-decoration: none;
   transition: background 0.12s;
+  flex-shrink: 0;
 }
 .v2-d-tools a:hover { background: #f4e5b5; }
 
@@ -1942,24 +1955,33 @@ a { color: inherit; text-decoration: none; }
   text-align: center;
 }
 
-/* LVR 「實」icon — 對齊 v1 lvr-icon hover popup */
+/* LVR 「實」icon — 1:1 對齊 v1 .lvr-icon (24×24 紅邊白底紅字圓圈) */
 .v2-lvr-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #4f46e5);
-  color: white;
-  font-size: 10px;
-  font-weight: 700;
-  cursor: help;
-  margin-left: 4px;
+  border: 2px solid #c0392b;
+  background: #ffffff;
+  color: #c0392b;
+  font-size: 12px;
+  font-weight: 800;
+  margin-left: 6px;
+  cursor: pointer;
   vertical-align: middle;
-  box-shadow: 0 1px 2px rgba(79, 70, 229, 0.35);
+  box-shadow: none;
 }
-.v2-lvr-icon--sm { width: 14px; height: 14px; font-size: 8px; margin-left: 2px; }
+.v2-lvr-icon:hover { background: #fbe8e8; }
+/* 卡片小版 (line1 售價旁) */
+.v2-lvr-icon--sm {
+  width: 16px;
+  height: 16px;
+  border-width: 1.5px;
+  font-size: 9px;
+  margin-left: 3px;
+}
 .v2-lvr-popup {
   position: fixed;
   background: white;
