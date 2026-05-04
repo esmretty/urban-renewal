@@ -1433,27 +1433,28 @@
       : `${valW > 0 ? `<div class="v2-bid-row">• 危老出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${wValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkBidOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(wValRound / 3.2)} 萬</span></div>` : ''}
          <div class="v2-bid-row">• 都更出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${dValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkBidOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(dValRound / 3.2)} 萬</span></div>`;
 
-    // 結果欄 render — 圈內 (tag + 倍數) + 右側兩行 (分回坪 / 估值萬+效益)
+    // 結果欄 render — 1:1 對齊 v1：tag (頂) / val (中央大字 萬) / 三圓圈 (分回坪/倍數/效益)
     const renderResult = (tag, val, share) => {
       const mult = desired ? (val / desired).toFixed(2) : '—';
-      const profitNum = desired ? (val - desired) : null;
-      const profitSign = profitNum != null && profitNum >= 0 ? '+' : '';
-      const profitStr = profitNum != null ? `${profitSign}${Math.round(profitNum).toLocaleString('zh-TW')}` : '—';
-      const profitCls = profitNum != null && profitNum < 0 ? 'v2-rv2-mind-info__profit--neg' : '';
+      const profit = desired ? (val - desired).toFixed(0) : '—';
+      const profitSign = desired && (val - desired) >= 0 ? '+' : '';
+      const negCls = desired && (val - desired) < 0 ? 'v2-rv2-circ--neg' : '';
       return `
-        <div class="v2-rv2-rcol v2-rv2-rcol--mind">
-          <div class="v2-rv2-mind-hub">
-            <div class="v2-rv2-mind-hub__tag">${tag}</div>
-            <div class="v2-rv2-mind-hub__val">${mult}<span class="v2-rv2-mind-hub__unit">倍</span></div>
-          </div>
-          <div class="v2-rv2-mind-info">
-            <div class="v2-rv2-mind-info__line">
-              <span class="v2-rv2-mind-info__lbl">可分回</span>
-              ${share.toFixed(2)} 坪
+        <div class="v2-rv2-rcol">
+          <div class="v2-rv2-rtag">${tag}</div>
+          <div class="v2-rv2-rval">${val.toFixed(0)} 萬</div>
+          <div class="v2-rv2-circles">
+            <div class="v2-rv2-circ">
+              <div class="v2-rv2-circ__num">${share.toFixed(2)}</div>
+              <div class="v2-rv2-circ__lbl">分回坪</div>
             </div>
-            <div class="v2-rv2-mind-info__line">
-              ${val.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')} 萬
-              ${desired ? `<span class="v2-rv2-mind-info__profit ${profitCls}">(${profitStr})</span>` : ''}
+            <div class="v2-rv2-circ">
+              <div class="v2-rv2-circ__num">${mult}×</div>
+              <div class="v2-rv2-circ__lbl">倍數</div>
+            </div>
+            <div class="v2-rv2-circ ${negCls}">
+              <div class="v2-rv2-circ__num">${profitSign}${profit}</div>
+              <div class="v2-rv2-circ__lbl">效益萬</div>
             </div>
           </div>
         </div>`;

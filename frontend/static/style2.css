@@ -2100,10 +2100,10 @@ a { color: inherit; text-decoration: none; }
   border-radius: 4px;
 }
 
-/* 試算 body：grid 1.4fr 1fr (左 formula 寬一點 / 右心智圖)，左半部往右吃 */
+/* 試算 body：1:1 對齊 v1 .rv2-body — grid 1fr auto (左 formula / 右 result 自適應) */
 .v2-rv2--2col {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
   gap: 0;
 }
@@ -2316,79 +2316,79 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; }
 /* 多分區換行 */
 .v2-d-zone-multi-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
 
-/* === 結果欄：左圈 (tag + 倍數) + 右側兩行 (分回坪 / 估值萬 + 效益) === */
-.v2-rv2-rcol--mind {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 0;
-  background: transparent;
-  border: none;
-}
-/* Hub: 中心圓 — tag (危老/都更) + 倍數大字 */
-.v2-rv2-mind-hub {
-  width: 90px;
-  height: 90px;
-  border-radius: 50%;
-  border: 3px solid #c78a00;
-  background: #fffaeb;
-  flex-shrink: 0;
+/* === 結果欄 — 1:1 對齊 v1：tag (頂) / val (中央大字) / 三圓圈 === */
+.v2-rv2-result, .v2-rv2-result--stack {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  line-height: 1.1;
-  box-shadow: 0 2px 6px rgba(199, 138, 0, 0.18);
+  gap: 14px;
+  border: none;
+  padding: 0;
+  background: transparent;
 }
-.v2-rv2-mind-hub__tag {
+.v2-rv2-rcol {
+  background: transparent;
+  border: none;
+  text-align: center;
+  padding: 0;
+  display: block;
+  min-width: 0;
+}
+.v2-rv2-rtag {
+  display: inline-block;
   font-size: 13px;
   font-weight: 700;
   color: #8b7c4a;
-  letter-spacing: 1.5px;
-  margin-bottom: 4px;
+  letter-spacing: 2px;
+  border-bottom: 2px solid #c78a00;
+  padding-bottom: 1px;
+  background: transparent;
+  width: max-content;
+  border-radius: 0;
 }
-.v2-rv2-mind-hub__val {
-  font-size: 22px;
+.v2-rv2-rval {
+  font-size: 24px;
   font-weight: 800;
   color: #5c4a0a;
   font-variant-numeric: tabular-nums;
-  line-height: 1;
+  margin: 2px 0 0;
+  line-height: 1.1;
+  text-align: center;
 }
-.v2-rv2-mind-hub__unit {
-  font-size: 13px;
-  font-weight: 600;
-  color: #8b7c4a;
-  margin-left: 1px;
+.v2-rv2-circles {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
 }
-/* 右側兩行資訊 */
-.v2-rv2-mind-info {
-  flex: 1;
+.v2-rv2-circ {
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  border: 2px solid #c78a00;
+  background: #ffffff;
+  aspect-ratio: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.1;
+  padding: 0;
+  flex-shrink: 0;
 }
-.v2-rv2-mind-info__line {
-  font-size: 13px;
+.v2-rv2-circ--neg { border-color: #b02a2a; }
+.v2-rv2-circ--neg .v2-rv2-circ__num { color: #b02a2a; }
+.v2-rv2-circ__num {
+  font-size: 16px;
   font-weight: 700;
   color: #5c4a0a;
   font-variant-numeric: tabular-nums;
-  line-height: 1.3;
-  white-space: nowrap;
 }
-.v2-rv2-mind-info__lbl {
+.v2-rv2-circ__lbl {
   font-size: 11px;
-  font-weight: 500;
   color: #8b7c4a;
-  margin-right: 4px;
+  margin-top: 2px;
+  letter-spacing: 0;
 }
-.v2-rv2-mind-info__profit {
-  font-size: 13px;
-  font-weight: 600;
-  color: #2e7d32;
-  margin-left: 4px;
-}
-.v2-rv2-mind-info__profit--neg { color: #b02a2a; }
 
 /* 響應式：drawer 窄時 (≤1024) 結果改放在 formula 下方 */
 @media (max-width: 1024px) {
