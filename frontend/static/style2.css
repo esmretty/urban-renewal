@@ -1816,6 +1816,32 @@ select.v2-rv2-edit {
 }
 .v2-ai-sec__body { font-size: 14.5px; line-height: 1.65; }
 
+/* 分回價值 dropdown */
+.v2-bid-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 13.5px;
+  flex-wrap: wrap;
+}
+.v2-bid-row--muted { color: var(--c-text-light); font-size: 12px; }
+.v2-bid-select {
+  padding: 3px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  background: var(--c-card);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.v2-bid-select:hover { border-color: var(--c-accent); }
+.v2-bid-max {
+  color: var(--c-danger);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 /* LVR 表 (popup 用) */
 .v2-lvr-tbl {
   width: 100%;

@@ -196,12 +196,18 @@
   }
 
   // ── AI 分析文字 render (對齊 v1 formatAiReason) ──
-  function renderAiText(text) {
+  // 「分回價值」section 特殊處理 → renderBidSection (動態算分回值 + 出價建議 dropdown)
+  function renderAiText(text, p, prices) {
     if (!text) return '';
     return text.split(/\n\n+/).map(section => {
       const m = section.match(/^【(.+?)】\s*([\s\S]*)/);
       if (m) {
         const title = m[1];
+        // 「分回價值」改用動態渲染 (從 input 欄位即時算)
+        if (title === '分回價值' && p && prices) {
+          return `<div class="v2-ai-sec"><div class="v2-ai-sec__title">${esc(title)}</div>
+            <div class="v2-ai-sec__body" id="v2-ai-bid-section">${renderBidSection(p, prices)}</div></div>`;
+        }
         let body = esc(m[2].trim());
         body = body.replace(/(\d+\.\d+)×/g, '$1倍').replace(/(\d+)×/g, '$1倍');
         body = body.replace(/&lt;chk-y&gt;([\s\S]*?)&lt;\/chk-y&gt;/g, '<span style="color:#16a34a;font-weight:700">✓</span> $1');
@@ -214,6 +220,66 @@
       }
       return `<div class="v2-ai-sec"><div class="v2-ai-sec__body">${esc(section).replace(/\n/g, '<br>')}</div></div>`;
     }).join('');
+  }
+
+  // ── 「分回價值」section 動態渲染 (對齊 v1 renderBidSection) ─────────────────
+  // 顯示：危老 X 萬 (Y 倍) / 都更 X 萬 (Y 倍)
+  //      • 危老出價建議：[3.2 倍 ▾] ≤ N 萬
+  //      • 都更出價建議：[3.2 倍 ▾] ≤ N 萬
+  // dropdown onchange 不打 server，純前端 JS 即時算 ≤ N 萬
+  function renderBidSection(p, prices) {
+    if (!p) return '—';
+    if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal) {
+      const reason = p.is_foreclosure ? '法拍屋'
+        : p.is_remote_area ? '新北偏遠路段'
+        : '特殊土地分區（非住商工）';
+      return `此物件標記為「${reason}」，出價試算不適用。`;
+    }
+    const land = p.land_area_ping;
+    const zoning = effectiveZoning(p);
+    const newPrice = p.new_house_price_wan_override ?? prices[p.district];
+    if (!land || !zoning || !newPrice) return '缺資料，無法計算';
+    const farPct = effectiveFar(p);
+    const coeff = p.rebuild_coeff ?? 1.57;
+    const [ratio, parking] = lookupShareRatio(newPrice);
+    const isFangzai = p.city === '台北市' && currentAge(p) && (new Date().getFullYear() - currentAge(p)) <= 1974;
+    const bonusW = p.bonus_weishau ?? 0.30;
+    const bonusD = p.bonus_dugen ?? (isFangzai ? 0.80 : 0.50);
+    const is1F = Number(p.floor) === 1 || Number(p.floor_range_min) === 1;
+    const floorPremium = p.floor_premium ?? (is1F ? 0.20 : 0);
+    const effectivePrice = newPrice * (1 + floorPremium);
+    const calcVal = (b) => {
+      const share = land * (farPct / 100) * (1 + b) * coeff * (ratio || 0);
+      return share * effectivePrice + (share / 40) * (parking || 0);
+    };
+    const wVal = Math.round(calcVal(bonusW));
+    const dVal = Math.round(calcVal(bonusD));
+    // priceWan 用欲出價 (沒填則 fallback 開價)
+    const priceWan = parseFloat(p.desired_price_wan ?? (p.price_ntd ? Math.round(p.price_ntd / 10000 * 0.9 / 10) * 10 : 0)) || 0;
+    const fmt = (n) => n.toLocaleString('zh-TW', { maximumFractionDigits: 0 });
+    const hasPrice = priceWan > 0;
+    const multW = hasPrice ? `（${(wVal / priceWan).toFixed(2)}倍）` : '';
+    const multD = hasPrice ? `（${(dVal / priceWan).toFixed(2)}倍）` : '';
+
+    let html = wVal
+      ? `危老 ${fmt(wVal)}萬${multW}　都更 ${fmt(dVal)}萬${multD}`
+      : `都更 ${fmt(dVal)}萬${multD}`;
+
+    if (!hasPrice) {
+      html += `<div class="v2-bid-row v2-bid-row--muted">（尚未填入欲出價，無法給出價建議）</div>`;
+      return html;
+    }
+
+    const opts = [3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0, 4.2, 4.5, 5.0];
+    const mkOpts = (sel) => opts.map(v =>
+      `<option value="${v}" ${Math.abs(v - sel) < 0.01 ? 'selected' : ''}>${v.toFixed(1)} 倍</option>`).join('');
+    const wMax = wVal ? Math.round(wVal / 3.2) : 0;
+    const dMax = Math.round(dVal / 3.2);
+    if (wVal) {
+      html += `<div class="v2-bid-row">• 危老出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${wVal}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmt(wMax)} 萬</span></div>`;
+    }
+    html += `<div class="v2-bid-row">• 都更出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${dVal}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmt(dMax)} 萬</span></div>`;
+    return html;
   }
 
   // ── 分區縮寫 helper (對齊 v1 zoneAbbr 並擴充處理 (特)/(遷)/(核)/(抄) 後綴) ──
@@ -1122,7 +1188,7 @@
         </div>
         <div class="v2-d-col v2-d-col--5">
           <h6 class="v2-d-h">分析建議</h6>
-          ${aiText ? `<div class="v2-d-ai-text">${renderAiText(aiText)}</div>` : '<div class="v2-detail-empty">尚無分析建議</div>'}
+          ${aiText ? `<div class="v2-d-ai-text">${renderAiText(aiText, p, prices)}</div>` : '<div class="v2-detail-empty">尚無分析建議</div>'}
         </div>
       </div>
 
