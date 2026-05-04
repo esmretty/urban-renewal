@@ -1261,7 +1261,7 @@
       const cls = z.includes('商') ? 'v2-d-zone-badge--commercial' : 'v2-d-zone-badge--default';
       badge = `<span class="v2-d-zone-badge ${cls}">${esc(z)}</span>`;
       if (orig && orig !== z) {
-        badge += ` <span class="v2-d-zone-orig">原：${esc(orig)}</span>`;
+        badge += `<div class="v2-d-zone-orig">原：${esc(orig)}</div>`;
       }
     } else {
       badge = '<span class="v2-d-hint">—</span>';
