@@ -1119,7 +1119,7 @@
               <tr><td>危老獎勵率</td><td>${editPct('bonus_weishau', bonusW)}</td>
                   <td>都更獎勵率</td><td>${editPct('bonus_dugen', bonusD)}</td></tr>
               <tr><td>樓層加成</td><td>${editPct('floor_premium', floorPremium)}</td>
-                  <td>建坪係數</td><td><input type="number" class="v2-d-input" min="1" max="2" step="0.01" value="${coeff}" ${dis}
+                  <td>建坪係數</td><td><input type="number" class="v2-d-input" min="1" max="2" step="0.01" value="${coeff}"
                     onchange="v2.saveOverride('${esc(id)}','rebuild_coeff',this.value)"></td></tr>
             </table>
             <div class="v2-d-formula">
