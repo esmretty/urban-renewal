@@ -1477,10 +1477,10 @@
         </div>
         <div class="v2-rv2-left">
           <div class="v2-rv2-formula">
-            ${r('乘以', '有效容積率', `${effFar}%`,
+            ${r('×', '有效容積率', `${effFar}%`,
                 roadCapped ? `<span class="v2-rv2-warn" title="台北市規則：FAR 上限 = 路寬 × 50%">⚠ 受路寬 ${roadW}m 限縮 (原 ${baseFarPct}%)</span>` : '')}
             <div class="v2-rv2-r">
-              <span class="v2-rv2-op">乘以</span>
+              <span class="v2-rv2-op">×</span>
               <span class="v2-rv2-lbl">容積獎勵</span>
               <span class="v2-rv2-val v2-rv2-val--bonus">
                 <span class="v2-rv2-bonus-line">
@@ -1494,25 +1494,25 @@
               </span>
             </div>
             <div class="v2-rv2-r">
-              <span class="v2-rv2-op">乘以</span>
+              <span class="v2-rv2-op">×</span>
               <span class="v2-rv2-lbl">都更係數</span>
               <span class="v2-rv2-val">
                 <input type="number" class="v2-rv2-edit" step="0.01" value="${coeff}"
                   onchange="v2.saveOverride('${esc(id)}','rebuild_coeff',this.value)">
               </span>
             </div>
-            ${r('乘以', '分回比例', ratio != null ? (ratio * 100).toFixed(1) + '%' : '—')}
+            ${r('×', '分回比例', ratio != null ? (ratio * 100).toFixed(1) + '%' : '—')}
             <div class="v2-rv2-r">
-              <span class="v2-rv2-op">乘以</span>
+              <span class="v2-rv2-op">×</span>
               <span class="v2-rv2-lbl">新成屋單價<span class="v2-rv2-lbl-unit">(萬/坪)</span></span>
               <span class="v2-rv2-val v2-rv2-val--col">
                 <input type="number" class="v2-rv2-edit" step="5" value="${newPrice}"
                   onchange="v2.saveOverride('${esc(id)}','new_house_price_wan_override',this.value)">
-                <span class="v2-rv2-note">${p.new_house_price_wan_override ? '(已覆寫)' : '(區域平均，可改)'}</span>
+                <span class="v2-rv2-note">${p.new_house_price_wan_override ? '已覆寫' : '此為區域平均房價，您可自行調整'}</span>
               </span>
             </div>
             <div class="v2-rv2-r">
-              <span class="v2-rv2-op">乘以</span>
+              <span class="v2-rv2-op">×</span>
               <span class="v2-rv2-lbl">樓層加成${is1F ? '<span class="v2-rv2-lbl-unit">(1F 預設20%)</span>' : ''}</span>
               <span class="v2-rv2-val">
                 <input type="number" class="v2-rv2-edit" min="0" max="80" step="5" value="${Math.round(floorPremium * 100)}"

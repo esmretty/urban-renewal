@@ -1420,6 +1420,7 @@ a { color: inherit; text-decoration: none; }
   border-collapse: collapse;
   font-size: 14px;
   table-layout: fixed;
+  background: #fafaf6;          /* 對齊 v1 .renewal-table 淡米底 */
 }
 .v2-d-tbl tr { border-bottom: 1px solid var(--c-border); }
 .v2-d-tbl tr:last-child { border-bottom: none; }
@@ -2062,8 +2063,14 @@ a { color: inherit; text-decoration: none; }
   justify-content: unset;
 }
 .v2-rv2-land__zone-body {
-  font-size: 13px;
+  font-size: 14px;       /* 跟「推測地址」table cell 同大小 */
   text-align: center;
+}
+/* 土地持分內的 zone-badge：縮小到跟 td 字體一致 (14/600 不再 15/700) */
+.v2-rv2-land__zone-body .v2-d-zone-badge {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 1px 8px;
 }
 .v2-rv2-land__abbr {
   display: inline-block;
@@ -2119,7 +2126,7 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0;
   line-height: 1;
 }
-.v2-rv2-lbl { color: #6b7280; font-size: 14px; font-weight: 500; }
+.v2-rv2-lbl { color: #6b7280; font-size: 14px; font-weight: 400; }   /* 對齊 v1 default normal */
 .v2-rv2-lbl-unit {
   display: block;
   font-size: 10.5px;
@@ -2140,13 +2147,25 @@ a { color: inherit; text-decoration: none; }
   flex-wrap: wrap;
 }
 .v2-rv2-val--bonus {
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
+  flex-direction: row;        /* 危老 / 都更 強制同一列 */
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: nowrap;
 }
-.v2-rv2-bonus-line { display: inline-flex; align-items: center; gap: 4px; }
+.v2-rv2-bonus-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;             /* 不允許換行 */
+}
 .v2-rv2-val--col { flex-direction: column; align-items: flex-end; gap: 2px; }
-.v2-rv2-note { font-size: 13px; color: #8b8680; font-style: italic; }
+.v2-rv2-note {
+  font-size: 11px;
+  color: #c0392b;       /* 紅字 (對齊用戶要求) */
+  font-style: italic;
+  font-weight: 500;
+}
 .v2-rv2-warn { color: #c0392b !important; font-weight: 600; background: transparent; padding: 0; }
 .v2-rv2-tag {
   display: inline-block;
