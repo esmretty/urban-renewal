@@ -2312,19 +2312,19 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; }
 /* 多分區換行 */
 .v2-d-zone-multi-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
 
-/* === 心智圖風結果欄 — 左 hub 圓 + 右三條分支 + 三個 leaf 圓 === */
+/* === 結果欄：左圈 (tag + 倍數) + 右側兩行 (分回坪 / 估值萬 + 效益) === */
 .v2-rv2-rcol--mind {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 14px;
   padding: 0;
   background: transparent;
   border: none;
 }
-/* Hub: 中心圓 (危老 / 都更 + 大數字 萬) */
+/* Hub: 中心圓 — tag (危老/都更) + 倍數大字 */
 .v2-rv2-mind-hub {
-  width: 100px;
-  height: 100px;
+  width: 90px;
+  height: 90px;
   border-radius: 50%;
   border: 3px solid #c78a00;
   background: #fffaeb;
@@ -2337,71 +2337,48 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; }
   box-shadow: 0 2px 6px rgba(199, 138, 0, 0.18);
 }
 .v2-rv2-mind-hub__tag {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: #8b7c4a;
   letter-spacing: 1.5px;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 .v2-rv2-mind-hub__val {
-  font-size: 19px;
+  font-size: 22px;
   font-weight: 800;
   color: #5c4a0a;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 .v2-rv2-mind-hub__unit {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   color: #8b7c4a;
   margin-left: 1px;
 }
-/* 三個分支垂直排列 */
-.v2-rv2-mind-branches {
+/* 右側兩行資訊 */
+.v2-rv2-mind-info {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
-.v2-rv2-mind-branch {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  min-width: 0;
-}
-.v2-rv2-mind-branch::before {
-  content: '';
-  display: block;
-  width: 18px;
-  height: 1.5px;
-  background: #c78a00;
-  flex-shrink: 0;
-}
-/* Leaf: 葉節點圓角 pill 形 (數字 + 標籤) */
-.v2-rv2-mind-leaf {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  border: 1.5px solid #c78a00;
-  border-radius: 16px;
-  padding: 4px 12px;
-  background: #ffffff;
-  min-width: 0;
-}
-.v2-rv2-mind-leaf__num {
-  font-size: 15px;
+.v2-rv2-mind-info__line {
+  font-size: 16px;
   font-weight: 700;
   color: #5c4a0a;
   font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  white-space: nowrap;
 }
-.v2-rv2-mind-leaf__lbl {
-  font-size: 11px;
-  color: #8b7c4a;
-  letter-spacing: 0.3px;
+.v2-rv2-mind-info__profit {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2e7d32;
+  margin-left: 4px;
 }
-.v2-rv2-mind-leaf--neg { border-color: #b02a2a; }
-.v2-rv2-mind-leaf--neg .v2-rv2-mind-leaf__num { color: #b02a2a; }
+.v2-rv2-mind-info__profit--neg { color: #b02a2a; }
 
 /* 響應式：drawer 窄時 (≤1024) 結果改放在 formula 下方 */
 @media (max-width: 1024px) {
