@@ -989,16 +989,21 @@ a { color: inherit; text-decoration: none; }
   flex-shrink: 0;
 }
 
-/* NEW badge：飽和紅底 + 白字 pill — 顯眼但不刺眼，無動畫無高光 */
+/* NEW badge：稍淡的紅 (red-500) + 白字 pill + fade in/out 呼吸動畫 */
 .v2-card__date--new {
   padding: 1px 8px;
   font-size: 10.5px;
   font-weight: 800;
   letter-spacing: 1px;
   color: white;
-  background: #dc2626;     /* red-600 */
+  background: #ef4444;     /* red-500 (比 600 亮一階) */
   border: none;
-  border-radius: 10px;     /* pill */
+  border-radius: 10px;
+  animation: v2-new-fade 2.6s ease-in-out infinite;
+}
+@keyframes v2-new-fade {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 
 /* 物件 title (591 賣家標題) — 地址下方一條小字 */
@@ -1141,61 +1146,85 @@ a { color: inherit; text-decoration: none; }
 .v2-drawer.v2-open { transform: translateX(0); }
 .v2-drawer__header {
   padding: var(--sp-3) var(--sp-4);
-  border-bottom: 1px solid var(--c-border);
+  border-bottom: none;
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  flex-shrink: 0;             /* 確保 body 內容多時 header 不被擠掉 */
-  background: var(--c-card);
+  flex-shrink: 0;
+  background: #2c3e50;          /* 對齊 v1 topbar--dark 深底 */
+  color: #fff;
   position: sticky;
   top: 0;
   z-index: 10;
 }
-/* 返回按鈕 — desktop 簡單款 */
+/* 返回按鈕 — 對齊 v1 .topbar--dark .tb-btn--ghost (透明 + 灰邊 + 白字) */
 .v2-drawer__back {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 10px;
-  border-radius: var(--r-sm);
-  background: var(--c-hover);
-  color: var(--c-text);
-  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid #7f8c8d;
+  color: #fff;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: background var(--t-fast);
   flex-shrink: 0;
 }
-.v2-drawer__back:hover { background: var(--c-border); }
-.v2-drawer__back-label { font-size: 13px; }
+.v2-drawer__back:hover { background: #34495e; }
+.v2-drawer__back-label { font-size: 14px; }
 
-/* 加入最愛按鈕 (drawer header，對齊返回按鈕字體) */
+/* 加入最愛按鈕 — 對齊 v1 .tb-btn--ghost 風 */
 .v2-drawer__fav {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 10px;
+  padding: 5px 12px;
   margin-left: 6px;
-  border-radius: var(--r-sm);
-  background: var(--c-hover);
-  color: var(--c-text);
-  font-size: 13px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid #7f8c8d;
+  color: #fff;
+  font-size: 14px;
   font-weight: 600;
-  border: 1px solid transparent;
   cursor: pointer;
-  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+  transition: background var(--t-fast);
   flex-shrink: 0;
 }
-.v2-drawer__fav:hover { background: var(--c-border); }
-.v2-drawer__fav-star { font-size: 14px; color: var(--c-text-light); transition: color var(--t-fast); }
-.v2-drawer__fav-label { font-size: 13px; }
-/* 已加入最愛狀態：金黃星 + 邊框 */
+.v2-drawer__fav:hover { background: #34495e; }
+.v2-drawer__fav-star { font-size: 15px; color: #d4d8dd; transition: color var(--t-fast); }
+.v2-drawer__fav-label { font-size: 14px; }
+/* 已加入最愛狀態：金黃星 + 邊框 (深底上仍醒目) */
 .v2-drawer__fav.v2-drawer__fav--active {
-  background: #fef3c7;
+  background: rgba(252, 211, 77, 0.18);
   border-color: #fcd34d;
-  color: #92400e;
 }
-.v2-drawer__fav--active .v2-drawer__fav-star { color: #f59e0b; }
+.v2-drawer__fav--active .v2-drawer__fav-star { color: #fbbf24; }
+
+/* drawer header 內 sources (591/永慶 連結) — 對齊 v1 .tb-btn--ghost */
+.v2-drawer__sources {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+}
+.v2-drawer__sources .v2-src-badge {
+  background: transparent;
+  border: 1px solid #7f8c8d;
+  color: #fff;
+  padding: 5px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 6px;
+  text-decoration: none;
+}
+.v2-drawer__sources .v2-src-badge:hover { background: #34495e; }
+.v2-drawer__sources .v2-src-badge--dead {
+  color: #95a5a6;
+  text-decoration: line-through;
+}
 /* Mobile：返回按鈕加大 + accent 藍底 + iOS safe-area inset */
 @media (max-width: 640px) {
   .v2-drawer__header {
@@ -1291,7 +1320,7 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-d-row {
   display: grid;
-  grid-template-columns: 8fr 4fr;   /* 圖片小一點，左側多一點 (從 7:5 → 8:4) */
+  grid-template-columns: 7fr 5fr;   /* 對齊 v1 Bootstrap col-md-7 + col-md-5 */
   gap: 12px;
   margin-bottom: 12px;
 }
@@ -1307,10 +1336,10 @@ a { color: inherit; text-decoration: none; }
   border-bottom: 1px solid var(--c-border);
 }
 
-/* 物件資訊 2 個 table 並排 — 左 table 略寬 (給地址多一點空間) */
+/* 物件資訊 2 個 table 並排 — 1:1 對齊 v1 .basic-info-grid (1fr 1fr gap 14) */
 .v2-d-basic-grid {
   display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
+  grid-template-columns: 1fr 1fr;
   gap: 14px;
   align-items: start;
   background: transparent;
@@ -2145,12 +2174,11 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-rv2-lbl { color: #6b7280; font-size: 14px; font-weight: 400; }   /* 對齊 v1 default normal */
 .v2-rv2-lbl-unit {
-  display: block;
+  display: inline;        /* 對齊 v1：(萬/坪) inline 跟「新成屋房價」同一行 */
   font-size: 10.5px;
   color: var(--c-text-light);
-  margin-top: 1px;
+  margin-left: 2px;
   font-weight: 400;
-  line-height: 1;
 }
 .v2-rv2-val {
   display: flex;

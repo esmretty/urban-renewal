@@ -924,7 +924,7 @@
     }
   }
 
-  // drawer header「★ 加入最愛 / 從最愛移除」按鈕同步 (依當前 detail p._in_watchlist)
+  // drawer header「★ 加入最愛 / 從最愛移除」按鈕同步 + sources (591/永慶 連結)
   function _updateFavBtn(p) {
     const btn = $('#v2-drawer-fav');
     if (!btn) return;
@@ -933,6 +933,17 @@
     btn.classList.toggle('v2-drawer__fav--active', inW);
     const lbl = btn.querySelector('.v2-drawer__fav-label');
     if (lbl) lbl.textContent = inW ? '從最愛移除' : '加入最愛';
+    // 來源連結 (591/永慶/信義)：放在 fav button 旁，drawer header 上 (對齊 v1 modal header)
+    const srcWrap = $('#v2-drawer-sources');
+    if (srcWrap) {
+      if (p.sources && p.sources.length) {
+        srcWrap.innerHTML = srcBadgesHTML(p.sources);
+        srcWrap.style.display = '';
+      } else {
+        srcWrap.innerHTML = '';
+        srcWrap.style.display = 'none';
+      }
+    }
   }
 
   // header fav 按鈕點擊：對 state.selectedId call toggleWatchlist 然後 update btn
@@ -957,9 +968,11 @@
     $('#v2-drawer').classList.remove('v2-open');
     $('#v2-drawer-backdrop').classList.remove('v2-open');
     state.selectedId = null;
-    // 收起 fav button
+    // 收起 fav button + sources
     const fav = $('#v2-drawer-fav');
     if (fav) fav.style.display = 'none';
+    const srcWrap = $('#v2-drawer-sources');
+    if (srcWrap) { srcWrap.innerHTML = ''; srcWrap.style.display = 'none'; }
   }
 
   function detailHTML(p, prices) {
@@ -1073,9 +1086,7 @@
       : '<span class="v2-d-hint">—</span>';
 
     return `
-      ${p.sources && p.sources.length ? `<div class="v2-d-sources-topright">${srcBadgesHTML(p.sources)}</div>` : ''}
-      <!-- Row 1: 物件資訊 (左 7) | 圖片 (右 4) -->
-      <!-- Row 1: 物件資訊 + 圖片 (對齊 v1) -->
+      <!-- Row 1: 物件資訊 (左 7) | 圖片 (右 5) — 對齊 v1 col-md-7 + col-md-5 -->
       <div class="v2-d-row">
         <div class="v2-d-col v2-d-col--7">
           <h6 class="v2-d-h v2-d-h--left">物件資訊</h6>
@@ -1474,7 +1485,7 @@
         <div class="v2-rv2-left">
           <div class="v2-rv2-formula">
             ${r('×', '有效容積率', `${effFar}%`,
-                roadCapped ? `<span class="v2-rv2-warn" title="台北市規則：FAR 上限 = 路寬 × 50%">⚠ 受路寬 ${roadW}m 限縮 (原 ${baseFarPct}%)</span>` : '')}
+                roadCapped ? `<span class="v2-rv2-warn">⚠ 受路寬 ${roadW}m 限縮</span>` : '')}
             <div class="v2-rv2-r">
               <span class="v2-rv2-op">×</span>
               <span class="v2-rv2-lbl">容積獎勵</span>
@@ -1500,11 +1511,11 @@
             ${r('×', '分回比例', ratio != null ? (ratio * 100).toFixed(1) + '%' : '—')}
             <div class="v2-rv2-r">
               <span class="v2-rv2-op">×</span>
-              <span class="v2-rv2-lbl">新成屋單價<span class="v2-rv2-lbl-unit">(萬/坪)</span></span>
-              <span class="v2-rv2-val v2-rv2-val--col">
+              <span class="v2-rv2-lbl">新成屋房價<span class="v2-rv2-lbl-unit">(萬/坪)</span></span>
+              <span class="v2-rv2-val">
+                <span class="v2-rv2-note">${p.new_house_price_wan_override ? '(已覆寫)' : '(此為區域平均單價，您可自行調整)'}</span>
                 <input type="number" class="v2-rv2-edit" step="5" value="${newPrice}"
                   onchange="v2.saveOverride('${esc(id)}','new_house_price_wan_override',this.value)">
-                <span class="v2-rv2-note">${p.new_house_price_wan_override ? '已覆寫' : '此為區域平均房價，您可自行調整'}</span>
               </span>
             </div>
             <div class="v2-rv2-r">
