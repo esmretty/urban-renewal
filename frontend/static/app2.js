@@ -1156,7 +1156,7 @@
           <div class="v2-d-basic-grid">
             <table class="v2-d-tbl">
               <tr><td>原始地址</td><td>${esc(p.address || p.title || '—')}</td></tr>
-              <tr><td>推測地址</td><td>${esc(p.address_inferred || '—')}${inferredTag}${cands.length > 1 ? `<div class="v2-d-hint">${cands.length} 候選</div>` : ''}</td></tr>
+              <tr><td>推測地址</td><td>${inferredAddressCellHTML(p)}${inferredTag}</td></tr>
               <tr><td>類型 / 樓層</td><td>${esc(p.building_type || '—')} · ${formatFloor(p)}</td></tr>
               <tr><td>屋齡</td><td>${age != null ? age + ' 年' : '未知'}${p.building_age_completed_year ? ` <span class="v2-d-hint">(${p.building_age_completed_year} 完工)</span>` : ''}</td></tr>
               <tr><td>售價</td><td><span class="v2-d-price">${priceWan ? fmt0(priceWan) + '萬' : '—'}</span>${lvrIcon}</td></tr>
@@ -1200,6 +1200,66 @@
         </button>
       </div>
     `;
+  }
+
+  // ── 推測地址 helper (對齊 v1 inferredAddressCellHTML + saveInferredChoice) ──
+  // 多候選時 → <select>；用戶切換 → POST inferred_choice → 後端 swap address+land_ping
+  function stripCityDist(addr) {
+    if (!addr) return '';
+    return String(addr)
+      .replace(/^(?:臺北市|台北市|新北市|桃園市|台中市|臺中市|高雄市|台南市|臺南市|基隆市|新竹市|新竹縣)/, '')
+      .replace(/^[一-龥]{1,3}(?:區|鄉|鎮|市)/, '')
+      .trim();
+  }
+  function fullAddress(p) {
+    const base = p.address_inferred || p.address || '';
+    if (!base) return '';
+    if (/^(?:臺北市|台北市|新北市)/.test(base)) return base;
+    return (p.city || '') + (p.district || '') + base;
+  }
+  function inferredAddressCellHTML(p) {
+    const cands = Array.isArray(p.address_inferred_candidates_detail) ? p.address_inferred_candidates_detail : [];
+    const current = p.address_inferred || p.address || p.title || '';
+    const mapLink = `<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener" class="v2-d-map-link" title="Google Maps">📍</a>`;
+    if (cands.length <= 1) {
+      return `${esc(stripCityDist(current))} ${mapLink}`;
+    }
+    const opts = cands.map(c => {
+      const sel = c.address === current ? 'selected' : '';
+      const label = stripCityDist(c.address) + (c.is_reverse_geo ? '（座標反查）' : '');
+      return `<option value="${esc(c.address)}" ${sel}>${esc(label)}</option>`;
+    }).join('');
+    return `<select class="v2-d-input v2-d-inferred-select" onchange="v2.saveInferredChoice('${esc(p.source_id || p.id || '')}', this.value)">${opts}</select> ${mapLink}`;
+  }
+  async function saveInferredChoice(id, address) {
+    try {
+      const r = await fetch(`/api/properties/${encodeURIComponent(id)}/inferred_choice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address }),
+      });
+      if (!r.ok) { toast('儲存失敗', 'error'); return; }
+      const data = await r.json();
+      const idx = state.allProperties.findIndex(x => (x.source_id || x.id) === id);
+      if (idx >= 0) {
+        const patch = { address_inferred: address };
+        if (data.land_ping != null) {
+          patch.land_area_ping = data.land_ping;
+          patch.land_area_sqm = Math.round(data.land_ping * 3.30578 * 100) / 100;
+        } else {
+          patch.land_area_ping = null;
+          patch.land_area_sqm = null;
+        }
+        Object.assign(state.allProperties[idx], patch);
+      }
+      // 重新 render detail (含試算 — land 變了倍數要重算) + 重 applyFilters 讓首頁卡片更新
+      _renderDetailFromCurrent();
+      applyFilters();
+      toast('已儲存', 'success');
+    } catch (e) {
+      console.error('saveInferredChoice', e);
+      toast('儲存失敗：' + e.message, 'error');
+    }
   }
 
   // ── 都更換回試算 visual (對齊 v1 renewalV2HTML 直式公式 + 結果 col) ─────
@@ -1812,7 +1872,7 @@
     triggerScrapeUrl, triggerManualAnalyze, populateManualDistricts,
     switchGridCity,
     showLvrPopup, hideLvrPopup,
-    saveOverride,
+    saveOverride, saveInferredChoice,
   };
 
   // Boot

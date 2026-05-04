@@ -1381,6 +1381,23 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-danger);
   font-size: 13px;
 }
+/* 推測地址候選 dropdown */
+.v2-d-inferred-select {
+  width: auto;
+  max-width: 240px;
+  padding: 3px 8px;
+  text-align: left;
+  font-size: 13px;
+}
+.v2-d-map-link {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 14px;
+  text-decoration: none;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
 /* 推測 badge — block 放下一行 */
 .v2-inferred-tag {
   display: inline-block;
