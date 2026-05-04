@@ -80,7 +80,7 @@
    - **不能留半完工**：「等下再回來收尾」「這部分先這樣」就是給審查者送把柄。要嘛做完、要嘛不動，不要做一半
    - 寫 commit message 也一樣 — 「修了 bug」這種無資訊量的訊息會被打槍。要寫根因、修法、影響範圍、驗證方式
 
-5. **用戶可見文字（reason / tooltip / 說明欄位）絕不出現開發用語**
+10. **用戶可見文字（reason / tooltip / 說明欄位）絕不出現開發用語**
    任何會被用戶看到的字串（`*_reason`、`*_note`、modal 裡的說明、toast 訊息、alert 文字等），**必須以「一般投資人視角」撰寫**，禁止以下內部實作術語：
    - 技術元件名：`Vision`、`OCR`、`regex`、`GeoServer`、`pipeline`、`fallback`、`CQL`、`bbox`、`Firestore`、`LVR`（可用「實價登錄」代替）
    - 流程描述：「規則優先」、「跳過 Vision」、「走到 fallback」、「重跑 pipeline」、「修正後」
@@ -96,6 +96,16 @@
    - **log / logger.warning / logger.info / 註解**：可以寫工程語氣、debug 細節（給開發者看）
    - **DB 欄位值 / alert / toast / modal 顯示**：必須乾淨中性（給用戶看）
    - 兩者不要混用。清理既有髒資料時，也要把用戶可見欄位一起洗乾淨，不能只改新邏輯。
+
+11. **避免 spawn 平行 Explore / Agent subagent — Claude Code 2.1.126 有 race condition 會把整個 extension 炸掉**
+   - 用 `Agent` tool（含 `Explore` 子 agent）做平行 dispatch 時，task 暫存檔（`%TEMP%\claude\<project>\<sessionId>\tasks\*.output`）的 cleanup 邏輯有 race condition
+   - 兩個 subagent 幾乎同時清同一個 `.output` → 後者拿 `ENOENT: no such file or directory, unlink` → CLI 沒 catch → 拋到 VS Code extension host → **整個 extension 重啟、conversation session 丟失（用戶體感「掛了」）**
+   - stack trace 在 `B:/~BUN/root/src/entrypoints/cli.js:8754:299` 的 `unlink` 處（CLI bug，不是 IDE 整合層的問題；換 Cursor / Windsurf / JetBrains 都會踩到同一個 bug，只有 web 版 claude.ai/code 不受影響但沒 IDE 整合）
+   - 直到 Anthropic 修掉前，**禁止用 Agent tool / Explore subagent 做平行 dispatch**
+   - 改用直接的 `Grep` / `Read` / `Glob` / `Bash` **依序**執行；同一回合多個 tool call 是 OK 的（main process 一條），觸發 race 的是子 agent 自己 fork 出多個平行工作
+   - 例外：單一 agent（不平行）做 isolated worktree 任務、或要保護主 context window 的長研究 → 仍可開，但**只開一個、不要 batch 平行**
+   - 過去踩雷：2026-05-04 21:23-22:23 多次 crash，pattern 都是 4 個 Explore subagent 平行打 API → 第一個清完 .output 後第二個踩到空檔 → ENOENT → extension restart
+   - 注意跟 `stream_idle_partial`（API streaming 卡 15 秒）區分：stall 只是慢、不會 crash；ENOENT 才是真正讓 extension 死掉的元兇
 
 ### 違反檢查
 
