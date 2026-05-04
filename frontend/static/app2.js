@@ -209,9 +209,9 @@
       if (m) {
         const title = m[1];
         if (_SKIP_AI_SECTIONS.has(title)) return '';
-        // 「分回價值」section 用動態 dropdown 渲染 (從 input 即時算)
+        // 「分回價值」section 用動態 dropdown 渲染 (從 input 即時算)；title 改顯示「出價試算」
         if (title === '分回價值' && p && prices) {
-          return `<div class="v2-ai-sec"><div class="v2-ai-sec__title">${esc(title)}</div>
+          return `<div class="v2-ai-sec"><div class="v2-ai-sec__title">出價試算</div>
             <div class="v2-ai-sec__body" id="v2-ai-bid-section">${renderBidSection(p, prices)}</div></div>`;
         }
         let body = esc(m[2].trim());
