@@ -1070,7 +1070,8 @@
       : '<span class="v2-d-hint">—</span>';
 
     return `
-      <!-- Row 1: 物件資訊 (左 7) | 圖片 + 來源連結 (右 4) -->
+      ${p.sources && p.sources.length ? `<div class="v2-d-sources-topright">${srcBadgesHTML(p.sources)}</div>` : ''}
+      <!-- Row 1: 物件資訊 (左 7) | 圖片 (右 4) -->
       <div class="v2-d-row">
         <div class="v2-d-col v2-d-col--7">
           <div class="v2-d-basic-grid">
@@ -1117,7 +1118,6 @@
         </div>
         <div class="v2-d-col v2-d-col--5">
           ${img || '<div class="v2-detail-image-wrap"><div class="v2-detail-image-empty">無照片</div></div>'}
-          ${p.sources && p.sources.length ? `<div class="v2-d-sources-under">${srcBadgesHTML(p.sources)}</div>` : ''}
         </div>
       </div>
 
@@ -1525,7 +1525,6 @@
             ${renderResult('危老', valW, shareW)}
             ${renderResult('都更', valD, shareD)}
           </div>
-          <div class="v2-rv2-disclaimer">⚠ 試算假設：買方擁有全部土地持分。實際換回比例依持分調整。</div>
         </div>
       </div>`;
   }

@@ -808,7 +808,7 @@ a { color: inherit; text-decoration: none; }
   flex: 1;
   min-width: 0;
   font-size: 18px;
-  font-weight: 400;
+  font-weight: 600;
   color: var(--c-text);
   white-space: nowrap;
   overflow: hidden;
@@ -1232,6 +1232,7 @@ a { color: inherit; text-decoration: none; }
   flex: 1;
   overflow-y: auto;
   padding: var(--sp-4);
+  position: relative;        /* 讓 .v2-d-sources-topright absolute 對齊 body 右上 */
 }
 .v2-drawer-backdrop {
   display: none;
@@ -1348,13 +1349,22 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-d-basic-grid .v2-d-tbl { height: auto; }
 
-/* 來源連結 — 放在 detail 照片下方、靠左 (跟首頁卡片同樣的 .v2-src-badge 樣式) */
+/* 來源連結 — 放在 detail body 最右上角 (絕對定位)；跟首頁卡片同樣 .v2-src-badge 樣式 */
+.v2-d-sources-topright {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  z-index: 1;
+}
+/* (legacy) sources-under 之前放在圖片下方，現已搬到右上角 — 留 stub 以防別處 caller */
 .v2-d-sources-under {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 8px;
-  justify-content: flex-start;
 }
 
 /* 來源連結 — 放右上、字大、清楚 (舊位置，新版已不用，留著以防其他 caller) */
@@ -1979,10 +1989,12 @@ a { color: inherit; text-decoration: none; }
 .v2-rv2-r {
   display: grid;
   grid-template-columns: 26px 90px 1fr;
-  align-items: center;
+  align-items: start;        /* 文字靠上 */
   gap: 6px;
-  padding: 3px 0;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--c-border);   /* 上下欄分隔線 */
 }
+.v2-rv2-formula > .v2-rv2-r:last-child { border-bottom: none; }
 .v2-rv2-op {
   font-size: 10px;
   font-weight: 500;
