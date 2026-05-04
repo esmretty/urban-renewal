@@ -566,11 +566,13 @@
           <span class="${multCls}" title="都更倍數">
             ${mult != null ? mult.toFixed(1) : '—'}<small>×</small>
           </span>
-          <button class="v2-card__star ${inWatchlist ? 'v2-card__star--active' : ''}" data-id="${esc(id)}" title="加入觀察清單">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-            </svg>
-          </button>
+          ${state.view === 'watchlist'
+            ? `<button class="v2-card__delete" onclick="event.stopPropagation(); v2.deleteRow('${esc(id)}')" title="從觀察清單移除">✕</button>`
+            : `<button class="v2-card__star ${inWatchlist ? 'v2-card__star--active' : ''}" data-id="${esc(id)}" title="加入觀察清單">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+              </button>`}
         </div>
         ${p.title ? `<div class="v2-card__title-sub" title="${esc(p.title)}">${esc(p.title)}</div>` : ''}
         <div class="v2-card__line2">
@@ -1604,6 +1606,27 @@
     }, 200);
   }
 
+  // ── watchlist tab 卡片刪除 (對齊 v1 deleteRow) — ✕ button + 雙確認 ─────────
+  async function deleteRow(id) {
+    const p = state.allProperties.find(x => (x.source_id || x.id) === id);
+    const label = p ? (p.address_inferred || p.address || p.title || id) : id;
+    if (!confirm(`確定從觀察清單移除？\n\n${label}\n\n移除後個人試算覆寫 (欲出價、新成屋單價等) 也會一併刪除。`)) return;
+    try {
+      const r = await fetch(`/api/watchlist/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      state.allProperties = state.allProperties.filter(x => (x.source_id || x.id) !== id);
+      state.watchlistItems = state.watchlistItems.filter(x => (x.source_id || x.id) !== id);
+      // explore tab 暫存裡的同 id 也去星 (下次切過去看就是 ☆)
+      const ex = state.exploreItems.find(x => (x.source_id || x.id) === id);
+      if (ex) ex._in_watchlist = false;
+      applyFilters();
+      toast('已從觀察清單移除', 'success');
+    } catch (e) {
+      console.error('deleteRow', e);
+      toast('移除失敗：' + e.message, 'error');
+    }
+  }
+
   // ── 重新掃描路寬 (對齊 v1 scanRoadWidth) — 台北市 + 沒 screenshot 時 ─────────
   // POST /api/properties/{id}/scan_road_width，progress 模擬 + 完成後更新 state + re-render detail
   async function scanRoadWidth(id, btn) {
@@ -2073,7 +2096,7 @@
     switchGridCity,
     showLvrPopup, hideLvrPopup,
     saveOverride, saveInferredChoice, setZonePing,
-    openRoadOverlay, scanRoadWidth,
+    openRoadOverlay, scanRoadWidth, deleteRow,
   };
 
   // Boot

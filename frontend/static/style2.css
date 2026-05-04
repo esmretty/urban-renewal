@@ -1062,6 +1062,29 @@ a { color: inherit; text-decoration: none; }
   transition: all var(--t-fast);
   flex-shrink: 0;
 }
+
+/* B9: watchlist tab 卡片右側 ✕ 刪除按鈕 (取代 ☆/★) */
+.v2-card__delete {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  border: none;
+  background: transparent;
+  color: var(--c-text-light);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--t-fast);
+  padding: 0;
+}
+.v2-card__delete:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
 .v2-card__star:hover { color: var(--c-warn); background: var(--c-hover); }
 .v2-card__star.v2-card__star--active { color: var(--c-warn); }
 .v2-card__star.v2-card__star--active svg { fill: currentColor; }
