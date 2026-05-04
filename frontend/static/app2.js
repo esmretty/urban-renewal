@@ -1118,18 +1118,30 @@
         </div>
         <div class="v2-d-col v2-d-col--5">
           ${img || '<div class="v2-detail-image-wrap"><div class="v2-detail-image-empty">無照片</div></div>'}
+          ${p.city === '台北市' ? `
+          <div class="v2-d-tools">
+            <span class="v2-d-tools-city">台北市</span>
+            <a href="https://bim.udd.gov.taipei/UDDPlanMap/" target="_blank" rel="noopener noreferrer">都市計畫圖 ↗</a>
+            <a href="https://zonemap.udd.gov.taipei/ZoneMapOP/" target="_blank" rel="noopener noreferrer">地籍套繪圖 ↗</a>
+          </div>` : p.city === '新北市' ? `
+          <div class="v2-d-tools">
+            <span class="v2-d-tools-city">新北市</span>
+            <a href="https://urban.planning.ntpc.gov.tw/NtpcURInfo/" target="_blank" rel="noopener noreferrer">城鄉資訊 ↗</a>
+          </div>` : ''}
         </div>
       </div>
 
-      <!-- Row 2: 都更換回試算 (左 7) | 出價建議 (右 5) -->
+      <!-- Row 2: 都更換回試算 (左 7) | 分析建議 (右 5) — 對齊 v1 -->
       <div class="v2-d-row">
         <div class="v2-d-col v2-d-col--7">
           <h6 class="v2-d-h">都更換回試算</h6>
           ${renewalSectionHTML(p, prices)}
         </div>
         <div class="v2-d-col v2-d-col--5">
-          <h6 class="v2-d-h">出價試算</h6>
-          ${bidSectionHTML(p, prices)}
+          <h6 class="v2-d-h">分析建議</h6>
+          ${aiText
+            ? `<div class="v2-d-ai-text">${renderAiText(aiText, p, prices)}</div>`
+            : '<div class="v2-detail-empty">尚無分析建議</div>'}
         </div>
       </div>
 
@@ -1198,6 +1210,16 @@
       }
     } else {
       badge = '<span class="v2-d-hint">—</span>';
+    }
+    // (特)/(遷)/(核)/(抄) 加註說明 — 對齊 v1
+    if (z && /\((?:特|遷|核|抄)\)/.test(z)) {
+      const eff = effectiveZoning(p);
+      const effFar = lookupFar(eff, p);
+      if (effFar != null && eff !== z) {
+        badge += `<div class="v2-d-zone-special">實際容積採「${esc(eff)}」${effFar}% 計算。此地塊有(特)/(遷)加註，真實容積請查都發局都市計畫書。</div>`;
+      } else {
+        badge += `<div class="v2-d-zone-special">此地塊有(特)/(遷)加註，容積率逐案而定，請查都發局都市計畫書。</div>`;
+      }
     }
     const candsBlock = cands.length
       ? `<details class="v2-d-zone-cands">

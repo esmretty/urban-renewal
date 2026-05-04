@@ -1504,6 +1504,14 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-text-muted);
   margin-top: 2px;
 }
+/* (特)/(遷)/(核)/(抄) 容積說明 — 對齊 v1 */
+.v2-d-zone-special {
+  font-size: 11.5px;
+  color: var(--c-text-muted);
+  font-style: italic;
+  margin-top: 4px;
+  line-height: 1.4;
+}
 .v2-d-zone-ping {
   border: 1px solid var(--c-border);
   border-radius: var(--r-sm);
@@ -1816,6 +1824,27 @@ a { color: inherit; text-decoration: none; }
 .v2-road-overlay-close:hover { background: #fff; transform: scale(1.05); }
 
 /* 參考工具 row (政府連結) — 放在抗性下方 */
+/* 政府連結 (照片下方，對齊 v1 .modal-tools) — 土黃色 button 風 */
+.v2-d-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+  margin-top: 10px;
+}
+.v2-d-tools a {
+  display: inline-block;
+  background: var(--c-accent);
+  color: white;
+  font-weight: 600;
+  text-decoration: none;
+  padding: 3px 10px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+}
+.v2-d-tools a:hover { background: var(--c-accent-hover); }
+
 .v2-d-tools-cell {
   display: flex;
   flex-wrap: wrap;
@@ -2231,14 +2260,18 @@ select.v2-rv2-edit {
   gap: 12px;
   min-width: 0;          /* 防止 grid 子項溢出父容器 */
 }
-/* 危老/都更結果在右欄改成上下直排 (不再左右並列)；窄欄內也不溢出 */
+/* 危老/都更結果並排 (對齊 v1 視覺)；窄欄內也不溢出 */
 .v2-rv2-result--stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
   border-top: none;
   padding-top: 0;
   min-width: 0;
+}
+@media (max-width: 1024px) {
+  /* drawer 變窄 / mobile 時改回上下 stack */
+  .v2-rv2-result--stack { grid-template-columns: 1fr; }
 }
 /* 危老/都更 結果框 — v1 風：標籤頂部 + 中央大數字 + 下方真圓圈三個 */
 .v2-rv2-result--stack .v2-rv2-rcol {
@@ -2516,16 +2549,34 @@ select.v2-rv2-edit {
   max-height: 420px;
   overflow-y: auto;
 }
-.v2-ai-sec { margin-bottom: 12px; }
+/* v1 風格：grid 兩欄 (72px label 黃底 + 1fr body) */
+.v2-ai-sec {
+  margin-bottom: 6px;
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 0 8px;
+}
 .v2-ai-sec:last-child { margin-bottom: 0; }
 .v2-ai-sec__title {
-  font-size: 14.5px;
   font-weight: 700;
-  color: var(--c-accent);
-  margin-bottom: 5px;
-  letter-spacing: 0.3px;
+  color: #5c4a0a;
+  font-size: 14px;
+  padding: 1px 6px;
+  background: #f4edd5;
+  border-radius: 3px;
+  white-space: nowrap;
+  text-align: center;
+  height: fit-content;
 }
-.v2-ai-sec__body { font-size: 14.5px; line-height: 1.65; }
+.v2-ai-sec__body {
+  color: var(--c-text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+@media (max-width: 1024px) {
+  .v2-ai-sec { grid-template-columns: 1fr; gap: 4px; }
+  .v2-ai-sec__title { width: max-content; }
+}
 
 /* 分回價值 dropdown */
 .v2-bid-row {
