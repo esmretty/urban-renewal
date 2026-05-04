@@ -1740,9 +1740,25 @@
       if (!r.ok) throw new Error('HTTP ' + r.status);
       state.allProperties = state.allProperties.filter(x => (x.source_id || x.id) !== id);
       state.watchlistItems = state.watchlistItems.filter(x => (x.source_id || x.id) !== id);
-      // explore tab 暫存裡的同 id 也去星 (下次切過去看就是 ☆)
+      // explore tab cache 同 id 物件：去星 + 清掉所有 override fields
+      // (DB 那邊 watchlist sub-doc 已 delete、override 跟著消失；前端 cache 也要清乾淨
+      //  避免用戶切到探索 tab 還看到改過的數字)
       const ex = state.exploreItems.find(x => (x.source_id || x.id) === id);
-      if (ex) ex._in_watchlist = false;
+      if (ex) {
+        ex._in_watchlist = false;
+        delete ex.desired_price_wan;
+        delete ex.bonus_weishau;
+        delete ex.bonus_dugen;
+        delete ex.rebuild_coeff;
+        delete ex.floor_premium;
+        delete ex.road_width_m_override;
+        delete ex.new_house_price_wan_override;
+        delete ex.zoning_ratios;
+        delete ex.inferred_address_choice;
+        delete ex._ephemeral_edit_made;
+        delete ex._pending_overrides;
+        delete ex._pending_inferred_choice;
+      }
       applyFilters();
       toast('已從觀察清單移除', 'success');
     } catch (e) {
