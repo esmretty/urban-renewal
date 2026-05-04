@@ -896,6 +896,7 @@
       const prices = await getDistrictPrices();
       $('#v2-drawer-title').textContent = slim.address_inferred || slim.address || '物件詳情';
       $('#v2-drawer-body').innerHTML = detailHTML(slim, prices);
+      _updateFavBtn(slim);
     } catch (e) {
       console.error('detailHTML render failed (slim):', e);
       $('#v2-drawer-body').innerHTML = `<div class="v2-detail-empty">渲染失敗：${esc(String(e.message || e))}</div>`;
@@ -914,10 +915,32 @@
       const prices2 = await getDistrictPrices();
       $('#v2-drawer-title').textContent = full.address_inferred || full.address || '物件詳情';
       $('#v2-drawer-body').innerHTML = detailHTML(state.allProperties[idx] || full, prices2);
+      _updateFavBtn(state.allProperties[idx] || full);
     } catch (e) {
       console.warn('openDetail upgrade fetch failed', e);
     }
   }
+
+  // drawer header「★ 加入最愛 / 從最愛移除」按鈕同步 (依當前 detail p._in_watchlist)
+  function _updateFavBtn(p) {
+    const btn = $('#v2-drawer-fav');
+    if (!btn) return;
+    btn.style.display = '';
+    const inW = !!(p._in_watchlist || p.user_url || p.added_at_user);
+    btn.classList.toggle('v2-drawer__fav--active', inW);
+    const lbl = btn.querySelector('.v2-drawer__fav-label');
+    if (lbl) lbl.textContent = inW ? '從最愛移除' : '加入最愛';
+  }
+
+  // header fav 按鈕點擊：對 state.selectedId call toggleWatchlist 然後 update btn
+  async function toggleDetailWatchlist() {
+    const id = state.selectedId;
+    if (!id) return;
+    await toggleWatchlist(id);
+    const p = state.allProperties.find(x => (x.source_id || x.id) === id);
+    if (p) _updateFavBtn(p);
+  }
+
   function closeDetail() {
     // 對齊 v1：關閉時若 ephemeral edit + 不在 watchlist → toast 提示沒儲存
     const id = state.selectedId;
@@ -931,6 +954,9 @@
     $('#v2-drawer').classList.remove('v2-open');
     $('#v2-drawer-backdrop').classList.remove('v2-open');
     state.selectedId = null;
+    // 收起 fav button
+    const fav = $('#v2-drawer-fav');
+    if (fav) fav.style.display = 'none';
   }
 
   function detailHTML(p, prices) {
@@ -1103,12 +1129,7 @@
         </div>
       </div>
 
-      <!-- Row 3: 操作 -->
-      <div class="v2-d-actions">
-        <button class="v2-btn v2-btn--primary v2-btn--sm" onclick="v2.toggleWatchlist('${esc(id)}')">
-          ${p._in_watchlist ? '從最愛移除' : '加入最愛'}
-        </button>
-      </div>
+      <!-- Row 3: 操作 (加入最愛已移到 drawer header，此區暫保留結構萬一未來放別的按鈕) -->
     `;
   }
 
@@ -2093,7 +2114,7 @@
   window.v2 = {
     switchView, toggleDistrict, applyFilters, applySort, runSearch,
     resetFilters, gotoPage, openSidebar, closeSidebar,
-    openDetail, closeDetail, toggleWatchlist, logout,
+    openDetail, closeDetail, toggleWatchlist, toggleDetailWatchlist, logout,
     toggleAllFloors, onFloorChange,
     toggleAllInCity, toggleSortDir,
     triggerScrapeUrl, triggerManualAnalyze, populateManualDistricts,
