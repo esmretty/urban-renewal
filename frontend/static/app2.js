@@ -775,8 +775,16 @@
     const reverse = state.sortDir === 'desc';
     list = list.slice();   // 不 mutate input
     if (mode === 'list_rank') {
-      list.sort((a, b) => (a.list_rank ?? 9999) - (b.list_rank ?? 9999));
-      list.sort((a, b) => (b.scrape_session_at || '').localeCompare(a.scrape_session_at || ''));
+      // 對齊 v1 (app.js:2473-2477)：用 _added_at (watchlist 加入時間) 優先 fallback 到
+      // scrape_session_at；同批次內再按 list_rank。watchlist tab 的 manual / user_url
+      // 物件沒 scrape_session_at 但有 _added_at，所以一定要 _added_at 先看
+      const dirMul = reverse ? 1 : -1;   // desc = 新→舊 (預設)
+      list.sort((a, b) => {
+        const ka = a._added_at || a.scrape_session_at || '';
+        const kb = b._added_at || b.scrape_session_at || '';
+        if (ka !== kb) return kb.localeCompare(ka) * dirMul;
+        return ((a.list_rank ?? 9999) - (b.list_rank ?? 9999)) * dirMul;
+      });
       return list;
     }
     const valOf = (p) => {
