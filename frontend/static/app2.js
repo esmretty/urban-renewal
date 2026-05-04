@@ -195,7 +195,7 @@
     return tot ? `?/${tot}F` : '—';
   }
 
-  // ── AI 分析文字 render (對齊 v1 formatAiReason，handle <chk-y> <chk-n> <red> markers) ──
+  // ── AI 分析文字 render (對齊 v1 formatAiReason) ──
   function renderAiText(text) {
     if (!text) return '';
     return text.split(/\n\n+/).map(section => {
@@ -207,7 +207,8 @@
         body = body.replace(/&lt;chk-y&gt;([\s\S]*?)&lt;\/chk-y&gt;/g, '<span style="color:#16a34a;font-weight:700">✓</span> $1');
         body = body.replace(/&lt;chk-n&gt;([\s\S]*?)&lt;\/chk-n&gt;/g, '<span style="color:#dc2626;font-weight:700">✗</span> <span style="color:#9ca3af">$1</span>');
         body = body.replace(/&lt;red&gt;([\s\S]*?)&lt;\/red&gt;/g, '<span style="color:#dc2626;font-weight:600">$1</span>');
-        body = body.replace(/&lt;bid_selector[^&]*&gt;/g, '');
+        // bid_selector tag 內含 &quot; (escaped quotes)，所以用 [\s\S]*? non-greedy 而不是 [^&]*
+        body = body.replace(/&lt;bid_selector[\s\S]*?&gt;/g, '');
         body = body.replace(/\n/g, '<br>');
         return `<div class="v2-ai-sec"><div class="v2-ai-sec__title">${esc(title)}</div><div class="v2-ai-sec__body">${body}</div></div>`;
       }
@@ -1091,8 +1092,7 @@
               <tr><td>附近捷運</td><td>${mrtList}</td></tr>
               <tr><td>使用分區</td><td>${esc(p.zoning || '—')}${p.zoning_original && p.zoning_original !== p.zoning ? ` <span class="v2-d-hint">(原: ${esc(p.zoning_original)})</span>` : ''}</td></tr>
               <tr><td>容積率</td><td>${farPct ? farPct + '%' : '—'}</td></tr>
-              <tr><td>臨路寬度</td><td>${editIn('road_width_m_override', p.road_width_m_override ?? p.road_width_m, 0.5, 'm')}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">(寬度不明)</span>' : ''}</td></tr>
-              <tr><td>新成屋單價</td><td>${editIn('new_house_price_wan_override', p.new_house_price_wan_override ?? newPrice, 5, '萬/坪')}${p.new_house_price_wan_override ? ' <span class="v2-d-hint">(已覆寫)</span>' : ' <span class="v2-d-hint">(區域預設)</span>'}</td></tr>
+              <tr><td>臨路寬度</td><td>${editIn('road_width_m_override', p.road_width_m_override ?? p.road_width_m, 0.5, 'm')}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">(寬度不明)</span>' : ''}${p.screenshot_roadwidth ? ` <a href="${esc(p.screenshot_roadwidth)}" target="_blank" rel="noopener" class="v2-d-screenshot-link">📷 地籍圖 ↗</a>` : ''}</td></tr>
             </table>
           </div>
           ${govLinks ? `<div class="v2-d-govlinks">${govLinks}</div>` : ''}
@@ -1116,6 +1116,7 @@
               ${scnHTML(isFangzai ? '防災都更' : '都更', sD, bonusD)}
             </div>
             <table class="v2-d-tbl v2-d-tbl--params">
+              <tr><td>新成屋單價</td><td colspan="3">${editIn('new_house_price_wan_override', p.new_house_price_wan_override ?? newPrice, 5, '萬/坪')}${p.new_house_price_wan_override ? ' <span class="v2-d-hint">(已覆寫)</span>' : ' <span class="v2-d-hint">(區域預設)</span>'}</td></tr>
               <tr><td>危老獎勵率</td><td>${editPct('bonus_weishau', bonusW)}</td>
                   <td>都更獎勵率</td><td>${editPct('bonus_dugen', bonusD)}</td></tr>
               <tr><td>樓層加成</td><td>${editPct('floor_premium', floorPremium)}</td>
@@ -1231,7 +1232,14 @@
       pop.addEventListener('mouseleave', hideLvrPopup);
       document.body.appendChild(pop);
     }
-    // price_total 單位是「元」不是「萬」，需 / 10000
+    // price_total 元 → 萬；地址砍市/區前綴
+    const stripCD = (a) => {
+      if (!a) return '—';
+      let s = String(a).trim();
+      s = s.replace(/^(?:臺北市|台北市|新北市|桃園市|台中市|臺中市|高雄市|台南市|臺南市|基隆市|新竹市|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義市|嘉義縣|屏東縣|宜蘭縣|花蓮縣|台東縣|臺東縣)/, '');
+      s = s.replace(/^[一-龥]{1,3}(?:區|鄉|鎮|市)/, '');
+      return s.trim() || '—';
+    };
     pop.innerHTML = `<div class="v2-lvr-popup__title">附近實價登錄 (${recs.length} 筆)</div>
       <table class="v2-lvr-tbl">
         <thead><tr><th>交易日</th><th>總價</th><th>建坪</th><th>單價</th><th>地址</th></tr></thead>
@@ -1243,7 +1251,7 @@
             <td>${totalWan != null ? fmt0(totalWan) + '萬' : '—'}</td>
             <td>${r.area_ping ? fmt1(r.area_ping) : '—'}</td>
             <td>${perPingWan != null ? perPingWan.toFixed(1) + '萬' : '—'}</td>
-            <td class="v2-lvr-addr" title="${esc(r.address || '')}">${esc(r.address || '—')}</td>
+            <td class="v2-lvr-addr" title="${esc(r.address || '')}">${esc(stripCD(r.address))}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>`;
