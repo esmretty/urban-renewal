@@ -1100,16 +1100,6 @@
                 <tr><td>優勢</td><td class="v2-d-chips-cell">${advChipsHTML}</td></tr>
                 <tr><td>抗性</td><td class="v2-d-chips-cell">${resistChipsHTML}</td></tr>
               </table>
-              ${p.city === '台北市' ? `
-              <div class="v2-d-tools">
-                <span class="v2-d-tools-city">台北市</span>
-                <a href="https://bim.udd.gov.taipei/UDDPlanMap/" target="_blank" rel="noopener noreferrer">都市計畫圖 ↗</a>
-                <a href="https://zonemap.udd.gov.taipei/ZoneMapOP/" target="_blank" rel="noopener noreferrer">地籍套繪圖 ↗</a>
-              </div>` : p.city === '新北市' ? `
-              <div class="v2-d-tools">
-                <span class="v2-d-tools-city">新北市</span>
-                <a href="https://urban.planning.ntpc.gov.tw/NtpcURInfo/" target="_blank" rel="noopener noreferrer">城鄉資訊 ↗</a>
-              </div>` : ''}
             </div>
           </div>
         </div>
@@ -1435,30 +1425,36 @@
       : `${valW > 0 ? `<div class="v2-bid-row">• 危老出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${wValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkBidOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(wValRound / 3.2)} 萬</span></div>` : ''}
          <div class="v2-bid-row">• 都更出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${dValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkBidOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(dValRound / 3.2)} 萬</span></div>`;
 
-    // 結果欄 render — 「都更」一律寫「都更」(不寫「防災都更」)，但若是 1974 前台北仍套 0.80 獎勵
+    // 結果欄 render — 心智圖風格：左 hub 圓 (tag + val) + 右側三個分支 leaf
     const renderResult = (tag, val, share) => {
       const mult = desired ? (val / desired).toFixed(2) : '—';
       const profit = desired ? (val - desired).toFixed(0) : '—';
       const profitSign = desired && (val - desired) >= 0 ? '+' : '';
-      const negCls = desired && (val - desired) < 0 ? 'v2-rv2-circ--neg' : '';
+      const negCls = desired && (val - desired) < 0 ? 'v2-rv2-mind-leaf--neg' : '';
       return `
-        <div class="v2-rv2-rcol">
-          <div class="v2-rv2-rcol-head">
-            <span class="v2-rv2-rtag">${tag}</span>
-            <span class="v2-rv2-rval">${val.toFixed(0)} 萬</span>
+        <div class="v2-rv2-rcol v2-rv2-rcol--mind">
+          <div class="v2-rv2-mind-hub">
+            <div class="v2-rv2-mind-hub__tag">${tag}</div>
+            <div class="v2-rv2-mind-hub__val">${val.toFixed(0)}<span class="v2-rv2-mind-hub__unit">萬</span></div>
           </div>
-          <div class="v2-rv2-circles">
-            <div class="v2-rv2-circ">
-              <div class="v2-rv2-circ__num">${share.toFixed(2)}</div>
-              <div class="v2-rv2-circ__lbl">分回坪</div>
+          <div class="v2-rv2-mind-branches">
+            <div class="v2-rv2-mind-branch">
+              <span class="v2-rv2-mind-leaf">
+                <span class="v2-rv2-mind-leaf__num">${share.toFixed(2)}</span>
+                <span class="v2-rv2-mind-leaf__lbl">分回坪</span>
+              </span>
             </div>
-            <div class="v2-rv2-circ">
-              <div class="v2-rv2-circ__num">${mult}×</div>
-              <div class="v2-rv2-circ__lbl">倍數</div>
+            <div class="v2-rv2-mind-branch">
+              <span class="v2-rv2-mind-leaf">
+                <span class="v2-rv2-mind-leaf__num">${mult}×</span>
+                <span class="v2-rv2-mind-leaf__lbl">倍數</span>
+              </span>
             </div>
-            <div class="v2-rv2-circ ${negCls}">
-              <div class="v2-rv2-circ__num">${profitSign}${profit}</div>
-              <div class="v2-rv2-circ__lbl">效益萬</div>
+            <div class="v2-rv2-mind-branch">
+              <span class="v2-rv2-mind-leaf ${negCls}">
+                <span class="v2-rv2-mind-leaf__num">${profitSign}${profit}</span>
+                <span class="v2-rv2-mind-leaf__lbl">效益萬</span>
+              </span>
             </div>
           </div>
         </div>`;
