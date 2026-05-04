@@ -556,7 +556,7 @@
         <div class="v2-card__line1">
           <span class="v2-card__type">${typeIcon(p.building_type)}</span>
           <span class="v2-card__addr">
-            <span class="v2-card__district">${esc(p.district || '')}</span>·${esc(addr)}
+            <span class="v2-card__district">${esc(p.district || '')}</span><span class="v2-card__sep" aria-hidden="true"></span>${esc(addr)}
           </span>
           <span class="v2-card__price-block">
             <span class="v2-card__price">${priceWan ? fmt0(priceWan) : '—'}<small>萬</small></span>

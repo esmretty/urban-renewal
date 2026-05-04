@@ -738,21 +738,23 @@ a { color: inherit; text-decoration: none; }
 .v2-card.v2-card--read .v2-card__district {
   color: #94a3b8 !important;
 }
-/* 城市色條（左側 3px）— 台北藍 / 新北綠 */
+/* 城市標識 — 左上角直角三角形 (corner ribbon)，台北青藍 / 新北綠
+   用 border 三角形：左上「實心三角」蓋在卡片角，跟卡片同 border-radius 圓角搭 */
 .v2-card::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 60%;
-  border-radius: 0 2px 2px 0;
-  opacity: 0.7;
-  background: var(--c-accent);   /* default fallback */
+  top: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 12px 12px 0 0;
+  border-color: transparent;
+  border-top-left-radius: var(--r-md);
+  pointer-events: none;
 }
-.v2-card.v2-card--tpe::before { background: #0891b2; }      /* 青藍 (台北) */
-.v2-card.v2-card--ntpc::before { background: #16a34a; }     /* 綠 (新北) */
+.v2-card.v2-card--tpe::before  { border-color: #0891b2 transparent transparent transparent; }   /* 青藍 (台北) */
+.v2-card.v2-card--ntpc::before { border-color: #16a34a transparent transparent transparent; }   /* 綠 (新北) */
 /* 已讀城市色條保持原色 (不淡) — 只有地址變灰 */
 
 /* 高倍數 (≥3.5x) — 用淡淡的金光漸層背景表示「值得注意」，不用粗框 */
@@ -818,6 +820,17 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-text-muted);
   font-weight: 500;
   margin-right: 2px;
+}
+
+/* 區 ↔ 地址 之間的細直線分隔 (取代音節號 ·) */
+.v2-card__sep {
+  display: inline-block;
+  width: 1px;
+  height: 12px;
+  background: var(--c-border);
+  margin: 0 8px;
+  vertical-align: middle;
+  flex-shrink: 0;
 }
 .v2-card__price-block {
   display: inline-flex;
@@ -1355,16 +1368,21 @@ a { color: inherit; text-decoration: none; }
   flex: 1 1 auto;
   min-width: 0;
 }
+/* 推測 badge — 扁平標籤式 (不可點，跟可點按鈕區分):
+   - 無底色、細邊框、字體輕、cursor:default
+   - 跟 .v2-btn / .v2-drawer__fav 等可點按鈕視覺差異化 */
 .v2-d-addr-inferred-badge {
   display: inline-block;
-  background: var(--c-accent-light);
-  color: var(--c-accent);
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-text-muted);
+  font-size: 10.5px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border: 1px solid var(--c-border);
+  border-radius: 3px;
   letter-spacing: 0.5px;
   flex-shrink: 0;
+  cursor: default;
 }
 .v2-d-basic-grid .v2-d-tbl { height: auto; }
 
