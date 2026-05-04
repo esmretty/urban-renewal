@@ -1307,10 +1307,10 @@ a { color: inherit; text-decoration: none; }
   border-bottom: 1px solid var(--c-border);
 }
 
-/* 物件資訊 2 個 table 並排 — 對齊 v1 .basic-info-grid (gap 14, 無外框) */
+/* 物件資訊 2 個 table 並排 — 左 table 略寬 (給地址多一點空間) */
 .v2-d-basic-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1.15fr 0.85fr;
   gap: 14px;
   align-items: start;
   background: transparent;
@@ -1740,20 +1740,20 @@ a { color: inherit; text-decoration: none; }
 .v2-d-screenshot-link:hover { background: var(--c-accent); color: white; }
 
 /* 地籍圖按鈕 — 點開內部 overlay (跟 v1 toggleRoadPreview/openRoadOverlay 行為一致) */
-/* 地籍圖按鈕 — 對齊 v1 .btn-show-map (米黃底棕字 14/600) */
+/* 地籍圖按鈕 — 1:1 對齊 v1 .btn-show-map (.btn-scan-road 衍生，11/600 藍底版) */
 .v2-d-road-show {
   display: inline-block;
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 600;
-  padding: 2px 10px;
-  margin-left: 6px;
-  background: #fff8e5;
-  color: #b0790a;
-  border: 1px solid #d8b56a;
+  padding: 2px 8px;
+  margin-left: 8px;
+  background: #e8f0fe;
+  color: #1a56a0;
+  border: 1px solid #4a86c8;
   border-radius: 4px;
   cursor: pointer;
 }
-.v2-d-road-show:hover { background: #f4e5b5; }
+.v2-d-road-show:hover { background: #d0e2fc; }
 /* 路名 hint — 對齊 v1 .road-name-hint-line */
 .v2-d-road-name-hint {
   font-size: 12px;
@@ -1761,16 +1761,16 @@ a { color: inherit; text-decoration: none; }
   margin-top: 4px;
 }
 
-/* 重新掃描路寬按鈕 — 同 .v2-d-road-show 米黃 button 風 */
+/* 重新掃描路寬按鈕 — 1:1 對齊 v1 .btn-scan-road (米黃 11/600) */
 .v2-d-road-scan {
   display: inline-block;
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 600;
-  padding: 2px 10px;
-  margin-left: 6px;
+  padding: 2px 8px;
+  margin-left: 8px;
   background: #fff8e5;
   color: #b0790a;
-  border: 1px solid #d8b56a;
+  border: 1px solid #c78a00;
   border-radius: 4px;
   cursor: pointer;
 }
