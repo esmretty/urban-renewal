@@ -71,7 +71,7 @@ a { color: inherit; text-decoration: none; }
   /* Sizes */
   --topbar-h: 52px;
   --sidebar-w: 268px;
-  --drawer-w: 880px;
+  --drawer-w: 1140px;             /* 對齊 v1 Bootstrap .modal-xl 寬度 */
 
   /* Radii */
   --r-sm: 4px;
@@ -2805,11 +2805,11 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; }
 
 /* === 11. Responsive ====================================================== */
 
-/* 13" laptop (≤1280px): tighter sidebar + smaller drawer */
+/* 13" laptop (≤1280px): tighter sidebar + drawer 仍盡量寬 */
 @media (max-width: 1280px) {
   :root {
     --sidebar-w: 240px;
-    --drawer-w: 720px;
+    --drawer-w: min(1140px, calc(100vw - 80px));   /* 螢幕較窄時 drawer 不溢出 */
   }
   .v2-grid {
     grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
