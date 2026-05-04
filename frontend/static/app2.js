@@ -671,7 +671,7 @@
           </span>
           <span class="v2-card__price-block">
             <span class="v2-card__price">${priceWan ? fmt0(priceWan) : '—'}<small>萬</small></span>
-            ${(p.lvr_records && p.lvr_records.length) ? `<span class="v2-lvr-icon v2-lvr-icon--sm" title="附近實價登錄" onmouseenter="v2.showLvrPopup(event, '${esc(id)}')" onmouseleave="v2.hideLvrPopup()" onclick="event.stopPropagation()">實</span>` : ''}
+            ${(p.lvr_records && p.lvr_records.length) ? `<span class="v2-lvr-icon v2-lvr-icon--sm" onmouseenter="v2.showLvrPopup(event, '${esc(id)}')" onmouseleave="v2.hideLvrPopup()" onclick="event.stopPropagation()">實</span>` : ''}
             ${perBld ? `<span class="v2-card__price-per">${perBld}/建</span>` : ''}
           </span>
           <span class="${multCls}" title="都更倍數">
@@ -1151,8 +1151,8 @@
               <tr><td>屋齡</td><td>${age != null ? age + ' 年' : '未知'}${p.building_age_completed_year ? ` <span class="v2-d-hint">(${p.building_age_completed_year} 完工)</span>` : ''}</td></tr>
               <tr><td>售價</td><td><span class="v2-d-price">${priceWan ? fmt0(priceWan) + '萬' : '—'}</span>${lvrIcon}</td></tr>
               <tr><td>欲出價</td><td>${editIn('desired_price_wan', desired, 10, '萬')}</td></tr>
-              <tr><td>建坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.building_area_ping ?? '—'}</span><span class="v2-d-unit">坪</span><span class="v2-d-num2">${perBld || '—'}</span><span class="v2-d-unit2">萬/建坪</span></div></td></tr>
-              <tr><td>地坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.land_area_ping ?? '—'}</span><span class="v2-d-unit">坪</span><span class="v2-d-num2">${perLand || '—'}</span><span class="v2-d-unit2">萬/地坪</span></div>${p.land_area_source === 'lvr' ? '<div class="v2-d-hint">(實登)</div>' : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 地坪過大（&gt; 建坪），可能不可信</div>' : ''}</td></tr>
+              <tr><td>建坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.building_area_ping ?? '—'}</span><span class="v2-d-unit">坪</span><span class="v2-d-per-lbl">單價</span><span class="v2-d-num2">${perBld || '—'}</span></div></td></tr>
+              <tr><td>地坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.land_area_ping ?? '—'}</span><span class="v2-d-unit">坪</span><span class="v2-d-per-lbl">單價</span><span class="v2-d-num2">${perLand || '—'}</span></div>${p.land_area_source === 'lvr' ? ' <span class="v2-d-hint">(實登)</span>' : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 地坪過大（&gt; 建坪），可能不可信</div>' : ''}</td></tr>
             </table>
             <table class="v2-d-tbl">
               <tr><td>附近捷運</td><td>${mrtList}</td></tr>
