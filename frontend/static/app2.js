@@ -1116,13 +1116,7 @@
     // ── AI 分析 ──
     const aiText = p.ai_reason || p.ai_analysis || '';
 
-    // ── 政府連結 ──
-    const govLinks = p.city === '台北市'
-      ? `<a class="v2-govlink" href="https://bim.udd.gov.taipei/UDDPlanMap/" target="_blank" rel="noopener">都市計畫圖 ↗</a>
-         <a class="v2-govlink" href="https://zonemap.udd.gov.taipei/ZoneMapOP/" target="_blank" rel="noopener">地籍套繪圖 ↗</a>`
-      : p.city === '新北市'
-        ? `<a class="v2-govlink" href="https://urban.planning.ntpc.gov.tw/NtpcURInfo/" target="_blank" rel="noopener">城鄉資訊 ↗</a>`
-        : '';
+    // (政府連結 都市計畫圖 / 地籍套繪圖 / 城鄉資訊 已移除 — 用戶要求)
 
     // LVR 「實」icon (v1 行為：hover 顯示彈窗)
     const lvrIcon = lvrRecs.length
@@ -1157,8 +1151,8 @@
               <tr><td>屋齡</td><td>${age != null ? age + ' 年' : '未知'}${p.building_age_completed_year ? ` <span class="v2-d-hint">(${p.building_age_completed_year} 完工)</span>` : ''}</td></tr>
               <tr><td>售價</td><td><span class="v2-d-price">${priceWan ? fmt0(priceWan) + '萬' : '—'}</span>${lvrIcon}</td></tr>
               <tr><td>欲出價</td><td>${editIn('desired_price_wan', desired, 10, '萬')}</td></tr>
-              <tr><td>建坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.building_area_ping ?? '—'}</span><span class="v2-d-unit">坪</span><span class="v2-d-per">${perBld ? perBld + ' 萬/建坪' : ''}</span></div></td></tr>
-              <tr><td>地坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.land_area_ping ?? '—'}</span><span class="v2-d-unit">坪${p.land_area_source === 'lvr' ? '<small class="v2-d-hint">(實登)</small>' : ''}</span><span class="v2-d-per">${perLand ? perLand + ' 萬/地坪' : ''}</span></div>${isLandSus ? '<div class="v2-d-warn">⚠ 地坪過大（&gt; 建坪），可能不可信</div>' : ''}</td></tr>
+              <tr><td>建坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.building_area_ping ?? '—'}</span><span class="v2-d-unit">坪</span><span class="v2-d-num2">${perBld || '—'}</span><span class="v2-d-unit2">萬/建坪</span></div></td></tr>
+              <tr><td>地坪</td><td><div class="v2-d-num-row"><span class="v2-d-num">${p.land_area_ping ?? '—'}</span><span class="v2-d-unit">坪</span><span class="v2-d-num2">${perLand || '—'}</span><span class="v2-d-unit2">萬/地坪</span></div>${p.land_area_source === 'lvr' ? '<div class="v2-d-hint">(實登)</div>' : ''}${isLandSus ? '<div class="v2-d-warn">⚠ 地坪過大（&gt; 建坪），可能不可信</div>' : ''}</td></tr>
             </table>
             <table class="v2-d-tbl">
               <tr><td>附近捷運</td><td>${mrtList}</td></tr>
@@ -1169,7 +1163,6 @@
               <tr><td>抗性</td><td class="v2-d-chips-cell">${resistChipsHTML}</td></tr>
             </table>
           </div>
-          ${govLinks ? `<div class="v2-d-govlinks">${govLinks}</div>` : ''}
         </div>
         <div class="v2-d-col v2-d-col--5">
           ${img || '<div class="v2-detail-image-wrap"><div class="v2-detail-image-empty">無照片</div></div>'}

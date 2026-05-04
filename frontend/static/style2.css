@@ -1475,10 +1475,17 @@ a { color: inherit; text-decoration: none; }
   color: #b45309;
 }
 
-/* 推測地址候選 dropdown — 撐滿可用寬度，📍 跟在後面同行不換行 */
+/* 推測地址候選 dropdown — 用 flex 撐滿，📍 不會換行 */
+.v2-d-tbl td:has(.v2-d-inferred-select) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 6px;
+}
 .v2-d-inferred-select {
-  width: calc(100% - 22px);   /* 留 22px 給 📍 icon */
-  max-width: 100%;
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
   padding: 3px 6px;
   text-align: left;
   font-size: 13px;
@@ -1493,26 +1500,26 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
 }
 
-/* 數字欄位 tab 對齊：建坪 / 地坪 / 試算等 4 column 對齊 */
+/* 建坪/地坪 4 column tab 對齊：[數字 坪] [數字 萬/X坪]，兩 row 共用同樣 column 寬度 */
 .v2-d-num-row {
   display: grid;
-  grid-template-columns: 60px 50px 1fr;
+  grid-template-columns: 50px 24px 50px 56px;
   align-items: baseline;
   gap: 4px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
-.v2-d-num {
+.v2-d-num, .v2-d-num2 {
   font-weight: 600;
   text-align: right;
+  font-size: 13px;
 }
-.v2-d-unit {
+.v2-d-num2 { color: var(--c-text); }
+.v2-d-unit, .v2-d-unit2 {
   color: var(--c-text-muted);
   font-size: 12px;
 }
-.v2-d-per {
-  color: var(--c-text-light);
-  font-size: 12.5px;
-}
+.v2-d-unit2 { font-size: 11.5px; color: var(--c-text-light); text-align: left; }
 
 /* 統一 input/select 字體 13px (有些 v1-port 預設 14px 留下來太大) */
 .v2-d-tbl input,
