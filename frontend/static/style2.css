@@ -924,7 +924,7 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.4;
 }
 
-/* 優勢 chip (TOD / 防災型 / 商業區) — 統一藍色 outline + 反光掃過動畫 */
+/* 優勢 chip (TOD / 防災型 / 商業區) — 統一綠色 outline + 反光掃過動畫 */
 .v2-achip,
 .v2-achip--tod,
 .v2-achip--fangzai,
@@ -937,13 +937,13 @@ a { color: inherit; text-decoration: none; }
   font-size: 11px;
   font-weight: 700;
   border-radius: var(--r-sm);
-  border: 1px solid #a5f3fc;     /* cyan-200 */
-  background: #ecfeff;           /* cyan-50 */
-  color: #0e7490;                /* cyan-700 */
+  border: 1px solid #86efac;     /* green-300 */
+  background: #f0fdf4;           /* green-50 */
+  color: #15803d;                /* green-700 */
   line-height: 1.4;
   letter-spacing: 0.2px;
 }
-/* 反光掃過動畫 — 一道斜光從左掃到右，每 3.5 秒一次 */
+/* 反光掃過動畫 — 一道斜光從左掃到右，每 3.5 秒一次 (綠色系) */
 .v2-achip::before {
   content: '';
   position: absolute;
@@ -954,9 +954,9 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(
     100deg,
     transparent 0%,
-    rgba(125, 211, 252, 0.45) 40%,
+    rgba(134, 239, 172, 0.45) 40%,
     rgba(255, 255, 255, 0.9) 50%,
-    rgba(125, 211, 252, 0.45) 60%,
+    rgba(134, 239, 172, 0.45) 60%,
     transparent 100%
   );
   transform: skewX(-15deg);
@@ -989,54 +989,16 @@ a { color: inherit; text-decoration: none; }
   flex-shrink: 0;
 }
 
-/* NEW badge：精緻版 — pill 形狀 + dual gradient + 內陰影高光 + 柔光暈 + 緩慢呼吸動畫 */
+/* NEW badge：低調款 — 淡橙底 + 橙字 + 細邊；無漸層、無陰影、無動畫 */
 .v2-card__date--new {
-  position: relative;
-  padding: 2px 9px 2px 16px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 1.5px;
-  color: white;
-  background:
-    linear-gradient(135deg, #ef4444 0%, #f97316 55%, #f59e0b 100%);
-  border-radius: 10px;
-  box-shadow:
-    0 1px 2px rgba(239, 68, 68, 0.35),
-    0 0 0 1px rgba(217, 26, 26, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.08);
-  text-shadow: 0 1px 0 rgba(133, 30, 30, 0.35);
-  animation: v2-new-pulse 2.4s ease-in-out infinite;
-}
-/* 左側白色小圓點當小裝飾 */
-.v2-card__date--new::before {
-  content: '';
-  position: absolute;
-  left: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 0 4px rgba(255, 255, 255, 0.7);
-}
-@keyframes v2-new-pulse {
-  0%, 100% {
-    box-shadow:
-      0 1px 2px rgba(239, 68, 68, 0.35),
-      0 0 0 1px rgba(217, 26, 26, 0.18),
-      inset 0 1px 0 rgba(255, 255, 255, 0.4),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.08);
-  }
-  50% {
-    box-shadow:
-      0 1px 4px rgba(239, 68, 68, 0.55),
-      0 0 8px rgba(249, 115, 22, 0.35),
-      0 0 0 1px rgba(217, 26, 26, 0.22),
-      inset 0 1px 0 rgba(255, 255, 255, 0.5),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.08);
-  }
+  padding: 1px 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: #c2410c;          /* orange-700 */
+  background: #fff7ed;     /* orange-50 */
+  border: 1px solid #fed7aa;  /* orange-200 */
+  border-radius: var(--r-sm);
 }
 
 /* 物件 title (591 賣家標題) — 地址下方一條小字 */
@@ -1061,7 +1023,9 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-text-muted);
   line-height: 1.4;
 }
-.v2-src-badge--alive { background: var(--c-good-bg); color: var(--c-good); }
+/* 來源連結 (591/永慶/信義 等) — 統一用 accent 青藍底白字 (跟「重新搜尋」同色系) */
+.v2-src-badge--alive { background: var(--c-accent); color: white; }
+.v2-src-badge--alive:hover { background: var(--c-accent-hover); }
 .v2-src-badge--dead { background: var(--c-low-bg); color: var(--c-text-light); text-decoration: line-through; }
 
 .v2-card__star {
@@ -1207,7 +1171,7 @@ a { color: inherit; text-decoration: none; }
 .v2-drawer__back:hover { background: var(--c-border); }
 .v2-drawer__back-label { font-size: 13px; }
 
-/* 加入最愛按鈕 (drawer header，對齊返回按鈕字體) */
+/* 加入最愛按鈕 (drawer header，accent 青藍跟「重新搜尋」同色) */
 .v2-drawer__fav {
   display: inline-flex;
   align-items: center;
@@ -1215,8 +1179,8 @@ a { color: inherit; text-decoration: none; }
   padding: 6px 10px;
   margin-left: 6px;
   border-radius: var(--r-sm);
-  background: var(--c-hover);
-  color: var(--c-text);
+  background: var(--c-accent);
+  color: white;
   font-size: 13px;
   font-weight: 600;
   border: 1px solid transparent;
@@ -1224,16 +1188,11 @@ a { color: inherit; text-decoration: none; }
   transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
   flex-shrink: 0;
 }
-.v2-drawer__fav:hover { background: var(--c-border); }
-.v2-drawer__fav-star { font-size: 14px; color: var(--c-text-light); transition: color var(--t-fast); }
+.v2-drawer__fav:hover { background: var(--c-accent-hover); }
+.v2-drawer__fav-star { font-size: 14px; color: rgba(255, 255, 255, 0.85); transition: color var(--t-fast); }
 .v2-drawer__fav-label { font-size: 13px; }
-/* 已加入最愛狀態：金黃星 + 邊框 */
-.v2-drawer__fav.v2-drawer__fav--active {
-  background: #fef3c7;
-  border-color: #fcd34d;
-  color: #92400e;
-}
-.v2-drawer__fav--active .v2-drawer__fav-star { color: #f59e0b; }
+/* 已加入最愛狀態：金黃星 + 維持 accent 底 */
+.v2-drawer__fav--active .v2-drawer__fav-star { color: #fbbf24; }
 /* Mobile：返回按鈕加大 + accent 藍底 + iOS safe-area inset */
 @media (max-width: 640px) {
   .v2-drawer__header {
@@ -1720,14 +1679,14 @@ a { color: inherit; text-decoration: none; }
   font-size: 12px;
   padding: 2px 8px;
   margin-left: 6px;
-  background: var(--c-accent-light);
-  color: var(--c-accent);
+  background: var(--c-accent);
+  color: white;
   border: 1px solid transparent;
   border-radius: var(--r-sm);
   font-weight: 600;
   cursor: pointer;
 }
-.v2-d-road-show:hover { background: var(--c-accent); color: white; }
+.v2-d-road-show:hover { background: var(--c-accent-hover); }
 
 /* 重新掃描路寬按鈕 (台北市 + 沒 screenshot 時) — 對齊 v1 .btn-scan-road */
 .v2-d-road-scan {
@@ -1735,14 +1694,14 @@ a { color: inherit; text-decoration: none; }
   font-size: 12px;
   padding: 2px 10px;
   margin-left: 6px;
-  background: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fcd34d;
+  background: var(--c-accent);
+  color: white;
+  border: 1px solid transparent;
   border-radius: var(--r-sm);
   font-weight: 600;
   cursor: pointer;
 }
-.v2-d-road-scan:hover { background: #fde68a; }
+.v2-d-road-scan:hover { background: var(--c-accent-hover); }
 .v2-d-road-scan--scanning {
   background: var(--c-accent-light);
   color: var(--c-accent);
@@ -1843,12 +1802,15 @@ a { color: inherit; text-decoration: none; }
   margin-right: 2px;
 }
 .v2-d-tools-cell a {
-  color: var(--c-accent);
-  text-decoration: underline;
-  padding: 1px 4px;
+  display: inline-block;
+  background: var(--c-accent);
+  color: white;
+  font-weight: 600;
+  text-decoration: none;
+  padding: 2px 8px;
   border-radius: var(--r-sm);
 }
-.v2-d-tools-cell a:hover { background: var(--c-accent-light); }
+.v2-d-tools-cell a:hover { background: var(--c-accent-hover); }
 
 /* 圖片：右上，固定高度 */
 .v2-detail-image-wrap {
