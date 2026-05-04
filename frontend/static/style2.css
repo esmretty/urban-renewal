@@ -1987,385 +1987,277 @@ a { color: inherit; text-decoration: none; }
   margin-top: 6px;
 }
 
-/* === 都更試算 直式公式 (對齊 v1 .rv2 視覺) ================================ */
+/* === 都更試算 v1 風 — 1:1 對齊 v1 .rv2 視覺 ============================ */
 .v2-rv2 {
-  display: flex;
-  gap: 12px;
-  background: var(--c-card);
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-md);
-  padding: 12px;
+  font-size: 15px;
+  color: #2a2a3e;
+  background: #ffffff;
+  border: 1px solid #ede7d4;
+  border-radius: 6px;
+  padding: 0 0 8px;
+  line-height: 1.5;
+  overflow: hidden;
 }
+
+/* 土地持分 — 米黃漸層 + 黃褐底線 */
 .v2-rv2-land {
-  flex: 0 0 110px;
-  background: linear-gradient(135deg, #e0f2fe, #f0f9ff);
-  border-radius: var(--r-md);
-  padding: 14px 8px;
-  text-align: center;
-  align-self: flex-start;
+  display: grid;
+  grid-template-columns: 96px 1fr auto;
+  align-items: center;
+  background: linear-gradient(90deg, #f4ecd0 0%, #f9f1d8 100%);
+  border-bottom: 2px solid #c78a00;
+  padding: 12px 14px;
+  margin-bottom: 6px;
+}
+.v2-rv2-land--top { display: grid; grid-template-columns: 96px 1fr auto; }   /* 沿用 v1 結構 */
+.v2-rv2-land__left {
+  display: contents;     /* 讓 lbl/val 直接落在父 grid 的前兩格 */
 }
 .v2-rv2-land__lbl {
-  font-size: 11.5px;
-  color: var(--c-text-muted);
-  letter-spacing: 0.5px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
+  color: #5c4a0a;
+  letter-spacing: 2px;
 }
 .v2-rv2-land__val {
+  text-align: center;
   font-size: 28px;
   font-weight: 800;
-  color: var(--c-accent);
+  color: #5c4a0a;
   font-variant-numeric: tabular-nums;
-  margin: 4px 0 2px;
   line-height: 1.1;
 }
 .v2-rv2-land__unit {
-  font-size: 14px;
-  color: var(--c-text-muted);
+  font-size: 16px;
+  font-weight: 600;
+  color: #8b7c4a;
   margin-left: 2px;
-  font-weight: 500;
+}
+.v2-rv2-land__zone {
+  text-align: center;
+  min-width: 72px;
+  display: block;
+  justify-content: unset;
+}
+.v2-rv2-land__zone-body {
+  font-size: 13px;
+  text-align: center;
 }
 .v2-rv2-land__abbr {
   display: inline-block;
-  background: var(--c-accent);
-  color: white;
-  padding: 2px 8px;
-  border-radius: var(--r-sm);
-  font-size: 12px;
-  font-weight: 700;
-  margin-top: 4px;
+  background: #c78a00;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: 1px;
+  padding: 3px 10px;
+  border-radius: 4px;
 }
 
-.v2-rv2-body {
-  flex: 1;
+/* 試算 body：左 公式 / 右 結果，grid 1fr auto */
+.v2-rv2--2col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 0;
+}
+.v2-rv2-land--top { grid-column: 1 / -1; }   /* 持分跨整列在最上面 */
+.v2-rv2--2col .v2-rv2-left {
+  display: block;
   min-width: 0;
+  padding: 6px 0;
+}
+.v2-rv2--2col .v2-rv2-right {
+  border-left: 2px solid #c78a00;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
+  background: #fafaf6;
+  min-width: 200px;
 }
-.v2-rv2-formula {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-}
+
+/* 公式列：× | 標籤 | 值 (對齊像直式算式) */
+.v2-rv2-formula { padding: 6px 0; }
 .v2-rv2-r {
   display: grid;
-  grid-template-columns: 26px 90px 1fr;
-  align-items: start;        /* 文字靠上 */
-  gap: 6px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--c-border);   /* 上下欄分隔線 */
+  grid-template-columns: 24px 96px 1fr;
+  align-items: center;
+  column-gap: 12px;
+  padding: 5px 14px;
+  border: none;
 }
 .v2-rv2-formula > .v2-rv2-r:last-child { border-bottom: none; }
 .v2-rv2-op {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--c-text-light);
-  text-align: center;
+  text-align: right;
+  color: #c78a00;
+  font-weight: 700;
+  font-size: 18px;
+  font-family: Georgia, serif;
   letter-spacing: 0;
   line-height: 1;
 }
-.v2-rv2-lbl {
-  font-size: 14px;
-  color: var(--c-text);
-  font-weight: 500;
-}
+.v2-rv2-lbl { color: #6b7280; font-size: 14px; font-weight: 500; }
 .v2-rv2-lbl-unit {
-  display: block;        /* 換行：(萬/坪) (1F 預設20%) 等不再 inline 接在標籤後 */
+  display: block;
   font-size: 10.5px;
   color: var(--c-text-light);
-  margin-left: 0;
   margin-top: 1px;
   font-weight: 400;
   line-height: 1;
 }
 .v2-rv2-val {
   display: flex;
+  justify-content: flex-end;
   align-items: center;
   gap: 6px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #1a1a2e;
+  font-variant-numeric: tabular-nums;
   flex-wrap: wrap;
-  font-size: 14px;
-  color: var(--c-text);
 }
 .v2-rv2-val--bonus {
-  flex-direction: column;     /* 危老 / 都更 兩塊上下排 */
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: flex-end;
   gap: 3px;
 }
-.v2-rv2-bonus-line {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-/* 新成屋單價這類「input + note 換行」的 val cell */
-.v2-rv2-val--col {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-}
-.v2-rv2-note {
-  font-size: 12px;
-  color: var(--c-text-light);
-}
+.v2-rv2-bonus-line { display: inline-flex; align-items: center; gap: 4px; }
+.v2-rv2-val--col { flex-direction: column; align-items: flex-end; gap: 2px; }
+.v2-rv2-note { font-size: 13px; color: #8b8680; font-style: italic; }
+.v2-rv2-warn { color: #c0392b !important; font-weight: 600; background: transparent; padding: 0; }
 .v2-rv2-tag {
   display: inline-block;
-  background: var(--c-hover);
-  color: var(--c-text-muted);
-  font-size: 11.5px;
-  padding: 1px 6px;
-  border-radius: var(--r-sm);
-  font-weight: 600;
-}
-.v2-rv2-edit {
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-sm);
-  padding: 3px 6px;
-  font-size: 14px;
-  width: 64px;
-  text-align: left;
-  background: var(--c-card);
-  font-variant-numeric: tabular-nums;
-}
-.v2-rv2-edit:focus {
-  outline: none;
-  border-color: var(--c-accent);
-  box-shadow: 0 0 0 2px var(--c-accent-light);
-}
-select.v2-rv2-edit {
-  width: 70px;
-  text-align: left;
-}
-.v2-rv2-parking {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-}
-.v2-rv2-parking__val {
+  font-size: 11px;
   font-weight: 700;
-  color: var(--c-accent);
-  font-variant-numeric: tabular-nums;
-}
-.v2-rv2-parking__cnt {
-  font-size: 12px;
-  color: var(--c-text-light);
+  color: #8b7c4a;
+  letter-spacing: 0.5px;
+  background: transparent;
+  padding: 0;
 }
 
-/* 結果 col：危老 / 都更 並列，每 col 顯示總值大字 + 3 個圓圈 */
-.v2-rv2-result {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  border-top: 1px dashed var(--c-border);
-  padding-top: 10px;
+/* 可編輯 input — 米黃淡底 + 虛線下緣 */
+.v2-rv2-edit {
+  background: #fffaeb;
+  border: none;
+  border-bottom: 1.5px dashed #c78a00;
+  padding: 1px 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a2e;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  width: 78px;
+  text-align: right;
+  cursor: pointer;
+  border-radius: 0;
+}
+select.v2-rv2-edit { text-align: left; padding-right: 18px; }
+.v2-rv2-edit:focus {
+  background: #fff5d6;
+  border-bottom-color: #b0790a;
+  box-shadow: none;
+}
+.v2-rv2-edit:hover { background: #fff5d6; }
+.v2-rv2-val--bonus .v2-rv2-edit { font-size: 14px; width: 60px; padding: 1px 4px; }
+
+.v2-rv2-parking {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.1;
+}
+.v2-rv2-parking__val { font-size: 17px; font-weight: 700; color: #1a1a2e; }
+.v2-rv2-parking__cnt { font-size: 11px; font-weight: 500; color: #666; }
+
+/* 結果欄：右側上下 stack 兩塊 (危老 / 都更)，每塊 tag + 大字 + 三圓圈 */
+.v2-rv2-result, .v2-rv2-result--stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border: none;
+  padding: 0;
+  background: transparent;
 }
 .v2-rv2-rcol {
-  background: var(--c-bg);
-  border: 1px solid var(--c-border);
-  border-radius: var(--r-md);
-  padding: 10px 8px;
+  background: transparent;
+  border: none;
   text-align: center;
+  padding: 0;
+  display: block;
+}
+.v2-rv2-rcol-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
 }
 .v2-rv2-rtag {
   display: inline-block;
-  background: var(--c-accent);
-  color: white;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
-  padding: 2px 10px;
-  border-radius: var(--r-pill);
-  letter-spacing: 0.5px;
+  color: #8b7c4a;
+  letter-spacing: 2px;
+  border-bottom: 2px solid #c78a00;
+  padding-bottom: 1px;
+  background: transparent;
+  width: max-content;
+  border-radius: 0;
 }
 .v2-rv2-rval {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 800;
-  color: var(--c-text);
-  margin: 6px 0 8px;
+  color: #5c4a0a;
   font-variant-numeric: tabular-nums;
+  margin: 2px 0 0;
+  line-height: 1.1;
+  text-align: center;
 }
 .v2-rv2-circles {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 4px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
 }
 .v2-rv2-circ {
-  background: var(--c-card);
-  border: 1px solid var(--c-border);
+  width: 78px;
+  height: 78px;
   border-radius: 50%;
+  border: 2px solid #c78a00;
+  background: #ffffff;
   aspect-ratio: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4px;
+  line-height: 1.1;
+  padding: 0;
+  flex-shrink: 0;
 }
+.v2-rv2-circ--neg { border-color: #b02a2a; }
+.v2-rv2-circ--neg .v2-rv2-circ__num { color: #b02a2a; }
 .v2-rv2-circ__num {
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 700;
-  color: var(--c-text);
+  color: #5c4a0a;
   font-variant-numeric: tabular-nums;
-  line-height: 1;
 }
 .v2-rv2-circ__lbl {
-  font-size: 9.5px;
-  color: var(--c-text-muted);
-  margin-top: 2px;
-  letter-spacing: 0.3px;
-}
-.v2-rv2-circ--neg .v2-rv2-circ__num { color: var(--c-danger); }
-
-/* === 都更試算 — 土地持分頂部 colspan + 下方左右兩欄 (左:計算過程 / 右:結果+出價) === */
-.v2-rv2--2col {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: 12px 16px;
-  align-items: start;
-}
-/* 土地持分頂部 colspan：左 = 持分坪數 (大字氣勢)、右 = 使用分區，淡色背景塊 */
-.v2-rv2-land--top {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px 24px;
-  align-items: center;
-  padding: 14px 18px;
-  text-align: left;
-  flex: none;
-  background: linear-gradient(135deg, var(--c-accent-light), rgba(255, 255, 255, 0.5));
-  border: 1px solid var(--c-accent-light);
-  border-radius: var(--r-md);
-}
-.v2-rv2-land__left {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  white-space: nowrap;
-}
-.v2-rv2-land__zone {
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-end;     /* 整個分區靠右對齊 */
-  gap: 10px;
-  min-width: 0;
-}
-.v2-rv2-land__zone-body {
-  flex: 0 1 auto;
-  min-width: 0;
-  font-size: 13px;               /* 跟「附近捷運」label 同字體 */
-  line-height: 1.5;
-  text-align: right;
-}
-.v2-rv2-land--top .v2-rv2-land__lbl { font-size: 14px; flex-shrink: 0; color: var(--c-text-muted); }
-.v2-rv2-land--top .v2-rv2-land__val {
-  font-size: 36px;
-  margin: 0;
-  font-weight: 800;
-  color: var(--c-accent);
-  letter-spacing: -0.5px;
-}
-.v2-rv2-land--top .v2-rv2-land__unit {
-  font-size: 16px;
-  color: var(--c-text-muted);
-  margin-left: 4px;
-  font-weight: 500;
-}
-/* 多分區時每分區換行排 */
-.v2-d-zone-multi-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 3px;
-}
-.v2-rv2--2col .v2-rv2-left {
-  display: block;
-  min-width: 0;
-}
-.v2-rv2--2col .v2-rv2-left .v2-rv2-formula {
-  min-width: 0;
-}
-.v2-rv2--2col .v2-rv2-right {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;          /* 防止 grid 子項溢出父容器 */
-}
-/* 危老/都更結果並排 (對齊 v1 視覺)；窄欄內也不溢出 */
-.v2-rv2-result--stack {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  border-top: none;
-  padding-top: 0;
-  min-width: 0;
-}
-@media (max-width: 1024px) {
-  /* drawer 變窄 / mobile 時改回上下 stack */
-  .v2-rv2-result--stack { grid-template-columns: 1fr; }
-}
-/* 危老/都更 結果框 — v1 風：標籤頂部 + 中央大數字 + 下方真圓圈三個 */
-.v2-rv2-result--stack .v2-rv2-rcol {
-  background: var(--c-card);
-  border-width: 2px;
-  border-color: var(--c-accent-light);
-  text-align: center;             /* 整塊置中 */
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 14px 12px;
-  min-width: 0;
-}
-.v2-rv2-result--stack .v2-rv2-rcol-head {
-  display: flex;
-  flex-direction: column;          /* 改直排：tag 上 + val 下 */
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-.v2-rv2-result--stack .v2-rv2-rtag {
-  display: inline-block;
-  width: max-content;
-  flex-shrink: 0;
-  font-size: 13px;
-  padding: 3px 14px;
-}
-.v2-rv2-result--stack .v2-rv2-rval {
-  font-size: 30px;                 /* v1 大字氣勢 */
-  margin: 0;
-  text-align: center;
-  font-weight: 800;
-  color: var(--c-accent);
-  line-height: 1.1;
-}
-.v2-rv2-result--stack .v2-rv2-circles {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 4px;
-}
-/* 真圓圈 — aspect-ratio:1 + border-radius:50% */
-.v2-rv2-result--stack .v2-rv2-circ {
-  border-radius: 50%;
-  aspect-ratio: 1;
-  border: 1.5px solid var(--c-accent-light);
-  background: var(--c-card);
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 0;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  min-width: 0;
-}
-.v2-rv2-result--stack .v2-rv2-circ__num {
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1;
-}
-.v2-rv2-result--stack .v2-rv2-circ__lbl {
-  margin-top: 4px;
   font-size: 11px;
-  letter-spacing: 0.3px;
+  color: #8b7c4a;
+  margin-top: 2px;
+  letter-spacing: 0;
+}
+
+/* 多分區換行 */
+.v2-d-zone-multi-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+
+/* 響應式：drawer 窄時 (≤1024) 結果改放在 formula 下方 */
+@media (max-width: 1024px) {
+  .v2-rv2--2col { grid-template-columns: 1fr; }
+  .v2-rv2--2col .v2-rv2-right { border-left: none; border-top: 2px solid #c78a00; }
+  .v2-rv2-land { grid-template-columns: 1fr; gap: 6px; text-align: center; }
+  .v2-rv2-land__zone { margin-top: 4px; }
 }
 
 /* 出價建議 — Row 2 右欄獨立區塊 */
