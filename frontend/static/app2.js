@@ -465,15 +465,35 @@
   }
 
   // ── Source badges (size 可選 'sm' / 'big') ────────────────────────────
+  function _fmtPubDate(iso) {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
+      return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+    } catch { return ''; }
+  }
   function srcBadgesHTML(sources, size) {
     if (!sources || !sources.length) return '';
+    // big 模式排序：alive 先、dead 後；同類別按 added_at 早→晚 (對齊 v1)
+    const sorted = size === 'big'
+      ? [...sources].sort((a, b) => {
+          const aa = a.alive !== false ? 1 : 0;
+          const ab = b.alive !== false ? 1 : 0;
+          if (aa !== ab) return ab - aa;
+          return (a.added_at || '').localeCompare(b.added_at || '');
+        })
+      : sources;
     const bigCls = size === 'big' ? ' v2-src-badge--big' : '';
-    return sources.map(s => {
+    return sorted.map(s => {
       const name = s.name || '';
       const alive = s.alive !== false;
       const aliveCls = alive ? 'v2-src-badge--alive' : 'v2-src-badge--dead';
       const url = s.url ? esc(s.url) : '';
-      const label = size === 'big' ? `${esc(name)} ↗` : esc(name);
+      const dateStr = size === 'big' ? _fmtPubDate(s.added_at) : '';
+      const label = size === 'big'
+        ? `${esc(name)} ↗${dateStr ? ` <span class="v2-src-pubdate">${esc(dateStr)}</span>` : ''}`
+        : esc(name);
       const inner = `<span class="v2-src-badge ${aliveCls}${bigCls}">${label}</span>`;
       return url
         ? `<a href="${url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${inner}</a>`
@@ -1067,10 +1087,17 @@
       ? `<span class="v2-lvr-icon" onmouseenter="v2.showLvrPopup(event, '${esc(id)}')" onmouseleave="v2.hideLvrPopup()" onclick="event.stopPropagation()">實</span>`
       : '';
 
+    // 法拍 / 偏遠路段 / 特殊土地 title badge (對齊 v1)
+    const titleBadges = [
+      p.is_foreclosure ? '<span class="v2-d-fc-badge v2-d-fc-badge--danger">法拍屋</span>' : '',
+      p.is_remote_area ? '<span class="v2-d-fc-badge v2-d-fc-badge--gray" title="依政府河道/天險範圍判定為偏遠位置">偏遠路段</span>' : '',
+      p.unsuitable_for_renewal ? `<span class="v2-d-fc-badge v2-d-fc-badge--gray" title="${esc(p.unsuitable_reason || '土地分區非住、商、工用地')}">特殊土地分區</span>` : '',
+    ].filter(Boolean).join('');
+
     return `
-      <!-- Header bar：物件資訊標題 (左) + 來源連結 (右上、字大) -->
+      <!-- Header bar：物件資訊標題 (含 badge) + 來源連結 (含日期) -->
       <div class="v2-d-header">
-        <h5 class="v2-d-title">物件資訊</h5>
+        <h5 class="v2-d-title">物件資訊${titleBadges}</h5>
         ${p.sources && p.sources.length ? `<div class="v2-d-sources-bar">${srcBadgesHTML(p.sources, 'big')}</div>` : ''}
       </div>
 
