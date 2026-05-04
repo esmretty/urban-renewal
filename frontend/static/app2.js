@@ -908,36 +908,47 @@
   // ── Detail drawer ────────────────────────────────────────────────────────
   async function openDetail(id) {
     state.selectedId = id;
-    markRead(id);    // 點開即標已讀（共用 localStorage 跟 v1）
-    // 即時把 card 標 read class（不重整全部）
+    markRead(id);
     const card = document.querySelector(`.v2-card[data-id="${CSS.escape(id)}"]`);
     if (card) card.classList.add('v2-card--read');
-    const slim = state.allProperties.find(x => (x.source_id || x.id) === id);
-    if (!slim) return;
 
-    // 立刻用 slim 渲染 + 開抽屜 (不要 loading 等待感；slim 已含 lvr_records 等大部分欄位)
-    const prices = await getDistrictPrices();
-    $('#v2-drawer-title').textContent = slim.address_inferred || slim.address || '物件詳情';
-    $('#v2-drawer-body').innerHTML = detailHTML(slim, prices);
+    // STEP 1: 立刻開抽屜 (無條件)，避免任何 await/exception 卡住
+    $('#v2-drawer-title').textContent = '載入中…';
+    $('#v2-drawer-body').innerHTML = `<div class="v2-drawer__loading">載入中…</div>`;
     $('#v2-drawer').classList.add('v2-open');
     $('#v2-drawer-backdrop').classList.add('v2-open');
 
-    // 背景升級成 full doc (含 ai_reason / address_inferred_candidates_detail 等 fat 欄位)
-    // 失敗也沒關係，slim 已經顯示
+    const slim = state.allProperties.find(x => (x.source_id || x.id) === id);
+    if (!slim) {
+      $('#v2-drawer-body').innerHTML = `<div class="v2-detail-empty">找不到物件 ${esc(id)}</div>`;
+      return;
+    }
+
+    // STEP 2: 用 slim 試渲染 (try/catch 出錯顯錯誤)
+    try {
+      const prices = await getDistrictPrices();
+      $('#v2-drawer-title').textContent = slim.address_inferred || slim.address || '物件詳情';
+      $('#v2-drawer-body').innerHTML = detailHTML(slim, prices);
+    } catch (e) {
+      console.error('detailHTML render failed (slim):', e);
+      $('#v2-drawer-body').innerHTML = `<div class="v2-detail-empty">渲染失敗：${esc(String(e.message || e))}</div>`;
+    }
+
+    // STEP 3: 背景升級 full doc (含 ai_reason 等 fat 欄位)，失敗也不影響 slim 顯示
     try {
       const r = await fetch(`/api/properties/${encodeURIComponent(id)}`);
       if (!r.ok) return;
       const full = await r.json();
-      if (state.selectedId !== id) return;   // 用戶已切到別物件，過期 response 不蓋
+      if (state.selectedId !== id) return;
       const idx = state.allProperties.findIndex(x => (x.source_id || x.id) === id);
       if (idx >= 0) {
         state.allProperties[idx] = { ...state.allProperties[idx], ...full };
       }
+      const prices2 = await getDistrictPrices();
       $('#v2-drawer-title').textContent = full.address_inferred || full.address || '物件詳情';
-      $('#v2-drawer-body').innerHTML = detailHTML(state.allProperties[idx] || full, prices);
+      $('#v2-drawer-body').innerHTML = detailHTML(state.allProperties[idx] || full, prices2);
     } catch (e) {
       console.warn('openDetail upgrade fetch failed', e);
-      // slim 已 render，不動
     }
   }
   function closeDetail() {
