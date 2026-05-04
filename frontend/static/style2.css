@@ -2105,6 +2105,27 @@ a { color: inherit; text-decoration: none; }
   font-size: 14px;       /* 跟「推測地址」table cell 同大小 */
   text-align: center;
 }
+/* 土地持分 row 右側「出價設定」input — 取代 zone-body */
+.v2-rv2-land__bid {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+  font-size: 14px;
+  font-weight: 700;
+  color: #5c4a0a;
+  white-space: nowrap;
+  letter-spacing: 1px;
+}
+.v2-rv2-land__bid-lbl {
+  letter-spacing: 1px;
+  font-weight: 700;
+  color: #5c4a0a;
+}
+.v2-rv2-land__bid .v2-d-input {
+  width: 80px;
+  letter-spacing: normal;
+}
 /* 土地持分內的 zone chip — 1:1 對齊 v1 .rv2-land__abbr (黃褐底白字 17/800) */
 .v2-rv2-land__zone-body .v2-d-zone-badge {
   display: inline-block;

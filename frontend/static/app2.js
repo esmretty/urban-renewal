@@ -1478,8 +1478,10 @@
             <span class="v2-rv2-land__lbl">土地持分</span>
             <span class="v2-rv2-land__val">${land}<span class="v2-rv2-land__unit">坪</span></span>
           </div>
-          <div class="v2-rv2-land__zone">
-            <div class="v2-rv2-land__zone-body">${zoningCellHTML(p)}</div>
+          <div class="v2-rv2-land__bid">
+            <label class="v2-rv2-land__bid-lbl">出價設定</label>
+            <input type="number" class="v2-d-input" min="0" step="10" value="${desired ?? ''}"
+              onchange="v2.saveOverride('${esc(id)}','desired_price_wan',this.value)"> 萬
           </div>
         </div>
         <div class="v2-rv2-left">
@@ -1549,11 +1551,6 @@
           </div>
         </div>
         <div class="v2-rv2-right">
-          <div class="v2-bid-input-row">
-            <label class="v2-bid-input-lbl">出價設定</label>
-            <input type="number" class="v2-d-input" min="0" step="10" value="${desired ?? ''}"
-              onchange="v2.saveOverride('${esc(id)}','desired_price_wan',this.value)"> 萬
-          </div>
           <div class="v2-rv2-result v2-rv2-result--stack">
             ${renderResult('危老', valW, shareW)}
             ${renderResult('都更', valD, shareD)}
