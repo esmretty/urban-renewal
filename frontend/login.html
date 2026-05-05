@@ -66,9 +66,9 @@
   </div>
 
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged }
-      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    // 同源 bundle（自打包）取代 gstatic CDN，省 ~3 秒 chained 跨域載入
+    import { initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged }
+      from "/static/firebase-bundle.js";
 
     const errEl = document.getElementById("err");
     const btn = document.getElementById("btn-google");

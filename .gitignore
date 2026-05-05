@@ -34,3 +34,7 @@ VERSION
 # 開發過程的 debug 預覽圖（preview_*.png / zonemap_yh_preview.png）
 preview_*.png
 zonemap_yh_preview.png
+
+# npm（只在 deploy 機器上 build firebase-bundle.js 用，bundle 產物本身有 commit）
+node_modules/
+package-lock.json

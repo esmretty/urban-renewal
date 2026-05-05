@@ -26,6 +26,23 @@ SSH_KEY="$HOME/.ssh/google_compute_engine"
 APP_DIR="/home/retty_liu/urban-renewal"
 SERVICE="taipei-urban"
 
+# Firebase SDK self-host bundle：每次 deploy 重新 build (升 firebase 版號 / 改 _firebase_entry.js 都會反映)
+# 為什麼放在 push 之前：bundle 產物 commit 進 repo (不 gitignore)，避免 server 端要裝 node_modules
+echo "==> Build firebase-bundle.js (self-host SDK)"
+if command -v npm >/dev/null 2>&1; then
+    npm run build:firebase --silent 2>&1 | tail -5
+    # 若 bundle 有變動就一併 stage 進當前 commit
+    if git diff --quiet -- frontend/static/firebase-bundle.js; then
+        echo "  bundle 無變化"
+    else
+        git add frontend/static/firebase-bundle.js
+        git commit --amend --no-edit --no-verify >/dev/null
+        echo "  bundle 已更新並 amend 進當前 commit"
+    fi
+else
+    echo "  ⚠ npm 不在 PATH，跳過 bundle (server 會用 commit 裡既有的)"
+fi
+
 if [[ "$1" != "--no-push" ]]; then
     echo "==> git push origin main"
     git push origin main

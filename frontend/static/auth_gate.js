@@ -3,9 +3,11 @@
 // - 有登入 → 暴露 window.authedFetch / window.currentUser / window.logoutUser 給 app.js 用
 //          把 window.fetch 整個覆寫成「一律帶 Authorization header」，這樣 app.js 不用改
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+// 自打包同源 bundle (esbuild 從 firebase npm 包打成 ~30KB gzip 單檔)
+// 取代 https://www.gstatic.com/firebasejs/10.12.2/firebase-*.js 的 chained 跨域載入
+// (~3 秒 → ~300ms)。升版改 package.json + 重跑 npm run build:firebase。
+import { initializeApp, getAuth, onAuthStateChanged, signOut }
+  from "/static/firebase-bundle.js";
 
 async function boot() {
   window.__perfMark && window.__perfMark('auth_gate_module_loaded');

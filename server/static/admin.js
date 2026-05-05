@@ -1,8 +1,8 @@
 // Admin Portal 前端：Google 登入 + 驗證 admin email + CRUD UI
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+// 同源 bundle（自打包）取代 gstatic CDN，省 ~3 秒 chained 跨域載入
+import { initializeApp, getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from "/static/firebase-bundle.js";
 
 // HTML escape helper：任何「會進 innerHTML 的後端/用戶文字」都要先 esc()。
 function esc(s) {

@@ -1,0 +1,12 @@
+{
+  "name": "urban-renewal-frontend",
+  "private": true,
+  "description": "Frontend bundle build (Firebase SDK self-host) for 都更神探R",
+  "scripts": {
+    "build:firebase": "esbuild frontend/static/_firebase_entry.js --bundle --format=esm --outfile=frontend/static/firebase-bundle.js --legal-comments=none --minify --target=es2020"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "firebase": "^10.12.2"
+  }
+}
