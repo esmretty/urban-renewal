@@ -75,6 +75,14 @@ DEFAULT_LINE_TEMPLATE = """🏠您好，發現高價值物件：
 def _build_template_vars(doc: dict, multiple: float, scenario: str,
                           rv2: Optional[dict] = None) -> dict:
     """準備所有可用變數給 template format 用。"""
+    # 發送時間（台灣時區，admin 在模板用 {send_time} 代入）
+    try:
+        from datetime import datetime, timezone, timedelta
+        _tw_now = datetime.now(timezone(timedelta(hours=8)))
+        send_time = _tw_now.strftime("%m/%d %H:%M")
+    except Exception:
+        send_time = ""
+
     addr = doc.get("address_inferred") or doc.get("address") or doc.get("title") or "(地址未知)"
     city = doc.get("city") or ""
     district = doc.get("district") or ""
@@ -121,6 +129,7 @@ def _build_template_vars(doc: dict, multiple: float, scenario: str,
         "multiple": f"{multiple:.2f}" if multiple is not None else "",
         "scenarios_text": scen_text,
         "sources_text": src_lines,
+        "send_time": send_time,
     }
 
 

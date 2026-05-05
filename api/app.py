@@ -1844,6 +1844,7 @@ async def admin_get_line_template(admin: dict = Depends(require_admin)):
             {"key": "{multiple}", "desc": "觸發最大倍數 (如 3.24)"},
             {"key": "{scenarios_text}", "desc": "各情境倍數列表 (多行)"},
             {"key": "{sources_text}", "desc": "來源連結列表 (多行)"},
+            {"key": "{send_time}", "desc": "發送日期+時間 (MM/DD HH:MM，台灣時區)"},
         ],
     }
 
