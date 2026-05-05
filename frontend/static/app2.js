@@ -2098,21 +2098,62 @@
       `<option value="${esc(d)}">${esc(d)}</option>`).join('');
   }
 
+  // sidebar 內 inline message helper (錯誤訊息一律在 menu 出現，不用 toast)
+  // kind: '' (默默) / 'info' (黃) / 'error' (紅) / 'success' (綠) / 'pending' (進行中)
+  function setCapMsg(slotId, kind, text) {
+    const el = document.getElementById(slotId);
+    if (!el) return;
+    if (!text) {
+      el.className = 'v2-cap__msg';
+      el.innerHTML = '';
+      return;
+    }
+    el.className = 'v2-cap__msg v2-cap__msg--' + (kind || 'info');
+    el.textContent = text;
+  }
+
+  // 在列表頂部塞一個「分析中…」placeholder card；返回 placeholder source_id 給 caller
+  // 完成後 loadProperties() 抓真實 doc 自然取代 placeholder
+  function _addPendingPlaceholder(label, kind /* 'url' | 'manual' */) {
+    const pid = '_pending_' + kind + '_' + Date.now();
+    const placeholder = {
+      source_id: pid,
+      _pending_analysis: true,
+      _pending_label: label,
+      _pending_kind: kind,
+      address: label,
+      address_inferred: label,
+      district: '分析中',
+      city: '台北市',
+      _added_at: new Date().toISOString(),
+    };
+    state.allProperties = [placeholder, ...(state.allProperties || [])];
+    state.exploreItems = [placeholder, ...(state.exploreItems || [])];
+    applyFilters();
+    return pid;
+  }
+  function _removePendingPlaceholder(pid) {
+    if (!pid) return;
+    state.allProperties = (state.allProperties || []).filter(p => (p.source_id || p.id) !== pid);
+    state.exploreItems = (state.exploreItems || []).filter(p => (p.source_id || p.id) !== pid);
+  }
+
   async function triggerScrapeUrl() {
     const inp = $('#v2-scrape-url');
     const url = (inp?.value || '').trim();
-    if (!url) { toast('請輸入網址', 'error'); return; }
+    if (!url) { setCapMsg('v2-cap-scrape-msg', 'error', '請輸入網址'); return; }
     const okPatterns = [
       /sale\.591\.com\.tw\/.*\d{6,}/,
       /buy\.yungching\.com\.tw\/house\/\d{6,8}/,
       /sinyi\.com\.tw\/buy\/house\/[A-Z0-9]{4,8}/i,
     ];
     if (!okPatterns.some(re => re.test(url))) {
-      toast('看起來不是 591/永慶/信義 詳情頁網址', 'error');
+      setCapMsg('v2-cap-scrape-msg', 'error', '看起來不是 591/永慶/信義 詳情頁網址');
       return;
     }
     inp.disabled = true;
-    toast('URL 分析送出中…');
+    setCapMsg('v2-cap-scrape-msg', 'pending', '分析中…（佇列忙時可能要 30-60 秒）');
+    const pid = _addPendingPlaceholder(url, 'url');
     try {
       const r = await fetch('/api/scrape_url', {
         method: 'POST',
@@ -2121,21 +2162,32 @@
       });
       const data = await r.json();
       if (data.status === 'ok') {
-        toast('處理完成', 'success');
+        setCapMsg('v2-cap-scrape-msg', 'success', '處理完成，已加入最愛');
         inp.value = '';
-        loadProperties();
+        _removePendingPlaceholder(pid);
+        await loadProperties();
       } else if (data.status === 'busy') {
-        toast('佇列繁忙：' + (data.message || ''), 'error');
+        setCapMsg('v2-cap-scrape-msg', 'error', '佇列繁忙：' + (data.message || ''));
+        _removePendingPlaceholder(pid);
+        applyFilters();
       } else if (data.status === 'skipped_non_apartment') {
-        toast('跳過：' + (data.message || '非公寓 (>5F)'), 'error');
+        setCapMsg('v2-cap-scrape-msg', 'error', '跳過：' + (data.message || '非公寓 (>5F)'));
         inp.value = '';
+        _removePendingPlaceholder(pid);
+        applyFilters();
       } else if (data.status === 'error') {
-        toast('分析失敗：' + (data.message || data.detail || 'unknown'), 'error');
+        setCapMsg('v2-cap-scrape-msg', 'error', '分析失敗：' + (data.message || data.detail || 'unknown'));
+        _removePendingPlaceholder(pid);
+        applyFilters();
       } else {
-        toast('未預期回應 (' + data.status + ')', 'error');
+        setCapMsg('v2-cap-scrape-msg', 'error', '未預期回應 (' + data.status + ')');
+        _removePendingPlaceholder(pid);
+        applyFilters();
       }
     } catch (e) {
-      toast('失敗：' + e.message, 'error');
+      setCapMsg('v2-cap-scrape-msg', 'error', '失敗：' + e.message);
+      _removePendingPlaceholder(pid);
+      applyFilters();
     } finally {
       inp.disabled = false;
     }
@@ -2148,13 +2200,15 @@
     const bld = parseFloat($('#v2-manual-bld')?.value);
     const land = parseFloat($('#v2-manual-land')?.value);
     const price = parseFloat($('#v2-manual-price')?.value);
-    if (!address) { toast('請輸入地址', 'error'); return; }
+    if (!address) { setCapMsg('v2-cap-manual-msg', 'error', '請輸入地址'); return; }
     const nonTarget = /^(桃園|基隆|新竹|苗栗|台中|臺中|彰化|南投|雲林|嘉義|台南|臺南|高雄|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江)/;
     if (!['台北市', '新北市'].includes(city) || nonTarget.test(address)) {
-      toast('目前僅支援台北/新北地址', 'error');
+      setCapMsg('v2-cap-manual-msg', 'error', '目前僅支援台北/新北地址');
       return;
     }
-    toast('地址分析送出中…');
+    setCapMsg('v2-cap-manual-msg', 'pending', '分析中…（後台處理約 10-30 秒）');
+    const label = `${city}${district}${address}`;
+    const pid = _addPendingPlaceholder(label, 'manual');
     try {
       const r = await fetch('/api/manual_analyze', {
         method: 'POST',
@@ -2169,25 +2223,65 @@
       });
       const data = await r.json();
       if (data.status === 'started') {
-        loadProperties();
-        toast('分析開始（後台處理中，數秒後重新整理）', 'success');
-        // 簡化版：不輪詢，10 秒後重抓清單
-        setTimeout(() => loadProperties(), 10000);
+        setCapMsg('v2-cap-manual-msg', 'pending', '分析中…等候後台完成（自動更新，不用重新整理）');
+        _pollManualAnalysisDone(pid, 'v2-cap-manual-msg');
       } else if (data.status === 'already_in_db') {
-        toast('該地址已在 DB（已加入觀察清單）', 'success');
-        loadProperties();
+        setCapMsg('v2-cap-manual-msg', 'success', '該地址已在 DB（已加入觀察清單）');
+        _removePendingPlaceholder(pid);
+        await loadProperties();
       } else if (data.status === 'district_mismatch') {
-        toast('地址與所選區不符：' + (data.message || ''), 'error');
+        setCapMsg('v2-cap-manual-msg', 'error', '地址與所選區不符：' + (data.message || ''));
+        _removePendingPlaceholder(pid);
+        applyFilters();
       } else if (data.status === 'not_found') {
-        toast('找不到該地址：' + (data.message || ''), 'error');
+        setCapMsg('v2-cap-manual-msg', 'error', '找不到該地址：' + (data.message || ''));
+        _removePendingPlaceholder(pid);
+        applyFilters();
       } else if (data.status === 'lvr_mismatch') {
-        toast('LVR 對不到候選：' + (data.message || ''), 'error');
+        setCapMsg('v2-cap-manual-msg', 'error', '實價登錄對不到候選：' + (data.message || ''));
+        _removePendingPlaceholder(pid);
+        applyFilters();
       } else {
-        toast('回應 (' + data.status + ')：' + (data.message || ''), 'error');
+        setCapMsg('v2-cap-manual-msg', 'error', '回應 (' + data.status + ')：' + (data.message || ''));
+        _removePendingPlaceholder(pid);
+        applyFilters();
       }
     } catch (e) {
-      toast('失敗：' + e.message, 'error');
+      setCapMsg('v2-cap-manual-msg', 'error', '失敗：' + e.message);
+      _removePendingPlaceholder(pid);
+      applyFilters();
     }
+  }
+
+  // 輪詢 manual analyze 完成 (5/10/15/20/30/45/60 秒重抓，看到新物件就停)
+  async function _pollManualAnalysisDone(pid, msgSlot) {
+    const intervals = [5000, 5000, 5000, 5000, 10000, 15000, 15000];   // total ~60s
+    const before = new Set((state.allProperties || []).filter(p => !p._pending_analysis).map(p => p.source_id || p.id));
+    for (const wait of intervals) {
+      await new Promise(r => setTimeout(r, wait));
+      try {
+        const params = new URLSearchParams();
+        params.set('districts', Object.values(V1_DISTRICTS).flatMap(c => c.enabled).join(','));
+        params.set('slim', 'true');
+        params.set('limit', '1000');
+        const r = await fetch('/api/central_search?' + params.toString());
+        const data = await r.json();
+        const items = data.items || [];
+        const newItem = items.find(it => !before.has(it.source_id || it.id));
+        if (newItem) {
+          state.exploreItems = items;
+          state.allProperties = items;
+          _removePendingPlaceholder(pid);
+          applyFilters();
+          setCapMsg(msgSlot, 'success', '分析完成，已加入最愛');
+          return;
+        }
+      } catch (e) { /* keep polling */ }
+    }
+    // timeout
+    _removePendingPlaceholder(pid);
+    applyFilters();
+    setCapMsg(msgSlot, 'error', '分析超時（>60 秒），請稍後手動重新整理或重抓');
   }
   function toggleDistrict(city, district, checked) {
     const key = `${city}|${district}`;

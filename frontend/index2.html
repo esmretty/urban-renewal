@@ -70,19 +70,20 @@
       <!-- 最愛 tab：URL / Manual 分析 capture (sidebar 內) -->
       <div class="v2-sidebar-section v2-sidebar-section--watchlist" id="v2-sidebar-watchlist" style="display:none">
 
-        <!-- 卡 1：貼物件網址 -->
+        <!-- 卡 1：貼網址分析 -->
         <div class="v2-cap">
-          <div class="v2-cap__title">貼物件網址</div>
+          <div class="v2-cap__title">貼網址分析，並加入最愛</div>
           <input id="v2-scrape-url" type="url" class="v2-input v2-cap__input"
                  placeholder="591 / 永慶 / 信義 詳情頁 URL">
           <button class="v2-btn v2-btn--primary v2-btn--block v2-cap__btn"
-                  onclick="v2.triggerScrapeUrl()">送出</button>
+                  onclick="v2.triggerScrapeUrl()">送出分析</button>
+          <div class="v2-cap__msg" id="v2-cap-scrape-msg"></div>
           <div class="v2-cap__hint">※ 支援 591 / 永慶 / 信義；分析完加入最愛</div>
         </div>
 
-        <!-- 卡 2：未上架地址評估 -->
+        <!-- 卡 2：地址分析 -->
         <div class="v2-cap">
-          <div class="v2-cap__title">未上架地址評估</div>
+          <div class="v2-cap__title">地址分析，並加入最愛</div>
           <div class="v2-cap__row">
             <label class="v2-cap__label">城市</label>
             <select id="v2-manual-city" class="v2-input v2-cap__field" onchange="v2.populateManualDistricts()">
@@ -116,6 +117,7 @@
           </div>
           <button class="v2-btn v2-btn--primary v2-btn--block v2-cap__btn"
                   onclick="v2.triggerManualAnalyze()">送出分析</button>
+          <div class="v2-cap__msg" id="v2-cap-manual-msg"></div>
           <div class="v2-cap__hint">※ 目前僅支援台北市與新北市地址</div>
         </div>
 
