@@ -1052,12 +1052,19 @@ app.mount("/data/screenshots", StaticFiles(directory=str(BASE_DIR / "data" / "sc
 
 @app.get("/")
 async def root():
+    """主前台 (v2)。"""
+    return FileResponse(str(FRONTEND_DIR / "index2.html"))
+
+
+@app.get("/legacy")
+async def root_legacy():
+    """舊版 v1 前台 (隱藏入口) — 知道 URL 才能訪問，主流量已切到 v2。"""
     return FileResponse(str(FRONTEND_DIR / "index.html"))
 
 
 @app.get("/v2")
 async def root_v2():
-    """新版前台（並行 beta）— 不影響舊版 /，路由完全獨立。"""
+    """v2 別名 — 對外仍可用 /v2 訪問新版 (跟 / 同檔)。"""
     return FileResponse(str(FRONTEND_DIR / "index2.html"))
 
 
