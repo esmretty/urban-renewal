@@ -205,22 +205,25 @@ window.loadSystemUsage = async function () {
         #system-usage-box .sysu__cols {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 8px 16px;
+          gap: 8px 12px;
         }
         #system-usage-box .sysu__col {
           background: #fff;
           border: 1px solid #e5dfca;
           border-radius: 4px;
           padding: 6px 10px;
+          min-width: 0;        /* grid 子項預設 min-width auto，會撐爆 — 必須蓋成 0 */
+          overflow: hidden;
         }
         #system-usage-box .sysu__line {
           display: flex;
+          flex-wrap: wrap;     /* 內容過長允許換行，不再衝出邊界 */
           align-items: baseline;
-          gap: 6px;
-          white-space: nowrap;
+          gap: 4px 6px;
+          min-width: 0;
         }
         #system-usage-box .sysu__line + .sysu__line { margin-top: 2px; }
-        #system-usage-box .sysu__label { color: #888; font-size: 11px; min-width: 38px; }
+        #system-usage-box .sysu__label { color: #888; font-size: 11px; min-width: 36px; }
         #system-usage-box .sysu__val { font-weight: 700; font-size: 13px; }
         #system-usage-box .sysu__sub { color: #888; font-size: 11px; }
         #system-usage-box .sysu__alert { color: #c0392b; font-weight: 600; }
