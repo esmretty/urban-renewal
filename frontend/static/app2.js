@@ -434,8 +434,8 @@
     // 手機 city tab pill 上標筆數 (e.g. 「台北市 12」)；桌面 pill 不顯示故無影響
     const _tpePill = document.querySelector('.v2-grid-toggle__pill[data-city="台北市"]');
     const _ntpPill = document.querySelector('.v2-grid-toggle__pill[data-city="新北市"]');
-    if (_tpePill) _tpePill.textContent = `台北市 ${_tpeN}`;
-    if (_ntpPill) _ntpPill.textContent = `新北市 ${_ntpN}`;
+    if (_tpePill) _tpePill.textContent = `台北市 (${_tpeN})`;
+    if (_ntpPill) _ntpPill.textContent = `新北市 (${_ntpN})`;
 
     if (total === 0) {
       grid.innerHTML = '';
