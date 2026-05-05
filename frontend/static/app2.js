@@ -1993,6 +1993,7 @@
       // 探索 tab 第一次：若 inline early-fetch 已經 fire 過且成功，直接拿那份結果（省 ~1.5 秒）
       let data = null;
       let _serverTiming = '';
+      let _bytes = 0;
       if (state.view !== 'watchlist' && window.__earlyDataPromise && !state._earlyDataConsumed) {
         state._earlyDataConsumed = true;
         try {
@@ -2004,9 +2005,14 @@
         } catch (_e) { /* fall through to fresh fetch */ }
       }
       if (!data) {
+        // 沒 early data → fallback fresh fetch；需要 auth_gate 包過的 window.fetch
+        if (!window.__authReady && typeof _waitForAuthReady === 'function') {
+          await _waitForAuthReady();
+        }
         const r = await fetch(url);
         _mark('fetch_headers');
         _serverTiming = r.headers.get('server-timing') || '';
+        _bytes = +r.headers.get('content-length') || 0;
         window.__perfMark && window.__perfMark('central_search_headers', { server_timing: _serverTiming });
         data = await r.json();
         window.__perfMark && window.__perfMark('central_search_json_parsed', { items: (data.items || []).length, bytes: r.headers.get('content-length') });
@@ -2015,7 +2021,6 @@
         window.__perfMark && window.__perfMark('central_search_headers_skipped_used_early', {});
       }
       _mark('json_parsed');
-      const _bytes = +r.headers.get('content-length') || 0;
       const items = data.items || [];
       if (state.view === 'watchlist') {
         state.watchlistItems = items;
@@ -2490,32 +2495,38 @@
     else window.location.replace('/login.html');
   }
 
+  function _waitForAuthReady() {
+    if (window.__authReady) return Promise.resolve();
+    return new Promise(resolve => document.addEventListener('auth:ready', resolve, { once: true }));
+  }
+
   // ── Boot ─────────────────────────────────────────────────────────────────
   async function boot() {
     window.__perfMark && window.__perfMark('app2_boot_start');
     // mobile menu button
     $('#v2-menu-btn')?.addEventListener('click', openSidebar);
 
-    // Wait for auth
-    if (!window.__authReady) {
-      await new Promise(resolve => {
-        document.addEventListener('auth:ready', resolve, { once: true });
-      });
-    }
-    window.__perfMark && window.__perfMark('app2_auth_ready_seen');
     // 預設勾選所有 enabled district (對齊 v1 default 全勾)
     Object.entries(V1_DISTRICTS).forEach(([city, cfg]) => {
       cfg.enabled.forEach(d => state.districtPicks.add(`${city}|${d}`));
     });
     // 還原上次 filter 偏好（覆蓋 default）— 必須在 loadDistricts 渲染 chips 之前
     _restoreFilters();
-    // loadDistricts (chips 的物件數量) 跟 loadProperties (中央 DB) 互無依賴，並行 fire
-    // 用 V1_DISTRICTS hardcoded 拼 districts 參數，不需要等 target_regions 回來
+
+    // loadDistricts 是 public endpoint，立刻 fire 不等 auth
+    // loadProperties：有 early data 立刻；沒有才等 auth_ready (因為 fallback fetch 需要 token)
     window.__perfMark && window.__perfMark('parallel_fetch_start');
-    await Promise.all([
-      loadDistricts().then(() => window.__perfMark && window.__perfMark('loadDistricts_done')),
-      loadProperties().then(() => window.__perfMark && window.__perfMark('loadProperties_done')),
-    ]);
+    const distP = loadDistricts().then(() => window.__perfMark && window.__perfMark('loadDistricts_done'));
+    const propsP = (async () => {
+      if (!window.__earlyDataPromise) {
+        await _waitForAuthReady();
+        window.__perfMark && window.__perfMark('app2_auth_ready_seen');
+      }
+      await loadProperties();
+      window.__perfMark && window.__perfMark('loadProperties_done');
+    })();
+
+    await Promise.all([distP, propsP]);
     window.__perfMark && window.__perfMark('boot_complete');
     requestAnimationFrame(() => requestAnimationFrame(() => {
       window.__perfMark && window.__perfMark('first_paint_after_boot');
