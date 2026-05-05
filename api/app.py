@@ -1704,16 +1704,140 @@ async def admin_set_line_skip_flags(body: LineSkipFlagsReq, admin: dict = Depend
 
 
 @app.get("/admin/line/notifications")
-async def admin_line_notifications(limit: int = 50, admin: dict = Depends(require_admin)):
-    """列出 LINE 通知發送紀錄（含每筆物件 id/地址/倍數/送達狀態）。"""
-    docs = list(get_firestore().collection("line_notifications")
-                .order_by("at", direction="DESCENDING").limit(min(int(limit), 200)).stream())
+async def admin_line_notifications(
+    limit: int = 50,
+    offset: int = 0,
+    admin: dict = Depends(require_admin),
+):
+    """列出 LINE 通知發送紀錄。支援 limit + offset 翻頁。
+    回傳 total_count 給前端算總頁數。"""
+    coll = get_firestore().collection("line_notifications")
+    # 抓 total count (用 aggregation count 比較快；萬一 aggregation 不可用 fallback list 全表 limit 1000)
+    try:
+        from google.cloud.firestore_v1.aggregation import AggregationQuery
+        agg = coll.count()
+        snap = list(agg.get())
+        total = int(snap[0][0].value) if snap and snap[0] else 0
+    except Exception:
+        total = len(list(coll.limit(1000).stream()))
+    limit = max(1, min(int(limit), 200))
+    offset = max(0, int(offset))
+    q = coll.order_by("at", direction="DESCENDING")
+    if offset > 0:
+        q = q.offset(offset)
+    docs = list(q.limit(limit).stream())
     items = []
     for d in docs:
         x = d.to_dict() or {}
         x["_id"] = d.id
         items.append(x)
-    return {"count": len(items), "items": items}
+    return {"count": len(items), "total": total, "limit": limit, "offset": offset, "items": items}
+
+
+# ── 訊息模板 ────────────────────────────────────────────────────────────────
+
+DEFAULT_LINE_TEMPLATE = """🏠您好，發現高價值物件：
+
+📍 {city}{district}
+   {address_with_floor}
+💰 總價：{price_wan} 萬
+
+📊 都更試算倍數：
+{scenarios_text}
+
+觸發：{scenario} {multiple} 倍
+
+🔗 來源連結：
+{sources_text}"""
+
+
+@app.get("/admin/line/template")
+async def admin_get_line_template(admin: dict = Depends(require_admin)):
+    """讀目前的 LINE 通知訊息模板 (admin 自訂；空 → 用 DEFAULT)。
+    可用變數列表也一起回傳給前端 UI 顯示。"""
+    cfg_doc = get_firestore().collection("settings").document("line_config").get()
+    template = ""
+    if cfg_doc.exists:
+        template = (cfg_doc.to_dict() or {}).get("message_template") or ""
+    return {
+        "template": template or DEFAULT_LINE_TEMPLATE,
+        "is_default": not template,
+        "default_template": DEFAULT_LINE_TEMPLATE,
+        "variables": [
+            {"key": "{address}", "desc": "推測地址 (如「虎林街57之15號」)"},
+            {"key": "{address_with_floor}", "desc": "地址 + 樓層 (如「虎林街...（1/4F）」)"},
+            {"key": "{city}", "desc": "城市 (台北市 / 新北市)"},
+            {"key": "{district}", "desc": "行政區"},
+            {"key": "{floor_str}", "desc": "樓層字串 (如「1/4F」)"},
+            {"key": "{price_wan}", "desc": "售價 (萬，逗號千分位)"},
+            {"key": "{building_age}", "desc": "屋齡"},
+            {"key": "{land_area_ping}", "desc": "土地坪數"},
+            {"key": "{building_area_ping}", "desc": "建物坪數"},
+            {"key": "{zoning}", "desc": "使用分區"},
+            {"key": "{scenario}", "desc": "觸發情境 (危老 / 都更 / 防災都更)"},
+            {"key": "{multiple}", "desc": "觸發最大倍數 (如 3.24)"},
+            {"key": "{scenarios_text}", "desc": "各情境倍數列表 (多行)"},
+            {"key": "{sources_text}", "desc": "來源連結列表 (多行)"},
+        ],
+    }
+
+
+class LineTemplateReq(BaseModel):
+    template: str
+
+
+@app.post("/admin/line/template")
+async def admin_set_line_template(body: LineTemplateReq, admin: dict = Depends(require_admin)):
+    """admin 儲存自訂訊息模板。空字串 → 還原為 DEFAULT_LINE_TEMPLATE。"""
+    tpl = (body.template or "").strip()
+    if len(tpl) > 4000:
+        raise HTTPException(400, "模板太長（>4000 字元，超過 LINE 單則訊息上限）")
+    payload = {
+        "message_template": tpl,
+        "updated_at": now_tw_iso(),
+        "updated_by_email": admin.get("email") or "",
+    }
+    get_firestore().collection("settings").document("line_config").set(payload, merge=True)
+    logger.warning(f"[admin] {admin.get('email')} 更新 LINE message_template ({len(tpl)} 字元)")
+    return {"status": "ok", "template": tpl, "is_default": not tpl}
+
+
+class LineTemplatePreviewReq(BaseModel):
+    template: str
+
+
+@app.post("/admin/line/template_preview")
+async def admin_preview_line_template(body: LineTemplatePreviewReq, admin: dict = Depends(require_admin)):
+    """用範例物件 render 模板，回傳預覽訊息字串給前端顯示。"""
+    from analysis.line_notify import render_template
+    sample_doc = {
+        "address_inferred": "虎林街57之15號",
+        "city": "台北市",
+        "district": "信義區",
+        "price_ntd": 11880000,
+        "floor": 1,
+        "total_floors": 4,
+        "building_age": 51,
+        "land_area_ping": 10.71,
+        "building_area_ping": 38.42,
+        "zoning": "第三種商業區",
+        "sources": [
+            {"name": "永慶", "url": "https://buy.yungching.com.tw/house/7342047", "alive": True},
+        ],
+    }
+    sample_rv2 = {
+        "scenarios": {
+            "危老": {"multiple": 3.24},
+            "都更": {"multiple": 4.49},
+        },
+    }
+    try:
+        msg = render_template(body.template or DEFAULT_LINE_TEMPLATE, sample_doc, 4.49, "都更", sample_rv2)
+        return {"status": "ok", "preview": msg}
+    except KeyError as e:
+        return {"status": "error", "message": f"模板含未知變數：{e}"}
+    except Exception as e:
+        return {"status": "error", "message": f"模板格式錯誤：{e}"}
 
 
 @app.post("/admin/line/test")
