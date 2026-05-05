@@ -3000,10 +3000,7 @@ def central_search(
         _t0 = now
 
     uid = user["uid"]
-    my_watchlist = {d.id: (d.to_dict() or {}) for d in get_user_watchlist(uid).get()}
-    my_watchlist_ids = set(my_watchlist.keys())
-    _tick("watchlist")
-
+    # filter params 先 parse 完，這樣 main query 才能跟 watchlist 同時 fire
     dist_set = {d.strip() for d in districts.split(",") if d.strip()} if districts else None
     btype_set = {t.strip() for t in building_types.split(",") if t.strip()} if building_types else None
     floor_set = None
@@ -3031,15 +3028,35 @@ def central_search(
     # dist_set 為 None（用戶沒挑）時 fallback 全收。
     # 注意：變數名 fs_q（不要叫 q —— 跟函式參數 q: Optional[str] 衝突會被 shadow，
     #       導致下面 `if q: kw = q.strip()` 拿到 Firestore Query 物件而 AttributeError）
+    # ── 並行打兩個 Firestore query：watchlist + 主 query ─
+    # 兩個各自一條 gRPC stream，等同網路 round-trip 折半
     cache_state = "miss"
-    try:
-        # SWR cache：fresh < 120s 直接回；120-600s 回舊 + 背景刷新；>600s 真等
-        # cache 存 (doc_id, dict) tuple list，hit 時連 to_dict 都省
-        dist_list_for_cache = list(dist_set) if (dist_set and len(dist_set) <= 30) else None
-        docs_data, cache_state = _query_districts_cached(col, dist_list_for_cache, max_price_wan, min_price_wan)
-    except Exception as _e:
-        logger.warning(f"[central_search] cached/parallel query 失敗，fallback 全收：{_e}")
-        docs_data = [(d.id, d.to_dict() or {}) for d in col.get()]
+    docs_data = []
+    my_watchlist = {}
+    my_watchlist_ids = set()
+    dist_list_for_cache = list(dist_set) if (dist_set and len(dist_set) <= 30) else None
+
+    def _fetch_watchlist():
+        try:
+            return {d.id: (d.to_dict() or {}) for d in get_user_watchlist(uid).get()}
+        except Exception as _e:
+            logger.warning(f"[central_search] watchlist fetch 失敗：{_e}")
+            return {}
+
+    def _fetch_main():
+        try:
+            return _query_districts_cached(col, dist_list_for_cache, max_price_wan, min_price_wan)
+        except Exception as _e:
+            logger.warning(f"[central_search] cached/parallel query 失敗，fallback 全收：{_e}")
+            return ([(d.id, d.to_dict() or {}) for d in col.get()], "miss")
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_watch = pool.submit(_fetch_watchlist)
+        f_main = pool.submit(_fetch_main)
+        my_watchlist = f_watch.result()
+        my_watchlist_ids = set(my_watchlist.keys())
+        docs_data, cache_state = f_main.result()
     _tick("firestore_query")
     _phase_t["docs_n"] = len(docs_data)
     _phase_t["cache_state"] = cache_state  # fresh / stale / miss
