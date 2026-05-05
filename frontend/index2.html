@@ -12,6 +12,15 @@
 </head>
 <body class="v2">
 
+<!-- 首次載入 loading overlay：JS 完成 + 第一筆資料抓回後 remove -->
+<div id="v2-bootstrap-loader">
+  <div class="v2-bootstrap-loader__panel">
+    <img src="/static/logo.png" alt="" class="v2-bootstrap-loader__logo">
+    <div class="v2-bootstrap-loader__spinner"></div>
+    <div class="v2-bootstrap-loader__text">載入中…</div>
+  </div>
+</div>
+
 <!-- Top bar -->
 <header class="v2-topbar">
   <div class="v2-topbar__left">
@@ -75,7 +84,7 @@
           <div class="v2-cap__title">貼網址分析，並加入最愛</div>
           <input id="v2-scrape-url" type="url" class="v2-input v2-cap__input"
                  placeholder="591 / 永慶 / 信義 詳情頁 URL">
-          <button class="v2-btn v2-btn--primary v2-btn--block v2-cap__btn"
+          <button id="v2-cap-scrape-btn" class="v2-btn v2-btn--primary v2-btn--block v2-cap__btn"
                   onclick="v2.triggerScrapeUrl()">送出分析</button>
           <div class="v2-cap__msg" id="v2-cap-scrape-msg"></div>
           <div class="v2-cap__hint">※ 支援 591 / 永慶 / 信義；分析完加入最愛</div>
@@ -115,7 +124,7 @@
             <input id="v2-manual-price" type="number" min="0" step="50"
                    class="v2-input v2-input--num v2-cap__field" placeholder="萬 (選填)">
           </div>
-          <button class="v2-btn v2-btn--primary v2-btn--block v2-cap__btn"
+          <button id="v2-cap-manual-btn" class="v2-btn v2-btn--primary v2-btn--block v2-cap__btn"
                   onclick="v2.triggerManualAnalyze()">送出分析</button>
           <div class="v2-cap__msg" id="v2-cap-manual-msg"></div>
           <div class="v2-cap__hint">※ 目前僅支援台北市與新北市地址</div>

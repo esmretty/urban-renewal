@@ -2029,7 +2029,20 @@
     } catch (e) {
       console.error('loadProperties', e);
       toast('載入失敗', 'error');
+    } finally {
+      _hideBootstrapLoader();
     }
+  }
+
+  // 首次載入全頁 loading overlay — fade out + remove
+  let _bootstrapHidden = false;
+  function _hideBootstrapLoader() {
+    if (_bootstrapHidden) return;
+    _bootstrapHidden = true;
+    const el = document.getElementById('v2-bootstrap-loader');
+    if (!el) return;
+    el.classList.add('v2-bootstrap-loader--hide');
+    setTimeout(() => { el.remove(); }, 400);
   }
 
   function _logV2Perf(ts, nItems, bytes, serverTiming) {
@@ -2160,6 +2173,16 @@
     state.exploreItems = (state.exploreItems || []).filter(p => (p.source_id || p.id) !== pid);
   }
 
+  // 兩個 capture 卡的「送出分析」按鈕，分析期間一律 disable 兩顆，避免併發
+  function _setCaptureButtonsDisabled(disabled) {
+    ['v2-cap-scrape-btn', 'v2-cap-manual-btn'].forEach(id => {
+      const b = document.getElementById(id);
+      if (!b) return;
+      b.disabled = !!disabled;
+      // textContent 不動，僅靠 :disabled CSS 灰化即可
+    });
+  }
+
   async function triggerScrapeUrl() {
     const inp = $('#v2-scrape-url');
     const url = (inp?.value || '').trim();
@@ -2174,6 +2197,7 @@
       return;
     }
     inp.disabled = true;
+    _setCaptureButtonsDisabled(true);
     setCapMsg('v2-cap-scrape-msg', 'pending', '分析中…（佇列忙時可能要 30-60 秒）');
     const pid = _addPendingPlaceholder(url, 'url');
     try {
@@ -2212,6 +2236,7 @@
       applyFilters();
     } finally {
       inp.disabled = false;
+      _setCaptureButtonsDisabled(false);
     }
   }
 
@@ -2229,12 +2254,15 @@
       return;
     }
     setCapMsg('v2-cap-manual-msg', 'pending', '分析中…（後台處理約 10-30 秒）');
+    _setCaptureButtonsDisabled(true);
     const label = `${city}${district}${address}`;
     const pid = _addPendingPlaceholder(label, 'manual');
 
     // 後端 status 通用錯誤訊息（讀 data.error，fallback data.message）
     const errMsg = (data) => data.error || data.message || '';
 
+    // 進入 polling 後 re-enable 由 polling 結束接手；其他結束分支立即 re-enable
+    let _enteredPolling = false;
     try {
       const r = await fetch('/api/manual_analyze', {
         method: 'POST',
@@ -2250,7 +2278,10 @@
       const data = await r.json();
       if (data.status === 'started') {
         setCapMsg('v2-cap-manual-msg', 'pending', '分析中…等候後台完成（自動更新，不用重新整理）');
-        _pollManualAnalysisDone(pid, 'v2-cap-manual-msg');
+        _enteredPolling = true;
+        _pollManualAnalysisDone(pid, 'v2-cap-manual-msg').finally(() => {
+          _setCaptureButtonsDisabled(false);
+        });
       } else if (data.status === 'already_in_db') {
         setCapMsg('v2-cap-manual-msg', 'success', '該地址已在 DB（已加入觀察清單）');
         _removePendingPlaceholder(pid);
@@ -2289,6 +2320,9 @@
       setCapMsg('v2-cap-manual-msg', 'error', '失敗：' + e.message);
       _removePendingPlaceholder(pid);
       applyFilters();
+    } finally {
+      // 進 polling 的 case：由 polling .finally 處理，這裡跳過避免提早 re-enable
+      if (!_enteredPolling) _setCaptureButtonsDisabled(false);
     }
   }
 

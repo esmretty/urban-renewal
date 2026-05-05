@@ -26,6 +26,63 @@ button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; border: none; background: none; }
 a { color: inherit; text-decoration: none; }
 
+/* === 0.5 Bootstrap Loader (首次載入全頁遮罩) =============================== */
+#v2-bootstrap-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: linear-gradient(180deg, #fbf9f3 0%, #f5f0e3 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.35s ease, visibility 0.35s ease;
+}
+#v2-bootstrap-loader.v2-bootstrap-loader--hide {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.v2-bootstrap-loader__panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+.v2-bootstrap-loader__logo {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  box-shadow: 0 4px 20px rgba(199, 138, 0, 0.18);
+  animation: v2-loader-pulse 1.6s ease-in-out infinite;
+}
+@keyframes v2-loader-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.92; }
+}
+.v2-bootstrap-loader__spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #e0d9c2;
+  border-top-color: #c78a00;
+  border-radius: 50%;
+  animation: v2-loader-spin 0.85s linear infinite;
+}
+@keyframes v2-loader-spin {
+  to { transform: rotate(360deg); }
+}
+.v2-bootstrap-loader__text {
+  font-size: 14px;
+  color: #8b7e5a;
+  letter-spacing: 1px;
+}
+
+/* :disabled 狀態的按鈕 (capture 卡送出鈕) — 灰化 + 禁用游標 */
+.v2-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 /* === 1. Design Tokens ===================================================== */
 :root {
   /* Colors */
