@@ -506,9 +506,11 @@
     const perBld = (p.price_ntd && p.building_area_ping)
       ? (p.price_ntd / 10000 / p.building_area_ping).toFixed(1) : null;
     const mult = rowMultiple(p, prices);
+    // 倍數 tier (對齊 CSS class)：>=4 桃紅 / >=3 綠 / >=2 土黃 / <2 灰
     let multCls = 'v2-card__mult';
     if (mult != null) {
-      if (mult >= 3.0) multCls += ' v2-card__mult--good';
+      if (mult >= 4.0) multCls += ' v2-card__mult--hot';
+      else if (mult >= 3.0) multCls += ' v2-card__mult--good';
       else if (mult >= 2.0) multCls += ' v2-card__mult--mid';
     }
     const advChips = computeAdvantageChips(p);
