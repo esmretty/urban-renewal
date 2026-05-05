@@ -190,45 +190,57 @@ window.loadSystemUsage = async function () {
          ${sub ? `<div class="sysu__sub">${sub}</div>` : ""}
        </div>`;
 
+    // 一行單列 inline cell — 「label: value (sub)」三段擠在一起
+    const inline = (label, valHtml, sub="") =>
+      `<span class="sysu__cell">
+         <span class="sysu__label">${label}</span>
+         <span class="sysu__val">${valHtml}</span>
+         ${sub ? `<span class="sysu__sub">${sub}</span>` : ""}
+       </span>`;
+
     box.innerHTML = `
       <style>
-        #system-usage-box { font-size: 13px; }
-        #system-usage-box .sysu__grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-          gap: 8px;
+        #system-usage-box { font-size: 12px; line-height: 1.3; }
+        #system-usage-box .sysu__row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px 8px;
+          align-items: center;
         }
         #system-usage-box .sysu__cell {
           background: #fff;
           border: 1px solid #e5dfca;
-          border-radius: 4px;
-          padding: 6px 10px;
-          line-height: 1.3;
+          border-radius: 3px;
+          padding: 3px 8px;
+          display: inline-flex;
+          align-items: baseline;
+          gap: 5px;
+          white-space: nowrap;
         }
         #system-usage-box .sysu__label { color: #888; font-size: 11px; }
-        #system-usage-box .sysu__val { font-weight: 700; font-size: 14px; }
+        #system-usage-box .sysu__val { font-weight: 700; font-size: 13px; }
         #system-usage-box .sysu__sub { color: #888; font-size: 11px; }
-        #system-usage-box .sysu__alert { color: #c0392b; }
+        #system-usage-box .sysu__alert { color: #c0392b; font-weight: 600; }
       </style>
-      <div class="sysu__grid">
-        ${stat("CPU",
+      <div class="sysu__row">
+        ${inline("CPU",
           `<span style="color:${pctColor(cpu.percent)};">${cpu.percent ?? "?"}%</span>`,
-          cpu.load_1m != null ? `load ${cpu.load_1m} / ${cpu.load_5m} / ${cpu.load_15m}` : `${cpu.count_logical ?? "?"} 核`)}
-        ${stat("RAM",
-          `<span style="color:${pctColor(ram.percent, 75, 92)};">${ram.used_gb ?? "?"}/${ram.total_gb ?? "?"} GB</span>`,
-          `${ram.percent ?? "?"}%`)}
-        ${(swap.total_gb > 0) ? stat("Swap",
+          cpu.load_1m != null ? `${cpu.load_1m}/${cpu.load_5m}/${cpu.load_15m}` : `${cpu.count_logical ?? "?"}核`)}
+        ${inline("RAM",
+          `<span style="color:${pctColor(ram.percent, 75, 92)};">${ram.percent ?? "?"}%</span>`,
+          `${ram.used_gb ?? "?"}/${ram.total_gb ?? "?"} GB`)}
+        ${(swap.total_gb > 0) ? inline("Swap",
           `<span style="color:${pctColor(swap.percent, 30, 60)};">${swap.percent}%</span>`,
           `${swap.used_gb}/${swap.total_gb} GB`) : ""}
-        ${stat("磁碟",
+        ${inline("磁碟",
           `<span style="color:${pctColor(100 - (disk.free_pct ?? 0), 70, 85)};">${disk.free_gb ?? "?"} GB free</span>`,
-          `${disk.free_pct ?? "?"}% / ${disk.total_gb ?? "?"} GB`)}
-        ${stat("截圖",
+          `${disk.free_pct ?? "?"}% / ${disk.total_gb ?? "?"}`)}
+        ${inline("截圖",
           `${ss.total_mb ?? 0} MB`,
-          `${ss.file_count ?? 0} 檔${ocrCount > 50 ? `，<span class="sysu__alert">孤兒 ${ocrCount}</span>` : ""}`)}
-        ${stat("data/",
+          `${ss.file_count ?? 0}檔${ocrCount > 50 ? ` <span class="sysu__alert">孤兒${ocrCount}</span>` : ""}`)}
+        ${inline("data/",
           `${dd.total_mb ?? 0} MB`,
-          `LVR/cache/logs/截圖`)}
+          "")}
       </div>
     `;
   } catch (e) {
