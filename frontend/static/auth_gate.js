@@ -36,6 +36,13 @@ async function boot() {
   const token = await user.getIdToken();
   window.__perfMark && window.__perfMark('getIdToken_done');
 
+  // 把 token 存進 localStorage 給「下次 page load 的 inline early-fetch script」用
+  // ID token TTL 1 小時，保守抓 50 分鐘可信任窗
+  try {
+    localStorage.setItem('v2_cached_token', token);
+    localStorage.setItem('v2_cached_token_exp', String(Date.now() + 50 * 60 * 1000));
+  } catch (_e) { /* localStorage 不可用就算了 */ }
+
   window.currentUser = {
     uid: user.uid,
     email: user.email,

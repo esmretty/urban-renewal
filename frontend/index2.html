@@ -36,10 +36,42 @@
           console.log('[PERF +' + entry.t.toFixed(1) + 'ms]', name, extra || '');
         }
       };
-      // 第一個 mark：HTML 解析到本 inline script 為止 (相對於 navigationStart 的 offset)
       window.__perfMark('html_inline_script_run', { ms_since_nav: Math.round(performance.now()) });
       document.addEventListener('DOMContentLoaded', function () { window.__perfMark('DOMContentLoaded'); });
       window.addEventListener('load', function () { window.__perfMark('window_load'); });
+    })();
+  </script>
+  <!-- Early data fetch：用上次存的 cached token 在 Firebase SDK 還沒載入前就 fire central_search，
+       平行壓掉 ~1.5 秒等 onAuthStateChanged 的時間。Token 過期/缺失 → app2.js 自然 fallback。 -->
+  <script>
+    (function () {
+      try {
+        var tok = localStorage.getItem('v2_cached_token');
+        var exp = +localStorage.getItem('v2_cached_token_exp') || 0;
+        if (!tok || Date.now() > exp) return;
+        // 對齊 V1_DISTRICTS 的預設清單（跟 app2.js boot 算出來的 districts 串一致）
+        var DISTRICTS = [
+          '中正區','大同區','中山區','松山區','大安區','萬華區','信義區','內湖區','南港區','文山區',
+          '板橋區','新莊區','新店區','中和區','永和區'
+        ];
+        var url = '/api/central_search?slim=true&limit=1000&districts=' + encodeURIComponent(DISTRICTS.join(','));
+        window.__perfMark && window.__perfMark('early_fetch_fire');
+        window.__earlyDataPromise = fetch(url, { headers: { 'Authorization': 'Bearer ' + tok } })
+          .then(function (r) {
+            window.__perfMark && window.__perfMark('early_fetch_headers', { status: r.status });
+            if (!r.ok) throw new Error('early_fetch_status_' + r.status);
+            return r.json();
+          })
+          .then(function (data) {
+            window.__perfMark && window.__perfMark('early_fetch_json_done', { items: (data.items||[]).length });
+            return data;
+          })
+          .catch(function (e) {
+            // 401 (token 過期) 或網路失敗：交還給 app2.js 走 fresh-token fallback
+            window.__perfMark && window.__perfMark('early_fetch_fallback', { err: String(e).slice(0,80) });
+            return null;
+          });
+      } catch (_e) { /* localStorage 不可用 */ }
     })();
   </script>
   <script type="module" src="/static/auth_gate.js"></script>

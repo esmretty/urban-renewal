@@ -1990,13 +1990,31 @@
       }
       _mark('fetch_start');
       window.__perfMark && window.__perfMark('central_search_fetch_start');
-      const r = await fetch(url);
-      _mark('fetch_headers');
-      const _serverTiming = r.headers.get('server-timing') || '';
-      window.__perfMark && window.__perfMark('central_search_headers', { server_timing: _serverTiming });
-      const data = await r.json();
+      // 探索 tab 第一次：若 inline early-fetch 已經 fire 過且成功，直接拿那份結果（省 ~1.5 秒）
+      let data = null;
+      let _serverTiming = '';
+      if (state.view !== 'watchlist' && window.__earlyDataPromise && !state._earlyDataConsumed) {
+        state._earlyDataConsumed = true;
+        try {
+          const early = await window.__earlyDataPromise;
+          if (early && Array.isArray(early.items)) {
+            data = early;
+            window.__perfMark && window.__perfMark('central_search_used_early_data', { items: early.items.length });
+          }
+        } catch (_e) { /* fall through to fresh fetch */ }
+      }
+      if (!data) {
+        const r = await fetch(url);
+        _mark('fetch_headers');
+        _serverTiming = r.headers.get('server-timing') || '';
+        window.__perfMark && window.__perfMark('central_search_headers', { server_timing: _serverTiming });
+        data = await r.json();
+        window.__perfMark && window.__perfMark('central_search_json_parsed', { items: (data.items || []).length, bytes: r.headers.get('content-length') });
+      } else {
+        _mark('fetch_headers');
+        window.__perfMark && window.__perfMark('central_search_headers_skipped_used_early', {});
+      }
       _mark('json_parsed');
-      window.__perfMark && window.__perfMark('central_search_json_parsed', { items: (data.items || []).length, bytes: r.headers.get('content-length') });
       const _bytes = +r.headers.get('content-length') || 0;
       const items = data.items || [];
       if (state.view === 'watchlist') {
