@@ -2643,6 +2643,23 @@
     applyFilters();
   }
 
+  // 強制重整（給 iOS 桌面 PWA 用）— 清 caches API + 加時間戳 → 不會吃到舊版
+  async function hardReload() {
+    try {
+      if ('caches' in window) {
+        const names = await caches.keys();
+        await Promise.all(names.map(n => caches.delete(n)));
+      }
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+    } catch (_e) { /* 失敗也照樣 reload */ }
+    const u = new URL(window.location.href);
+    u.searchParams.set('_t', Date.now());
+    window.location.replace(u.toString());
+  }
+
   window.v2 = {
     switchView, toggleDistrict, applyFilters, applySort, runSearch,
     resetFilters, gotoPage, openSidebar, closeSidebar,
@@ -2654,6 +2671,7 @@
     showLvrPopup, hideLvrPopup,
     saveOverride, saveInferredChoice, setZonePing,
     openRoadOverlay, scanRoadWidth, deleteRow,
+    hardReload,
   };
 
   // Boot
