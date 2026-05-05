@@ -67,42 +67,42 @@ async function boot() {
     if (emailEl) emailEl.textContent = user.email || "";
   }
 
-  // 從 /api/me 拿階級名稱顯示在 email 後面；
-  // 403 = 新帳號不在白名單 → 登出並導回 login 頁顯示訊息
-  try {
-    const meResp = await window.authedFetch("/api/me");
-    if (meResp.status === 403) {
-      const body = await meResp.json().catch(() => ({}));
-      const msg = body.detail || "此帳號尚未獲邀，請聯絡管理者將您加入白名單。";
-      await signOut(auth);
-      window.location.replace("/login.html?err=" + encodeURIComponent(msg));
-      return;
-    }
-    if (meResp.ok) {
-      const me = await meResp.json();
-      window.currentUserTier = me;
-      if (emailEl && me.tier_name_zh) {
-        emailEl.textContent = `${me.email || ""}（${me.tier_name_zh}）`;
-      }
-      // 維護模式：所有人（含 admin）首頁都導去維護頁
-      // admin 若需要管理，請走 /admin.html（admin 後台不受影響）
-      if (me.maintenance && me.maintenance.enabled) {
-        window.location.replace("/maintenance.html");
-        return;
-      }
-    }
-  } catch (e) {
-    console.warn("fetch /api/me failed:", e);
-  }
-
   window.logoutUser = async () => {
     await signOut(auth);
     window.location.replace("/login.html");
   };
 
-  // 告訴 app.js auth 已就緒（app.js 有綁 DOMContentLoaded，通常這時候還沒跑完）
+  // 立刻 dispatch auth:ready — 讓 app2.js 可以並行 fire 它的資料請求，不再被 /api/me 卡住
   window.__authReady = true;
   document.dispatchEvent(new CustomEvent("auth:ready", { detail: window.currentUser }));
+
+  // /api/me 在背景跑：拿階級名稱 + 處理 403 (白名單) / 維護模式 redirect
+  // 跟 app2.js 的資料載入並行，不再 sequential block 首頁渲染
+  (async () => {
+    try {
+      const meResp = await window.authedFetch("/api/me");
+      if (meResp.status === 403) {
+        const body = await meResp.json().catch(() => ({}));
+        const msg = body.detail || "此帳號尚未獲邀，請聯絡管理者將您加入白名單。";
+        await signOut(auth);
+        window.location.replace("/login.html?err=" + encodeURIComponent(msg));
+        return;
+      }
+      if (meResp.ok) {
+        const me = await meResp.json();
+        window.currentUserTier = me;
+        if (emailEl && me.tier_name_zh) {
+          emailEl.textContent = `${me.email || ""}（${me.tier_name_zh}）`;
+        }
+        if (me.maintenance && me.maintenance.enabled) {
+          window.location.replace("/maintenance.html");
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("fetch /api/me failed:", e);
+    }
+  })();
 }
 
 boot().catch(e => {

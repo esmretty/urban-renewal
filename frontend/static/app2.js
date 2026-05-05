@@ -2486,8 +2486,9 @@
     });
     // 還原上次 filter 偏好（覆蓋 default）— 必須在 loadDistricts 渲染 chips 之前
     _restoreFilters();
-    await loadDistricts();
-    await loadProperties();
+    // loadDistricts (chips 的物件數量) 跟 loadProperties (中央 DB) 互無依賴，並行 fire
+    // 用 V1_DISTRICTS hardcoded 拼 districts 參數，不需要等 target_regions 回來
+    await Promise.all([loadDistricts(), loadProperties()]);
   }
 
   // ── Public namespace (matches inline onclick handlers) ──────────────────
