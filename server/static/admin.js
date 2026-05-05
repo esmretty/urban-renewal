@@ -174,45 +174,62 @@ window.loadSystemUsage = async function () {
     const cpu = d.cpu || {};
     const ram = d.ram || {};
     const swap = d.swap || {};
-    const proc = d.process || {};
-    const freeColor = (disk.free_pct != null && disk.free_pct < 15) ? "#c0392b"
-                    : (disk.free_pct != null && disk.free_pct < 30) ? "#c78a00" : "#2a7a2a";
-    // CPU / RAM 用量也用顏色帶警告
+    // 用量警示色 — 統一一個 helper
     const pctColor = (p, warn=70, crit=90) =>
       p == null ? "#888"
       : p >= crit ? "#c0392b"
       : p >= warn ? "#c78a00"
       : "#2a7a2a";
-    const cpuPct = cpu.percent;
-    const ramPct = ram.percent;
-    const swapPct = swap.percent;
     const ocrCount = (ss.by_kind && ss.by_kind.ocr_temp) || 0;
     const ocrMb = (ss.by_kind_mb && ss.by_kind_mb.ocr_temp) || 0;
-    const rwCount = (ss.by_kind && ss.by_kind.roadwidth) || 0;
-    const rwMb = (ss.by_kind_mb && ss.by_kind_mb.roadwidth) || 0;
-    const loadStr = cpu.load_1m != null
-      ? ` ｜ load ${cpu.load_1m} / ${cpu.load_5m} / ${cpu.load_15m} (1/5/15分)`
-      : "";
-    const procStr = (proc && proc.rss_mb != null)
-      ? `<div style="padding-left:24px; color:#555;">
-           ・本 process：RSS ${proc.rss_mb} MB ｜ CPU ${proc.cpu_percent ?? '—'}% ｜ thread ${proc.num_threads ?? '—'}
-         </div>`
-      : "";
+    // 緊湊單元格 helper
+    const stat = (label, valHtml, sub="") =>
+      `<div class="sysu__cell">
+         <div class="sysu__label">${label}</div>
+         <div class="sysu__val">${valHtml}</div>
+         ${sub ? `<div class="sysu__sub">${sub}</div>` : ""}
+       </div>`;
+
     box.innerHTML = `
-      <div>🖥️ <strong>CPU：</strong><span style="color:${pctColor(cpuPct)}; font-weight:700;">${cpuPct ?? "?"}%</span>
-        <span style="color:#888;">（${cpu.count_logical ?? "?"} 核 logical / ${cpu.count_physical ?? "?"} 核 physical）</span>${loadStr}</div>
-      <div>🧠 <strong>RAM：</strong>用 <span style="color:${pctColor(ramPct, 75, 92)}; font-weight:700;">${ram.used_gb ?? "?"} GB</span> / ${ram.total_gb ?? "?"} GB（${ramPct ?? "?"}%）
-        <span style="color:#888;">free ${ram.available_gb ?? "?"} GB</span></div>
-      ${swap.total_gb > 0 ? `<div>📀 <strong>Swap：</strong>${swap.used_gb} GB / ${swap.total_gb} GB <span style="color:${pctColor(swapPct, 30, 60)};">(${swapPct}%)</span></div>` : ""}
-      ${procStr}
-      <div>💽 <strong>磁碟：</strong>剩 <span style="color:${freeColor}; font-weight:700;">${disk.free_gb ?? "?"} GB</span> / ${disk.total_gb ?? "?"} GB（${disk.free_pct ?? "?"}%）</div>
-      <div>📷 <strong>截圖總計：</strong>${ss.file_count ?? 0} 檔，${ss.total_mb ?? 0} MB
-        ${ss.oldest_age_days != null ? `（最舊 ${ss.oldest_age_days} 天前）` : ""}</div>
-      <div style="padding-left:24px; color:#555;">
-        ・路寬地籍圖（保留）：${rwCount} 檔 / ${rwMb} MB<br>
-        ・OCR 中途檔（孤兒，可清）：<span style="color:${ocrCount > 50 ? '#c0392b' : '#888'};">${ocrCount} 檔 / ${ocrMb} MB</span>
+      <style>
+        #system-usage-box { font-size: 13px; }
+        #system-usage-box .sysu__grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 8px;
+        }
+        #system-usage-box .sysu__cell {
+          background: #fff;
+          border: 1px solid #e5dfca;
+          border-radius: 4px;
+          padding: 6px 10px;
+          line-height: 1.3;
+        }
+        #system-usage-box .sysu__label { color: #888; font-size: 11px; }
+        #system-usage-box .sysu__val { font-weight: 700; font-size: 14px; }
+        #system-usage-box .sysu__sub { color: #888; font-size: 11px; }
+        #system-usage-box .sysu__alert { color: #c0392b; }
+      </style>
+      <div class="sysu__grid">
+        ${stat("CPU",
+          `<span style="color:${pctColor(cpu.percent)};">${cpu.percent ?? "?"}%</span>`,
+          cpu.load_1m != null ? `load ${cpu.load_1m} / ${cpu.load_5m} / ${cpu.load_15m}` : `${cpu.count_logical ?? "?"} 核`)}
+        ${stat("RAM",
+          `<span style="color:${pctColor(ram.percent, 75, 92)};">${ram.used_gb ?? "?"}/${ram.total_gb ?? "?"} GB</span>`,
+          `${ram.percent ?? "?"}%`)}
+        ${(swap.total_gb > 0) ? stat("Swap",
+          `<span style="color:${pctColor(swap.percent, 30, 60)};">${swap.percent}%</span>`,
+          `${swap.used_gb}/${swap.total_gb} GB`) : ""}
+        ${stat("磁碟",
+          `<span style="color:${pctColor(100 - (disk.free_pct ?? 0), 70, 85)};">${disk.free_gb ?? "?"} GB free</span>`,
+          `${disk.free_pct ?? "?"}% / ${disk.total_gb ?? "?"} GB`)}
+        ${stat("截圖",
+          `${ss.total_mb ?? 0} MB`,
+          `${ss.file_count ?? 0} 檔${ocrCount > 50 ? `，<span class="sysu__alert">孤兒 ${ocrCount}</span>` : ""}`)}
+        ${stat("data/",
+          `${dd.total_mb ?? 0} MB`,
+          `LVR/cache/logs/截圖`)}
       </div>
-      <div>📂 <strong>data/ 整體：</strong>${dd.total_mb ?? 0} MB（含 LVR DB / cache / logs / screenshots）</div>
     `;
   } catch (e) {
     box.textContent = "讀取失敗：" + e.message;
