@@ -990,31 +990,31 @@ async def lifespan(app: FastAPI):
     _url_sem = asyncio.Semaphore(MAX_URL_CONCURRENCY)
     _sched_wake_event = asyncio.Event()
     init_db()
-    # 暖機：建立 gRPC 連線 + 預填 cache（避免第一個用戶吃 1-2 秒冷啟）
+    # 暖機：建立 gRPC 連線 + 預填 cache（同步 block 直到完成才讓 uvicorn 開始接 request）
+    # 之前 cache warmup 跑背景 task 但用戶會在 1-2s 內打進來，cache 還是冷的；
+    # 改成同步等完成，第一個訪客就拿到熱 cache
     logger.info("Firebase 連線中...")
     import asyncio as _aio
     await _aio.to_thread(lambda: list(get_col().limit(1).get()))
     logger.info("Firebase 連線完成")
-    # 預填 target_regions counts cache + central_search 預設 districts cache（背景跑，不阻塞 startup）
-    async def _warm_caches():
-        try:
-            await _aio.to_thread(lambda: api_target_regions(with_counts=True))
-            logger.info("[warmup] target_regions counts cache 預填完成")
-        except Exception as e:
-            logger.warning("[warmup] target_regions 預填失敗: %s", e)
-        try:
-            from config import target_regions_for_frontend
-            regions = target_regions_for_frontend()
-            all_dists = []
-            for city, sections in regions.items():
-                all_dists.extend(sections.keys())
-            if all_dists:
-                col = get_col()
-                await _aio.to_thread(lambda: _query_districts_cached(col, all_dists, None, None))
-                logger.info("[warmup] central_search query cache 預填完成（%d districts）", len(all_dists))
-        except Exception as e:
-            logger.warning("[warmup] central_search 預填失敗: %s", e)
-    asyncio.create_task(_warm_caches())
+    # 預填 target_regions counts cache + central_search 預設 districts cache（同步等完）
+    try:
+        await _aio.to_thread(lambda: api_target_regions(with_counts=True))
+        logger.info("[warmup] target_regions counts cache 預填完成")
+    except Exception as e:
+        logger.warning("[warmup] target_regions 預填失敗: %s", e)
+    try:
+        from config import target_regions_for_frontend
+        regions = target_regions_for_frontend()
+        all_dists = []
+        for city, sections in regions.items():
+            all_dists.extend(sections.keys())
+        if all_dists:
+            col = get_col()
+            await _aio.to_thread(lambda: _query_districts_cached(col, all_dists, None, None))
+            logger.info("[warmup] central_search query cache 預填完成（%d districts）", len(all_dists))
+    except Exception as e:
+        logger.warning("[warmup] central_search 預填失敗: %s", e)
     if os.getenv("DISABLE_SCHEDULER", "").lower() in ("1", "true", "yes"):
         logger.info("[scheduler] DISABLE_SCHEDULER=true，本次啟動不執行定時 batch（本機 debug 模式）")
         sched_task = None
