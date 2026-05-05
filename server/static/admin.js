@@ -190,57 +190,69 @@ window.loadSystemUsage = async function () {
          ${sub ? `<div class="sysu__sub">${sub}</div>` : ""}
        </div>`;
 
-    // 一行單列 inline cell — 「label: value (sub)」三段擠在一起
-    const inline = (label, valHtml, sub="") =>
-      `<span class="sysu__cell">
+    // 左：CPU / RAM (+ Swap if any)；右：磁碟 / 截圖 / data
+    // 每列「label: value …說明」清楚顯示意義，但靠 2-col grid 把整體高度減半
+    const line = (label, valHtml, sub="") =>
+      `<div class="sysu__line">
          <span class="sysu__label">${label}</span>
          <span class="sysu__val">${valHtml}</span>
          ${sub ? `<span class="sysu__sub">${sub}</span>` : ""}
-       </span>`;
+       </div>`;
 
     box.innerHTML = `
       <style>
-        #system-usage-box { font-size: 12px; line-height: 1.3; }
-        #system-usage-box .sysu__row {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 4px 8px;
-          align-items: center;
+        #system-usage-box { font-size: 12px; line-height: 1.45; }
+        #system-usage-box .sysu__cols {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px 16px;
         }
-        #system-usage-box .sysu__cell {
+        #system-usage-box .sysu__col {
           background: #fff;
           border: 1px solid #e5dfca;
-          border-radius: 3px;
-          padding: 3px 8px;
-          display: inline-flex;
+          border-radius: 4px;
+          padding: 6px 10px;
+        }
+        #system-usage-box .sysu__line {
+          display: flex;
           align-items: baseline;
-          gap: 5px;
+          gap: 6px;
           white-space: nowrap;
         }
-        #system-usage-box .sysu__label { color: #888; font-size: 11px; }
+        #system-usage-box .sysu__line + .sysu__line { margin-top: 2px; }
+        #system-usage-box .sysu__label { color: #888; font-size: 11px; min-width: 38px; }
         #system-usage-box .sysu__val { font-weight: 700; font-size: 13px; }
         #system-usage-box .sysu__sub { color: #888; font-size: 11px; }
         #system-usage-box .sysu__alert { color: #c0392b; font-weight: 600; }
+        @media (max-width: 720px) {
+          #system-usage-box .sysu__cols { grid-template-columns: 1fr; }
+        }
       </style>
-      <div class="sysu__row">
-        ${inline("CPU",
-          `<span style="color:${pctColor(cpu.percent)};">${cpu.percent ?? "?"}%</span>`,
-          cpu.load_1m != null ? `${cpu.load_1m}/${cpu.load_5m}/${cpu.load_15m}` : `${cpu.count_logical ?? "?"}核`)}
-        ${inline("RAM",
-          `<span style="color:${pctColor(ram.percent, 75, 92)};">${ram.percent ?? "?"}%</span>`,
-          `${ram.used_gb ?? "?"}/${ram.total_gb ?? "?"} GB`)}
-        ${(swap.total_gb > 0) ? inline("Swap",
-          `<span style="color:${pctColor(swap.percent, 30, 60)};">${swap.percent}%</span>`,
-          `${swap.used_gb}/${swap.total_gb} GB`) : ""}
-        ${inline("磁碟",
-          `<span style="color:${pctColor(100 - (disk.free_pct ?? 0), 70, 85)};">${disk.free_gb ?? "?"} GB free</span>`,
-          `${disk.free_pct ?? "?"}% / ${disk.total_gb ?? "?"}`)}
-        ${inline("截圖",
-          `${ss.total_mb ?? 0} MB`,
-          `${ss.file_count ?? 0}檔${ocrCount > 50 ? ` <span class="sysu__alert">孤兒${ocrCount}</span>` : ""}`)}
-        ${inline("data/",
-          `${dd.total_mb ?? 0} MB`,
-          "")}
+      <div class="sysu__cols">
+        <div class="sysu__col">
+          ${line("CPU",
+            `<span style="color:${pctColor(cpu.percent)};">${cpu.percent ?? "?"}%</span>`,
+            cpu.load_1m != null
+              ? `load ${cpu.load_1m} / ${cpu.load_5m} / ${cpu.load_15m}（1/5/15分平均）`
+              : `${cpu.count_logical ?? "?"} 核`)}
+          ${line("RAM",
+            `<span style="color:${pctColor(ram.percent, 75, 92)};">${ram.used_gb ?? "?"} / ${ram.total_gb ?? "?"} GB</span>`,
+            `已用 ${ram.percent ?? "?"}%`)}
+          ${(swap.total_gb > 0) ? line("Swap",
+            `<span style="color:${pctColor(swap.percent, 30, 60)};">${swap.used_gb} / ${swap.total_gb} GB</span>`,
+            `已用 ${swap.percent}%`) : ""}
+        </div>
+        <div class="sysu__col">
+          ${line("磁碟",
+            `<span style="color:${pctColor(100 - (disk.free_pct ?? 0), 70, 85)};">剩 ${disk.free_gb ?? "?"} GB</span>`,
+            `/ ${disk.total_gb ?? "?"} GB（${disk.free_pct ?? "?"}% free）`)}
+          ${line("截圖",
+            `${ss.total_mb ?? 0} MB`,
+            `${ss.file_count ?? 0} 檔${ocrCount > 50 ? `；<span class="sysu__alert">孤兒 ${ocrCount}</span>` : ""}`)}
+          ${line("data/",
+            `${dd.total_mb ?? 0} MB`,
+            "含 LVR / cache / logs / 截圖")}
+        </div>
       </div>
     `;
   } catch (e) {
