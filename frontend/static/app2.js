@@ -423,14 +423,19 @@
     const total = list.length;
     // 手機 (≤1024px) 切到單城市 tab 時，「共 N 筆」只算該城市；桌面看全部
     const _isMobileCol = window.matchMedia('(max-width: 1024px)').matches;
+    const _tpeN = list.filter(p => p.city === '台北市').length;
+    const _ntpN = list.filter(p => p.city === '新北市').length;
     let _countN = total;
-    let _countLabel = '';
     if (_isMobileCol) {
       const active = state.gridCity || '台北市';
-      _countN = list.filter(p => p.city === active).length;
-      _countLabel = active.replace('市', '') + '·';
+      _countN = active === '台北市' ? _tpeN : (active === '新北市' ? _ntpN : total);
     }
-    $('#v2-result-count').innerHTML = `共 ${_countLabel}<strong>${_countN}</strong> 筆`;
+    $('#v2-result-count').innerHTML = `共 <strong>${_countN}</strong> 筆`;
+    // 手機 city tab pill 上標筆數 (e.g. 「台北市 12」)；桌面 pill 不顯示故無影響
+    const _tpePill = document.querySelector('.v2-grid-toggle__pill[data-city="台北市"]');
+    const _ntpPill = document.querySelector('.v2-grid-toggle__pill[data-city="新北市"]');
+    if (_tpePill) _tpePill.textContent = `台北市 ${_tpeN}`;
+    if (_ntpPill) _ntpPill.textContent = `新北市 ${_ntpN}`;
 
     if (total === 0) {
       grid.innerHTML = '';
