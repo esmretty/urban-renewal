@@ -6,6 +6,13 @@
   <title>都更神探R · v2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- 預連線 Firebase 三家 origin（DNS + TLS 提早做），SDK / token 真用到時就少 ~300-1000ms 冷啟 -->
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://securetoken.googleapis.com" crossorigin>
+  <!-- 預載入 Firebase JS modules（auth_gate 真 import 時就 cache hit） -->
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/static/style2.css?v=1" />
   <!-- Perf instrumentation：?perf=1 (or localStorage v2_perf=1) 顯示分階段時間表 -->
