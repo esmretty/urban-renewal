@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>學區查詢測試 · 都更神探R</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 16px;
+      font-family: -apple-system, "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+      background: #f5f0e3; color: #2d2a23;
+    }
+    h1 { margin: 0 0 14px; font-size: 20px; }
+    .card {
+      background: #fff; border: 1px solid #e0d9c2;
+      border-radius: 6px; padding: 14px; margin-bottom: 14px;
+    }
+    .card h2 { margin: 0 0 10px; font-size: 15px; color: #555; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+    label { font-size: 13px; color: #666; }
+    input, select, button {
+      font: inherit; padding: 7px 10px; border-radius: 4px;
+      border: 1px solid #c8b97a; background: #fffdf6;
+    }
+    input[type=text] { flex: 1; min-width: 200px; }
+    button {
+      background: #c78a00; color: #fff; border: none; cursor: pointer; font-weight: 600;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .result {
+      margin-top: 10px; padding: 10px 14px; background: #f7f3ea;
+      border-left: 3px solid #c78a00; border-radius: 4px;
+      font-size: 14px; line-height: 1.7;
+    }
+    .result strong { color: #c78a00; }
+    .schools {
+      display: inline-flex; flex-wrap: wrap; gap: 6px;
+    }
+    .school-tag {
+      display: inline-block; padding: 3px 10px;
+      background: #c78a00; color: #fff; border-radius: 12px; font-size: 12px;
+    }
+    .school-tag.junior { background: #6a8caf; }
+    .err { color: #c0392b; }
+    table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #eee; vertical-align: top; }
+    th { background: #f0ece0; font-weight: 600; }
+    #map { height: 480px; border-radius: 4px; border: 1px solid #ddd; }
+    .map-hint { font-size: 12px; color: #666; margin-bottom: 6px; }
+    .legend {
+      background: #fff; padding: 6px 10px; line-height: 1.5;
+      font-size: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      border-radius: 4px;
+    }
+    .raw {
+      margin-top: 6px; font-size: 11px; font-family: Consolas, monospace;
+      color: #888; white-space: pre-wrap; word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+
+<h1>📚 學區查詢測試（國小 / 國中）</h1>
+
+<!-- 1. 地址查詢 -->
+<div class="card">
+  <h2>① 用地址查</h2>
+  <div class="row">
+    <input type="text" id="addr" placeholder="例：台北市信義區虎林街57之15號" autocomplete="off">
+    <button onclick="queryByAddress()">查詢</button>
+  </div>
+  <div id="addr-result" class="result" style="display:none;"></div>
+</div>
+
+<!-- 2. 區+里查詢 -->
+<div class="card">
+  <h2>② 用 區 + 里 查（直接 lookup 對照表，不經 geocode）</h2>
+  <div class="row">
+    <select id="city">
+      <option value="">城市…</option>
+    </select>
+    <select id="district">
+      <option value="">行政區…</option>
+    </select>
+    <select id="village">
+      <option value="">里…</option>
+    </select>
+    <button onclick="queryByVillage()">查詢</button>
+  </div>
+  <div id="village-result" class="result" style="display:none;"></div>
+</div>
+
+<!-- 3. 區內所有里 -->
+<div class="card">
+  <h2>③ 整區所有里學區對照</h2>
+  <div class="row">
+    <select id="bd-city" onchange="onBdCityChange()">
+      <option value="">城市…</option>
+    </select>
+    <select id="bd-district">
+      <option value="">行政區…</option>
+    </select>
+    <button onclick="loadDistrictTable()">列出</button>
+  </div>
+  <div id="bd-table"></div>
+</div>
+
+<!-- 4. 地圖 -->
+<div class="card">
+  <h2>④ 地圖：點任一點查該位置學區</h2>
+  <div class="map-hint">底圖：OpenStreetMap；村里界線：內政部 NLSC WMTS。在地圖上點任一點 → 自動 query 該位置學區。</div>
+  <div id="map"></div>
+  <div id="map-result" class="result" style="display:none;"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+
+function renderResult(el, data, opts = {}) {
+  el.style.display = 'block';
+  if (data.error) {
+    el.innerHTML = `<span class="err">❌ ${esc(data.error)}</span>`;
+    return;
+  }
+  const es = data.school_elementary || [];
+  const jh = data.school_junior_high || [];
+  const tags = (arr, cls) => arr.length
+    ? arr.map(s => `<span class="school-tag ${cls}">${esc(s)}</span>`).join(' ')
+    : '<span style="color:#888;">—</span>';
+  let html = '';
+  if (data.geocoded_address || data.input_address) {
+    html += `<div>輸入地址：${esc(data.input_address || '')}</div>`;
+  }
+  if (data.geocoded_address) {
+    html += `<div>Google 解析：${esc(data.geocoded_address)}</div>`;
+  }
+  if (data.geocoded_lat || data.lat) {
+    html += `<div>座標：${(data.geocoded_lat || data.lat || '').toFixed?.(6) || (data.geocoded_lat || data.lat)}, ${(data.geocoded_lng || data.lng || '').toFixed?.(6) || (data.geocoded_lng || data.lng)}</div>`;
+  }
+  if (data.city || data.district) {
+    html += `<div>位置：${esc(data.city || '')} ${esc(data.district || '')} <strong>${esc(data.village || '?里')}</strong></div>`;
+  }
+  html += `<div>國小學區：<span class="schools">${tags(es, '')}</span></div>`;
+  html += `<div>國中學區：<span class="schools">${tags(jh, 'junior')}</span></div>`;
+  if (data.source && data.source !== 'lookup_hit') {
+    html += `<div class="raw">source: ${esc(data.source)}</div>`;
+  }
+  el.innerHTML = html;
+}
+
+async function queryByAddress() {
+  const addr = $('addr').value.trim();
+  if (!addr) return;
+  const r = await fetch(`/api/school_district/lookup?address=${encodeURIComponent(addr)}`);
+  renderResult($('addr-result'), await r.json());
+}
+
+async function queryByVillage() {
+  const c = $('city').value, d = $('district').value, v = $('village').value;
+  if (!c || !d || !v) {
+    renderResult($('village-result'), { error: '請選擇 城市 / 區 / 里' });
+    return;
+  }
+  const r = await fetch(`/api/school_district/lookup?city=${encodeURIComponent(c)}&district=${encodeURIComponent(d)}&village=${encodeURIComponent(v)}`);
+  renderResult($('village-result'), await r.json());
+}
+
+let SUPPORTED = {};
+let DISTRICT_VILLAGES = null;
+
+async function loadSupported() {
+  const r = await fetch('/api/school_district/supported');
+  SUPPORTED = await r.json();
+  // ① / ③ 城市下拉
+  for (const sel of [$('city'), $('bd-city')]) {
+    sel.innerHTML = '<option value="">城市…</option>';
+    Object.keys(SUPPORTED).forEach(c => {
+      sel.innerHTML += `<option value="${esc(c)}">${esc(c)}</option>`;
+    });
+  }
+  $('city').addEventListener('change', () => {
+    const dSel = $('district');
+    dSel.innerHTML = '<option value="">行政區…</option>';
+    (SUPPORTED[$('city').value] || []).forEach(d => {
+      dSel.innerHTML += `<option value="${esc(d)}">${esc(d)}</option>`;
+    });
+    $('village').innerHTML = '<option value="">里…</option>';
+  });
+  $('district').addEventListener('change', async () => {
+    const c = $('city').value, d = $('district').value;
+    const vSel = $('village');
+    vSel.innerHTML = '<option value="">里…</option>';
+    if (!c || !d) return;
+    const r = await fetch(`/api/school_district/by_district?city=${encodeURIComponent(c)}&district=${encodeURIComponent(d)}`);
+    const data = await r.json();
+    DISTRICT_VILLAGES = data.villages || {};
+    Object.keys(DISTRICT_VILLAGES).sort().forEach(v => {
+      vSel.innerHTML += `<option value="${esc(v)}">${esc(v)}</option>`;
+    });
+  });
+}
+
+function onBdCityChange() {
+  const c = $('bd-city').value;
+  const dSel = $('bd-district');
+  dSel.innerHTML = '<option value="">行政區…</option>';
+  (SUPPORTED[c] || []).forEach(d => {
+    dSel.innerHTML += `<option value="${esc(d)}">${esc(d)}</option>`;
+  });
+}
+
+async function loadDistrictTable() {
+  const c = $('bd-city').value, d = $('bd-district').value;
+  if (!c || !d) return;
+  const r = await fetch(`/api/school_district/by_district?city=${encodeURIComponent(c)}&district=${encodeURIComponent(d)}`);
+  const data = await r.json();
+  const v = data.villages || {};
+  const rows = Object.keys(v).sort();
+  if (!rows.length) {
+    $('bd-table').innerHTML = '<div class="raw">查無資料</div>';
+    return;
+  }
+  let html = '<table><thead><tr><th>里</th><th>國小</th><th>國中</th></tr></thead><tbody>';
+  rows.forEach(name => {
+    const info = v[name];
+    html += `<tr><td><b>${esc(name)}</b></td>
+      <td>${(info.elementary || []).map(s => `<span class="school-tag">${esc(s)}</span>`).join(' ') || '—'}</td>
+      <td>${(info.junior_high || []).map(s => `<span class="school-tag junior">${esc(s)}</span>`).join(' ') || '—'}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  $('bd-table').innerHTML = html;
+}
+
+// ── Map ────────────────────────────────────────────────────
+let map, marker;
+function initMap() {
+  // 預設中心：台北 101 附近
+  map = L.map('map').setView([25.033, 121.565], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OSM', maxZoom: 19,
+  }).addTo(map);
+  // 內政部 NLSC 村里界 WMTS
+  L.tileLayer('https://wmts.nlsc.gov.tw/wmts/B0727/default/EPSG:3857/{z}/{x}/{y}', {
+    attribution: '村里界 © 內政部 NLSC', maxZoom: 19, opacity: 0.45,
+  }).addTo(map);
+  map.on('click', async (e) => {
+    const { lat, lng } = e.latlng;
+    if (marker) map.removeLayer(marker);
+    marker = L.marker([lat, lng]).addTo(map);
+    const r = await fetch(`/api/school_district/lookup?lat=${lat}&lng=${lng}`);
+    renderResult($('map-result'), await r.json());
+  });
+  // 圖例
+  const legend = L.control({ position: 'bottomright' });
+  legend.onAdd = () => {
+    const div = L.DomUtil.create('div', 'legend');
+    div.innerHTML = '<b>地圖圖層</b><br>底圖 OSM<br>橘紅線 = 村里界 (NLSC)<br><br>點任一點查學區';
+    return div;
+  };
+  legend.addTo(map);
+}
+
+// boot
+loadSupported();
+initMap();
+</script>
+</body>
+</html>

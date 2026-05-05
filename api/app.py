@@ -43,6 +43,10 @@ _PUBLIC_PATHS = {
     "/api/firebase_config",
     "/api/target_regions",
     "/api/district_new_house_price",   # 各區新成屋中位數，純市場統計，前端 boot 早於 auth 就要拿
+    "/api/school_district/lookup",     # 學區查詢測試頁，純地理對照無個資
+    "/api/school_district/supported",
+    "/api/school_district/by_district",
+    "/school_lookup.html",              # 學區查詢測試頁 HTML
     "/api/maintenance_status",   # 維護頁 polling 用，公開不需 auth
     "/api/version",              # 版本號（commit short SHA），admin UI 對版用，無敏感資訊
     "/admin.html",            # admin 也走自己的登入頁
@@ -1134,8 +1138,53 @@ async def root_v2():
     return _serve_index2_with_version()
 
 
+@app.get("/school_lookup.html")
+async def school_lookup_page():
+    """學區查詢測試頁（公開、無需登入）— 用來驗證 lookup 正確性。"""
+    return FileResponse(str(FRONTEND_DIR / "school_lookup.html"))
+
+
 _TARGET_REGIONS_COUNTS_CACHE = {"ts": 0.0, "data": None}
 _TARGET_REGIONS_COUNTS_TTL = 120   # 2 分鐘 — 物件數變化頻率低，每次 page load 都打 Firestore 浪費
+
+@app.get("/api/school_district/lookup")
+def api_school_district_lookup(
+    address: Optional[str] = Query(None),
+    lat: Optional[float] = Query(None),
+    lng: Optional[float] = Query(None),
+    city: Optional[str] = Query(None),
+    district: Optional[str] = Query(None),
+    village: Optional[str] = Query(None),
+):
+    """測試頁專用：地址 / 座標 / (city+district+village) 任一組合都可查學區。
+    優先序：village > coord > address。"""
+    from analysis import school_district as sd
+    if village and city and district:
+        r = sd.lookup_by_village(city, district, village)
+        return {"mode": "village", "city": city, "district": district, "village": village,
+                "school_elementary": r["elementary"], "school_junior_high": r["junior_high"]}
+    if lat is not None and lng is not None:
+        return {"mode": "coord", **sd.lookup_by_coord(lat, lng, city or "", district or "")}
+    if address:
+        return {"mode": "address", **sd.lookup_by_address(address)}
+    return {"error": "請提供 address / lat+lng / city+district+village 任一組合"}
+
+
+@app.get("/api/school_district/supported")
+def api_school_district_supported():
+    """回 {city: [district, ...]} 給測試頁下拉選單。"""
+    from analysis import school_district as sd
+    return sd.get_supported_districts()
+
+
+@app.get("/api/school_district/by_district")
+def api_school_district_by_district(city: str = Query(...), district: str = Query(...)):
+    """測試頁地圖用：回某區所有里的學區對照 + 該里 polygon (NLSC TaiwanVillage WMS)。
+    現在先回對照表本身 (polygon 由前端用 NLSC WMS overlay)。"""
+    from analysis import school_district as sd
+    villages = sd.get_district_villages(city, district)
+    return {"city": city, "district": district, "villages": villages}
+
 
 @app.get("/api/target_regions")
 def api_target_regions(with_counts: bool = False):

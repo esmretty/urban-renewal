@@ -8,6 +8,8 @@ firebase-credentials.json
 data/*
 # 但保留這些靜態資料檔（部署到新機器需要）
 !data/mrt_exits.json
+!data/school_districts/
+!data/school_districts/**
 
 # Python
 __pycache__/
