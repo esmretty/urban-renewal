@@ -2885,31 +2885,36 @@ def _strip_for_list(d: dict) -> dict:
 
 
 def _query_districts_parallel(col, dist_list, max_price_wan, min_price_wan):
-    """繞過 Firestore `in [N values]` 的 fan-out 慢點：並行跑 N 個 `==` query。
+    """切 N districts query 用 Firestore `in` operator (現代 SDK 支援 ≤30 值)。
 
-    背景：where("district", "in", [15 districts]) 在 Firestore 內部會 serialize 成
-    15 個 sub-query 依序跑，prod 實測 N=525 docs 要 1.8 秒。改成 ThreadPoolExecutor
-    並行 15 個 `where("district", "==", d)`，預計降到 ~200ms (max of single-district query).
+    舊版本曾因為 `in` 內部 serialize fan-out 改用 N 個 parallel `==`，
+    但實測：N=15 parallel 仍要 ~1.3 秒（gRPC 多路複用瓶頸）。
+    現在 Python SDK ≥ 2.x 對 `in [≤30]` 已優化成單 query，1 個 round-trip 就拿全部。
+    超過 30 districts → 切 chunks 平行 fire（保留舊 fallback）。
     """
     from google.cloud.firestore_v1 import FieldFilter
-    import concurrent.futures as _cf
 
     max_ntd = int(max_price_wan * 10000) if (max_price_wan and max_price_wan > 0) else None
     min_ntd = int(min_price_wan * 10000) if (min_price_wan and min_price_wan > 0) else None
 
-    def _q_one(d):
-        q = col.where(filter=FieldFilter("district", "==", d))
+    def _q_in(chunk):
+        q = col.where(filter=FieldFilter("district", "in", list(chunk)))
         if max_ntd is not None:
             q = q.where(filter=FieldFilter("price_ntd", "<=", max_ntd))
         if min_ntd is not None:
             q = q.where(filter=FieldFilter("price_ntd", ">=", min_ntd))
         return list(q.get())
 
+    if len(dist_list) <= 30:
+        return _q_in(dist_list)
+
+    # >30 districts：切成 30 一組 chunks 平行 fire
+    import concurrent.futures as _cf
+    chunks = [dist_list[i:i+30] for i in range(0, len(dist_list), 30)]
     docs = []
     seen = set()
-    n_workers = min(len(dist_list), 16)
-    with _cf.ThreadPoolExecutor(max_workers=n_workers) as ex:
-        for sub in ex.map(_q_one, dist_list):
+    with _cf.ThreadPoolExecutor(max_workers=min(len(chunks), 4)) as ex:
+        for sub in ex.map(_q_in, chunks):
             for d in sub:
                 if d.id not in seen:
                     seen.add(d.id)
