@@ -2500,79 +2500,11 @@
     return new Promise(resolve => document.addEventListener('auth:ready', resolve, { once: true }));
   }
 
-  // 觸控裝置 pull-to-refresh：頁面捲到頂、往下拉 ≥ 80px 觸發 location.reload()
-  function _setupPullToRefresh() {
-    if (!('ontouchstart' in window)) return;
-    const THRESHOLD = 80;
-    const MAX = 200;
-    let startY = 0, dy = 0, pulling = false;
-    let indicator = null, textEl = null;
-
-    function ensureIndicator() {
-      if (indicator) return;
-      indicator = document.createElement('div');
-      indicator.id = 'v2-ptr';
-      indicator.innerHTML = `
-        <div class="v2-ptr__inner">
-          <div class="v2-ptr__spinner"></div>
-          <span class="v2-ptr__text">下拉重新整理</span>
-        </div>`;
-      document.body.appendChild(indicator);
-      textEl = indicator.querySelector('.v2-ptr__text');
-    }
-
-    function setIndicator(distance, ratio, label) {
-      ensureIndicator();
-      indicator.style.transition = 'none';
-      indicator.style.transform = `translateY(${distance * 0.45}px)`;
-      indicator.style.opacity = String(ratio);
-      if (textEl) textEl.textContent = label;
-    }
-
-    function hideIndicator() {
-      if (!indicator) return;
-      indicator.style.transition = 'transform 0.22s ease, opacity 0.22s ease';
-      indicator.style.transform = 'translateY(-50px)';
-      indicator.style.opacity = '0';
-    }
-
-    document.addEventListener('touchstart', (e) => {
-      if (window.scrollY > 0) { pulling = false; return; }
-      // sidebar / drawer / modal 開啟時不啟用 PTR
-      if (document.body.classList.contains('v2-no-scroll')) { pulling = false; return; }
-      startY = e.touches[0].clientY;
-      pulling = true;
-      dy = 0;
-    }, { passive: true });
-
-    document.addEventListener('touchmove', (e) => {
-      if (!pulling) return;
-      dy = e.touches[0].clientY - startY;
-      if (dy <= 0) { pulling = false; hideIndicator(); return; }
-      dy = Math.min(dy, MAX);
-      const ratio = Math.min(dy / THRESHOLD, 1);
-      setIndicator(dy, ratio, dy >= THRESHOLD ? '放開重新整理' : '下拉重新整理');
-    }, { passive: true });
-
-    document.addEventListener('touchend', () => {
-      if (!pulling) return;
-      pulling = false;
-      if (dy >= THRESHOLD) {
-        setIndicator(THRESHOLD, 1, '重新整理中…');
-        setTimeout(() => location.reload(), 120);
-      } else {
-        hideIndicator();
-      }
-      dy = 0;
-    });
-  }
-
   // ── Boot ─────────────────────────────────────────────────────────────────
   async function boot() {
     window.__perfMark && window.__perfMark('app2_boot_start');
     // mobile menu button
     $('#v2-menu-btn')?.addEventListener('click', openSidebar);
-    _setupPullToRefresh();
 
     // 預設勾選所有 enabled district (對齊 v1 default 全勾)
     Object.entries(V1_DISTRICTS).forEach(([city, cfg]) => {
