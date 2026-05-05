@@ -307,23 +307,23 @@ REBUILD_SCENARIOS = {
 }
 
 # 新北市 4 區 — 都更實務上「值得分析」的分區。
-# 規則：住、商、工 三大類都有都更價值；保護區/風景區/機關用地/河道用地/道路用地/公園用地等不算。
+# 規則：住、商 兩大類有都更價值；
+#   工業區一律 NOT suitable（重建後仍須工業使用、不能改住宅，由
+#   is_zoning_suitable_for_renewal 在進入 district 比對前直接擋）；
+#   保護區/風景區/機關用地/河道用地/道路用地/公園用地等也不算。
 # 住宅區子類別在這 4 區還有額外限制：
 #   板橋/中和/永和：只有「住宅區」(=第二種，300%) 算
 #   新店：只有「第四種住宅區」(300%) 算
 #   其他子類別（第三種、住宅區(再)等）容積率低，不列入
-# 商業區/工業區：所有子類別都算 (沒分子類別限制)
+# 商業區：所有子類別都算 (沒分子類別限制)
 _COMMERCIAL_ZONES = {
     "商業區", "第一種商業區", "第二種商業區", "第三種商業區", "第四種商業區",
 }
-_INDUSTRIAL_ZONES = {
-    "工業區", "甲種工業區", "乙種工業區", "丙種工業區", "丁種工業區",
-}
 SUITABLE_ZONING_FOR_RENEWAL_NEW_TAIPEI = {
-    "板橋區": {"住宅區"} | _COMMERCIAL_ZONES | _INDUSTRIAL_ZONES,
-    "中和區": {"住宅區"} | _COMMERCIAL_ZONES | _INDUSTRIAL_ZONES,
-    "永和區": {"住宅區"} | _COMMERCIAL_ZONES | _INDUSTRIAL_ZONES,
-    "新店區": {"第四種住宅區"} | _COMMERCIAL_ZONES | _INDUSTRIAL_ZONES,
+    "板橋區": {"住宅區"} | _COMMERCIAL_ZONES,
+    "中和區": {"住宅區"} | _COMMERCIAL_ZONES,
+    "永和區": {"住宅區"} | _COMMERCIAL_ZONES,
+    "新店區": {"第四種住宅區"} | _COMMERCIAL_ZONES,
 }
 # 各行政區新成屋預設單價（萬/坪）— 之後可由預售屋 CSV 自動更新
 DISTRICT_NEW_HOUSE_PRICE_WAN = {

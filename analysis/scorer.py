@@ -339,21 +339,36 @@ def calculate_renewal_value(
 
 
 def is_zoning_suitable_for_renewal(district: Optional[str], zoning) -> tuple:
-    """判斷新北 4 區（板橋/新店/中和/永和）的物件分區是否值得做都更分析。
+    """判斷物件分區是否值得做都更分析。
 
     zoning 接受兩種格式：
       - str：單一 zone_name（如「住宅區」）
-      - list：多分區（如 ["住宅區", "商業區"]）— 物件座落跨多塊 polygon
-    多分區時：只要有任一塊在 SUITABLE 裡就算 suitable。
+      - list：多分區（如 ["住宅區", "商業區"]）
 
     回 (suitable: bool, reason: str)
       suitable=True  → 跑完整分析
       suitable=False → 跳過分析；reason 是給用戶看的中性說明
 
-    規則：實務上有都更價值的只有「住、商、工」三種；其他（保護區/風景區/機關用地/河道用地等）無價值。
-    住宅區子類別在新北 4 區還有額外限制（見 config.SUITABLE_ZONING_FOR_RENEWAL_NEW_TAIPEI）。
-    台北市等不在 SUITABLE 的 district 一律 True（不限制）。
+    規則：
+    - 工業區（甲/乙/丙/丁/泛稱）一律不適合 — 重建後仍須工業使用，要改住宅必須
+      先做「土地使用變更」程序冗長，實務上對住宅都更投資人無價值
+    - 新北 4 區（板橋/新店/中和/永和）住宅區子類別有額外限制
+      （見 config.SUITABLE_ZONING_FOR_RENEWAL_NEW_TAIPEI）
+    - 其他 district：除工業區外一律 True（住、商、住宅用地都算）
     """
+    # 標準化成 list
+    if not zoning:
+        return True, ""
+    zones = [zoning] if isinstance(zoning, str) else list(zoning)
+    zones = [z for z in zones if z]
+    if not zones:
+        return True, ""
+
+    # 工業區一律不適合 (任何 district)
+    if all("工業" in z for z in zones):
+        label = "、".join(zones)
+        return False, f"本物件土地分區為「{label}」（工業用地），重建後仍須工業使用，不適合住宅都更"
+
     if not district:
         return True, ""
     try:
@@ -362,14 +377,6 @@ def is_zoning_suitable_for_renewal(district: Optional[str], zoning) -> tuple:
         return True, ""
     suitable_set = SUITABLE_ZONING_FOR_RENEWAL_NEW_TAIPEI.get(district)
     if suitable_set is None:
-        return True, ""
-
-    # 標準化成 list
-    if not zoning:
-        return True, ""
-    zones = [zoning] if isinstance(zoning, str) else list(zoning)
-    zones = [z for z in zones if z]
-    if not zones:
         return True, ""
 
     # 任一 zone 在 SUITABLE 裡 → suitable
