@@ -375,6 +375,9 @@ def _reverse_geocode_loose(lat: float, lng: float, road_hint: str, prefer_distan
                 continue
             canon = canon_m.group(1)
             canon = re.sub(r"^(台灣|臺灣)", "", canon).strip()
+            # Google formatted_address 會在「區」「路名」之間插入里名 (e.g. 「信義區華興里虎林街」)
+            # 貪婪 regex 的 [一-龥]+ 會把里名當路名前綴吃進來，需在這裡剝除避免污染 LVR 比對
+            canon = re.sub(r"(區)[一-龥]{1,4}里", r"\1", canon)
             if road_short not in canon:
                 continue
             if prefer_distance:
@@ -444,6 +447,9 @@ def _reverse_geocode_lane(lat: float, lng: float, road_hint: str, lane_hint: str
             canon = canon_m.group(1)
             # 去掉「台灣 / 臺灣」前綴（regex 的市/縣 prefix 可能貪婪吃進去）
             canon = re.sub(r"^(台灣|臺灣)", "", canon).strip()
+            # Google formatted_address 在「區」「路名」之間會插里名 (e.g. 「信義區華興里虎林街」)
+            # 貪婪 regex [一-龥]+ 把里名當路名前綴吃進來，需剝除避免污染 LVR 比對
+            canon = re.sub(r"(區)[一-龥]{1,4}里", r"\1", canon)
             # 排除畸形：正則應該已保證，但再保險一次
             if re.search(r"樓.*號", canon):
                 continue

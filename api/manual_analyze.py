@@ -87,6 +87,9 @@ def normalize_address(s: str) -> str:
     # 去開頭的「縣市+區」前綴（LVR 有時會含，使用者輸入通常沒有）
     s = re.sub(r"^(台北市|新北市|桃園市|基隆市)", "", s)
     s = re.sub(r"^[\u4e00-\u9fa5]{1,4}區", "", s)
+    # 去掉里名 (Google reverse-geocode 會在「區」跟路名之間塞「華興里」之類)
+    # LVR / 591 都不存里名，比對前必須剝除否則 ±0.01 三角驗證 fail
+    s = re.sub(r"^[一-龥]{1,4}里", "", s)
     # 段：阿拉伯 → 漢字（1段→一段 ... 10段→十段；其餘保持）
     s = re.sub(r"(\d+)段",
                lambda m: _DIGIT_TO_CN.get(m.group(1), m.group(1)) + "段",
