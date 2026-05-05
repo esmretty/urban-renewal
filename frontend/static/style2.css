@@ -2129,6 +2129,9 @@ select.v2-d-input { text-align: left; }
   padding: 8px;
   z-index: 1000;
   max-width: 460px;
+  max-height: 70vh;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
   display: none;
 }
 .v2-lvr-popup__title {
@@ -2956,7 +2959,18 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
 }
 @media (max-width: 640px) {
   .v2-d-row { gap: 8px; margin-bottom: 8px; }
-  .v2-lvr-popup { max-width: calc(100vw - 24px); left: 12px !important; }
+  /* popup 寬限制 + 內部 table 7 欄 nowrap 必定超寬 → 靠 overflow-x:auto 橫向滑 */
+  .v2-lvr-popup {
+    max-width: calc(100vw - 24px);
+    left: 12px !important;
+    /* 縮 padding 給內容更多橫向空間 */
+    padding: 6px;
+  }
+  /* 縮表格 padding & 字體，盡量擠進 viewport，不行的話橫向 swipe 看完 */
+  .v2-lvr-tbl { font-size: 12px; }
+  .v2-lvr-tbl th { padding: 4px 5px; }
+  .v2-lvr-tbl td { padding: 4px 5px; }
+  .v2-lvr-tbl td.v2-lvr-addr { max-width: 140px; }
   .v2-src-badge--big { font-size: 13px !important; padding: 5px 10px !important; }
   .v2-d-title { font-size: 16px; }
   .v2-d-tbl { font-size: 14px; }
