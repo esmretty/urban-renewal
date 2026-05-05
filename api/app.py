@@ -2843,16 +2843,10 @@ def _query_districts_parallel(col, dist_list, max_price_wan, min_price_wan):
 
 # Server-side in-memory cache for Firestore query results (NOT response — watchlist join is per-user)
 # Key: 規範化 query params 的 hash；Value: (timestamp, list of (doc_id, doc_data) tuples)
-# SWR (stale-while-revalidate)：
-#   - fresh (<TTL_FRESH): 直接回 cache
-#   - stale (TTL_FRESH ~ TTL_HARD): 立即回舊 cache，背景跑新 query 更新
-#   - expired (>TTL_HARD): 視同 cache miss，必須等真 query
+# 純 lazy fill：TTL 內 hit 直接回；過期 → 真等。沒有背景 thread。
 _FIRESTORE_QUERY_CACHE: dict = {}
-_FIRESTORE_QUERY_CACHE_TTL_FRESH = 120   # 2 分鐘內視為新鮮，直接回
-_FIRESTORE_QUERY_CACHE_TTL_HARD = 600    # 10 分鐘外視為失效，必須真等
-_FIRESTORE_QUERY_CACHE_MAX = 128         # 最多存 N 個 query；爆量 LRU evict
-_SWR_REFRESH_INFLIGHT: set = set()       # 已在背景 refresh 中的 key（避免同 key 重複 refresh）
-_SWR_REFRESH_LOCK = None                 # threading.Lock，lazy init（worker thread safe）
+_FIRESTORE_QUERY_CACHE_TTL = 120   # 2 分鐘
+_FIRESTORE_QUERY_CACHE_MAX = 128
 
 
 def _cache_key_for_query(dist_list, max_price_wan, min_price_wan):
@@ -2864,78 +2858,34 @@ def _cache_key_for_query(dist_list, max_price_wan, min_price_wan):
     return f"{ds}|{max_price_wan or 0}|{min_price_wan or 0}"
 
 
-def _do_firestore_query(col, dist_list, max_price_wan, min_price_wan):
-    """實際打 Firestore；回傳 [(doc_id, doc_dict), ...]"""
-    if dist_list and 0 < len(dist_list) <= 30:
-        docs = _query_districts_parallel(col, dist_list, max_price_wan, min_price_wan)
-    else:
-        docs = list(col.get())
-    return [(d.id, d.to_dict() or {}) for d in docs]
-
-
-def _evict_oldest_if_full():
-    if len(_FIRESTORE_QUERY_CACHE) >= _FIRESTORE_QUERY_CACHE_MAX:
-        oldest_key = min(_FIRESTORE_QUERY_CACHE, key=lambda k: _FIRESTORE_QUERY_CACHE[k][0])
-        _FIRESTORE_QUERY_CACHE.pop(oldest_key, None)
-
-
-def _swr_background_refresh(key, col, dist_list, max_price_wan, min_price_wan):
-    """背景 thread：偷偷重抓並更新 cache。caller 已經拿到舊資料回給用戶。
-    用 in-flight set 防同一 key 同時被多個 request 各自 refresh。"""
-    global _SWR_REFRESH_LOCK
-    if _SWR_REFRESH_LOCK is None:
-        import threading as _th
-        _SWR_REFRESH_LOCK = _th.Lock()
-    with _SWR_REFRESH_LOCK:
-        if key in _SWR_REFRESH_INFLIGHT:
-            return
-        _SWR_REFRESH_INFLIGHT.add(key)
-
-    def _worker():
-        import time as _t
-        try:
-            docs_data = _do_firestore_query(col, dist_list, max_price_wan, min_price_wan)
-            _evict_oldest_if_full()
-            _FIRESTORE_QUERY_CACHE[key] = (_t.time(), docs_data)
-            logger.info("[SWR] background refresh done key=%s docs=%d", key, len(docs_data))
-        except Exception as e:
-            logger.warning("[SWR] background refresh failed key=%s: %s", key, e)
-        finally:
-            with _SWR_REFRESH_LOCK:
-                _SWR_REFRESH_INFLIGHT.discard(key)
-
-    import threading as _th
-    _th.Thread(target=_worker, daemon=True, name=f"swr-refresh-{key[:20]}").start()
-
-
 def invalidate_query_cache():
     """admin 改物件、scraper 寫入後呼叫，強制下次 query 走 DB。"""
     _FIRESTORE_QUERY_CACHE.clear()
 
 
 def _query_districts_cached(col, dist_list, max_price_wan, min_price_wan):
-    """SWR cache 包裝。回傳 (docs_data_list, cache_state)。
-    cache_state: "fresh" / "stale" / "miss"
+    """純 lazy cache。回傳 (docs_data_list, cache_state)。
+    cache_state: "fresh" (hit) / "miss"
     """
     import time as _t
     key = _cache_key_for_query(dist_list, max_price_wan, min_price_wan)
     now = _t.time()
+
     cached = _FIRESTORE_QUERY_CACHE.get(key)
+    if cached and (now - cached[0]) < _FIRESTORE_QUERY_CACHE_TTL:
+        return cached[1], "fresh"
 
-    if cached:
-        age = now - cached[0]
-        if age < _FIRESTORE_QUERY_CACHE_TTL_FRESH:
-            # 新鮮 → 直接回
-            return cached[1], "fresh"
-        if age < _FIRESTORE_QUERY_CACHE_TTL_HARD:
-            # stale → 立即回舊資料 + 背景 refresh
-            _swr_background_refresh(key, col, dist_list, max_price_wan, min_price_wan)
-            return cached[1], "stale"
-        # 太舊 → fall through to miss
+    # miss — do real query
+    if dist_list and 0 < len(dist_list) <= 30:
+        docs = _query_districts_parallel(col, dist_list, max_price_wan, min_price_wan)
+    else:
+        docs = list(col.get())
+    docs_data = [(d.id, d.to_dict() or {}) for d in docs]
 
-    # miss / hard expired — 真等
-    docs_data = _do_firestore_query(col, dist_list, max_price_wan, min_price_wan)
-    _evict_oldest_if_full()
+    if len(_FIRESTORE_QUERY_CACHE) >= _FIRESTORE_QUERY_CACHE_MAX:
+        oldest_key = min(_FIRESTORE_QUERY_CACHE, key=lambda k: _FIRESTORE_QUERY_CACHE[k][0])
+        _FIRESTORE_QUERY_CACHE.pop(oldest_key, None)
+
     _FIRESTORE_QUERY_CACHE[key] = (now, docs_data)
     return docs_data, "miss"
 
@@ -3116,11 +3066,7 @@ def central_search(
     _was_cached = _phase_t.pop("cache_hit", 0)
     _cache_state = _phase_t.pop("cache_state", "miss")
     _st_parts = [f"{name};dur={ms:.0f}" for name, ms in _phase_t.items()]
-    _cache_desc = {
-        "fresh": "cache_FRESH",
-        "stale": "cache_STALE_swr",  # 立即回 + 背景 refresh
-        "miss":  "cache_MISS",
-    }.get(_cache_state, "cache_MISS")
+    _cache_desc = "cache_HIT" if _cache_state == "fresh" else "cache_MISS"
     # auth time (Firebase token verify) 從 middleware 帶過來
     _auth_ms = getattr(request.state, "auth_ms", 0)
     _st_parts.append(f"auth;dur={_auth_ms:.0f}")
