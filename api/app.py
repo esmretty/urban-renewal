@@ -42,6 +42,7 @@ _PUBLIC_PATHS = {
     "/favicon.ico",
     "/api/firebase_config",
     "/api/target_regions",
+    "/api/district_new_house_price",   # 各區新成屋中位數，純市場統計，前端 boot 早於 auth 就要拿
     "/api/maintenance_status",   # 維護頁 polling 用，公開不需 auth
     "/api/version",              # 版本號（commit short SHA），admin UI 對版用，無敏感資訊
     "/admin.html",            # admin 也走自己的登入頁

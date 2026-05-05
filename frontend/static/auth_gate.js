@@ -9,6 +9,17 @@
 import { initializeApp, getAuth, onAuthStateChanged, signOut }
   from "/static/firebase-bundle.js";
 
+// 跳到 /login.html 前先把當前 URL 存進 sessionStorage，登入完導回（保留 ?id= deep-link 等）
+function _redirectToLogin(extraQuery) {
+  try {
+    const cur = window.location.pathname + window.location.search + window.location.hash;
+    if (cur && cur !== "/login.html" && !cur.startsWith("/login.html")) {
+      sessionStorage.setItem("post_login_redirect", cur);
+    }
+  } catch (_e) {}
+  window.location.replace("/login.html" + (extraQuery || ""));
+}
+
 async function boot() {
   window.__perfMark && window.__perfMark('auth_gate_module_loaded');
   const res = await fetch("/api/firebase_config");
@@ -26,7 +37,7 @@ async function boot() {
   const ready = new Promise(resolve => {
     onAuthStateChanged(auth, (user) => {
       if (!user) {
-        window.location.replace("/login.html");
+        _redirectToLogin();
         return;
       }
       resolve(user);
@@ -65,7 +76,7 @@ async function boot() {
     if (!headers.has("Authorization")) headers.set("Authorization", "Bearer " + fresh);
     const resp = await origFetch(input, { ...init, headers });
     if (resp.status === 401) {
-      window.location.replace("/login.html");
+      _redirectToLogin();
     }
     return resp;
   };
@@ -83,6 +94,8 @@ async function boot() {
 
   window.logoutUser = async () => {
     await signOut(auth);
+    // logout 不帶 redirect-back（用戶主動登出，不該回原 URL）
+    try { sessionStorage.removeItem("post_login_redirect"); } catch (_e) {}
     window.location.replace("/login.html");
   };
 
@@ -100,6 +113,8 @@ async function boot() {
         const body = await meResp.json().catch(() => ({}));
         const msg = body.detail || "此帳號尚未獲邀，請聯絡管理者將您加入白名單。";
         await signOut(auth);
+        // 403 = 白名單擋 → 不帶 redirect-back（避免登入完又被擋一次）
+        try { sessionStorage.removeItem("post_login_redirect"); } catch (_e) {}
         window.location.replace("/login.html?err=" + encodeURIComponent(msg));
         return;
       }

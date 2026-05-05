@@ -87,9 +87,20 @@
       const app = initializeApp(cfg);
       const auth = getAuth(app);
 
-      // 若已登入直接跳首頁
+      // 已登入 → 跳到登入前的頁面（auth_gate 存的 sessionStorage post_login_redirect）
+      // 沒存就跳首頁；只接受同源相對路徑「/...」開頭、不接受「//...」(避免跨域跳轉)
+      function _safePostLoginTarget() {
+        try {
+          const raw = sessionStorage.getItem("post_login_redirect");
+          if (raw && raw.startsWith("/") && !raw.startsWith("//")) {
+            sessionStorage.removeItem("post_login_redirect");
+            return raw;
+          }
+        } catch (_e) {}
+        return "/";
+      }
       onAuthStateChanged(auth, (user) => {
-        if (user) window.location.href = "/";
+        if (user) window.location.href = _safePostLoginTarget();
       });
 
       btn.disabled = false;
