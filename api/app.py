@@ -1355,7 +1355,72 @@ async def admin_system_usage(admin: dict = Depends(require_admin)):
             out["data_dir"] = {"total_mb": 0}
     except Exception as e:
         out["data_dir"] = {"error": str(e)}
+    # ── CPU / RAM ─（用 psutil；非阻塞 cpu_percent，靠下方 helper 取近 1 秒平均）
+    try:
+        import psutil
+        # cpu_percent(interval=None) 第一次回 0，需要 prime → 用 _get_cpu_percent 處理
+        cpu_pct = _get_cpu_percent()
+        load1 = load5 = load15 = None
+        try:
+            la = psutil.getloadavg()
+            load1, load5, load15 = round(la[0], 2), round(la[1], 2), round(la[2], 2)
+        except (AttributeError, OSError):
+            pass  # Windows 無 getloadavg
+        vm = psutil.virtual_memory()
+        sw = psutil.swap_memory()
+        out["cpu"] = {
+            "percent": round(cpu_pct, 1) if cpu_pct is not None else None,
+            "count_logical": psutil.cpu_count(logical=True),
+            "count_physical": psutil.cpu_count(logical=False),
+            "load_1m": load1,
+            "load_5m": load5,
+            "load_15m": load15,
+        }
+        out["ram"] = {
+            "total_gb": round(vm.total / 1024**3, 2),
+            "used_gb": round(vm.used / 1024**3, 2),
+            "available_gb": round(vm.available / 1024**3, 2),
+            "percent": round(vm.percent, 1),
+        }
+        out["swap"] = {
+            "total_gb": round(sw.total / 1024**3, 2),
+            "used_gb": round(sw.used / 1024**3, 2),
+            "percent": round(sw.percent, 1) if sw.total else 0.0,
+        }
+        # 本 process 自身用量（容器/VM 共用主機時更具參考性）
+        try:
+            proc = psutil.Process()
+            with proc.oneshot():
+                rss_mb = round(proc.memory_info().rss / 1024**2, 1)
+                proc_cpu = round(proc.cpu_percent(interval=None), 1)
+            out["process"] = {
+                "rss_mb": rss_mb,
+                "cpu_percent": proc_cpu,
+                "num_threads": proc.num_threads(),
+            }
+        except Exception as e:
+            out["process"] = {"error": str(e)}
+    except Exception as e:
+        out["cpu"] = {"error": str(e)}
+        out["ram"] = {"error": str(e)}
     return out
+
+
+# psutil cpu_percent 第一次呼叫一律回 0；需要持續 prime 一個取樣才有意義。
+# admin 頁每 10-30 秒會 fetch 一次 → 每次都回「上次 fetch 到這次 fetch 的平均」即可。
+_LAST_CPU_TICK = {"ts": 0.0}
+
+def _get_cpu_percent():
+    import time as _t
+    import psutil
+    now = _t.time()
+    last = _LAST_CPU_TICK["ts"]
+    _LAST_CPU_TICK["ts"] = now
+    if last == 0.0:
+        # 第一次：用一個短 sample（會 block 100ms，可接受）拿真實值
+        return psutil.cpu_percent(interval=0.1)
+    # 後續：interval=None → 自動拿「自上次呼叫到現在」的平均
+    return psutil.cpu_percent(interval=None)
 
 
 @app.post("/admin/system_usage/cleanup_orphan_ocr")

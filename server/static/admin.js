@@ -171,13 +171,40 @@ window.loadSystemUsage = async function () {
     const disk = d.disk || {};
     const ss = d.screenshots || {};
     const dd = d.data_dir || {};
+    const cpu = d.cpu || {};
+    const ram = d.ram || {};
+    const swap = d.swap || {};
+    const proc = d.process || {};
     const freeColor = (disk.free_pct != null && disk.free_pct < 15) ? "#c0392b"
                     : (disk.free_pct != null && disk.free_pct < 30) ? "#c78a00" : "#2a7a2a";
+    // CPU / RAM 用量也用顏色帶警告
+    const pctColor = (p, warn=70, crit=90) =>
+      p == null ? "#888"
+      : p >= crit ? "#c0392b"
+      : p >= warn ? "#c78a00"
+      : "#2a7a2a";
+    const cpuPct = cpu.percent;
+    const ramPct = ram.percent;
+    const swapPct = swap.percent;
     const ocrCount = (ss.by_kind && ss.by_kind.ocr_temp) || 0;
     const ocrMb = (ss.by_kind_mb && ss.by_kind_mb.ocr_temp) || 0;
     const rwCount = (ss.by_kind && ss.by_kind.roadwidth) || 0;
     const rwMb = (ss.by_kind_mb && ss.by_kind_mb.roadwidth) || 0;
+    const loadStr = cpu.load_1m != null
+      ? ` ｜ load ${cpu.load_1m} / ${cpu.load_5m} / ${cpu.load_15m} (1/5/15分)`
+      : "";
+    const procStr = (proc && proc.rss_mb != null)
+      ? `<div style="padding-left:24px; color:#555;">
+           ・本 process：RSS ${proc.rss_mb} MB ｜ CPU ${proc.cpu_percent ?? '—'}% ｜ thread ${proc.num_threads ?? '—'}
+         </div>`
+      : "";
     box.innerHTML = `
+      <div>🖥️ <strong>CPU：</strong><span style="color:${pctColor(cpuPct)}; font-weight:700;">${cpuPct ?? "?"}%</span>
+        <span style="color:#888;">（${cpu.count_logical ?? "?"} 核 logical / ${cpu.count_physical ?? "?"} 核 physical）</span>${loadStr}</div>
+      <div>🧠 <strong>RAM：</strong>用 <span style="color:${pctColor(ramPct, 75, 92)}; font-weight:700;">${ram.used_gb ?? "?"} GB</span> / ${ram.total_gb ?? "?"} GB（${ramPct ?? "?"}%）
+        <span style="color:#888;">free ${ram.available_gb ?? "?"} GB</span></div>
+      ${swap.total_gb > 0 ? `<div>📀 <strong>Swap：</strong>${swap.used_gb} GB / ${swap.total_gb} GB <span style="color:${pctColor(swapPct, 30, 60)};">(${swapPct}%)</span></div>` : ""}
+      ${procStr}
       <div>💽 <strong>磁碟：</strong>剩 <span style="color:${freeColor}; font-weight:700;">${disk.free_gb ?? "?"} GB</span> / ${disk.total_gb ?? "?"} GB（${disk.free_pct ?? "?"}%）</div>
       <div>📷 <strong>截圖總計：</strong>${ss.file_count ?? 0} 檔，${ss.total_mb ?? 0} MB
         ${ss.oldest_age_days != null ? `（最舊 ${ss.oldest_age_days} 天前）` : ""}</div>
