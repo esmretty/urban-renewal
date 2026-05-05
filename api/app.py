@@ -1004,15 +1004,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("[warmup] target_regions 預填失敗: %s", e)
     try:
-        from config import target_regions_for_frontend
-        regions = target_regions_for_frontend()
-        all_dists = []
-        for city, sections in regions.items():
-            all_dists.extend(sections.keys())
-        if all_dists:
-            col = get_col()
-            await _aio.to_thread(lambda: _query_districts_cached(col, all_dists, None, None))
-            logger.info("[warmup] central_search query cache 預填完成（%d districts）", len(all_dists))
+        # ⚠️ 必須跟前端 V1_DISTRICTS.enabled / inline early-fetch 列表一字不差，
+        #    否則 cache key 不同 → 永遠 MISS。9 個是「預設啟用」的最常見 query。
+        DEFAULT_FRONTEND_DISTRICTS = [
+            "大安區", "信義區", "中山區", "中正區", "文山區",
+            "新店區", "永和區", "中和區", "板橋區",
+        ]
+        col = get_col()
+        await _aio.to_thread(lambda: _query_districts_cached(col, DEFAULT_FRONTEND_DISTRICTS, None, None))
+        logger.info("[warmup] central_search query cache 預填完成（%d districts）", len(DEFAULT_FRONTEND_DISTRICTS))
     except Exception as e:
         logger.warning("[warmup] central_search 預填失敗: %s", e)
     if os.getenv("DISABLE_SCHEDULER", "").lower() in ("1", "true", "yes"):

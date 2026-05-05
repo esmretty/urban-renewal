@@ -96,10 +96,12 @@
           return;
         }
         window.__perfMark && window.__perfMark('early_fetch_token_ok', { age_min_remaining: ageMin, token_len: tok.length });
-        // 對齊 V1_DISTRICTS 的預設清單（跟 app2.js boot 算出來的 districts 串一致）
+        // ⚠️ 必須跟 app2.js 的 V1_DISTRICTS.enabled (9 個) 一字不差，
+        //    否則 server query cache key 不同 → 永遠 cache MISS
+        //    app2.js: Object.values(V1_DISTRICTS).flatMap(cfg => cfg.enabled).join(',')
         var DISTRICTS = [
-          '中正區','大同區','中山區','松山區','大安區','萬華區','信義區','內湖區','南港區','文山區',
-          '板橋區','新莊區','新店區','中和區','永和區'
+          '大安區','信義區','中山區','中正區','文山區',
+          '新店區','永和區','中和區','板橋區'
         ];
         var url = '/api/central_search?slim=true&limit=1000&districts=' + encodeURIComponent(DISTRICTS.join(','));
         window.__perfMark && window.__perfMark('early_fetch_fire');
