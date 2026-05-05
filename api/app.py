@@ -5652,8 +5652,11 @@ def _scrape_single_url_yongqing(url: str, src_id: str, is_reanalyze: bool = Fals
     _trig = "manual_reanalyze" if is_reanalyze else ("manual_url" if mark_user_url else "manual_url")
     if existing_doc_id:
         if is_reanalyze:
-            for _keep in ("scrape_session_at", "list_rank", "scraped_at"):
-                doc[_keep] = old.get(_keep)
+            # 保留排序位置欄位 + user_url 標記欄位（避免 reanalyze 把私人物件「升級」成中央物件）
+            for _keep in ("scrape_session_at", "list_rank", "scraped_at",
+                          "source_origin", "submitted_by_uid", "submitted_by_email", "added_at_user"):
+                if old.get(_keep) is not None:
+                    doc[_keep] = old.get(_keep)
             doc["id"] = existing_doc_id
             col.document(existing_doc_id).set(_safe_doc(doc))
             try: _la(_trig, "reanalyze", source_id=src_id, doc_id=existing_doc_id,
@@ -5740,8 +5743,11 @@ def _scrape_single_url_sinyi(url: str, src_id: str, is_reanalyze: bool = False, 
     _trig = "manual_reanalyze" if is_reanalyze else "manual_url"
     if existing_doc_id:
         if is_reanalyze:
-            for _keep in ("scrape_session_at", "list_rank", "scraped_at"):
-                doc[_keep] = old.get(_keep)
+            # 保留排序位置欄位 + user_url 標記欄位（避免 reanalyze 把私人物件「升級」成中央物件）
+            for _keep in ("scrape_session_at", "list_rank", "scraped_at",
+                          "source_origin", "submitted_by_uid", "submitted_by_email", "added_at_user"):
+                if old.get(_keep) is not None:
+                    doc[_keep] = old.get(_keep)
             doc["id"] = existing_doc_id
             col.document(existing_doc_id).set(_safe_doc(doc))
             try: _la(_trig, "reanalyze", source_id=src_id, doc_id=existing_doc_id,
@@ -6216,10 +6222,11 @@ def _scrape_single_url_591_inner(url: str, src_id: str, is_reanalyze: bool = Fal
         if existing_doc_id:
             if is_reanalyze:
                 # admin 重新分析：完全以新抓結果替換，不保留舊值（避免舊錯資料污染）
-                # 例外：scrape_session_at / list_rank / scraped_at 一律保留舊值（即使舊值是 None），
-                # 物件在列表排序中的位置絕對不因 reanalyze 而變動。
-                for _keep in ("scrape_session_at", "list_rank", "scraped_at"):
-                    doc[_keep] = old.get(_keep)
+                # 例外：保留排序位置欄位 + user_url 標記（避免私人物件被「升級」成中央物件）
+                for _keep in ("scrape_session_at", "list_rank", "scraped_at",
+                              "source_origin", "submitted_by_uid", "submitted_by_email", "added_at_user"):
+                    if old.get(_keep) is not None:
+                        doc[_keep] = old.get(_keep)
                 doc["id"] = existing_doc_id   # 保留既有 UUID
                 col.document(existing_doc_id).set(_safe_doc(doc))
                 return {"status": "ok", "source_id": src_id, "message": "重新分析完成（完整替換）"}
