@@ -140,12 +140,6 @@
     <button class="v2-icon-btn v2-only-mobile" id="v2-menu-btn" aria-label="選單">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
     </button>
-    <button class="v2-icon-btn v2-only-mobile" id="v2-reload-btn" aria-label="重新整理" onclick="v2.hardReload()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="23 4 23 10 17 10"/>
-        <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
-      </svg>
-    </button>
     <a class="v2-brand" href="/v2">
       <img src="/static/logo.png" alt="" class="v2-brand__logo">
       <span class="v2-brand__name">都更神探R</span>
@@ -365,6 +359,12 @@
     <div class="v2-toolbar">
       <div class="v2-toolbar__left">
         <span class="v2-result-count" id="v2-result-count">— 筆</span>
+        <button class="v2-icon-btn v2-result-reload" aria-label="重新整理" onclick="v2.hardReload()" title="重新整理（清快取）">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+          </svg>
+        </button>
       </div>
       <div class="v2-toolbar__right">
         <!-- 8 排序選項對齊 v1，預設「新進優先」+ 降冪 -->
