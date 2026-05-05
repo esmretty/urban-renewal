@@ -2538,8 +2538,17 @@
     Object.entries(V1_DISTRICTS).forEach(([city, cfg]) => {
       cfg.enabled.forEach(d => state.districtPicks.add(`${city}|${d}`));
     });
-    // 還原上次 filter 偏好（覆蓋 default）— 必須在 loadDistricts 渲染 chips 之前
-    _restoreFilters();
+    // 還原上次 filter 偏好：_filterKey() 用 currentUser.uid 做 key，必須等 auth ready
+    // 才能讀到正確 uid 的儲存值（auth_gate 之前 uid 是 'anon' → 拿不到）。
+    // 為了不擋 data fetch，這裡把 restore 排到 auth_ready 後背景跑；ready 後若資料已載完
+    // 就 re-apply 套 filter，沒載完則資料載完時 applyFilters 會用 restored 值。
+    const _restoreP = _waitForAuthReady().then(() => {
+      _restoreFilters();
+      // 同步 UI：district chips 已 render → 重畫一次反應 restored picks
+      if (typeof renderDistrictChips === 'function') renderDistrictChips();
+      // 資料已載完才需要 re-apply (會觸發重 render)；沒載完則資料 callback 會用最新 state
+      if (state.exploreLoaded || state.watchlistLoaded) applyFilters();
+    });
 
     // loadDistricts 是 public endpoint，立刻 fire 不等 auth
     // loadProperties：有 early data 立刻；沒有才等 auth_ready (因為 fallback fetch 需要 token)
@@ -2554,7 +2563,7 @@
       window.__perfMark && window.__perfMark('loadProperties_done');
     })();
 
-    await Promise.all([distP, propsP]);
+    await Promise.all([distP, propsP, _restoreP]);
     window.__perfMark && window.__perfMark('boot_complete');
     requestAnimationFrame(() => requestAnimationFrame(() => {
       window.__perfMark && window.__perfMark('first_paint_after_boot');
