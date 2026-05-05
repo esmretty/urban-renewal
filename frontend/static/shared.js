@@ -74,9 +74,13 @@
   // p 提供 district + is_remote_area (浮洲判定) — 跟後端 config.lookup_far 對齊
   function lookupFar(zoning, p) {
     if (!zoning || !p) return null;
+    // 先剝「(含道路用地)」「(含公共設施保留地)」之類括號註記，避免下面 regex 把
+    // 「第四種住宅區(含道路用地)」整個誤判為不可建築用地 → 0%
+    const zClean = zoning.replace(/\(含[^)]*\)/g, '').trim();
     // 不可建築用地 (道路/公共設施保留地/綠地/公園/河道/機關用地) → FAR = 0%
     // 不貢獻倍數但仍視為「合法值」(0 ≠ null)，讓多分區加權能繼續計算
-    if (/(道路用地|公共設施|保留地|綠地|公園|河道|機關用地)/.test(zoning)) return 0;
+    if (/^(道路用地|公共設施|保留地|綠地|公園|河道|機關用地)/.test(zClean)) return 0;
+    zoning = zClean;   // 用剝過註記的 zoning 繼續查
     const district = p.district;
     // 1) 浮洲 (板橋偏遠 polygon 內)
     if (district === "板橋區" && p.is_remote_area) {

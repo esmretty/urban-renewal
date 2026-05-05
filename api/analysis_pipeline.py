@@ -1121,6 +1121,22 @@ def analyze_single_property(
                         doc_data["zoning_original"] = base_orig + suffix
                     doc_data["has_public_use_land"] = True
                     doc_data["public_use_land_kinds"] = public_kw_in_raw
+                    # 把公設地寫進 zoning_list 當「第二分區」處理 (預設 ratio 80/20，
+                    # 主分區 80% / 公設地 20%)，讓前端能用既有多分區比例 UI 給用戶調整。
+                    # 條件：當前 zoning_list 是單一分區 (yc_multi 多實體分區 path 不覆蓋)
+                    _existing_zlist = doc_data.get("zoning_list") or []
+                    if len(_existing_zlist) <= 1:
+                        _main_zone = (_existing_zlist[0] if _existing_zlist
+                                       else doc_data.get("zoning") or "")
+                        if _main_zone and _main_zone not in public_kw_in_raw:
+                            new_zlist = [_main_zone] + public_kw_in_raw
+                            new_ratios = [80] + [20 / len(public_kw_in_raw)] * len(public_kw_in_raw)
+                            doc_data["zoning_list"] = new_zlist
+                            doc_data["zoning_ratios"] = new_ratios
+                            logger.info(
+                                f"[{src_id}] 公設地拆多分區 → zoning_list={new_zlist} "
+                                f"ratios={new_ratios}（用戶可前端調整）"
+                            )
                     logger.info(
                         f"[{src_id}] 偵測到公設地（{public_kw_in_raw}）→ "
                         f"zoning_original 改為 {doc_data.get('zoning_original')!r}"
