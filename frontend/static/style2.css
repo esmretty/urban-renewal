@@ -839,35 +839,47 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-text-light);
   font-variant-numeric: tabular-nums;
 }
+/* 倍數區塊 — 整塊（數字 + ×）做成從卡片頂端往下延伸的旗標 */
 .v2-card__mult {
   font-size: 18px;
   font-weight: 700;
   line-height: 1;
-  color: var(--c-low);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0;
-}
-/* 倍數後綴「×」做成像旗標的小方塊背景 */
-.v2-card__mult small {
-  font-size: 11px;
-  font-weight: 700;
   color: #fff;
   background: var(--c-low);
-  padding: 2px 5px;
-  border-radius: 3px;
-  margin-left: 4px;
-  letter-spacing: 0;
-  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  /* 從卡片頂端內邊延伸下來：負 margin-top 抵掉 .v2-card 的 padding-top (8px)，
+     底部圓角 + bottom margin 收尾，看起來像從上端垂下來的旗標 */
+  align-self: flex-start;
+  margin-top: -8px;
+  margin-bottom: 2px;
+  padding: 10px 8px 6px;
+  border-radius: 0 0 4px 4px;
+  min-width: 44px;
+  text-align: center;
+  justify-content: center;
+}
+.v2-card__mult small {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.9;
+  color: inherit;
+  background: transparent;
+  padding: 0;
+  margin: 0;
   line-height: 1;
 }
-.v2-card__mult--good { color: var(--c-good); }
-.v2-card__mult--good small { background: var(--c-good); }
-.v2-card__mult--mid { color: var(--c-mid); }
-.v2-card__mult--mid small { background: var(--c-mid); }
+.v2-card__mult--good { background: var(--c-good); color: #fff; }
+.v2-card__mult--mid  { background: var(--c-mid); color: #fff; }
+/* hot 卡片的高倍數仍維持金棕色文字旗標（覆蓋 fallback color #fff） */
+.v2-card.v2-card--hot .v2-card__mult {
+  background: #b45309;
+  color: #fff;
+  text-shadow: none;
+}
 
 /* Line 2: stats inline + chips + sources */
 .v2-card__line2 {
