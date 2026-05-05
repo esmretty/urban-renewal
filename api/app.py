@@ -1068,15 +1068,25 @@ async def root_v2():
     return FileResponse(str(FRONTEND_DIR / "index2.html"))
 
 
+_TARGET_REGIONS_COUNTS_CACHE = {"ts": 0.0, "data": None}
+_TARGET_REGIONS_COUNTS_TTL = 120   # 2 分鐘 — 物件數變化頻率低，每次 page load 都打 Firestore 浪費
+
 @app.get("/api/target_regions")
 def api_target_regions(with_counts: bool = False):
     """回傳目標分析範圍（前端下拉選單用）— 含台北市跟新北市。
     with_counts=true → 多回每個區的物件數量，前端可隱藏「沒資料的區」。
+    counts 部分 server 端 cache 120s。
     """
     from config import target_regions_for_frontend
     regions = target_regions_for_frontend()
     if not with_counts:
         return regions
+
+    import time as _t
+    now = _t.time()
+    cached = _TARGET_REGIONS_COUNTS_CACHE.get("data")
+    if cached and (now - _TARGET_REGIONS_COUNTS_CACHE["ts"]) < _TARGET_REGIONS_COUNTS_TTL:
+        return {"regions": regions, "counts": cached}
 
     # 算每個 (city, district) 的物件數 — 只算 batch source（user_url 隱私不算進去）
     from collections import Counter
@@ -1089,10 +1099,10 @@ def api_target_regions(with_counts: bool = False):
         ds = data.get("district")
         if c and ds:
             counts[(c, ds)] += 1
-    return {
-        "regions": regions,
-        "counts": {f"{c}|{d}": n for (c, d), n in counts.items()},
-    }
+    counts_dict = {f"{c}|{d}": n for (c, d), n in counts.items()}
+    _TARGET_REGIONS_COUNTS_CACHE["ts"] = now
+    _TARGET_REGIONS_COUNTS_CACHE["data"] = counts_dict
+    return {"regions": regions, "counts": counts_dict}
 
 
 @app.get("/api/district_new_house_price")
