@@ -2571,6 +2571,62 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
 
 /* B6: 已下架 overlay — 整卡灰透 + 中央白字「已下架」 */
 .v2-card--archived { opacity: 0.55; }
+
+/* 分析中 placeholder card (URL / 地址 capture 送出後) */
+.v2-card--pending {
+  background: #fff8e5;
+  border: 1.5px dashed #c78a00;
+  cursor: default;
+}
+.v2-card__pending-wrap {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 6px;
+}
+.v2-card__pending-spinner {
+  width: 28px; height: 28px;
+  border: 3px solid #f4ecd0;
+  border-top-color: #c78a00;
+  border-radius: 50%;
+  animation: v2-spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes v2-spin { to { transform: rotate(360deg); } }
+.v2-card__pending-label {
+  font-weight: 700;
+  color: #5c4a0a;
+  font-size: 14px;
+}
+.v2-card__pending-target {
+  font-size: 12px;
+  color: #8b7c4a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+/* sidebar capture 卡內 inline 錯誤/狀態訊息 */
+.v2-cap__msg {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 0;
+  border-radius: 4px;
+  display: none;
+}
+.v2-cap__msg--info,
+.v2-cap__msg--error,
+.v2-cap__msg--success,
+.v2-cap__msg--pending {
+  display: block;
+  padding: 6px 10px;
+}
+.v2-cap__msg--info    { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.v2-cap__msg--error   { background: #fef2f2; color: #b91c1c; border: 1px solid #fca5a5; }
+.v2-cap__msg--success { background: #f0fdf4; color: #15803d; border: 1px solid #86efac; }
+.v2-cap__msg--pending { background: #fff8e5; color: #b0790a; border: 1px solid #d8b56a; }
 .v2-card__archived-overlay {
   position: absolute;
   inset: 0;

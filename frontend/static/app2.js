@@ -487,6 +487,19 @@
 
   function cardHTML(p, prices) {
     const id = p.source_id || p.id || '';
+    // 分析中 placeholder card
+    if (p._pending_analysis) {
+      const kindLbl = p._pending_kind === 'url' ? 'URL 分析' : '地址分析';
+      return `<article class="v2-card v2-card--pending" data-id="${esc(id)}">
+        <div class="v2-card__pending-wrap">
+          <div class="v2-card__pending-spinner"></div>
+          <div class="v2-card__pending-text">
+            <div class="v2-card__pending-label">${kindLbl}中…</div>
+            <div class="v2-card__pending-target" title="${esc(p._pending_label || '')}">${esc(p._pending_label || '')}</div>
+          </div>
+        </div>
+      </article>`;
+    }
     // 用推測地址（LVR 推到巷弄/門牌）優先，591 raw address 只到路段不夠精確
     const addr = p.address_inferred || p.address || '—';
     const priceWan = p.price_ntd ? Math.round(p.price_ntd / 10000) : null;
