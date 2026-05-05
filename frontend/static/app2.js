@@ -1954,14 +1954,18 @@
   // ── Load properties ──────────────────────────────────────────────────────
   // explore 不傳 districts 給 server (對齊用戶要求 #5: 一次抓全部、client 端 filter)
   async function loadProperties() {
+    // PERF TIMER：開關 localStorage.setItem('debugPerf','1')
+    const _DBG = localStorage.getItem('debugPerf') === '1';
+    const _ts = {};
+    const _mark = (k) => { if (_DBG) _ts[k] = performance.now(); };
+    _mark('start');
     renderSkeletons(8);
+    _mark('skeleton_done');
     try {
       let url;
       if (state.view === 'watchlist') {
         url = '/api/properties?limit=500&slim=true';
       } else {
-        // 不再帶 districts/price 給 server — 全部交給 client filter
-        // 用 15 個目標區一起抓，client 再依用戶勾選 filter
         const params = new URLSearchParams();
         params.set('districts', Object.values(V1_DISTRICTS)
           .flatMap(cfg => cfg.enabled).join(','));
@@ -1969,8 +1973,13 @@
         params.set('limit', '1000');
         url = '/api/central_search?' + params.toString();
       }
+      _mark('fetch_start');
       const r = await fetch(url);
+      _mark('fetch_headers');
+      const _serverTiming = r.headers.get('server-timing') || '';
       const data = await r.json();
+      _mark('json_parsed');
+      const _bytes = +r.headers.get('content-length') || 0;
       const items = data.items || [];
       if (state.view === 'watchlist') {
         state.watchlistItems = items;
@@ -1980,7 +1989,6 @@
         state.exploreLoaded = true;
       }
       state.allProperties = items;
-      // 觀察清單計數：watchlist tab 直接用全部；explore tab 用 _in_watchlist
       const cnt = $('#v2-watchlist-count');
       if (cnt) {
         const n = state.view === 'watchlist'
@@ -1989,10 +1997,48 @@
         cnt.textContent = n > 0 ? String(n) : '';
       }
       applyFilters();
+      _mark('filter_render_done');
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          _mark('painted');
+          if (_DBG) _logV2Perf(_ts, items.length, _bytes, _serverTiming);
+        });
+      });
     } catch (e) {
       console.error('loadProperties', e);
       toast('載入失敗', 'error');
     }
+  }
+
+  function _logV2Perf(ts, nItems, bytes, serverTiming) {
+    const T = (a, b) => Math.round(ts[b] - ts[a]);
+    const total = Math.round(ts.painted - ts.start);
+    const ttfb = T('fetch_start', 'fetch_headers');
+    const phases = [];
+    let cacheStatus = '';
+    if (serverTiming) {
+      serverTiming.split(',').forEach(part => {
+        const m = part.trim().match(/^([a-z_]+);dur=(\d+(?:\.\d+)?)(?:;desc="([^"]*)")?/i);
+        if (m) {
+          const name = m[1], ms = Math.round(+m[2]), desc = m[3] || '';
+          if (name === 'cache') cacheStatus = desc;
+          else phases.push([name, ms]);
+        }
+      });
+    }
+    const serverTotal = phases.reduce((s, [_, ms]) => s + ms, 0);
+    const networkOverhead = Math.max(0, ttfb - serverTotal);
+    const lines = [
+      ['skeleton 渲染',          T('start', 'skeleton_done'),       '畫骨架佔位'],
+      ['fetch+TTFB+headers',     ttfb,                              `server ${serverTotal}ms + 網路/auth ${networkOverhead}ms${cacheStatus ? ` [${cacheStatus}]` : ''}`],
+    ];
+    phases.forEach(([name, ms]) => lines.push([`  └─ ${name}`, ms, '']));
+    lines.push(['response body 讀+JSON.parse', T('fetch_headers', 'json_parsed'), '']);
+    lines.push(['filter+sort+render',         T('json_parsed', 'filter_render_done'), '']);
+    lines.push(['等到 paint',                  T('filter_render_done', 'painted'),     'requestAnimationFrame×2']);
+    lines.push(['─ TOTAL',                     total,                                  `${nItems} items, ${(bytes/1024).toFixed(1)} KB`]);
+    console.log('%c[v2 perf]', 'color:#0e7490;font-weight:700', `${nItems} items / ${total}ms`);
+    console.table(Object.fromEntries(lines.map(([k, ms, note]) => [k, { ms, note }])));
   }
 
   // 「重新搜尋」按鈕：強制重抓中央 (跳過 client cache)
