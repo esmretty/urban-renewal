@@ -4134,6 +4134,10 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                         "land_area_ping": _mobile_data_591.get("land_area_ping"),
                         "building_age": _mobile_data_591.get("building_age"),
                         "floor": _mobile_data_591.get("floor"),
+                        # mobile API 從 region+section+street+addr_number 拼出完整地址
+                        # (e.g. 「新北市中和區景平路162號」)；listing API 卡片只到路名級
+                        # 此前漏填 → batch path 落地 doc 永遠卡在路名級沒到號
+                        "address": _mobile_data_591.get("address") or "",
                         # total_floors 透過 parse_floor_range 從 floor 字串拆出（'B1/5F' → total=5）
                     }
                     # 也補 item — mobile 給的 community_name / 座標 等可立即覆蓋
