@@ -86,6 +86,17 @@ def _build_template_vars(doc: dict, multiple: float, scenario: str,
     addr = doc.get("address_inferred") or doc.get("address") or doc.get("title") or "(地址未知)"
     city = doc.get("city") or ""
     district = doc.get("district") or ""
+    # Google Maps 連結 (用完整地址 city+district+addr 做關鍵字搜尋)
+    try:
+        from urllib.parse import quote
+        full_addr = f"{city}{district}{addr}"
+        address_map_link = f"https://www.google.com/maps/search/?api=1&query={quote(full_addr)}"
+    except Exception:
+        address_map_link = ""
+    # 系統內 detail page 深層連結 (前端讀 ?id= 會自動打開該物件 detail drawer)
+    doc_id = doc.get("id") or doc.get("source_id") or ""
+    base_url = os.getenv("PUBLIC_BASE_URL", "https://taipei.retty-ai.com")
+    detail_page_link = f"{base_url}/?id={doc_id}" if doc_id else base_url
     price_wan = round((doc.get("price_ntd") or 0) / 10000)
     _fl = doc.get("floor")
     _tf = doc.get("total_floors")
@@ -130,6 +141,8 @@ def _build_template_vars(doc: dict, multiple: float, scenario: str,
         "scenarios_text": scen_text,
         "sources_text": src_lines,
         "send_time": send_time,
+        "address_map_link": address_map_link,
+        "detail_page_link": detail_page_link,
     }
 
 

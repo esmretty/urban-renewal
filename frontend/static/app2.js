@@ -2532,6 +2532,20 @@
       window.__perfMark && window.__perfMark('first_paint_after_boot');
       _renderPerfPanel();
     }));
+    // Deep-link：URL 帶 ?id=<doc_id> → 自動打開該物件 detail drawer
+    // (LINE 通知 / 分享連結點進來會直接看到對應物件)
+    try {
+      const params = new URLSearchParams(location.search);
+      const targetId = params.get('id');
+      if (targetId) {
+        const exists = (state.allProperties || []).some(
+          p => (p.source_id || p.id) === targetId
+        );
+        if (exists) {
+          openDetail(targetId);
+        }
+      }
+    } catch (_e) { /* no-op */ }
   }
 
   function _renderPerfPanel() {

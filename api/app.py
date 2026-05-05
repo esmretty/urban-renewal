@@ -1070,10 +1070,55 @@ app.mount("/server/static", StaticFiles(directory=str(SERVER_DIR / "static")), n
 app.mount("/data/screenshots", StaticFiles(directory=str(BASE_DIR / "data" / "screenshots")), name="screenshots")
 
 
+_INDEX2_HTML_CACHE = {"sha": None, "html": None, "mtime": 0.0}
+
+def _read_version_sha() -> str:
+    """讀 VERSION 檔 (deploy.sh 寫的 git short SHA)，fallback git rev-parse。"""
+    try:
+        v = (BASE_DIR / "VERSION").read_text(encoding="utf-8").strip()
+        if v:
+            return v
+    except Exception:
+        pass
+    try:
+        import subprocess
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], cwd=str(BASE_DIR), timeout=2
+        ).decode().strip()
+    except Exception:
+        return "unknown"
+
+
+def _serve_index2_with_version() -> Response:
+    """讀 index2.html 把 ?v=1 替換成當前 git SHA，避免 iOS PWA WKWebView 永遠 cache 舊版。
+    HTML 本身回 no-cache 確保拿到新 SHA URL；CSS/JS 因為 URL 不同 → 強制重抓。"""
+    html_path = FRONTEND_DIR / "index2.html"
+    try:
+        mt = html_path.stat().st_mtime
+    except OSError:
+        mt = 0.0
+    sha = _read_version_sha()
+    if (_INDEX2_HTML_CACHE["sha"] != sha
+            or _INDEX2_HTML_CACHE["mtime"] != mt
+            or _INDEX2_HTML_CACHE["html"] is None):
+        try:
+            raw = html_path.read_text(encoding="utf-8")
+        except Exception:
+            return FileResponse(str(html_path))
+        _INDEX2_HTML_CACHE["html"] = raw.replace("?v=1", f"?v={sha}")
+        _INDEX2_HTML_CACHE["sha"] = sha
+        _INDEX2_HTML_CACHE["mtime"] = mt
+    return Response(
+        content=_INDEX2_HTML_CACHE["html"],
+        media_type="text/html",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
+
+
 @app.get("/")
 async def root():
     """主前台 (v2)。"""
-    return FileResponse(str(FRONTEND_DIR / "index2.html"))
+    return _serve_index2_with_version()
 
 
 @app.get("/legacy")
@@ -1085,7 +1130,7 @@ async def root_legacy():
 @app.get("/v2")
 async def root_v2():
     """v2 別名 — 對外仍可用 /v2 訪問新版 (跟 / 同檔)。"""
-    return FileResponse(str(FRONTEND_DIR / "index2.html"))
+    return _serve_index2_with_version()
 
 
 _TARGET_REGIONS_COUNTS_CACHE = {"ts": 0.0, "data": None}
@@ -1875,6 +1920,8 @@ async def admin_get_line_template(admin: dict = Depends(require_admin)):
             {"key": "{scenarios_text}", "desc": "各情境倍數列表 (多行)"},
             {"key": "{sources_text}", "desc": "來源連結列表 (多行)"},
             {"key": "{send_time}", "desc": "發送日期+時間 (MM/DD HH:MM，台灣時區)"},
+            {"key": "{address_map_link}", "desc": "Google Maps 地址連結 (點擊看地圖)"},
+            {"key": "{detail_page_link}", "desc": "本系統 detail page 連結 (點擊在 app 內打開該物件)"},
         ],
     }
 

@@ -9,8 +9,9 @@
   <!-- 預連線 Firebase auth API origin（SDK 已自打包同源，但 token 驗證仍打 Google） -->
   <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
   <link rel="preconnect" href="https://securetoken.googleapis.com" crossorigin>
-  <!-- 預載入自打包同源 Firebase bundle (auth_gate.js 真 import 時 cache hit) -->
-  <link rel="modulepreload" href="/static/firebase-bundle.js">
+  <!-- 預載入自打包同源 Firebase bundle (auth_gate.js 真 import 時 cache hit)
+       ?v=1 會被 server 端用當前 git SHA 替換，避免 iOS PWA cache 舊版 -->
+  <link rel="modulepreload" href="/static/firebase-bundle.js?v=1">
 
   <!-- ⚡ Critical CSS inline：讓 bootstrap loader 在 HTML 一解析完就 render，
        不必等 fonts CSS / style2.css 來回。原本 render-blocking 造成「3-4 秒空白」-->
@@ -121,7 +122,7 @@
       } catch (_e) { /* localStorage 不可用 */ }
     })();
   </script>
-  <script type="module" src="/static/auth_gate.js"></script>
+  <script type="module" src="/static/auth_gate.js?v=1"></script>
 </head>
 <body class="v2">
 
@@ -425,7 +426,7 @@
 <div class="v2-toast-host" id="v2-toast-host"></div>
 
 <!-- shared.js: v1/v2 共用算式 — 必須在 app2.js 之前 -->
-<script src="/static/shared.js"></script>
+<script src="/static/shared.js?v=1"></script>
 <script src="/static/app2.js?v=1"></script>
 </body>
 </html>
