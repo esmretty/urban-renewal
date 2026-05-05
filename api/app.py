@@ -1473,6 +1473,7 @@ async def admin_delete_property(property_id: str, admin: dict = Depends(require_
     if not ref.get().exists:
         raise HTTPException(status_code=404, detail="物件不存在")
     ref.delete()
+    invalidate_query_cache()
     logger.warning("[admin] %s 永久刪除 %s", admin.get("email"), property_id)
     return {"status": "ok", "deleted": property_id}
 
@@ -2278,6 +2279,8 @@ async def admin_purge_non_apartments(admin: dict = Depends(require_admin)):
             d.reference.delete()
             deleted.append({"id": d.id, "reason": hit_reason,
                             "address": data.get("address"), "building_type": bt})
+    if deleted:
+        invalidate_query_cache()
     logger.warning("[admin] %s 清除非公寓 %d 筆", admin.get("email"), len(deleted))
     return {"status": "ok", "deleted_count": len(deleted), "deleted": deleted[:100]}
 
@@ -2840,10 +2843,16 @@ def _query_districts_parallel(col, dist_list, max_price_wan, min_price_wan):
 
 # Server-side in-memory cache for Firestore query results (NOT response — watchlist join is per-user)
 # Key: 規範化 query params 的 hash；Value: (timestamp, list of (doc_id, doc_data) tuples)
-# TTL: 30 秒 — 用戶 refine 條件多按幾次直接命中；資料新鮮度可接受
+# SWR (stale-while-revalidate)：
+#   - fresh (<TTL_FRESH): 直接回 cache
+#   - stale (TTL_FRESH ~ TTL_HARD): 立即回舊 cache，背景跑新 query 更新
+#   - expired (>TTL_HARD): 視同 cache miss，必須等真 query
 _FIRESTORE_QUERY_CACHE: dict = {}
-_FIRESTORE_QUERY_CACHE_TTL = 120   # seconds — 用戶在頁面上瀏覽幾分鐘內都 cache HIT
-_FIRESTORE_QUERY_CACHE_MAX = 128    # 最多存 N 個 query；爆量 LRU evict
+_FIRESTORE_QUERY_CACHE_TTL_FRESH = 120   # 2 分鐘內視為新鮮，直接回
+_FIRESTORE_QUERY_CACHE_TTL_HARD = 600    # 10 分鐘外視為失效，必須真等
+_FIRESTORE_QUERY_CACHE_MAX = 128         # 最多存 N 個 query；爆量 LRU evict
+_SWR_REFRESH_INFLIGHT: set = set()       # 已在背景 refresh 中的 key（避免同 key 重複 refresh）
+_SWR_REFRESH_LOCK = None                 # threading.Lock，lazy init（worker thread safe）
 
 
 def _cache_key_for_query(dist_list, max_price_wan, min_price_wan):
@@ -2855,35 +2864,80 @@ def _cache_key_for_query(dist_list, max_price_wan, min_price_wan):
     return f"{ds}|{max_price_wan or 0}|{min_price_wan or 0}"
 
 
-def _query_districts_cached(col, dist_list, max_price_wan, min_price_wan):
-    """30 秒 TTL cache 包裝。回傳 (docs_data_list, cache_hit_flag)。
-    docs_data_list 是 [(doc_id, doc_dict), ...] tuple list — 已經 to_dict()。
-    cache hit 時跳過 to_dict() loop，直接拿 dict。
-    """
-    import time as _t
-    key = _cache_key_for_query(dist_list, max_price_wan, min_price_wan)
-    now = _t.time()
-
-    # cache hit
-    cached = _FIRESTORE_QUERY_CACHE.get(key)
-    if cached and (now - cached[0]) < _FIRESTORE_QUERY_CACHE_TTL:
-        return cached[1], True
-
-    # cache miss — do real query
+def _do_firestore_query(col, dist_list, max_price_wan, min_price_wan):
+    """實際打 Firestore；回傳 [(doc_id, doc_dict), ...]"""
     if dist_list and 0 < len(dist_list) <= 30:
         docs = _query_districts_parallel(col, dist_list, max_price_wan, min_price_wan)
     else:
         docs = list(col.get())
-    # to_dict 一次轉好存進 cache，後面 caller 不用再 to_dict
-    docs_data = [(d.id, d.to_dict() or {}) for d in docs]
+    return [(d.id, d.to_dict() or {}) for d in docs]
 
-    # LRU-ish evict 防 memory 爆
+
+def _evict_oldest_if_full():
     if len(_FIRESTORE_QUERY_CACHE) >= _FIRESTORE_QUERY_CACHE_MAX:
         oldest_key = min(_FIRESTORE_QUERY_CACHE, key=lambda k: _FIRESTORE_QUERY_CACHE[k][0])
         _FIRESTORE_QUERY_CACHE.pop(oldest_key, None)
 
+
+def _swr_background_refresh(key, col, dist_list, max_price_wan, min_price_wan):
+    """背景 thread：偷偷重抓並更新 cache。caller 已經拿到舊資料回給用戶。
+    用 in-flight set 防同一 key 同時被多個 request 各自 refresh。"""
+    global _SWR_REFRESH_LOCK
+    if _SWR_REFRESH_LOCK is None:
+        import threading as _th
+        _SWR_REFRESH_LOCK = _th.Lock()
+    with _SWR_REFRESH_LOCK:
+        if key in _SWR_REFRESH_INFLIGHT:
+            return
+        _SWR_REFRESH_INFLIGHT.add(key)
+
+    def _worker():
+        import time as _t
+        try:
+            docs_data = _do_firestore_query(col, dist_list, max_price_wan, min_price_wan)
+            _evict_oldest_if_full()
+            _FIRESTORE_QUERY_CACHE[key] = (_t.time(), docs_data)
+            logger.info("[SWR] background refresh done key=%s docs=%d", key, len(docs_data))
+        except Exception as e:
+            logger.warning("[SWR] background refresh failed key=%s: %s", key, e)
+        finally:
+            with _SWR_REFRESH_LOCK:
+                _SWR_REFRESH_INFLIGHT.discard(key)
+
+    import threading as _th
+    _th.Thread(target=_worker, daemon=True, name=f"swr-refresh-{key[:20]}").start()
+
+
+def invalidate_query_cache():
+    """admin 改物件、scraper 寫入後呼叫，強制下次 query 走 DB。"""
+    _FIRESTORE_QUERY_CACHE.clear()
+
+
+def _query_districts_cached(col, dist_list, max_price_wan, min_price_wan):
+    """SWR cache 包裝。回傳 (docs_data_list, cache_state)。
+    cache_state: "fresh" / "stale" / "miss"
+    """
+    import time as _t
+    key = _cache_key_for_query(dist_list, max_price_wan, min_price_wan)
+    now = _t.time()
+    cached = _FIRESTORE_QUERY_CACHE.get(key)
+
+    if cached:
+        age = now - cached[0]
+        if age < _FIRESTORE_QUERY_CACHE_TTL_FRESH:
+            # 新鮮 → 直接回
+            return cached[1], "fresh"
+        if age < _FIRESTORE_QUERY_CACHE_TTL_HARD:
+            # stale → 立即回舊資料 + 背景 refresh
+            _swr_background_refresh(key, col, dist_list, max_price_wan, min_price_wan)
+            return cached[1], "stale"
+        # 太舊 → fall through to miss
+
+    # miss / hard expired — 真等
+    docs_data = _do_firestore_query(col, dist_list, max_price_wan, min_price_wan)
+    _evict_oldest_if_full()
     _FIRESTORE_QUERY_CACHE[key] = (now, docs_data)
-    return docs_data, False
+    return docs_data, "miss"
 
 
 @app.get("/api/central_search")
@@ -2951,18 +3005,19 @@ def central_search(
     # dist_set 為 None（用戶沒挑）時 fallback 全收。
     # 注意：變數名 fs_q（不要叫 q —— 跟函式參數 q: Optional[str] 衝突會被 shadow，
     #       導致下面 `if q: kw = q.strip()` 拿到 Firestore Query 物件而 AttributeError）
-    cache_hit = False
+    cache_state = "miss"
     try:
-        # 30 秒 in-memory cache — 第 2 次起的 refinement 直接命中 ~5ms
-        # cache 存的是 to_dict() 後的 (doc_id, dict) tuple list，cache hit 時連 to_dict 都省
+        # SWR cache：fresh < 120s 直接回；120-600s 回舊 + 背景刷新；>600s 真等
+        # cache 存 (doc_id, dict) tuple list，hit 時連 to_dict 都省
         dist_list_for_cache = list(dist_set) if (dist_set and len(dist_set) <= 30) else None
-        docs_data, cache_hit = _query_districts_cached(col, dist_list_for_cache, max_price_wan, min_price_wan)
+        docs_data, cache_state = _query_districts_cached(col, dist_list_for_cache, max_price_wan, min_price_wan)
     except Exception as _e:
         logger.warning(f"[central_search] cached/parallel query 失敗，fallback 全收：{_e}")
         docs_data = [(d.id, d.to_dict() or {}) for d in col.get()]
     _tick("firestore_query")
     _phase_t["docs_n"] = len(docs_data)
-    _phase_t["cache_hit"] = 1 if cache_hit else 0
+    _phase_t["cache_state"] = cache_state  # fresh / stale / miss
+    _phase_t["cache_hit"] = 1 if cache_state in ("fresh", "stale") else 0
     items = []
     for doc_id, data in docs_data:
         # cache hit 時 docs_data 是共用的（多用戶共享） — 後面要 mutate (加 _in_watchlist / id)
@@ -3059,8 +3114,13 @@ def central_search(
     # 順序：watchlist → firestore_query → py_filter → sort_strip
     _docs_n = _phase_t.pop("docs_n", 0)
     _was_cached = _phase_t.pop("cache_hit", 0)
+    _cache_state = _phase_t.pop("cache_state", "miss")
     _st_parts = [f"{name};dur={ms:.0f}" for name, ms in _phase_t.items()]
-    _cache_desc = "cache_HIT" if _was_cached else "cache_MISS"
+    _cache_desc = {
+        "fresh": "cache_FRESH",
+        "stale": "cache_STALE_swr",  # 立即回 + 背景 refresh
+        "miss":  "cache_MISS",
+    }.get(_cache_state, "cache_MISS")
     # auth time (Firebase token verify) 從 middleware 帶過來
     _auth_ms = getattr(request.state, "auth_ms", 0)
     _st_parts.append(f"auth;dur={_auth_ms:.0f}")
@@ -3070,7 +3130,13 @@ def central_search(
     response.headers["Server-Timing"] = ", ".join(_st_parts)
     response.headers["Access-Control-Expose-Headers"] = "Server-Timing"
 
-    return {"total": len(items), "items": out_items}
+    # total_watchlist：用戶觀察清單真實總數（含被 dist/price 過濾掉的）—
+    # 前端 badge 用這個顯示，避免「探索 tab 過濾掉的 watchlist 物件不被算到」的 race
+    return {
+        "total": len(items),
+        "total_watchlist": len(my_watchlist_ids),
+        "items": out_items,
+    }
 
 
 class WatchlistAddReq(BaseModel):

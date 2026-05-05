@@ -275,8 +275,11 @@ window.loadLineStatus = async function () {
       const el = document.getElementById(id);
       if (el && typeof v === "boolean") el.checked = v;
     });
-    // 載入發送紀錄
-    if (typeof loadLineNotifications === "function") loadLineNotifications();
+    // 載入發送紀錄（重置到第一頁）
+    _lineNotifOffset = 0;
+    if (typeof loadLineNotificationsPage === "function") loadLineNotificationsPage(0);
+    // 載入訊息模板
+    if (typeof loadLineTemplate === "function") loadLineTemplate();
   } catch (e) {
     box.innerHTML = `<span style="color:#c0392b;">載入失敗：${esc(e.message)}</span>`;
   }
@@ -341,45 +344,194 @@ window.saveLineSkipFlags = async function () {
   }
 };
 
-window.loadLineNotifications = async function () {
+// pagination state（每頁 50 筆）
+const LINE_NOTIF_PAGE_SIZE = 50;
+let _lineNotifOffset = 0;
+let _lineNotifTotal = 0;
+
+// dir = 0: 重抓當前頁 / -1: 上一頁 / 1: 下一頁
+window.loadLineNotificationsPage = async function (dir) {
   const box = document.getElementById("line-notifications-box");
   if (!box) return;
+  if (dir === -1) {
+    _lineNotifOffset = Math.max(0, _lineNotifOffset - LINE_NOTIF_PAGE_SIZE);
+  } else if (dir === 1) {
+    _lineNotifOffset = _lineNotifOffset + LINE_NOTIF_PAGE_SIZE;
+  }
+  // dir === 0：保留 offset
+
+  const prevBtn = document.getElementById("line-notif-prev");
+  const nextBtn = document.getElementById("line-notif-next");
+  const info = document.getElementById("line-notif-pageinfo");
+  if (prevBtn) prevBtn.disabled = true;
+  if (nextBtn) nextBtn.disabled = true;
+
   try {
-    const r = await authedFetch("/admin/line/notifications?limit=50");
+    const r = await authedFetch(`/admin/line/notifications?limit=${LINE_NOTIF_PAGE_SIZE}&offset=${_lineNotifOffset}`);
     if (!r.ok) {
       box.innerHTML = `<span style="color:#c0392b;">載入失敗 HTTP ${r.status}</span>`;
       return;
     }
     const data = await r.json();
+    _lineNotifTotal = data.total || 0;
+
     if (!data.items.length) {
-      box.innerHTML = '<div style="color:#888; padding:8px;">尚無發送紀錄</div>';
-      return;
+      if (_lineNotifOffset === 0) {
+        box.innerHTML = '<div style="color:#888; padding:8px;">尚無發送紀錄</div>';
+      } else {
+        // 翻過頭 → 退回上一頁
+        _lineNotifOffset = Math.max(0, _lineNotifOffset - LINE_NOTIF_PAGE_SIZE);
+        return loadLineNotificationsPage(0);
+      }
+    } else {
+      box.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
+        <thead><tr style="background:#f0ece0; text-align:left;">
+          <th style="padding:6px 8px;">時間</th>
+          <th style="padding:6px 8px;">物件</th>
+          <th style="padding:6px 8px;">情境 / 倍數</th>
+          <th style="padding:6px 8px;">送達</th>
+        </tr></thead>
+        <tbody>${data.items.map(it => {
+          const t = it.at ? new Date(it.at).toLocaleString("zh-TW", {hour12: false}) : "—";
+          const addr = `${it.city || ""}${it.district || ""}${it.address || ""}`;
+          const price = it.price_ntd ? `${Math.round(it.price_ntd / 10000)} 萬` : "—";
+          const ok = it.delivered_ok ? '<span style="color:#27ae60;">✓</span>' : '<span style="color:#c0392b;">✗</span>';
+          return `<tr style="border-bottom:1px solid #eee;">
+            <td style="padding:6px 8px; font-family:Consolas,monospace; font-size:11px; color:#555;">${esc(t)}</td>
+            <td style="padding:6px 8px;">
+              <div>${esc(addr)} <span style="color:#666;">${esc(price)}</span></div>
+              <div style="color:#888; font-size:11px; font-family:Consolas,monospace;">${esc(it.doc_id || "")} (${esc(it.source_id || "")})</div>
+            </td>
+            <td style="padding:6px 8px;">${esc(it.scenario || "")} <b style="color:#c0392b;">${(it.max_multiple || 0).toFixed(2)} 倍</b><span style="color:#888; font-size:11px;"> / 門檻 ${it.threshold_used || "?"}</span></td>
+            <td style="padding:6px 8px; text-align:center;">${ok}</td>
+          </tr>`;
+        }).join("")}</tbody></table>`;
     }
-    box.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
-      <thead><tr style="background:#f0ece0; text-align:left;">
-        <th style="padding:6px 8px;">時間</th>
-        <th style="padding:6px 8px;">物件</th>
-        <th style="padding:6px 8px;">情境 / 倍數</th>
-        <th style="padding:6px 8px;">送達</th>
-      </tr></thead>
-      <tbody>${data.items.map(it => {
-        const t = it.at ? new Date(it.at).toLocaleString("zh-TW", {hour12: false}) : "—";
-        const addr = `${it.city || ""}${it.district || ""}${it.address || ""}`;
-        const price = it.price_ntd ? `${Math.round(it.price_ntd / 10000)} 萬` : "—";
-        const ok = it.delivered_ok ? '<span style="color:#27ae60;">✓</span>' : '<span style="color:#c0392b;">✗</span>';
-        return `<tr style="border-bottom:1px solid #eee;">
-          <td style="padding:6px 8px; font-family:Consolas,monospace; font-size:11px; color:#555;">${esc(t)}</td>
-          <td style="padding:6px 8px;">
-            <div>${esc(addr)} <span style="color:#666;">${esc(price)}</span></div>
-            <div style="color:#888; font-size:11px; font-family:Consolas,monospace;">${esc(it.doc_id || "")} (${esc(it.source_id || "")})</div>
-          </td>
-          <td style="padding:6px 8px;">${esc(it.scenario || "")} <b style="color:#c0392b;">${(it.max_multiple || 0).toFixed(2)} 倍</b><span style="color:#888; font-size:11px;"> / 門檻 ${it.threshold_used || "?"}</span></td>
-          <td style="padding:6px 8px; text-align:center;">${ok}</td>
-        </tr>`;
-      }).join("")}</tbody></table>`;
+
+    // 更新翻頁 UI
+    const start = data.items.length ? _lineNotifOffset + 1 : 0;
+    const end = _lineNotifOffset + data.items.length;
+    if (info) {
+      info.textContent = _lineNotifTotal
+        ? `第 ${start}–${end} 筆 / 共 ${_lineNotifTotal} 筆`
+        : `共 ${data.items.length} 筆`;
+    }
+    if (prevBtn) prevBtn.disabled = (_lineNotifOffset <= 0);
+    if (nextBtn) nextBtn.disabled = (end >= _lineNotifTotal);
   } catch (e) {
     box.innerHTML = `<span style="color:#c0392b;">載入失敗：${esc(e.message)}</span>`;
   }
+};
+
+// 舊名相容（loadLineStatus 內若還有舊呼叫保留 fallback）
+window.loadLineNotifications = function () { return loadLineNotificationsPage(0); };
+
+// ── 訊息模板 ────────────────────────────────────────
+let _lineTemplateDefault = "";
+
+window.loadLineTemplate = async function () {
+  const ta = document.getElementById("line-template-textarea");
+  const varsBox = document.getElementById("line-template-vars-box");
+  if (!ta) return;
+  try {
+    const r = await authedFetch("/admin/line/template");
+    if (!r.ok) {
+      if (varsBox) varsBox.innerHTML = `<span style="color:#c0392b;">載入失敗 HTTP ${r.status}</span>`;
+      return;
+    }
+    const data = await r.json();
+    ta.value = data.template || "";
+    _lineTemplateDefault = data.default_template || "";
+    // 渲染變數列表（後端 variables: [{key:"{address}", desc:"..."}, ...]）
+    if (varsBox) {
+      const vars = data.variables || data.available_vars || [];
+      if (vars.length) {
+        varsBox.innerHTML = vars.map(v => {
+          const key = v.key || (typeof v === "string" ? v : "");
+          const desc = v.desc || v.description || "";
+          // key 已含 {}（後端格式）；若沒有就補上
+          const token = /^\{.*\}$/.test(key) ? key : `{${key}}`;
+          return `<div><code style="background:#fff; padding:1px 5px; border-radius:3px; cursor:pointer;" data-token="${esc(token)}">${esc(token)}</code> <span style="color:#666;">${esc(desc)}</span></div>`;
+        }).join("");
+        // delegate click（避免 inline onclick 在 token 含特殊字元時破裂）
+        varsBox.querySelectorAll("code[data-token]").forEach(el => {
+          el.addEventListener("click", () => insertLineTemplateVar(el.getAttribute("data-token")));
+        });
+      } else {
+        varsBox.textContent = "（後端未提供變數列表）";
+      }
+    }
+  } catch (e) {
+    if (varsBox) varsBox.innerHTML = `<span style="color:#c0392b;">${esc(e.message)}</span>`;
+  }
+};
+
+window.insertLineTemplateVar = function (token) {
+  const ta = document.getElementById("line-template-textarea");
+  if (!ta) return;
+  const start = ta.selectionStart, end = ta.selectionEnd;
+  const v = ta.value;
+  ta.value = v.slice(0, start) + token + v.slice(end);
+  ta.focus();
+  ta.selectionStart = ta.selectionEnd = start + token.length;
+};
+
+window.saveLineTemplate = async function () {
+  const ta = document.getElementById("line-template-textarea");
+  const resEl = document.getElementById("line-template-result");
+  if (!ta) return;
+  if (resEl) resEl.textContent = "儲存中…";
+  try {
+    const r = await authedFetch("/admin/line/template", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ template: ta.value }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      if (resEl) resEl.innerHTML = '<span style="color:#27ae60;">✓ 已儲存</span>';
+    } else {
+      if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(data.detail || "失敗")}</span>`;
+    }
+  } catch (e) {
+    if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(e.message)}</span>`;
+  }
+};
+
+window.previewLineTemplate = async function () {
+  const ta = document.getElementById("line-template-textarea");
+  const out = document.getElementById("line-template-preview-box");
+  const resEl = document.getElementById("line-template-result");
+  if (!ta || !out) return;
+  if (resEl) resEl.textContent = "預覽中…";
+  try {
+    const r = await authedFetch("/admin/line/template_preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ template: ta.value }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      out.textContent = data.preview || "（無內容）";
+      if (resEl) resEl.innerHTML = '<span style="color:#27ae60;">✓ 預覽完成</span>';
+    } else {
+      out.textContent = "";
+      if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(data.detail || "失敗")}</span>`;
+    }
+  } catch (e) {
+    if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(e.message)}</span>`;
+  }
+};
+
+window.resetLineTemplate = function () {
+  const ta = document.getElementById("line-template-textarea");
+  if (!ta) return;
+  if (!_lineTemplateDefault) {
+    alert("尚未載入預設模板");
+    return;
+  }
+  if (!confirm("確定要還原成預設模板？目前未儲存的內容會丟失。")) return;
+  ta.value = _lineTemplateDefault;
 };
 
 window.testLineNotify = async function () {

@@ -2004,9 +2004,16 @@
       state.allProperties = items;
       const cnt = $('#v2-watchlist-count');
       if (cnt) {
-        const n = state.view === 'watchlist'
-          ? items.filter(p => !p.deleted).length
-          : items.filter(p => p._in_watchlist).length;
+        // 探索 tab：用 server 回的 total_watchlist（含被 dist 過濾掉的，避免 race）
+        // 最愛 tab：用 items 實長度
+        let n;
+        if (state.view === 'watchlist') {
+          n = items.filter(p => !p.deleted).length;
+        } else if (typeof data.total_watchlist === 'number') {
+          n = data.total_watchlist;
+        } else {
+          n = items.filter(p => p._in_watchlist).length;
+        }
         cnt.textContent = n > 0 ? String(n) : '';
       }
       applyFilters();
@@ -2222,6 +2229,10 @@
     setCapMsg('v2-cap-manual-msg', 'pending', '分析中…（後台處理約 10-30 秒）');
     const label = `${city}${district}${address}`;
     const pid = _addPendingPlaceholder(label, 'manual');
+
+    // 後端 status 通用錯誤訊息（讀 data.error，fallback data.message）
+    const errMsg = (data) => data.error || data.message || '';
+
     try {
       const r = await fetch('/api/manual_analyze', {
         method: 'POST',
@@ -2243,19 +2254,32 @@
         _removePendingPlaceholder(pid);
         await loadProperties();
       } else if (data.status === 'district_mismatch') {
-        setCapMsg('v2-cap-manual-msg', 'error', '地址與所選區不符：' + (data.message || ''));
+        // 後端回 candidates: [{city, district, address, formatted}, ...]
+        // → 顯示錯誤訊息 + 可點選的候選區按鈕，幫用戶一鍵改正
+        const cands = Array.isArray(data.candidates) ? data.candidates : [];
+        _renderManualCandidates('v2-cap-manual-msg', errMsg(data) || '地址與所選區不符', cands);
         _removePendingPlaceholder(pid);
         applyFilters();
       } else if (data.status === 'not_found') {
-        setCapMsg('v2-cap-manual-msg', 'error', '找不到該地址：' + (data.message || ''));
+        // 後端可能回 suggestions: [str, ...]（或舊格式對 fuzzy 建議）
+        const sugg = Array.isArray(data.suggestions) ? data.suggestions : [];
+        if (sugg.length) {
+          _renderManualSuggestions('v2-cap-manual-msg', errMsg(data) || '找不到該地址', sugg);
+        } else {
+          setCapMsg('v2-cap-manual-msg', 'error', errMsg(data) || '找不到該地址');
+        }
         _removePendingPlaceholder(pid);
         applyFilters();
       } else if (data.status === 'lvr_mismatch') {
-        setCapMsg('v2-cap-manual-msg', 'error', '實價登錄對不到候選：' + (data.message || ''));
+        setCapMsg('v2-cap-manual-msg', 'error', errMsg(data) || '實價登錄資料對不到');
+        _removePendingPlaceholder(pid);
+        applyFilters();
+      } else if (data.status === 'error') {
+        setCapMsg('v2-cap-manual-msg', 'error', errMsg(data) || '輸入有誤');
         _removePendingPlaceholder(pid);
         applyFilters();
       } else {
-        setCapMsg('v2-cap-manual-msg', 'error', '回應 (' + data.status + ')：' + (data.message || ''));
+        setCapMsg('v2-cap-manual-msg', 'error', '回應 (' + data.status + ')：' + errMsg(data));
         _removePendingPlaceholder(pid);
         applyFilters();
       }
@@ -2264,6 +2288,63 @@
       _removePendingPlaceholder(pid);
       applyFilters();
     }
+  }
+
+  // district_mismatch 時的 UI：訊息 + 候選按鈕（點擊 → 自動切到對應 city/district 並重送）
+  function _renderManualCandidates(slotId, msg, candidates) {
+    const el = document.getElementById(slotId);
+    if (!el) return;
+    const safe = (s) => String(s || '').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+    const btns = candidates.map((c, i) =>
+      `<button type="button" class="v2-cap__cand-btn" data-cand="${i}">${safe(c.formatted || (c.city + c.district))}</button>`
+    ).join('');
+    el.className = 'v2-cap__msg v2-cap__msg--error';
+    el.innerHTML = `<div style="margin-bottom:6px;">${safe(msg)}</div>` +
+      (btns ? `<div class="v2-cap__cand-list">${btns}</div>` : '');
+    el.querySelectorAll('button[data-cand]').forEach(b => {
+      b.addEventListener('click', () => {
+        const idx = +b.getAttribute('data-cand');
+        const c = candidates[idx];
+        if (!c) return;
+        // 切 city → 等 district 列表 populate → 切 district + address → 重送
+        const cityEl = $('#v2-manual-city');
+        const distEl = $('#v2-manual-district');
+        const addrEl = $('#v2-manual-address');
+        if (cityEl && c.city) {
+          cityEl.value = c.city;
+          if (typeof populateManualDistricts === 'function') populateManualDistricts();
+        }
+        setTimeout(() => {
+          if (distEl && c.district) distEl.value = c.district;
+          if (addrEl && c.address) addrEl.value = c.address;
+          triggerManualAnalyze();
+        }, 50);
+      });
+    });
+  }
+
+  // not_found 的 fuzzy 建議：純字串 list，點擊填入 address 欄位（不自動重送，讓用戶確認）
+  function _renderManualSuggestions(slotId, msg, suggestions) {
+    const el = document.getElementById(slotId);
+    if (!el) return;
+    const safe = (s) => String(s || '').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+    const btns = suggestions.slice(0, 8).map((s, i) =>
+      `<button type="button" class="v2-cap__cand-btn" data-sugg="${i}">${safe(s)}</button>`
+    ).join('');
+    el.className = 'v2-cap__msg v2-cap__msg--error';
+    el.innerHTML = `<div style="margin-bottom:6px;">${safe(msg)}</div>` +
+      (btns ? `<div class="v2-cap__cand-list">${btns}</div>` : '');
+    el.querySelectorAll('button[data-sugg]').forEach(b => {
+      b.addEventListener('click', () => {
+        const idx = +b.getAttribute('data-sugg');
+        const s = suggestions[idx];
+        const addrEl = $('#v2-manual-address');
+        if (addrEl && s) {
+          addrEl.value = s;
+          addrEl.focus();
+        }
+      });
+    });
   }
 
   // 輪詢 manual analyze 完成 (5/10/15/20/30/45/60 秒重抓，看到新物件就停)

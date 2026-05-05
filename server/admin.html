@@ -318,8 +318,10 @@
 
     <!-- ════════════ LINE 通知 page ════════════ -->
     <div class="admin-page hidden" data-page="line">
+
+      <!-- panel A：連線狀態 -->
       <section class="panel">
-        <h2>LINE 通知設定（高獲利物件警示）</h2>
+        <h2>① 連線狀態</h2>
         <p style="font-size:13px; color:#555; margin: 0 0 10px;">
           物件分析後，若 都更/危老/防災都更 任一試算情境的獲利倍數達門檻 → 自動 push LINE。
         </p>
@@ -328,6 +330,18 @@
           <code>LINE_CHANNEL_TOKEN=xxx</code> 和 <code>LINE_USER_ID=Uxxx</code>，restart service。
         </p>
         <div id="line-status-box" style="font-size:13px; padding: 10px 12px; background:#f7f3ea; border-radius:4px; margin-bottom: 12px;">載入中…</div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <button onclick="testLineNotify()" style="padding:8px 18px; background:#c78a00; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:600;">
+            📨 發送測試訊息
+          </button>
+          <button onclick="loadLineStatus()" style="padding:8px 14px;">重新整理</button>
+          <span id="line-test-result" style="font-size:13px;"></span>
+        </div>
+      </section>
+
+      <!-- panel B：觸發條件 -->
+      <section class="panel">
+        <h2>② 觸發條件</h2>
 
         <!-- 倍數門檻 -->
         <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom: 14px; padding:10px 12px; background:#fff; border:1px solid #e0d9c2; border-radius:4px;">
@@ -343,7 +357,7 @@
         </div>
 
         <!-- 不可觸發旗標（admin 勾選） -->
-        <div style="margin-bottom: 14px; padding:10px 12px; background:#fff; border:1px solid #e0d9c2; border-radius:4px;">
+        <div style="padding:10px 12px; background:#fff; border:1px solid #e0d9c2; border-radius:4px;">
           <div style="font-weight:600; margin-bottom:8px;">不可觸發 LINE 通知的物件類型（任一勾選命中即 skip）：</div>
           <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center;">
             <label style="cursor:pointer;"><input type="checkbox" id="line-skip-floors-5plus" checked> 五樓蓋+</label>
@@ -355,18 +369,64 @@
             <span id="line-skip-flags-result" style="font-size:13px;"></span>
           </div>
         </div>
+      </section>
 
-        <!-- 測試訊息 -->
-        <div style="display:flex; gap:10px; align-items:center; margin-bottom: 18px;">
-          <button onclick="testLineNotify()" style="padding:8px 18px; background:#c78a00; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:600;">
-            📨 發送測試訊息
-          </button>
-          <button onclick="loadLineStatus()" style="padding:8px 14px;">重新整理</button>
-          <span id="line-test-result" style="font-size:13px;"></span>
+      <!-- panel C：訊息模板 -->
+      <section class="panel">
+        <h2>③ 訊息模板</h2>
+        <p style="font-size:13px; color:#555; margin: 0 0 10px;">
+          自訂高獲利物件 LINE 通知訊息內容。可使用變數 <code>{address}</code>、<code>{price_wan}</code> 等，將被自動代入物件資料。
+        </p>
+
+        <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start;">
+          <!-- 左：模板編輯 -->
+          <div style="flex:1 1 480px; min-width:380px;">
+            <label style="font-weight:600; display:block; margin-bottom:6px;">訊息內容</label>
+            <textarea id="line-template-textarea"
+              style="width:100%; min-height:280px; padding:10px 12px; font-size:13px; font-family:Consolas,'Microsoft JhengHei',monospace; line-height:1.6; border:1px solid #c8b97a; border-radius:4px; background:#fffdf6; resize:vertical;"
+              placeholder="載入中…"></textarea>
+            <div style="display:flex; gap:10px; margin-top:10px; align-items:center;">
+              <button onclick="saveLineTemplate()" style="padding:8px 18px; background:#c78a00; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:600;">
+                儲存模板
+              </button>
+              <button onclick="previewLineTemplate()" style="padding:8px 14px;">
+                🔍 預覽
+              </button>
+              <button onclick="resetLineTemplate()" style="padding:8px 14px;">
+                ↺ 還原預設
+              </button>
+              <span id="line-template-result" style="font-size:13px;"></span>
+            </div>
+          </div>
+
+          <!-- 右：可用變數 + 預覽 -->
+          <div style="flex:1 1 320px; min-width:280px;">
+            <label style="font-weight:600; display:block; margin-bottom:6px;">可用變數</label>
+            <div id="line-template-vars-box"
+              style="font-size:12px; padding:10px 12px; background:#f7f3ea; border:1px solid #e0d9c2; border-radius:4px; line-height:1.9; max-height:140px; overflow-y:auto;">
+              載入中…
+            </div>
+            <label style="font-weight:600; display:block; margin:12px 0 6px;">預覽結果</label>
+            <pre id="line-template-preview-box"
+              style="font-size:12px; padding:10px 12px; background:#fffdf6; border:1px solid #e0d9c2; border-radius:4px; line-height:1.6; min-height:140px; max-height:280px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; margin:0;">
+（按「🔍 預覽」用範例物件渲染）</pre>
+          </div>
         </div>
+      </section>
 
-        <h3 style="margin-top:18px; font-size:15px;">最近發送紀錄</h3>
+      <!-- panel D：最近發送紀錄 -->
+      <section class="panel">
+        <h2>④ 最近發送紀錄</h2>
         <div id="line-notifications-box" style="font-size:13px;">載入中…</div>
+        <div id="line-notifications-pager"
+          style="display:flex; gap:10px; align-items:center; margin-top:12px; font-size:13px;">
+          <button id="line-notif-prev" onclick="loadLineNotificationsPage(-1)" disabled
+            style="padding:6px 12px;">← 上一頁</button>
+          <button id="line-notif-next" onclick="loadLineNotificationsPage(1)" disabled
+            style="padding:6px 12px;">下一頁 →</button>
+          <span id="line-notif-pageinfo" style="margin-left:10px; color:#555;"></span>
+          <button onclick="loadLineNotificationsPage(0)" style="padding:6px 12px; margin-left:auto;">重新整理</button>
+        </div>
       </section>
     </div>
     <!-- ════════════ /LINE 通知 page ════════════ -->
