@@ -346,6 +346,12 @@ window.loadLineStatus = async function () {
       const el = document.getElementById(id);
       if (el && typeof v === "boolean") el.checked = v;
     });
+    // 同步 road_blacklist textarea (一行一條)
+    const blEl = document.getElementById("line-road-blacklist");
+    if (blEl) {
+      const arr = Array.isArray(s.road_blacklist) ? s.road_blacklist : [];
+      blEl.value = arr.join("\n");
+    }
     // 載入發送紀錄（重置到第一頁）
     _lineNotifOffset = 0;
     if (typeof loadLineNotificationsPage === "function") loadLineNotificationsPage(0);
@@ -378,6 +384,31 @@ window.saveLineThreshold = async function () {
     if (r.ok) {
       if (resEl) resEl.innerHTML = `<span style="color:#27ae60;">✓ 已儲存（${data.threshold_multiple} 倍 / ${esc(data.trigger_scenario || trigger_scenario)}）</span>`;
       loadLineStatus();
+    } else {
+      if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(data.detail || "失敗")}</span>`;
+    }
+  } catch (e) {
+    if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(e.message)}</span>`;
+  }
+};
+
+window.saveLineRoadBlacklist = async function () {
+  const ta = document.getElementById("line-road-blacklist");
+  const resEl = document.getElementById("line-road-blacklist-result");
+  if (!ta) return;
+  const items = ta.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  if (resEl) resEl.textContent = "儲存中…";
+  try {
+    const r = await authedFetch("/admin/line/road_blacklist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ road_blacklist: items }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      if (resEl) resEl.innerHTML = `<span style="color:#27ae60;">✓ 已儲存（${(data.road_blacklist || []).length} 條）</span>`;
+      // 用 server normalize 後的結果回填 (去重 / trim)
+      ta.value = (data.road_blacklist || []).join("\n");
     } else {
       if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(data.detail || "失敗")}</span>`;
     }

@@ -1204,8 +1204,12 @@ def analyze_single_property(
         _skip_foreclosure = bool(_cfg_data_skip.get("skip_foreclosure", True))
         _skip_floors_5plus = bool(_cfg_data_skip.get("skip_floors_5plus", True))
         _skip_basement = bool(_cfg_data_skip.get("skip_basement", True))
+        _road_blacklist = _cfg_data_skip.get("road_blacklist") or []
+        if not isinstance(_road_blacklist, list):
+            _road_blacklist = []
     except Exception:
         _skip_remote = _skip_unsuitable = _skip_foreclosure = _skip_floors_5plus = _skip_basement = True
+        _road_blacklist = []
     _skip_reasons = []
     if _skip_remote and doc_data.get("is_remote_area"):
         _skip_reasons.append("remote_area")
@@ -1221,6 +1225,18 @@ def analyze_single_property(
         except Exception: _tf_chk = 0
         if _tf_chk >= 5:
             _skip_reasons.append(f"floors={_tf_chk}")
+    # 黑名單路段：地址含任一黑名單字串就 skip（admin 在 line_config.road_blacklist 設定）
+    if _road_blacklist:
+        _addr_blob = " ".join([
+            str(doc_data.get("address_inferred") or ""),
+            str(doc_data.get("address") or ""),
+            str(doc_data.get("title") or ""),
+        ])
+        for kw in _road_blacklist:
+            kw_clean = (kw or "").strip()
+            if kw_clean and kw_clean in _addr_blob:
+                _skip_reasons.append(f"blacklist={kw_clean}")
+                break
     if _skip_reasons:
         logger.info(f"[{src_id}] LINE 通知跳過：{','.join(_skip_reasons)}")
         rv2 = None   # 後續 try block 看不到 scenarios，自然不會觸發 notify

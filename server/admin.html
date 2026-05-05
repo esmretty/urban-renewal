@@ -357,7 +357,7 @@
         </div>
 
         <!-- 不可觸發旗標（admin 勾選） -->
-        <div style="padding:10px 12px; background:#fff; border:1px solid #e0d9c2; border-radius:4px;">
+        <div style="padding:10px 12px; background:#fff; border:1px solid #e0d9c2; border-radius:4px; margin-bottom:14px;">
           <div style="font-weight:600; margin-bottom:8px;">不可觸發 LINE 通知的物件類型（任一勾選命中即 skip）：</div>
           <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center;">
             <label style="cursor:pointer;"><input type="checkbox" id="line-skip-floors-5plus" checked> 五樓蓋+</label>
@@ -367,6 +367,21 @@
             <label style="cursor:pointer; padding-left:14px; border-left:1px solid #d4cba0;"><input type="checkbox" id="line-skip-foreclosure" checked> 法拍屋</label>
             <button onclick="saveLineSkipFlags()" style="padding:6px 14px; background:#c78a00; color:#fff; border:none; border-radius:4px; cursor:pointer; margin-left:auto;">儲存旗標</button>
             <span id="line-skip-flags-result" style="font-size:13px;"></span>
+          </div>
+        </div>
+
+        <!-- 黑名單路段：地址含任一條目子字串就 skip (即使倍數達門檻) -->
+        <div style="padding:10px 12px; background:#fff; border:1px solid #e0d9c2; border-radius:4px;">
+          <div style="font-weight:600; margin-bottom:6px;">黑名單路段（地址含任一字串即 skip 通知）：</div>
+          <div style="font-size:12px; color:#666; margin-bottom:8px;">
+            一行一條，可填路名 / 巷弄 / 任意地址子字串。例：<code>瑞光路</code>、<code>保平路100巷</code>、<code>古亭里</code>。物件 address / address_inferred 含任一子字串即 skip。
+          </div>
+          <textarea id="line-road-blacklist" rows="5"
+            style="width:100%; padding:8px 10px; font-size:13px; font-family:Consolas,'Microsoft JhengHei',monospace; line-height:1.5; border:1px solid #c8b97a; border-radius:4px; background:#fffdf6; resize:vertical; box-sizing:border-box;"
+            placeholder="一行一條，例如&#10;瑞光路&#10;保平路100巷"></textarea>
+          <div style="display:flex; gap:10px; align-items:center; margin-top:8px;">
+            <button onclick="saveLineRoadBlacklist()" style="padding:6px 14px; background:#c78a00; color:#fff; border:none; border-radius:4px; cursor:pointer;">儲存黑名單</button>
+            <span id="line-road-blacklist-result" style="font-size:13px;"></span>
           </div>
         </div>
       </section>

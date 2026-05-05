@@ -1742,6 +1742,7 @@ async def admin_line_status(admin: dict = Depends(require_admin)):
         "skip_basement": True,
     }
     trigger_scenario = "都更"   # 預設拿「都更」倍數比對 threshold；admin 可改為「危老」或「防災都更」
+    road_blacklist = []
     try:
         cfg = get_firestore().collection("settings").document("line_config").get()
         if cfg.exists:
@@ -1751,6 +1752,9 @@ async def admin_line_status(admin: dict = Depends(require_admin)):
             for k in skip_flags:
                 if k in cfg_data:
                     skip_flags[k] = bool(cfg_data.get(k))
+            _bl = cfg_data.get("road_blacklist")
+            if isinstance(_bl, list):
+                road_blacklist = [str(x) for x in _bl if x]
     except Exception: pass
     notified_count = 0
     last_notified = None
@@ -1774,6 +1778,7 @@ async def admin_line_status(admin: dict = Depends(require_admin)):
         "notified_property_count": notified_count,
         "last_notified_at": last_notified,
         "trigger_threshold": f"{trigger_scenario} ≥ {threshold} 倍",
+        "road_blacklist": road_blacklist,
     }
 
 
@@ -1842,6 +1847,37 @@ async def admin_set_line_skip_flags(body: LineSkipFlagsReq, admin: dict = Depend
     return {"status": "ok", "skip_flags": {k: payload[k] for k in (
         "skip_remote_area", "skip_unsuitable", "skip_foreclosure", "skip_floors_5plus", "skip_basement"
     )}}
+
+
+class LineRoadBlacklistReq(BaseModel):
+    road_blacklist: list[str] = []
+
+
+@app.post("/admin/line/road_blacklist")
+async def admin_set_line_road_blacklist(body: LineRoadBlacklistReq, admin: dict = Depends(require_admin)):
+    """Admin 設定 LINE 通知的黑名單路段。
+    地址含任一條目子字串就 skip 通知 (即使倍數達門檻)。
+    e.g. ["瑞光路", "保平路100巷"]"""
+    cleaned = [s.strip() for s in (body.road_blacklist or []) if s and s.strip()]
+    # 防呆：去重 + 限制條目長度
+    seen = set()
+    unique = []
+    for s in cleaned:
+        if len(s) > 60:
+            raise HTTPException(400, f"條目「{s[:20]}...」過長 (>60 字元)")
+        if s not in seen:
+            seen.add(s)
+            unique.append(s)
+    if len(unique) > 100:
+        raise HTTPException(400, "最多 100 條黑名單")
+    payload = {
+        "road_blacklist": unique,
+        "updated_at": now_tw_iso(),
+        "updated_by_email": admin.get("email") or "",
+    }
+    get_firestore().collection("settings").document("line_config").set(payload, merge=True)
+    logger.warning(f"[admin] {admin.get('email')} 設 LINE road_blacklist {len(unique)} 條：{unique[:10]}{'...' if len(unique)>10 else ''}")
+    return {"status": "ok", "road_blacklist": unique}
 
 
 @app.get("/admin/line/notifications")
