@@ -3157,6 +3157,12 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   }
   .v2-user__email { display: none; }
   .v2-brand__name { display: none; }
+
+  /* 手機 detail page 整體放大 ~8%（≈ 每個 px 字 +1px），不用一條一條 override
+     header 不縮放（保留視覺層級），只動 body 內容 */
+  .v2-drawer__body {
+    zoom: 1.08;
+  }
 }
 
 /* Hidden by default; only mobile media query unhides */
