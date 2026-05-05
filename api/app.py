@@ -46,6 +46,7 @@ _PUBLIC_PATHS = {
     "/api/school_district/lookup",     # 學區查詢測試頁，純地理對照無個資
     "/api/school_district/supported",
     "/api/school_district/by_district",
+    "/api/school_district/polygons",
     "/school_lookup.html",              # 學區查詢測試頁 HTML
     "/api/maintenance_status",   # 維護頁 polling 用，公開不需 auth
     "/api/version",              # 版本號（commit short SHA），admin UI 對版用，無敏感資訊
@@ -1179,11 +1180,46 @@ def api_school_district_supported():
 
 @app.get("/api/school_district/by_district")
 def api_school_district_by_district(city: str = Query(...), district: str = Query(...)):
-    """測試頁地圖用：回某區所有里的學區對照 + 該里 polygon (NLSC TaiwanVillage WMS)。
-    現在先回對照表本身 (polygon 由前端用 NLSC WMS overlay)。"""
+    """測試頁地圖用：回某區所有里的學區對照表。"""
     from analysis import school_district as sd
     villages = sd.get_district_villages(city, district)
     return {"city": city, "district": district, "villages": villages}
+
+
+_POLYGON_CACHE = {"data": None}
+
+@app.get("/api/school_district/polygons")
+def api_school_district_polygons(city: str = Query(...), district: str = Query(...)):
+    """回某區所有里的 polygon (GeoJSON FeatureCollection) + 每個 feature merge 學校資料。
+    給測試頁地圖按學校上色用。"""
+    from analysis import school_district as sd
+    if _POLYGON_CACHE["data"] is None:
+        try:
+            import json as _json
+            poly_path = BASE_DIR / "data" / "school_districts" / "villages_polygon.geojson"
+            with open(poly_path, encoding="utf-8") as f:
+                _POLYGON_CACHE["data"] = _json.load(f)
+        except Exception as e:
+            return {"error": f"polygon 檔案載入失敗: {e}"}
+    all_features = (_POLYGON_CACHE["data"] or {}).get("features") or []
+    villages_lookup = sd.get_district_villages(city, district)
+    out = []
+    for ft in all_features:
+        p = ft.get("properties") or {}
+        if p.get("county") != city or p.get("town") != district:
+            continue
+        v = p.get("village")
+        info = villages_lookup.get(v) or {}
+        merged = dict(ft)
+        merged["properties"] = {
+            "county": p.get("county"),
+            "town": p.get("town"),
+            "village": v,
+            "elementary": info.get("elementary") or [],
+            "junior_high": info.get("junior_high") or [],
+        }
+        out.append(merged)
+    return {"type": "FeatureCollection", "features": out}
 
 
 @app.get("/api/target_regions")

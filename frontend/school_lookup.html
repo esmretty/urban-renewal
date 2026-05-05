@@ -60,6 +60,19 @@
       margin-top: 6px; font-size: 11px; font-family: Consolas, monospace;
       color: #888; white-space: pre-wrap; word-break: break-all;
     }
+    .sd-label {
+      background: rgba(255,255,255,0.85);
+      border: 1px solid #444;
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #333;
+      white-space: nowrap;
+      text-align: center;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    }
+    .sd-label span { display: inline-block; }
   </style>
 </head>
 <body>
@@ -111,8 +124,22 @@
 
 <!-- 4. 地圖 -->
 <div class="card">
-  <h2>④ 地圖：點任一點查該位置學區</h2>
-  <div class="map-hint">底圖：OpenStreetMap；村里界線：內政部 NLSC WMTS。在地圖上點任一點 → 自動 query 該位置學區。</div>
+  <h2>④ 地圖：點任一點查該位置學區，或載入區內所有里 polygon (按學校上色)</h2>
+  <div class="row">
+    <select id="map-city" onchange="onMapCityChange()">
+      <option value="">城市…</option>
+    </select>
+    <select id="map-district">
+      <option value="">行政區…</option>
+    </select>
+    <select id="map-kind">
+      <option value="elementary">國小</option>
+      <option value="junior_high">國中</option>
+    </select>
+    <button onclick="loadPolygons()">載入學區邊界 + 上色</button>
+    <button onclick="clearPolygons()">清除</button>
+  </div>
+  <div class="map-hint">每個里 polygon 的顏色 = 對應學校 (hash 配色)；點任一點查該位置學區。</div>
   <div id="map"></div>
   <div id="map-result" class="result" style="display:none;"></div>
 </div>
@@ -242,16 +269,99 @@ async function loadDistrictTable() {
 }
 
 // ── Map ────────────────────────────────────────────────────
-let map, marker;
+let map, marker, polygonLayer, labelLayer;
+
+// 字串 hash → HSL 顏色（同學校永遠同色）
+function colorForSchool(name) {
+  if (!name) return '#888';
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  const hue = Math.abs(h) % 360;
+  return `hsl(${hue}, 65%, 60%)`;
+}
+
+function onMapCityChange() {
+  const c = $('map-city').value;
+  const dSel = $('map-district');
+  dSel.innerHTML = '<option value="">行政區…</option>';
+  (SUPPORTED[c] || []).forEach(d => {
+    dSel.innerHTML += `<option value="${esc(d)}">${esc(d)}</option>`;
+  });
+}
+
+function clearPolygons() {
+  if (polygonLayer) { map.removeLayer(polygonLayer); polygonLayer = null; }
+  if (labelLayer) { map.removeLayer(labelLayer); labelLayer = null; }
+}
+
+async function loadPolygons() {
+  const c = $('map-city').value, d = $('map-district').value, kind = $('map-kind').value;
+  if (!c || !d) {
+    alert('請先選城市 + 行政區');
+    return;
+  }
+  clearPolygons();
+  const r = await fetch(`/api/school_district/polygons?city=${encodeURIComponent(c)}&district=${encodeURIComponent(d)}`);
+  const geo = await r.json();
+  if (geo.error) { alert(geo.error); return; }
+  if (!(geo.features || []).length) { alert('該區無 polygon 資料'); return; }
+  // GeoJSON layer
+  polygonLayer = L.geoJSON(geo, {
+    style: (ft) => {
+      const schools = ft.properties[kind] || [];
+      const main = schools[0] || '';
+      return {
+        color: '#444',
+        weight: 1.2,
+        opacity: 0.9,
+        fillColor: colorForSchool(main),
+        fillOpacity: 0.45,
+      };
+    },
+    onEachFeature: (ft, layer) => {
+      const p = ft.properties;
+      const es = (p.elementary || []).join('、') || '—';
+      const jh = (p.junior_high || []).join('、') || '—';
+      layer.bindPopup(
+        `<b>${esc(p.village)}</b> (${esc(p.county)}${esc(p.town)})<br>` +
+        `國小：${esc(es)}<br>` +
+        `國中：${esc(jh)}`
+      );
+      layer.on('mouseover', () => layer.setStyle({ weight: 2.5, fillOpacity: 0.65 }));
+      layer.on('mouseout', () => polygonLayer.resetStyle(layer));
+    },
+  }).addTo(map);
+  // 自動 fit bounds
+  try { map.fitBounds(polygonLayer.getBounds(), { padding: [20, 20] }); } catch (_e) {}
+  // 在每個 polygon 中心放學校名 label
+  labelLayer = L.layerGroup();
+  geo.features.forEach(ft => {
+    const schools = ft.properties[kind] || [];
+    if (!schools.length) return;
+    const center = (() => {
+      const lay = L.geoJSON(ft);
+      try { return lay.getBounds().getCenter(); } catch (_e) { return null; }
+    })();
+    if (!center) return;
+    const txt = schools.length > 1 ? schools.join('/') : schools[0];
+    const ic = L.divIcon({
+      className: 'sd-label',
+      html: `<span>${esc(txt)}</span>`,
+      iconSize: null,
+    });
+    L.marker(center, { icon: ic, interactive: false }).addTo(labelLayer);
+  });
+  labelLayer.addTo(map);
+}
+
 function initMap() {
-  // 預設中心：台北 101 附近
   map = L.map('map').setView([25.033, 121.565], 13);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OSM', maxZoom: 19,
   }).addTo(map);
-  // 內政部 NLSC 村里界 WMTS
+  // 也保留 NLSC 村里界 WMTS 當底圖薄線（沒載 polygon 時可用）
   L.tileLayer('https://wmts.nlsc.gov.tw/wmts/B0727/default/EPSG:3857/{z}/{x}/{y}', {
-    attribution: '村里界 © 內政部 NLSC', maxZoom: 19, opacity: 0.45,
+    attribution: '村里界 © 內政部 NLSC', maxZoom: 19, opacity: 0.3,
   }).addTo(map);
   map.on('click', async (e) => {
     const { lat, lng } = e.latlng;
@@ -262,25 +372,24 @@ function initMap() {
     out.innerHTML = `查詢中… (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
     try {
       const r = await fetch(`/api/school_district/lookup?lat=${lat}&lng=${lng}`);
-      if (!r.ok) {
-        out.innerHTML = `<span class="err">HTTP ${r.status}</span>`;
-        return;
-      }
-      const data = await r.json();
-      renderResult(out, data);
-    } catch (e) {
-      out.innerHTML = `<span class="err">查詢失敗：${esc(e.message)}</span>`;
+      if (!r.ok) { out.innerHTML = `<span class="err">HTTP ${r.status}</span>`; return; }
+      renderResult(out, await r.json());
+    } catch (err) {
+      out.innerHTML = `<span class="err">查詢失敗：${esc(err.message)}</span>`;
     }
   });
-  // 圖例
-  const legend = L.control({ position: 'bottomright' });
-  legend.onAdd = () => {
-    const div = L.DomUtil.create('div', 'legend');
-    div.innerHTML = '<b>地圖圖層</b><br>底圖 OSM<br>橘紅線 = 村里界 (NLSC)<br><br>點任一點查學區';
-    return div;
-  };
-  legend.addTo(map);
 }
+
+// 改裝 loadSupported 也填 #map-city
+const _origLoadSupported = loadSupported;
+loadSupported = async function () {
+  await _origLoadSupported();
+  const sel = $('map-city');
+  sel.innerHTML = '<option value="">城市…</option>';
+  Object.keys(SUPPORTED).forEach(c => {
+    sel.innerHTML += `<option value="${esc(c)}">${esc(c)}</option>`;
+  });
+};
 
 // boot
 loadSupported();
