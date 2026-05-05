@@ -35,11 +35,19 @@ def _load_lookup() -> dict:
     return _LOOKUP_CACHE
 
 
+def _normalize_city(city: str) -> str:
+    """臺/台 互換 — NLSC 回「臺北市」但 lookup.json key 是「台北市」。"""
+    if not city:
+        return city
+    return city.replace("臺", "台")
+
+
 def lookup_by_village(city: str, district: str, village: str) -> Dict[str, List[str]]:
     """直接用 (city, district, village) 查學區。
     回 {"elementary": [...], "junior_high": [...]}；查不到回空 list。"""
     if not (city and district and village):
         return {"elementary": [], "junior_high": []}
+    city = _normalize_city(city)
     lk = _load_lookup()
     info = lk.get(city, {}).get(district, {}).get(village)
     if info:
@@ -85,7 +93,9 @@ def lookup_by_coord(lat: float, lng: float, city: str = "", district: str = "") 
         out["source"] = "nlsc_empty"
         return out
     out["village"] = sp.get("village")
-    nlsc_city = sp.get("city") or city
+    out["lat"] = lat
+    out["lng"] = lng
+    nlsc_city = _normalize_city(sp.get("city") or city)
     nlsc_district = sp.get("district") or district
     out["city"] = nlsc_city
     out["district"] = nlsc_district

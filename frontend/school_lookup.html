@@ -140,8 +140,11 @@ function renderResult(el, data, opts = {}) {
   if (data.geocoded_address) {
     html += `<div>Google 解析：${esc(data.geocoded_address)}</div>`;
   }
-  if (data.geocoded_lat || data.lat) {
-    html += `<div>座標：${(data.geocoded_lat || data.lat || '').toFixed?.(6) || (data.geocoded_lat || data.lat)}, ${(data.geocoded_lng || data.lng || '').toFixed?.(6) || (data.geocoded_lng || data.lng)}</div>`;
+  const lat = data.geocoded_lat ?? data.lat;
+  const lng = data.geocoded_lng ?? data.lng;
+  if (lat != null && lng != null) {
+    const fmt = (v) => typeof v === 'number' ? v.toFixed(6) : String(v);
+    html += `<div>座標：${fmt(lat)}, ${fmt(lng)}</div>`;
   }
   if (data.city || data.district) {
     html += `<div>位置：${esc(data.city || '')} ${esc(data.district || '')} <strong>${esc(data.village || '?里')}</strong></div>`;
@@ -254,8 +257,20 @@ function initMap() {
     const { lat, lng } = e.latlng;
     if (marker) map.removeLayer(marker);
     marker = L.marker([lat, lng]).addTo(map);
-    const r = await fetch(`/api/school_district/lookup?lat=${lat}&lng=${lng}`);
-    renderResult($('map-result'), await r.json());
+    const out = $('map-result');
+    out.style.display = 'block';
+    out.innerHTML = `查詢中… (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+    try {
+      const r = await fetch(`/api/school_district/lookup?lat=${lat}&lng=${lng}`);
+      if (!r.ok) {
+        out.innerHTML = `<span class="err">HTTP ${r.status}</span>`;
+        return;
+      }
+      const data = await r.json();
+      renderResult(out, data);
+    } catch (e) {
+      out.innerHTML = `<span class="err">查詢失敗：${esc(e.message)}</span>`;
+    }
   });
   // 圖例
   const legend = L.control({ position: 'bottomright' });
