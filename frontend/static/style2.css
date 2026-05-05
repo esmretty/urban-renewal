@@ -3153,6 +3153,13 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   .v2-drawer__body {
     zoom: 1.08;
   }
+
+  /* iOS Safari focus 自動放大：input/select/textarea font-size < 16px 觸發
+     強制全部 ≥ 16px，瀏覽器就不會 zoom-on-focus */
+  input, select, textarea,
+  .v2-input, .v2-select, .v2-cap__input, .v2-cap__field {
+    font-size: 16px !important;
+  }
 }
 
 /* Hidden by default; only mobile media query unhides */

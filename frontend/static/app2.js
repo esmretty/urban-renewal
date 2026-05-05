@@ -421,7 +421,16 @@
     const empty = $('#v2-empty');
     const list = state.filteredSorted;
     const total = list.length;
-    $('#v2-result-count').innerHTML = `共 <strong>${total}</strong> 筆`;
+    // 手機 (≤1024px) 切到單城市 tab 時，「共 N 筆」只算該城市；桌面看全部
+    const _isMobileCol = window.matchMedia('(max-width: 1024px)').matches;
+    let _countN = total;
+    let _countLabel = '';
+    if (_isMobileCol) {
+      const active = state.gridCity || '台北市';
+      _countN = list.filter(p => p.city === active).length;
+      _countLabel = active.replace('市', '') + '·';
+    }
+    $('#v2-result-count').innerHTML = `共 ${_countLabel}<strong>${_countN}</strong> 筆`;
 
     if (total === 0) {
       grid.innerHTML = '';
@@ -902,6 +911,10 @@
     $$('.v2-grid-toggle__pill').forEach(p => {
       p.classList.toggle('v2-grid-toggle__pill--active', p.dataset.city === city);
     });
+    // 手機切城市時，「共 N 筆」也要跟著切（renderGrid 會根據 state.gridCity 重算）
+    if (window.matchMedia('(max-width: 1024px)').matches) {
+      renderGrid();
+    }
   }
 
   // ── Detail drawer ────────────────────────────────────────────────────────
@@ -2107,7 +2120,15 @@
   async function runSearch() {
     if (state.view !== 'explore') switchView('explore');
     state.exploreLoaded = false;     // force refetch
+    _autoCloseSidebarOnMobile();
     await loadProperties();
+  }
+
+  // 手機按下任何 sidebar 動作鈕後，自動把 menu 縮回（看結果不被 menu 擋住）
+  function _autoCloseSidebarOnMobile() {
+    if (window.matchMedia('(max-width: 1024px)').matches) {
+      closeSidebar();
+    }
   }
 
   // ── City tab switch (narrow viewport) ────────────────────────────────────
@@ -2226,6 +2247,7 @@
     _setCaptureButtonsDisabled(true);
     setCapMsg('v2-cap-scrape-msg', 'pending', '分析中…（佇列忙時可能要 30-60 秒）');
     const pid = _addPendingPlaceholder(url, 'url');
+    _autoCloseSidebarOnMobile();
     try {
       const r = await fetch('/api/scrape_url', {
         method: 'POST',
@@ -2283,6 +2305,7 @@
     _setCaptureButtonsDisabled(true);
     const label = `${city}${district}${address}`;
     const pid = _addPendingPlaceholder(label, 'manual');
+    _autoCloseSidebarOnMobile();
 
     // 後端 status 通用錯誤訊息（讀 data.error，fallback data.message）
     const errMsg = (data) => data.error || data.message || '';
