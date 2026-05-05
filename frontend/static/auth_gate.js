@@ -8,7 +8,9 @@ import { getAuth, onAuthStateChanged, signOut }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 async function boot() {
+  window.__perfMark && window.__perfMark('auth_gate_module_loaded');
   const res = await fetch("/api/firebase_config");
+  window.__perfMark && window.__perfMark('firebase_config_fetched');
   const cfg = await res.json();
   if (!cfg.apiKey) {
     document.body.innerHTML =
@@ -17,6 +19,7 @@ async function boot() {
   }
   const app = initializeApp(cfg);
   const auth = getAuth(app);
+  window.__perfMark && window.__perfMark('firebase_initialized');
 
   const ready = new Promise(resolve => {
     onAuthStateChanged(auth, (user) => {
@@ -29,7 +32,9 @@ async function boot() {
   });
 
   const user = await ready;
+  window.__perfMark && window.__perfMark('onAuthStateChanged_resolved');
   const token = await user.getIdToken();
+  window.__perfMark && window.__perfMark('getIdToken_done');
 
   window.currentUser = {
     uid: user.uid,
@@ -74,6 +79,7 @@ async function boot() {
 
   // 立刻 dispatch auth:ready — 讓 app2.js 可以並行 fire 它的資料請求，不再被 /api/me 卡住
   window.__authReady = true;
+  window.__perfMark && window.__perfMark('auth_ready_dispatched');
   document.dispatchEvent(new CustomEvent("auth:ready", { detail: window.currentUser }));
 
   // /api/me 在背景跑：拿階級名稱 + 處理 403 (白名單) / 維護模式 redirect

@@ -1989,11 +1989,14 @@
         url = '/api/central_search?' + params.toString();
       }
       _mark('fetch_start');
+      window.__perfMark && window.__perfMark('central_search_fetch_start');
       const r = await fetch(url);
       _mark('fetch_headers');
       const _serverTiming = r.headers.get('server-timing') || '';
+      window.__perfMark && window.__perfMark('central_search_headers', { server_timing: _serverTiming });
       const data = await r.json();
       _mark('json_parsed');
+      window.__perfMark && window.__perfMark('central_search_json_parsed', { items: (data.items || []).length, bytes: r.headers.get('content-length') });
       const _bytes = +r.headers.get('content-length') || 0;
       const items = data.items || [];
       if (state.view === 'watchlist') {
@@ -2471,6 +2474,7 @@
 
   // ── Boot ─────────────────────────────────────────────────────────────────
   async function boot() {
+    window.__perfMark && window.__perfMark('app2_boot_start');
     // mobile menu button
     $('#v2-menu-btn')?.addEventListener('click', openSidebar);
 
@@ -2480,6 +2484,7 @@
         document.addEventListener('auth:ready', resolve, { once: true });
       });
     }
+    window.__perfMark && window.__perfMark('app2_auth_ready_seen');
     // 預設勾選所有 enabled district (對齊 v1 default 全勾)
     Object.entries(V1_DISTRICTS).forEach(([city, cfg]) => {
       cfg.enabled.forEach(d => state.districtPicks.add(`${city}|${d}`));
@@ -2488,7 +2493,41 @@
     _restoreFilters();
     // loadDistricts (chips 的物件數量) 跟 loadProperties (中央 DB) 互無依賴，並行 fire
     // 用 V1_DISTRICTS hardcoded 拼 districts 參數，不需要等 target_regions 回來
-    await Promise.all([loadDistricts(), loadProperties()]);
+    window.__perfMark && window.__perfMark('parallel_fetch_start');
+    await Promise.all([
+      loadDistricts().then(() => window.__perfMark && window.__perfMark('loadDistricts_done')),
+      loadProperties().then(() => window.__perfMark && window.__perfMark('loadProperties_done')),
+    ]);
+    window.__perfMark && window.__perfMark('boot_complete');
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      window.__perfMark && window.__perfMark('first_paint_after_boot');
+      _renderPerfPanel();
+    }));
+  }
+
+  function _renderPerfPanel() {
+    if (!window.__PERF || !window.__PERF.enabled) return;
+    if (document.getElementById('v2-perf-panel')) return;
+    const marks = window.__PERF.marks;
+    let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b>⏱ Boot timing</b><button onclick="document.getElementById(\'v2-perf-panel\').remove()" style="background:#444;color:#fff;border:0;padding:2px 6px;border-radius:3px;cursor:pointer;">×</button></div>';
+    html += '<table style="font-family:Consolas,monospace;font-size:11px;border-collapse:collapse;color:#fff;">';
+    html += '<tr style="color:#aaa;border-bottom:1px solid #555;"><th style="text-align:left;padding:2px 8px;">phase</th><th style="text-align:right;padding:2px 8px;">+ms</th><th style="text-align:right;padding:2px 8px;">Δms</th></tr>';
+    let prev = 0;
+    marks.forEach(m => {
+      const delta = Math.round(m.t - prev);
+      const cls = delta > 500 ? 'color:#f87171;' : delta > 200 ? 'color:#fbbf24;' : '';
+      html += `<tr style="${cls}"><td style="padding:1px 8px;">${m.name}</td><td style="text-align:right;padding:1px 8px;">${m.t.toFixed(1)}</td><td style="text-align:right;padding:1px 8px;">+${delta}</td></tr>`;
+      prev = m.t;
+    });
+    html += '</table>';
+    html += '<div style="margin-top:6px;color:#aaa;font-size:10px;">關閉：localStorage.removeItem(\'v2_perf\') 或拿掉 ?perf=1</div>';
+    const panel = document.createElement('div');
+    panel.id = 'v2-perf-panel';
+    panel.style.cssText = 'position:fixed;bottom:8px;right:8px;z-index:99999;background:rgba(20,20,28,0.96);color:#fff;padding:10px 14px;border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,0.4);max-width:520px;font-size:12px;';
+    panel.innerHTML = html;
+    document.body.appendChild(panel);
+    // 同時 console.table 給開發者 copy
+    console.table(marks.map(m => ({ phase: m.name, '+ms': m.t.toFixed(1), extra: m.extra ? JSON.stringify(m.extra) : '' })));
   }
 
   // ── Public namespace (matches inline onclick handlers) ──────────────────

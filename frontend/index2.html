@@ -8,6 +8,33 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/static/style2.css?v=1" />
+  <!-- Perf instrumentation：?perf=1 (or localStorage v2_perf=1) 顯示分階段時間表 -->
+  <script>
+    (function () {
+      var navT = (performance.timing && performance.timing.navigationStart) || performance.timeOrigin || 0;
+      var t0 = performance.now();   // 從這支 inline script 第一次執行算起
+      var enabled = location.search.indexOf('perf=1') >= 0
+                 || localStorage.getItem('v2_perf') === '1';
+      window.__PERF = {
+        marks: [],
+        t0: t0,
+        nav_start_abs: navT,
+        enabled: enabled,
+      };
+      window.__perfMark = function (name, extra) {
+        var t = performance.now() - t0;
+        var entry = { name: name, t: Math.round(t * 10) / 10, extra: extra || null };
+        window.__PERF.marks.push(entry);
+        if (enabled) {
+          console.log('[PERF +' + entry.t.toFixed(1) + 'ms]', name, extra || '');
+        }
+      };
+      // 第一個 mark：HTML 解析到本 inline script 為止 (相對於 navigationStart 的 offset)
+      window.__perfMark('html_inline_script_run', { ms_since_nav: Math.round(performance.now()) });
+      document.addEventListener('DOMContentLoaded', function () { window.__perfMark('DOMContentLoaded'); });
+      window.addEventListener('load', function () { window.__perfMark('window_load'); });
+    })();
+  </script>
   <script type="module" src="/static/auth_gate.js"></script>
 </head>
 <body class="v2">
