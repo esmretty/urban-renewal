@@ -2345,19 +2345,20 @@ select.v2-d-input { text-align: left; }
   text-align: right;
 }
 .v2-rv2-val--bonus {
-  /* 危老 / 都更 換行排列 (堆疊兩行)，且整體靠右對齊 — 跟其他單行欄位視覺一致 */
+  /* 危老 / 都更 換行 — 兩 line 撐到父寬，內部 grid 對齊 */
   flex-direction: column;
-  align-items: flex-end;
+  align-items: stretch;
   justify-content: flex-end;
   gap: 4px;
   flex-wrap: nowrap;
 }
 .v2-rv2-bonus-line {
-  display: inline-flex;
+  /* tag 靠左 (auto)、內容 (slider/parking) 撐 1fr 到右側 */
+  display: grid;
+  grid-template-columns: auto 1fr;
   align-items: center;
-  justify-content: flex-end;
   gap: 8px;
-  flex-shrink: 0;             /* 不允許換行 */
+  width: 100%;
 }
 .v2-rv2-val--col { flex-direction: column; align-items: flex-end; gap: 2px; }
 .v2-rv2-note {
@@ -2414,14 +2415,18 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
  * 走 -webkit-appearance 客製化才會跨瀏覽器一致
  */
 .v2-rv2-slider {
-  display: inline-flex;
+  /* 拉桿 + 數字 同一個 grid：拉桿吃 1fr（撐滿剩餘空間）、數字固定寬靠右 */
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 8px;
+  width: 100%;
 }
 .v2-rv2-range {
   -webkit-appearance: none;
   appearance: none;
-  width: 110px;
+  width: 100%;          /* 撐滿 grid col 1 — bonus line 含 tag 自然會比沒 tag 的 row 短 */
+  min-width: 0;
   height: 4px;
   background: #e8e2cc;
   border-radius: 2px;
@@ -2457,6 +2462,7 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   min-width: 40px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;        /* 不換行確保 1.57 / 80% 在同 col */
 }
 /* 容積獎勵改 column 排列後，每行 slider 寬度跟其他欄位一致（不再縮窄） */
 
@@ -3086,8 +3092,7 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   .v2-lvr-tbl th { padding: 4px 5px; }
   .v2-lvr-tbl td { padding: 4px 5px; }
   .v2-lvr-tbl td.v2-lvr-addr { max-width: 120px; }
-  /* mobile 拉桿略窄 */
-  .v2-rv2-range { width: 90px; }
+  /* mobile：拉桿 width:100% 已在 base CSS 套用，這裡不用再寫死 */
   .v2-src-badge--big { font-size: 13px !important; padding: 5px 10px !important; }
   .v2-d-title { font-size: 16px; }
   .v2-d-tbl { font-size: 14px; }
