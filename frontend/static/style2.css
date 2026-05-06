@@ -2345,16 +2345,18 @@ select.v2-d-input { text-align: left; }
   text-align: right;
 }
 .v2-rv2-val--bonus {
-  flex-direction: row;        /* 危老 / 都更 強制同一列 */
-  align-items: center;
+  /* 危老 / 都更 換行排列 (堆疊兩行)，且整體靠右對齊 — 跟其他單行欄位視覺一致 */
+  flex-direction: column;
+  align-items: flex-end;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 4px;
   flex-wrap: nowrap;
 }
 .v2-rv2-bonus-line {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: flex-end;
+  gap: 8px;
   flex-shrink: 0;             /* 不允許換行 */
 }
 .v2-rv2-val--col { flex-direction: column; align-items: flex-end; gap: 2px; }
@@ -2456,9 +2458,7 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-/* 容積獎勵列在 .v2-rv2-val--bonus 下，slider 寬度更窄（兩條同列） */
-.v2-rv2-val--bonus .v2-rv2-range { width: 80px; }
-.v2-rv2-val--bonus .v2-rv2-slider-val { min-width: 36px; font-size: 13px; }
+/* 容積獎勵改 column 排列後，每行 slider 寬度跟其他欄位一致（不再縮窄） */
 
 /* ── 新成屋房價 ＋／－ 按鈕（mobile 才顯示）──
  * PC 用 input number 上下箭頭已夠；mobile 觸控不易，加圓形按鈕 ±5
@@ -3088,7 +3088,6 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   .v2-lvr-tbl td.v2-lvr-addr { max-width: 120px; }
   /* mobile 拉桿略窄 */
   .v2-rv2-range { width: 90px; }
-  .v2-rv2-val--bonus .v2-rv2-range { width: 70px; }
   .v2-src-badge--big { font-size: 13px !important; padding: 5px 10px !important; }
   .v2-d-title { font-size: 16px; }
   .v2-d-tbl { font-size: 14px; }
