@@ -3076,6 +3076,11 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
     box-shadow: var(--sh-3);
   }
   .v2-sidebar.v2-open { transform: translateX(0); }
+  /* sidebar 最下面留充足 padding：最後一個 slider 太靠底邊會被誤判成 scroll gesture
+     (iOS Safari 觸控判定區)。加 safe-area-inset 兼顧瀏海手機 home indicator */
+  .v2-sidebar__inner {
+    padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px)) !important;
+  }
   .v2-only-mobile { display: inline-flex !important; }
   /* mobile city tab switcher 顯示 */
   .v2-grid-toggle { display: flex !important; }
