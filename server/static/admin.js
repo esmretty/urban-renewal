@@ -636,6 +636,30 @@ window.resetLineTemplate = function () {
   ta.value = _lineTemplateDefault;
 };
 
+// 試發：用當前 textarea 內容（未存）+ 範例物件 render 後實際 push 到 LINE，admin 可在手機看效果
+window.testSendLineTemplate = async function () {
+  const ta = document.getElementById("line-template-textarea");
+  const resEl = document.getElementById("line-template-result");
+  if (!ta) return;
+  if (!confirm("確定試發到 LINE？將用範例物件 render 當前模板並 push 到 LINE_USER_ID。")) return;
+  if (resEl) resEl.textContent = "試發中…";
+  try {
+    const r = await authedFetch("/admin/line/template_test_send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ template: ta.value }),
+    });
+    const data = await r.json();
+    if (r.ok && data.status === "ok") {
+      if (resEl) resEl.innerHTML = '<span style="color:#27ae60;">✓ 已試發，請查看 LINE</span>';
+    } else {
+      if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(data.message || data.detail || "失敗")}</span>`;
+    }
+  } catch (e) {
+    if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(e.message)}</span>`;
+  }
+};
+
 window.testLineNotify = async function () {
   const resultEl = document.getElementById("line-test-result");
   if (resultEl) resultEl.textContent = "送出中…";

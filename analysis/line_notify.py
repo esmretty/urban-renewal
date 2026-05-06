@@ -21,33 +21,34 @@ logger = logging.getLogger(__name__)
 
 LINE_API_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 
-# TinyURL 縮址 in-memory cache（process 級，restart 失效；TTL 24h 內同 URL 不重打 API）
-_TINYURL_CACHE: dict = {}
-_TINYURL_TTL = 86400
+# is.gd 縮址 in-memory cache（process 級，restart 失效；TTL 24h 內同 URL 不重打 API）
+# is.gd 比 TinyURL 短 8 字元 (https://is.gd/abc123 = 20 chars vs https://tinyurl.com/12345678 = 28 chars)
+_SHORT_URL_CACHE: dict = {}
+_SHORT_URL_TTL = 86400
 
 
 def _shorten_url(long_url: str) -> str:
-    """用 TinyURL 縮址，失敗 fallback 原 URL；同 URL 24h 內走 cache。"""
+    """用 is.gd 縮址，失敗 fallback 原 URL；同 URL 24h 內走 cache。"""
     if not long_url or len(long_url) < 30:
         return long_url or ""
     now = time.time()
-    cached = _TINYURL_CACHE.get(long_url)
+    cached = _SHORT_URL_CACHE.get(long_url)
     if cached and cached[1] > now:
         return cached[0]
     try:
         import httpx
         r = httpx.get(
-            "https://tinyurl.com/api-create.php",
-            params={"url": long_url},
+            "https://is.gd/create.php",
+            params={"format": "simple", "url": long_url},
             timeout=5,
         )
         body = (r.text or "").strip()
         if r.status_code == 200 and body.startswith("http"):
-            _TINYURL_CACHE[long_url] = (body, now + _TINYURL_TTL)
+            _SHORT_URL_CACHE[long_url] = (body, now + _SHORT_URL_TTL)
             return body
-        logger.warning("TinyURL failed status=%d body=%s for %s", r.status_code, body[:80], long_url[:80])
+        logger.warning("is.gd shorten failed status=%d body=%s for %s", r.status_code, body[:80], long_url[:80])
     except Exception as e:
-        logger.warning("TinyURL exception: %s for %s", e, long_url[:80])
+        logger.warning("is.gd shorten exception: %s for %s", e, long_url[:80])
     return long_url
 
 

@@ -750,11 +750,16 @@ async def _run_verify_alive_command(progress=None, trigger_label: str = "verify_
                     "source_keys": compute_source_keys(new_sources),
                 })
                 pruned_count += 1
-                logger.info(f"[verify-alive] toggled alive in {d.id} (dead={dead_count})")
+                # 列出實際被標 dead 的 source（admin UI message 才不會誤導為主來源被標 dead）
+                dead_keys = [
+                    f"{s.get('name') or '?'}/{s.get('source_id') or '?'}"
+                    for s in new_sources if s.get("alive") is False
+                ]
+                logger.info(f"[verify-alive] toggled alive in {d.id} (dead={dead_count}: {dead_keys})")
                 log_action(trigger_label, "verify_alive_prune",
                            doc_id=d.id, source_id=primary_source_id(data),
-                           message=f"標 {dead_count} 個失效來源 (alive=False)",
-                           details={"dead_count": dead_count, "address": data.get("address")})
+                           message=f"標 {dead_count} 個失效來源：{', '.join(dead_keys) or '(無)'}",
+                           details={"dead_count": dead_count, "dead_source_keys": dead_keys, "address": data.get("address")})
                 _write_progress(current=i + 1)
             elif (i + 1) % 5 == 0:
                 _write_progress(current=i + 1)
@@ -2105,6 +2110,48 @@ async def admin_preview_line_template(body: LineTemplatePreviewReq, admin: dict 
         return {"status": "error", "message": f"模板含未知變數：{e}"}
     except Exception as e:
         return {"status": "error", "message": f"模板格式錯誤：{e}"}
+
+
+@app.post("/admin/line/template_test_send")
+async def admin_line_template_test_send(body: LineTemplatePreviewReq, admin: dict = Depends(require_admin)):
+    """用範例物件 render 模板後實際 push 到 LINE — 給 admin 在 admin 後台「試發」當前未存模板看效果。"""
+    from analysis.line_notify import render_template, push_line
+    sample_doc = {
+        "address_inferred": "虎林街57之15號",
+        "city": "台北市",
+        "district": "信義區",
+        "price_ntd": 11880000,
+        "floor": 1,
+        "total_floors": 4,
+        "building_age": 51,
+        "land_area_ping": 10.71,
+        "building_area_ping": 38.42,
+        "zoning": "第三種商業區",
+        "sources": [
+            {"name": "永慶", "url": "https://buy.yungching.com.tw/house/7342047", "alive": True},
+        ],
+    }
+    sample_rv2 = {
+        "scenarios": {
+            "危老": {"multiple": 3.24},
+            "都更": {"multiple": 4.49},
+        },
+    }
+    try:
+        msg = render_template(body.template or DEFAULT_LINE_TEMPLATE, sample_doc, 4.49, "都更", sample_rv2)
+    except KeyError as e:
+        return {"status": "error", "message": f"模板含未知變數：{e}"}
+    except Exception as e:
+        return {"status": "error", "message": f"模板格式錯誤：{e}"}
+    # 加 prefix 標示測試（避免接收者誤以為真物件）
+    msg = "🧪【試發】此為模板測試，非真實物件\n\n" + msg
+    ok = push_line(msg)
+    if ok:
+        return {"status": "ok", "message": "已試發到 LINE，請查看訊息"}
+    import os as _os
+    if not _os.getenv("LINE_CHANNEL_TOKEN") or not _os.getenv("LINE_USER_ID"):
+        return {"status": "error", "message": "未設定 LINE_CHANNEL_TOKEN 或 LINE_USER_ID"}
+    return {"status": "error", "message": "送出失敗（檢查 token 是否有效、bot 是否已加好友）"}
 
 
 @app.post("/admin/line/test")
