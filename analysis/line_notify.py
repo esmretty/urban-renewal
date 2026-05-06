@@ -14,11 +14,41 @@
 """
 import logging
 import os
+import time
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 LINE_API_PUSH_URL = "https://api.line.me/v2/bot/message/push"
+
+# TinyURL 縮址 in-memory cache（process 級，restart 失效；TTL 24h 內同 URL 不重打 API）
+_TINYURL_CACHE: dict = {}
+_TINYURL_TTL = 86400
+
+
+def _shorten_url(long_url: str) -> str:
+    """用 TinyURL 縮址，失敗 fallback 原 URL；同 URL 24h 內走 cache。"""
+    if not long_url or len(long_url) < 30:
+        return long_url or ""
+    now = time.time()
+    cached = _TINYURL_CACHE.get(long_url)
+    if cached and cached[1] > now:
+        return cached[0]
+    try:
+        import httpx
+        r = httpx.get(
+            "https://tinyurl.com/api-create.php",
+            params={"url": long_url},
+            timeout=5,
+        )
+        body = (r.text or "").strip()
+        if r.status_code == 200 and body.startswith("http"):
+            _TINYURL_CACHE[long_url] = (body, now + _TINYURL_TTL)
+            return body
+        logger.warning("TinyURL failed status=%d body=%s for %s", r.status_code, body[:80], long_url[:80])
+    except Exception as e:
+        logger.warning("TinyURL exception: %s for %s", e, long_url[:80])
+    return long_url
 
 
 def push_line(message: str, user_id: Optional[str] = None) -> bool:
@@ -86,17 +116,19 @@ def _build_template_vars(doc: dict, multiple: float, scenario: str,
     addr = doc.get("address_inferred") or doc.get("address") or doc.get("title") or "(地址未知)"
     city = doc.get("city") or ""
     district = doc.get("district") or ""
-    # Google Maps 連結 (用完整地址 city+district+addr 做關鍵字搜尋)
+    # Google Maps 連結 (用完整地址 city+district+addr 做關鍵字搜尋) — 縮址讓 LINE 訊息簡短
     try:
         from urllib.parse import quote
         full_addr = f"{city}{district}{addr}"
-        address_map_link = f"https://www.google.com/maps/search/?api=1&query={quote(full_addr)}"
+        address_map_link = _shorten_url(
+            f"https://www.google.com/maps/search/?api=1&query={quote(full_addr)}"
+        )
     except Exception:
         address_map_link = ""
     # 系統內 detail page 深層連結 (前端讀 ?id= 會自動打開該物件 detail drawer)
     doc_id = doc.get("id") or doc.get("source_id") or ""
     base_url = os.getenv("PUBLIC_BASE_URL", "https://taipei.retty-ai.com")
-    detail_page_link = f"{base_url}/?id={doc_id}" if doc_id else base_url
+    detail_page_link = _shorten_url(f"{base_url}/?id={doc_id}" if doc_id else base_url)
     price_wan = round((doc.get("price_ntd") or 0) / 10000)
     _fl = doc.get("floor")
     _tf = doc.get("total_floors")
@@ -112,7 +144,7 @@ def _build_template_vars(doc: dict, multiple: float, scenario: str,
 
     sources_arr = doc.get("sources") or []
     src_lines = "\n".join(
-        f"  • {s.get('name', '?')}: {s.get('url', '')}"
+        f"  • {s.get('name', '?')}: {_shorten_url(s.get('url') or '')}"
         for s in sources_arr
         if s.get("url") and s.get("alive") is not False
     ) or "  • (無連結)"
