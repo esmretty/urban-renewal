@@ -3372,6 +3372,51 @@ def central_search(
     }
 
 
+# ── 用戶 filter 偏好（探索 tab 條件持久化） ─────────────────────────────────
+# 跨裝置同步：用戶在手機 / 桌面切換帳號用同樣的 filter。寫到
+#   users/{uid}/preferences/filters
+# 只儲存「key:value」形式 dict，不做 schema 驗證 (前端負責 normalize)
+class FilterPrefsReq(BaseModel):
+    prefs: dict
+
+
+@app.get("/api/user/filter_prefs")
+async def get_filter_prefs(user: dict = Depends(get_current_user)):
+    """取出當前用戶的 filter 偏好。沒存過回 {prefs: {}}。"""
+    uid = user["uid"]
+    try:
+        doc = (
+            get_firestore().collection("users").document(uid)
+            .collection("preferences").document("filters").get()
+        )
+        if doc.exists:
+            return {"prefs": (doc.to_dict() or {}).get("prefs") or {}}
+    except Exception as e:
+        logger.warning(f"get_filter_prefs failed uid={uid}: {e}")
+    return {"prefs": {}}
+
+
+@app.post("/api/user/filter_prefs")
+async def set_filter_prefs(body: FilterPrefsReq, user: dict = Depends(get_current_user)):
+    """寫入當前用戶的 filter 偏好（完整覆蓋，不 merge）。
+    payload size 限 8 KB（filter 偏好不該大）。"""
+    uid = user["uid"]
+    import json as _json
+    payload = _json.dumps(body.prefs or {}, ensure_ascii=False)
+    if len(payload.encode("utf-8")) > 8192:
+        raise HTTPException(400, "filter prefs payload too large (>8KB)")
+    try:
+        get_firestore().collection("users").document(uid)\
+            .collection("preferences").document("filters").set(
+                {"prefs": body.prefs or {}, "updated_at": now_tw_iso()},
+                merge=False,
+            )
+    except Exception as e:
+        logger.warning(f"set_filter_prefs failed uid={uid}: {e}")
+        raise HTTPException(500, "filter_prefs save failed")
+    return {"status": "ok"}
+
+
 class WatchlistAddReq(BaseModel):
     """加入觀察清單時可一併寫入 ephemeral override（用戶在搜尋 tab 曾改過數字）。"""
     desired_price_wan: Optional[float] = None

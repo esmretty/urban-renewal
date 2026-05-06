@@ -80,8 +80,12 @@
     const uid = (window.currentUser && window.currentUser.uid) || 'anon';
     return `explore-filters-v2:${uid}`;
   }
-  function _saveFilters() {
-    const obj = {
+  // localStorage 仍當「即時 cache」(同 tab 重整 instant restore)；DB 是 cross-device 真值。
+  // 寫 DB debounced 1.2 秒（避免 slider 拖動時噴大量 POST），用戶關 tab 前用 sendBeacon flush。
+  let _saveDbDebounce = null;
+  let _saveDbPendingObj = null;
+  function _collectFilterObj() {
+    return {
       road: $('#v2-road')?.value || '',
       dists: Array.from(state.districtPicks),
       btypes: $$('.v2-filter-btype:not(:disabled)').filter(c => c.checked).map(c => c.value),
@@ -101,11 +105,57 @@
       hideBas: $('#v2-hide-basement')?.checked || false,
       hideFc: $('#v2-hide-foreclosure')?.checked || false,
     };
-    try { localStorage.setItem(_filterKey(), JSON.stringify(obj)); } catch {}
   }
-  function _restoreFilters() {
-    let obj;
-    try { obj = JSON.parse(localStorage.getItem(_filterKey()) || 'null'); } catch {}
+  async function _flushFilterPrefsToDB(obj) {
+    if (!obj) return;
+    try {
+      const r = await fetch('/api/user/filter_prefs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prefs: obj }),
+      });
+      if (!r.ok) console.warn('filter_prefs save HTTP', r.status);
+    } catch (e) {
+      console.warn('filter_prefs save failed:', e.message || e);
+    }
+  }
+  function _saveFilters() {
+    const obj = _collectFilterObj();
+    // 1) localStorage 立即寫 — 同 tab 重整看到瞬間 restore
+    try { localStorage.setItem(_filterKey(), JSON.stringify(obj)); } catch {}
+    // 2) DB 寫 debounced（拖 slider 時不會噴）
+    _saveDbPendingObj = obj;
+    clearTimeout(_saveDbDebounce);
+    _saveDbDebounce = setTimeout(() => {
+      const o = _saveDbPendingObj;
+      _saveDbPendingObj = null;
+      _flushFilterPrefsToDB(o);
+    }, 1200);
+  }
+  // 關 tab 前若有 pending 寫入，用 sendBeacon flush（不依賴 fetch await）
+  window.addEventListener('beforeunload', () => {
+    if (!_saveDbPendingObj) return;
+    try {
+      const blob = new Blob(
+        [JSON.stringify({ prefs: _saveDbPendingObj })],
+        { type: 'application/json' }
+      );
+      navigator.sendBeacon('/api/user/filter_prefs', blob);
+    } catch (_e) {}
+  });
+  // _restoreFilters：DB 優先，DB 拿不到 fallback localStorage（離線 / 401 也能 work）
+  async function _restoreFilters() {
+    let obj = null;
+    try {
+      const r = await fetch('/api/user/filter_prefs');
+      if (r.ok) {
+        const data = await r.json();
+        if (data && data.prefs && Object.keys(data.prefs).length > 0) obj = data.prefs;
+      }
+    } catch (_e) { /* 離線 / 網路錯 → fallback */ }
+    if (!obj) {
+      try { obj = JSON.parse(localStorage.getItem(_filterKey()) || 'null'); } catch {}
+    }
     if (!obj) return;
     const setVal = (id, v) => {
       const el = $('#' + id);
@@ -2619,11 +2669,9 @@
     // 才能讀到正確 uid 的儲存值（auth_gate 之前 uid 是 'anon' → 拿不到）。
     // 為了不擋 data fetch，這裡把 restore 排到 auth_ready 後背景跑；ready 後若資料已載完
     // 就 re-apply 套 filter，沒載完則資料載完時 applyFilters 會用 restored 值。
-    const _restoreP = _waitForAuthReady().then(() => {
-      _restoreFilters();
-      // 同步 UI：district chips 已 render → 重畫一次反應 restored picks
+    const _restoreP = _waitForAuthReady().then(async () => {
+      await _restoreFilters();   // DB 優先，fallback localStorage
       if (typeof renderDistrictChips === 'function') renderDistrictChips();
-      // 資料已載完才需要 re-apply (會觸發重 render)；沒載完則資料 callback 會用最新 state
       if (state.exploreLoaded || state.watchlistLoaded) applyFilters();
     });
 
