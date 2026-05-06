@@ -1148,7 +1148,7 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.4;
 }
 .v2-src-badge--alive { background: var(--c-good-bg); color: var(--c-good); }
-.v2-src-badge--dead { background: var(--c-low-bg); color: var(--c-text-light); text-decoration: line-through; }
+/* .v2-src-badge--dead 已移除 — 失效 source 在 srcBadgesHTML filter 階段就跳過不 render */
 
 .v2-card__star {
   width: 24px;
@@ -1340,10 +1340,6 @@ a { color: inherit; text-decoration: none; }
   text-decoration: none;
 }
 .v2-drawer__sources .v2-src-badge:hover { background: #f4efe0; }
-.v2-drawer__sources .v2-src-badge--dead {
-  color: #8b8680;
-  text-decoration: line-through;
-}
 /* Mobile：返回按鈕加大 + accent 藍底 + iOS safe-area inset */
 @media (max-width: 640px) {
   .v2-drawer__header {

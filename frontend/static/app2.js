@@ -511,16 +511,17 @@
   }
 
   // ── Source badges (size 可選 'sm' / 'big') ────────────────────────────
+  // 失效 source (alive===false) 直接 filter 掉不 render — 用戶反映「劃掉的連結沒意義不如直接移除」
   function srcBadgesHTML(sources, size) {
     if (!sources || !sources.length) return '';
+    const aliveSources = sources.filter(s => s.alive !== false);
+    if (!aliveSources.length) return '';
     const bigCls = size === 'big' ? ' v2-src-badge--big' : '';
-    return sources.map(s => {
+    return aliveSources.map(s => {
       const name = s.name || '';
-      const alive = s.alive !== false;
-      const aliveCls = alive ? 'v2-src-badge--alive' : 'v2-src-badge--dead';
       const url = s.url ? esc(s.url) : '';
       const label = size === 'big' ? `${esc(name)} ↗` : esc(name);
-      const inner = `<span class="v2-src-badge ${aliveCls}${bigCls}">${label}</span>`;
+      const inner = `<span class="v2-src-badge v2-src-badge--alive${bigCls}">${label}</span>`;
       return url
         ? `<a href="${url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${inner}</a>`
         : inner;
