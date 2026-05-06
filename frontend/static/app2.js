@@ -2625,32 +2625,101 @@
   }
 
   // 路名語音輸入 — webkitSpeechRecognition
+  // iOS Safari 行為說明：必須 HTTPS、要 user gesture 直接 trigger（不能 await 後 start）、
+  // 第一次需用戶授權麥克風。我們的 onclick 直接 start 符合這個要求。
+  function _showVoiceStatus(text, kind) {
+    // kind: 'listening' | 'error' | 'success' | ''
+    let host = $('#v2-voice-banner');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'v2-voice-banner';
+      document.body.appendChild(host);
+    }
+    host.className = 'v2-voice-banner' + (kind ? ' v2-voice-banner--' + kind : '');
+    host.textContent = text;
+    host.style.display = 'block';
+    if (kind === 'error' || kind === 'success') {
+      setTimeout(() => { if (host.textContent === text) host.style.display = 'none'; }, 3000);
+    }
+  }
+  function _hideVoiceStatus() {
+    const host = $('#v2-voice-banner');
+    if (host) host.style.display = 'none';
+  }
+  const _VOICE_ERR_TXT = {
+    'no-speech': '沒偵測到語音 — 請靠近麥克風再試一次',
+    'audio-capture': '麥克風無法使用 — 請檢查裝置麥克風',
+    'not-allowed': '瀏覽器拒絕麥克風權限 — 請在設定→Safari/Chrome 開啟麥克風',
+    'service-not-allowed': '系統拒絕語音服務 — 改用其他瀏覽器試試',
+    'network': '語音辨識需要網路連線',
+    'language-not-supported': '不支援中文辨識',
+    'aborted': '語音辨識被取消',
+  };
   function startVoiceRoad() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const inp = $('#v2-road');
     const btn = $('#v2-road-mic');
     if (!SR) {
-      alert('此瀏覽器不支援語音輸入，請改用 Chrome / Safari');
+      _showVoiceStatus('此瀏覽器不支援語音輸入。Chrome 或 iOS Safari 較新版本才支援', 'error');
       return;
     }
     if (!inp) return;
+    if (!window.isSecureContext) {
+      _showVoiceStatus('語音輸入只能在 HTTPS 環境用', 'error');
+      return;
+    }
     const rec = new SR();
     rec.lang = 'zh-TW';
-    rec.interimResults = false;
+    rec.interimResults = true;     // 邊講邊顯示，方便確認 mic 有抓到
     rec.maxAlternatives = 1;
+    rec.continuous = false;
     if (btn) btn.classList.add('v2-road-mic--active');
+    let gotAnyResult = false;
+    rec.onaudiostart = () => _showVoiceStatus('🎤 麥克風已開啟，請說話…', 'listening');
+    rec.onspeechstart = () => _showVoiceStatus('🎙 偵測到聲音，繼續說…', 'listening');
     rec.onresult = (e) => {
-      const text = (e.results[0][0].transcript || '').trim()
-        .replace(/\s+/g, '').replace(/。$/, '');
-      inp.value = text;
-      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      // 累積所有 result，最後一個 isFinal 才寫入 input；中間的顯示在 banner
+      let interim = '';
+      let final = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const tr = e.results[i][0].transcript || '';
+        if (e.results[i].isFinal) final += tr;
+        else interim += tr;
+      }
+      if (interim) {
+        gotAnyResult = true;
+        _showVoiceStatus('辨識中：' + interim, 'listening');
+      }
+      if (final) {
+        gotAnyResult = true;
+        const text = final.trim().replace(/\s+/g, '').replace(/。$/, '');
+        inp.value = text;
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+        _showVoiceStatus('✓ 已輸入：' + text, 'success');
+      }
     };
+    rec.onnomatch = () => _showVoiceStatus('沒辨識出內容，再試一次', 'error');
     rec.onerror = (ev) => {
-      console.warn('voice rec error:', ev.error);
+      const msg = _VOICE_ERR_TXT[ev.error] || ('語音辨識錯誤：' + ev.error);
+      _showVoiceStatus(msg, 'error');
       if (btn) btn.classList.remove('v2-road-mic--active');
     };
-    rec.onend = () => { if (btn) btn.classList.remove('v2-road-mic--active'); };
-    try { rec.start(); } catch (_e) { /* already running */ }
+    rec.onend = () => {
+      if (btn) btn.classList.remove('v2-road-mic--active');
+      if (!gotAnyResult) {
+        // 沒任何結果且也沒 error 觸發 → 通常 mic 抓不到聲音
+        const host = $('#v2-voice-banner');
+        if (!host || host.className.indexOf('--error') < 0) {
+          _showVoiceStatus('未偵測到語音，請靠近麥克風再試一次', 'error');
+        }
+      }
+    };
+    try {
+      rec.start();
+    } catch (e) {
+      _showVoiceStatus('語音啟動失敗：' + (e.message || e), 'error');
+      if (btn) btn.classList.remove('v2-road-mic--active');
+    }
   }
 
   // ── Boot ─────────────────────────────────────────────────────────────────
