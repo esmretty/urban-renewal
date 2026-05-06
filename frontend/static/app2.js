@@ -2119,12 +2119,6 @@
       p._in_watchlist = !isIn;
       const card = document.querySelector(`.v2-card[data-id="${CSS.escape(id)}"] .v2-card__star`);
       if (card) card.classList.toggle('v2-card__star--active', !isIn);
-      // 更新 watchlist tab 計數
-      const cnt = $('#v2-watchlist-count');
-      if (cnt) {
-        const n = state.exploreItems.filter(x => x._in_watchlist).length;
-        cnt.textContent = n > 0 ? String(n) : '';
-      }
       // 觀察清單 tab cache 失效 (下次切過去會重抓)
       state.watchlistLoaded = false;
     } catch (e) {
@@ -2197,20 +2191,6 @@
         state.exploreLoaded = true;
       }
       state.allProperties = items;
-      const cnt = $('#v2-watchlist-count');
-      if (cnt) {
-        // 探索 tab：用 server 回的 total_watchlist（含被 dist 過濾掉的，避免 race）
-        // 最愛 tab：用 items 實長度
-        let n;
-        if (state.view === 'watchlist') {
-          n = items.filter(p => !p.deleted).length;
-        } else if (typeof data.total_watchlist === 'number') {
-          n = data.total_watchlist;
-        } else {
-          n = items.filter(p => p._in_watchlist).length;
-        }
-        cnt.textContent = n > 0 ? String(n) : '';
-      }
       applyFilters();
       _mark('filter_render_done');
       requestAnimationFrame(() => {
