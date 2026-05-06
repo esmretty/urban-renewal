@@ -79,12 +79,14 @@
     list.forEach(p => {
       const r = (typeof UrbanShared !== 'undefined' && UrbanShared.computeMultiples)
         ? UrbanShared.computeMultiples(p, prices[p.district]) : null;
-      const mult = r ? Math.max(r.w || 0, r.d || 0) : null;
+      let mult = r ? Math.max(r.w || 0, r.d || 0) : null;
+      // 倍數算不出 (缺 land/zoning/price 等) 會回 0 → 顯示 0.0x 沒意義，當 N/A
+      if (mult != null && mult <= 0) mult = null;
       const color = mult == null ? '#94a3b8'
         : mult >= 3.5 ? '#dc2626'
         : mult >= 2.5 ? '#f59e0b'
         : '#94a3b8';
-      const label = mult != null ? mult.toFixed(1) + 'x' : '—';
+      const label = mult != null ? mult.toFixed(1) + 'x' : 'N/A';
       const icon = L.divIcon({
         html: `<div class="v2-map-marker" style="background:${color}">${label}</div>`,
         className: '', iconSize: null, iconAnchor: [22, 14],

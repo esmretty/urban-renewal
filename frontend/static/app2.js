@@ -636,13 +636,14 @@
     const priceWan = p.price_ntd ? Math.round(p.price_ntd / 10000) : null;
     const perBld = (p.price_ntd && p.building_area_ping)
       ? (p.price_ntd / 10000 / p.building_area_ping).toFixed(1) : null;
-    const mult = rowMultiple(p, prices);
-    // 倍數 tier (對齊 CSS class)：>=4 桃紅 / >=3 綠 / >=2 土黃 / <2 灰
+    // mult 算出 0 視為缺資料 (跟地圖 marker 統一處理)
+    const _multRaw = rowMultiple(p, prices);
+    const mult = (_multRaw != null && _multRaw > 0) ? _multRaw : null;
+    // 倍數 tier 對齊地圖 marker 配色：>=3.5 紅 / >=2.5 黃 / 其他灰
     let multCls = 'v2-card__mult';
     if (mult != null) {
-      if (mult >= 4.0) multCls += ' v2-card__mult--hot';
-      else if (mult >= 3.0) multCls += ' v2-card__mult--good';
-      else if (mult >= 2.0) multCls += ' v2-card__mult--mid';
+      if (mult >= 3.5) multCls += ' v2-card__mult--hot';
+      else if (mult >= 2.5) multCls += ' v2-card__mult--mid';
     }
     const advChips = computeAdvantageChips(p);
     const chips = computeChips(p);
