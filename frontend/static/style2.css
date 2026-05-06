@@ -2345,20 +2345,23 @@ select.v2-d-input { text-align: left; }
   text-align: right;
 }
 .v2-rv2-val--bonus {
-  /* 危老 / 都更 換行排列 (堆疊兩行)，且整體靠右對齊 — 跟其他單行欄位視覺一致 */
+  /* 危老 / 都更 換行 — 兩 line 都撐到父寬 (stretch)，內部用 grid 對齊 tag 跟內容 */
   flex-direction: column;
-  align-items: flex-end;
+  align-items: stretch;
   justify-content: flex-end;
   gap: 4px;
   flex-wrap: nowrap;
 }
 .v2-rv2-bonus-line {
-  display: inline-flex;
+  /* 兩欄 grid：col1 tag 靠左，col2 內容（slider/parking）靠右 → 容積獎勵跟分回車位 tag 在同 X */
+  display: grid;
+  grid-template-columns: auto 1fr;
   align-items: center;
-  justify-content: flex-end;
   gap: 8px;
-  flex-shrink: 0;             /* 不允許換行 */
 }
+.v2-rv2-bonus-line > .v2-rv2-tag { justify-self: start; }
+.v2-rv2-bonus-line > .v2-rv2-slider,
+.v2-rv2-bonus-line > .v2-rv2-parking { justify-self: end; }
 .v2-rv2-val--col { flex-direction: column; align-items: flex-end; gap: 2px; }
 .v2-rv2-note {
   font-size: 11px;
