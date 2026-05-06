@@ -816,23 +816,26 @@ a { color: inherit; text-decoration: none; }
   gap: 4px;
   overflow: hidden;   /* 給 NEW corner ribbon 用：旋轉斜貼超出邊界自然被切 */
 }
-/* NEW 緞帶 — 左上角斜貼 ribbon，往外退避免擋住卡片內容 */
+/* NEW 標誌 — 左上角圓形 N (iOS 新訊息風格、粉紅不鮮紅) */
 .v2-card__corner-new {
   position: absolute;
-  top: 8px;
-  left: -28px;
-  width: 84px;
-  background: #a16b3a;          /* 溫暖焦糖色（質感溫和、不鮮紅） */
+  top: 6px;
+  left: 6px;
+  width: 18px;
+  height: 18px;
+  background: #f48a9a;          /* 粉紅，比鮮紅柔和 */
   color: #fff;
-  text-align: center;
-  font-size: 8.5px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 1.2px;
-  padding: 1px 0;
-  transform: rotate(-45deg);    /* 左上角斜向左下→右上 */
-  transform-origin: center;
+  line-height: 1;
+  letter-spacing: 0;
+  padding: 0;
   pointer-events: none;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.18);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
   z-index: 3;
 }
 .v2-card:hover {

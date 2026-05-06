@@ -690,7 +690,7 @@
     return `
       <article class="v2-card ${archivedClass} ${readClass} ${hotClass} ${cityClass}" data-id="${esc(id)}">
         ${archivedOverlay}
-        ${isNewObject ? `<div class="v2-card__corner-new" title="第一次抓進 DB：${esc(newTitle)}"><span>NEW</span></div>` : ''}
+        ${isNewObject ? `<div class="v2-card__corner-new" title="新進物件 (24 小時內第一次抓進 DB)：${esc(newTitle)}">N</div>` : ''}
         <div class="v2-card__line1">
           <span class="v2-card__type">${typeIcon(p.building_type)}</span>
           <span class="v2-card__addr">
