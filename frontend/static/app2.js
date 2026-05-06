@@ -1253,6 +1253,14 @@
 
     // ── LVR 實價登錄 (前 5 筆) ──
     const lvrRecs = Array.isArray(p.lvr_records) ? p.lvr_records.slice(0, 5) : [];
+    // LVR 地址砍市/區前綴；超寬時 wrap 不省略，⚠ icon 永遠在最右獨立 cell 不會被擠掉
+    const stripCDLvr = (a) => {
+      if (!a) return '—';
+      let s = String(a).trim();
+      s = s.replace(/^(?:臺北市|台北市|新北市|桃園市|台中市|臺中市|高雄市|台南市|臺南市|基隆市|新竹市|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義市|嘉義縣|屏東縣|宜蘭縣|花蓮縣|台東縣|臺東縣)/, '');
+      s = s.replace(/^[一-龥]{1,3}(?:區|鄉|鎮|市)/, '');
+      return s.trim() || '—';
+    };
     const lvrHTML = lvrRecs.length
       ? `<table class="v2-lvr-tbl"><thead><tr><th>交易日</th><th>總價(萬)</th><th>建坪</th><th>單價</th><th>地址</th><th></th></tr></thead><tbody>${
           lvrRecs.map(r => {
@@ -1262,8 +1270,8 @@
               <td>${totalWan != null ? Math.round(totalWan) : '—'}</td>
               <td>${r.area_ping ? r.area_ping.toFixed(2) : '—'}</td>
               <td>${(totalWan != null && r.area_ping) ? Math.round(totalWan / r.area_ping) : '—'}</td>
-              <td title="${esc(r.address || '')}">${esc((r.address || '').slice(0, 14))}</td>
-              <td>${r.is_special ? `<span class="v2-lvr-warn">⚠<span class="v2-lvr-tip">${esc(r.note || '特殊交易')}</span></span>` : ''}</td>
+              <td class="v2-lvr-addr" title="${esc(r.address || '')}">${esc(stripCDLvr(r.address))}</td>
+              <td class="v2-lvr-warn-cell">${r.is_special ? `<span class="v2-lvr-warn">⚠<span class="v2-lvr-tip">${esc(r.note || '特殊交易')}</span></span>` : ''}</td>
             </tr>`;
           }).join('')}</tbody></table>`
       : '<div class="v2-detail-empty">無實價登錄記錄</div>';
@@ -1701,11 +1709,21 @@
               <span class="v2-rv2-val v2-rv2-val--bonus">
                 <span class="v2-rv2-bonus-line">
                   <span class="v2-rv2-tag">危老</span>
-                  <select class="v2-rv2-edit" onchange="v2.saveOverride('${esc(id)}','bonus_weishau',this.value)">${bonusOptsW(bonusW)}</select>
+                  <span class="v2-rv2-slider">
+                    <input type="range" class="v2-rv2-range" min="0" max="40" step="5" value="${Math.round(bonusW * 100)}"
+                      oninput="this.nextElementSibling.textContent=this.value+'%'"
+                      onchange="v2.saveOverride('${esc(id)}','bonus_weishau',this.value/100)">
+                    <span class="v2-rv2-slider-val">${Math.round(bonusW * 100)}%</span>
+                  </span>
                 </span>
                 <span class="v2-rv2-bonus-line">
                   <span class="v2-rv2-tag">都更</span>
-                  <select class="v2-rv2-edit" onchange="v2.saveOverride('${esc(id)}','bonus_dugen',this.value)">${bonusOptsD(bonusD)}</select>
+                  <span class="v2-rv2-slider">
+                    <input type="range" class="v2-rv2-range" min="0" max="100" step="5" value="${Math.round(bonusD * 100)}"
+                      oninput="this.nextElementSibling.textContent=this.value+'%'"
+                      onchange="v2.saveOverride('${esc(id)}','bonus_dugen',this.value/100)">
+                    <span class="v2-rv2-slider-val">${Math.round(bonusD * 100)}%</span>
+                  </span>
                 </span>
               </span>
             </div>
@@ -1713,8 +1731,12 @@
               <span class="v2-rv2-op">×</span>
               <span class="v2-rv2-lbl">都更係數</span>
               <span class="v2-rv2-val">
-                <input type="number" class="v2-rv2-edit" step="0.01" value="${coeff}"
-                  onchange="v2.saveOverride('${esc(id)}','rebuild_coeff',this.value)">
+                <span class="v2-rv2-slider">
+                  <input type="range" class="v2-rv2-range" min="1.50" max="1.60" step="0.01" value="${coeff}"
+                    oninput="this.nextElementSibling.textContent=parseFloat(this.value).toFixed(2)"
+                    onchange="v2.saveOverride('${esc(id)}','rebuild_coeff',this.value)">
+                  <span class="v2-rv2-slider-val">${parseFloat(coeff).toFixed(2)}</span>
+                </span>
               </span>
             </div>
             ${r('×', '分回比例', ratio != null ? (ratio * 100).toFixed(1) + '%' : '—')}
@@ -1723,16 +1745,26 @@
               <span class="v2-rv2-lbl">新成屋房價<span class="v2-rv2-lbl-unit">(萬/坪)</span></span>
               <span class="v2-rv2-val">
                 <span class="v2-rv2-note">${p.new_house_price_wan_override ? '(已覆寫)' : '(此為區域平均單價，您可自行調整)'}</span>
-                <input type="number" class="v2-rv2-edit" step="5" value="${newPrice}"
-                  onchange="v2.saveOverride('${esc(id)}','new_house_price_wan_override',this.value)">
+                <span class="v2-rv2-price-wrap">
+                  <button type="button" class="v2-rv2-price-bump v2-rv2-price-bump--minus" aria-label="減 5"
+                    onclick="v2.bumpPrice(this, '${esc(id)}', -5)">－</button>
+                  <input type="number" class="v2-rv2-edit" step="5" value="${newPrice}"
+                    onchange="v2.saveOverride('${esc(id)}','new_house_price_wan_override',this.value)">
+                  <button type="button" class="v2-rv2-price-bump v2-rv2-price-bump--plus" aria-label="加 5"
+                    onclick="v2.bumpPrice(this, '${esc(id)}', 5)">＋</button>
+                </span>
               </span>
             </div>
             <div class="v2-rv2-r">
               <span class="v2-rv2-op">×</span>
               <span class="v2-rv2-lbl">樓層加成${is1F ? '<span class="v2-rv2-lbl-unit">(1F 預設20%)</span>' : ''}</span>
               <span class="v2-rv2-val">
-                <input type="number" class="v2-rv2-edit v2-rv2-edit--narrow" min="0" max="80" step="5" value="${Math.round(floorPremium * 100)}"
-                  onchange="v2.saveOverride('${esc(id)}','floor_premium',this.value/100)"> %
+                <span class="v2-rv2-slider">
+                  <input type="range" class="v2-rv2-range" min="0" max="50" step="5" value="${Math.round(floorPremium * 100)}"
+                    oninput="this.nextElementSibling.textContent=this.value+'%'"
+                    onchange="v2.saveOverride('${esc(id)}','floor_premium',this.value/100)">
+                  <span class="v2-rv2-slider-val">${Math.round(floorPremium * 100)}%</span>
+                </span>
               </span>
             </div>
             <div class="v2-rv2-r">
@@ -1814,6 +1846,18 @@
   // v1: input 永遠 editable，save 永遠 POST。POST 寫到 user 的 watchlist 子文件，
   //     不在 watchlist 就設 _ephemeral_edit_made flag。
   // closeDetail 時 if flag && !inWatchlist → toast 「沒有自動儲存」警示
+  // 新成屋房價 ＋／－ 按鈕 helper (mobile 用：點按鈕 ±5 萬，存進 DB)
+  function bumpPrice(btn, id, delta) {
+    const wrap = btn.closest('.v2-rv2-price-wrap');
+    if (!wrap) return;
+    const input = wrap.querySelector('input.v2-rv2-edit');
+    if (!input) return;
+    const cur = parseFloat(input.value) || 0;
+    const next = Math.max(0, Math.round((cur + delta) / 5) * 5);
+    input.value = next;
+    saveOverride(id, 'new_house_price_wan_override', next);
+  }
+
   async function saveOverride(id, field, value) {
     const p = state.allProperties.find(x => (x.source_id || x.id) === id);
     if (!p) return;
@@ -1924,7 +1968,7 @@
             <td>${r.land_ping ? r.land_ping.toFixed(2) : '—'}</td>
             <td>${perPingWan != null ? Math.round(perPingWan) + '萬' : '—'}</td>
             <td class="v2-lvr-addr" title="${esc(r.address || '')}">${esc(stripCD(r.address))}</td>
-            <td>${r.is_special ? `<span class="v2-lvr-warn">⚠<span class="v2-lvr-tip">${esc(r.note || '特殊交易')}</span></span>` : ''}</td>
+            <td class="v2-lvr-warn-cell">${r.is_special ? `<span class="v2-lvr-warn">⚠<span class="v2-lvr-tip">${esc(r.note || '特殊交易')}</span></span>` : ''}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>`;
@@ -3013,7 +3057,7 @@
     triggerScrapeUrl, triggerManualAnalyze, populateManualDistricts,
     switchGridCity,
     showLvrPopup, hideLvrPopup,
-    saveOverride, saveInferredChoice, setZonePing,
+    saveOverride, saveInferredChoice, setZonePing, bumpPrice,
     openRoadOverlay, scanRoadWidth, deleteRow,
     hardReload,
     startVoiceRoad,
