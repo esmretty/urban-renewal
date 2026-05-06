@@ -339,10 +339,10 @@
       return `此物件標記為「${reason}」，出價試算不適用。`;
     }
     const land = p.land_area_ping;
-    const zoning = effectiveZoning(p);
     const newPrice = p.new_house_price_wan_override ?? prices[p.district];
-    if (!land || !zoning || !newPrice) return '缺資料，無法計算';
     const farPct = effectiveFar(p);
+    // farPct null 涵蓋「single zoning 空」+「multi zoning_list 加權失敗」兩種 case，比看 zoning string 嚴謹
+    if (!land || farPct == null || !newPrice) return '缺資料，無法計算';
     const coeff = p.rebuild_coeff ?? 1.57;
     const [ratio, parking] = lookupShareRatio(newPrice);
     const isFangzai = p.city === '台北市' && currentAge(p) && (new Date().getFullYear() - currentAge(p)) <= 1974;
@@ -1597,17 +1597,17 @@
     }
     const id = p.source_id || p.id || '';
     const land = p.land_area_ping;
-    const zoning = effectiveZoning(p);
     const baseFarPct = baseFar(p);
     const effFar = effectiveFar(p);
     const roadCapped = (baseFarPct != null && effFar != null && effFar < baseFarPct);
     const roadW = p.road_width_m_override ?? p.road_width_m;
     const coeff = p.rebuild_coeff ?? 1.57;
     const newPrice = p.new_house_price_wan_override ?? prices[p.district];
-    if (!land || !zoning || !newPrice) {
+    // farPct null 涵蓋「single zoning 空」+「multi zoning_list 加權失敗」兩種 case
+    if (!land || effFar == null || !newPrice) {
       const missing = [
         !land ? '土地坪數' : null,
-        !zoning ? '使用分區' : null,
+        effFar == null ? '使用分區' : null,
         !newPrice ? '新成屋房價' : null,
       ].filter(Boolean).join(' / ');
       return `<div class="v2-d-alert">⚠ 缺資料：${esc(missing)}，無法試算。</div>`;
@@ -1772,13 +1772,12 @@
       return `<div class="v2-bid-section"><div class="v2-d-alert v2-d-alert--soft">此物件不適用都更/危老試算，故無出價建議。</div></div>`;
     }
     const land = p.land_area_ping;
-    const zoning = effectiveZoning(p);
     const newPrice = p.new_house_price_wan_override ?? prices[p.district];
-    if (!land || !zoning || !newPrice) {
+    const farPct = effectiveFar(p);
+    // farPct null 涵蓋「single zoning 空」+「multi zoning_list 加權失敗」兩種 case
+    if (!land || farPct == null || !newPrice) {
       return `<div class="v2-d-alert v2-d-alert--soft">缺資料，無法給出價建議。</div>`;
     }
-    const farPct = effectiveFar(p);
-    if (!farPct) return `<div class="v2-d-alert v2-d-alert--soft">缺有效容積率，無法給出價建議。</div>`;
     const coeff = p.rebuild_coeff ?? 1.57;
     const [ratio, parking] = lookupShareRatio(newPrice);
     if (!ratio) return `<div class="v2-d-alert v2-d-alert--soft">缺分回比例，無法給出價建議。</div>`;

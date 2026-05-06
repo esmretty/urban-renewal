@@ -1591,10 +1591,11 @@ function renewalV2HTML(p) {
   const floorPremium = p.floor_premium ?? (is1F ? 0.20 : 0);
   const id = p.id;
 
-  if (!land || !zoning || !price) {
+  // effFar null 涵蓋「single zoning 空」+「multi zoning_list 加權失敗」兩種 case
+  if (!land || effFar == null || !price) {
     return `<div class="text-muted small">⚠️ 缺資料：${[
       !land ? "土地坪數" : null,
-      !zoning ? "使用分區" : null,
+      effFar == null ? "使用分區" : null,
       !price ? "新成屋房價" : null,
     ].filter(Boolean).join(" / ")}，無法試算。</div>`;
   }
