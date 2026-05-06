@@ -2655,6 +2655,9 @@
     state.sortDir = 'desc';
     const sd = $('#v2-sort-dir'); if (sd) sd.textContent = '↓';
     renderDistrictChips();
+    // 直接設 input.value 不會觸發 'input' event，mobile slider DOM 不會跟著更新
+    // → 用戶體感「reset 沒 work」(數字改了但 slider 沒移動)。同步 slider 位置
+    _syncSlidersFromInputs();
     applyFilters();
   }
   function openSidebar() {
@@ -2830,10 +2833,23 @@
   // iOS Safari 的 webkitSpeechRecognition 即使 .stop() 之後 OS 層 mic indicator 仍會持續顯示
   // 直到 SR 物件被 GC 或主動 abort()。所以結束時必須 abort + nullify reference。
   let _activeRec = null;
+  // iOS WebKit retain-mic workaround：webkitSpeechRecognition 結束後 OS audio session
+  // 不會立刻 release（系統 mic indicator 持續亮）。透過 getUserMedia 取得 mic stream
+  // 再 immediate stop tracks，可促使 OS 認為 mic 已不被需要、提早 release indicator。
+  // 不一定 100% work（iOS WKWebView 限制），best-effort。
+  async function _forceReleaseMic() {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(t => { try { t.stop(); } catch (_e) {} });
+    } catch (_e) { /* permission 拒絕或其他錯 — 忽略 */ }
+  }
   function _killActiveVoice() {
     if (!_activeRec) return;
     try { _activeRec.abort(); } catch (_e) {}
     _activeRec = null;
+    // 延遲一點再戳 mic release —— 避免 abort 還沒走完
+    setTimeout(_forceReleaseMic, 50);
   }
   // 切走 tab / app / 進背景 → 強制 release mic（不等 onend）
   document.addEventListener('visibilitychange', () => {
@@ -2905,11 +2921,12 @@
           _showVoiceStatus('未偵測到語音，請靠近麥克風再試一次', 'error');
         }
       }
-      // 主動 abort + 清掉 reference 讓 OS 層 mic indicator 立刻收掉
-      // (iOS 上 .stop() 走完不夠 — 必須 abort + 釋放 SR 物件才會 release mic)
+      // 主動 abort + 釋放 reference + getUserMedia stop 三重戳，
+      // 讓 iOS 層 mic indicator 盡快關閉
       if (_activeRec === rec) {
         try { rec.abort(); } catch (_e) {}
         _activeRec = null;
+        setTimeout(_forceReleaseMic, 50);
       }
     };
     try {

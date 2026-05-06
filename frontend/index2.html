@@ -290,32 +290,31 @@
       </div>
 
       <div class="v2-filter-group">
-        <label class="v2-filter-label">總價（萬）</label>
+        <label class="v2-filter-label">數字條件（萬）</label>
         <div class="v2-range">
           <input class="v2-input v2-input--num" type="number" id="v2-price-min" min="0" max="30000" step="100" value="0"
                  data-slider-max="30000" data-slider-curve="piecewise"
-                 data-slider-label="總價最低" data-slider-suffix="萬"
+                 data-slider-label="總價最低"
                  oninput="v2.applyFilters()" onchange="v2.capInput(this)">
           <span class="v2-range__sep">–</span>
           <input class="v2-input v2-input--num" type="number" id="v2-price-max" min="0" max="30000" step="100" value="5000"
                  data-slider-max="30000" data-slider-curve="piecewise"
-                 data-slider-label="總價最高" data-slider-suffix="萬"
+                 data-slider-label="總價最高"
                  oninput="v2.applyFilters()" onchange="v2.capInput(this)">
         </div>
       </div>
 
       <div class="v2-filter-group v2-filter-group--num-compact">
-        <label class="v2-filter-label">數字條件</label>
         <!-- 第 1 列：建單價 + 地單價 並排 -->
         <div class="v2-num-row v2-num-row--compact v2-num-row--pair">
           <span class="v2-num-row__label">建&lt;</span>
           <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-bld-price-max" min="0" max="1000" step="5" value="300"
-                 data-slider-max="1000" data-slider-label="建單價≤" data-slider-suffix="萬"
+                 data-slider-max="1000" data-slider-label="建單價≤"
                  oninput="v2.applyFilters()" onchange="v2.capInput(this)">
           <span class="v2-num-row__sep"></span>
           <span class="v2-num-row__label">地&lt;</span>
           <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-land-price-max" min="0" max="1000" step="10" value="600"
-                 data-slider-max="1000" data-slider-label="地單價≤" data-slider-suffix="萬"
+                 data-slider-max="1000" data-slider-label="地單價≤"
                  oninput="v2.applyFilters()" onchange="v2.capInput(this)">
           <span class="v2-num-row__suffix">萬/坪</span>
         </div>
