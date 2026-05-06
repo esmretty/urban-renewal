@@ -43,6 +43,27 @@ else
     echo "  ⚠ npm 不在 PATH，跳過 bundle (server 會用 commit 裡既有的)"
 fi
 
+# Pre-check：production 有正在跑的任務時擋下 deploy（CLAUDE.md 規則 12）
+# systemctl restart 會攔腰砍掉 scrape session → 落地殘缺 doc。
+# --force 跳過（緊急情況用）；--no-busy-check 也可（若 endpoint 失靈）。
+if [[ "$1" != "--force" && "$1" != "--no-busy-check" && "$2" != "--force" && "$2" != "--no-busy-check" ]]; then
+    BUSY=$(curl -sf --max-time 5 https://taipei.retty-ai.com/api/busy_state || echo "")
+    if [[ -n "$BUSY" ]]; then
+        BATCH=$(echo "$BUSY" | sed -n 's/.*"batch_running":\s*\(true\|false\).*/\1/p')
+        URL_IF=$(echo "$BUSY" | sed -n 's/.*"url_inflight":\s*\([0-9]*\).*/\1/p')
+        if [[ "$BATCH" == "true" || ( -n "$URL_IF" && "$URL_IF" -gt 0 ) ]]; then
+            echo "✗ Production 有正在執行的任務 — batch_running=$BATCH url_inflight=$URL_IF"
+            echo "  deploy 會把任務攔腰砍斷 (CLAUDE.md 規則 12)。請等任務結束。"
+            echo "  確認狀態：curl https://taipei.retty-ai.com/api/busy_state"
+            echo "  非要強制可加 --force 跳過檢查"
+            exit 1
+        fi
+        echo "✓ busy check pass (batch_running=$BATCH url_inflight=$URL_IF)"
+    else
+        echo "⚠ busy_state endpoint 無回應，跳過 busy check (續行 deploy)"
+    fi
+fi
+
 if [[ "$1" != "--no-push" ]]; then
     echo "==> git push origin main"
     git push origin main

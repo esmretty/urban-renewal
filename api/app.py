@@ -49,6 +49,7 @@ _PUBLIC_PATHS = {
     "/api/school_district/polygons",
     "/school_lookup.html",              # 學區查詢測試頁 HTML
     "/api/maintenance_status",   # 維護頁 polling 用，公開不需 auth
+    "/api/busy_state",           # deploy.sh pre-check 用，無個資
     "/api/version",              # 版本號（commit short SHA），admin UI 對版用，無敏感資訊
     "/admin.html",            # admin 也走自己的登入頁
 }
