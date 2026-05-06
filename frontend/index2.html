@@ -346,9 +346,8 @@
       <!-- 最低獲利倍數 — toggle + input + 倍以上 同一列 -->
       <div class="v2-filter-group">
         <div class="v2-min-mult-row">
-          <label class="v2-toggle v2-toggle--inline">
+          <label class="v2-toggle v2-toggle--inline" title="啟用獲利倍數過濾">
             <input type="checkbox" id="v2-min-mult-on" onchange="v2.applySort()">
-            <span>啟用</span>
           </label>
           <input class="v2-input v2-input--num" type="number" id="v2-min-mult-val" min="0" step="0.1" value="3.0"
                  data-slider-max="5" data-slider-label="獲利倍數≥" data-slider-suffix="倍"

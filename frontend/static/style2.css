@@ -442,12 +442,12 @@ a { color: inherit; text-decoration: none; }
 /* 最低獲利倍數：toggle + input + 倍以上 同一列 */
 .v2-min-mult-row {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;     /* slider wrap 在 sidebar 中被換到下一行 */
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .v2-min-mult-row .v2-toggle--inline {
-  flex: 1;
+  flex: 0 0 auto;        /* checkbox 大小 */
   min-width: 0;
   font-size: 12px;
 }
@@ -460,10 +460,22 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-text-muted);
   flex-shrink: 0;
 }
-/* slider 跟 toggle 是 row 兄弟元素，slider wrap 強制換新行避免擠在 toggle 旁邊 */
+/* slider wrap 跟 toggle 同 row，wrap 內 label 在第 1 行接 toggle 後，slider 換新行 */
 .v2-min-mult-row .v2-mobile-slider-wrap {
-  flex: 1 0 100%;
-  margin-top: 4px;
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+  margin-top: 0;
+}
+.v2-min-mult-row .v2-mobile-slider-wrap .v2-mobile-slider-label {
+  flex: 1 1 auto;
+  margin-bottom: 0;
+}
+.v2-min-mult-row .v2-mobile-slider-wrap .v2-mobile-slider {
+  flex: 0 0 100%;
+  margin-top: 2px;
 }
 
 /* 抗性 toggle grid (3 col × 2 row，最後一格空) */
