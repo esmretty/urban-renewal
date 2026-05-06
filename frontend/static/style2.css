@@ -757,6 +757,56 @@ a { color: inherit; text-decoration: none; }
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
+
+/* ── 列表 / 地圖 切換 (僅 retty.liu@gmail.com 看得到 — JS 控制 display) ── */
+.v2-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 12px;
+  font-size: 13px;
+}
+.v2-view-toggle__link {
+  color: var(--c-text-muted);
+  text-decoration: none;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.v2-view-toggle__link:hover { color: #c78a00; }
+.v2-view-toggle__link.is-active {
+  color: #c78a00;
+  font-weight: 700;
+  text-decoration: underline;
+}
+.v2-view-toggle__sep { color: #d8d2be; }
+
+/* 地圖容器 */
+.v2-map {
+  width: 100%;
+  height: calc(100vh - 220px);
+  min-height: 480px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  z-index: 0;       /* drawer / sidebar 蓋過去 */
+  background: #e8e2cc;   /* loading 時不至於是白板 */
+}
+@media (max-width: 1024px) {
+  .v2-map { height: calc(100vh - 200px); min-height: 400px; }
+}
+
+/* Leaflet tooltip 客製：default 太醜 */
+.leaflet-tooltip {
+  background: rgba(31, 41, 55, 0.95) !important;
+  color: #fff !important;
+  border: none !important;
+  font-size: 12px !important;
+  padding: 6px 10px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+.leaflet-tooltip-top:before {
+  border-top-color: rgba(31, 41, 55, 0.95) !important;
+}
 .v2-grid-col {
   display: flex;
   flex-direction: column;

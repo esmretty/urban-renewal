@@ -48,6 +48,9 @@
         media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap"></noscript>
 
+  <!-- Leaflet (地圖模式用，僅 retty.liu@gmail.com 可見入口；CSS 載這裡，JS 在 body 結尾) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
   <!-- style2.css 仍 render-blocking，但量級小（~80KB 同源），且 critical CSS 已涵蓋 loader -->
   <link rel="stylesheet" href="/static/style2.css?v=1" />
   <!-- Perf instrumentation：?perf=1 (or localStorage v2_perf=1) 顯示分階段時間表 -->
@@ -390,6 +393,14 @@
         </button>
       </div>
       <div class="v2-toolbar__right">
+        <!-- 列表 / 地圖 切換（預設 display:none，JS 檢查 email 才 reveal — 只 retty.liu@gmail.com 看得到） -->
+        <div class="v2-view-toggle" id="v2-view-toggle" style="display:none">
+          <a href="#" class="v2-view-toggle__link is-active" data-view-mode="list"
+             onclick="event.preventDefault(); v2.setViewMode('list')">列表模式</a>
+          <span class="v2-view-toggle__sep">|</span>
+          <a href="#" class="v2-view-toggle__link" data-view-mode="map"
+             onclick="event.preventDefault(); v2.setViewMode('map')">地圖模式</a>
+        </div>
         <!-- 8 排序選項對齊 v1，預設「新進優先」+ 降冪 -->
         <select class="v2-select" id="v2-sort" onchange="v2.applySort()">
           <option value="list_rank" selected>新進優先</option>
@@ -409,6 +420,9 @@
     <div class="v2-grid" id="v2-grid">
       <!-- skeleton placeholder injected by JS -->
     </div>
+
+    <!-- 地圖容器（地圖模式才 show） -->
+    <div id="v2-map" class="v2-map" style="display:none"></div>
 
     <!-- Empty state -->
     <div class="v2-empty" id="v2-empty" style="display:none">
@@ -447,6 +461,8 @@
 <!-- Toast container -->
 <div class="v2-toast-host" id="v2-toast-host"></div>
 
+<!-- Leaflet JS (地圖模式用) — 放在 app2.js 之前確保 L 全域可用 -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <!-- shared.js: v1/v2 共用算式 — 必須在 app2.js 之前 -->
 <script src="/static/shared.js?v=1"></script>
 <script src="/static/app2.js?v=1"></script>
