@@ -691,8 +691,10 @@
             <span class="v2-card__district">${esc(p.district || '')}</span><span class="v2-card__sep" aria-hidden="true"></span>${esc(addr)}
           </span>
           <span class="v2-card__price-block">
-            <span class="v2-card__price">${priceWan ? fmt0(priceWan) : '—'}<small>萬</small></span>
-            ${(p.lvr_records && p.lvr_records.length) ? `<span class="v2-lvr-icon v2-lvr-icon--sm" onmouseenter="v2.showLvrPopup(event, '${esc(id)}')" onmouseleave="v2.hideLvrPopup()" onclick="event.stopPropagation()">實</span>` : ''}
+            <span class="v2-card__price-line">
+              <span class="v2-card__price">${priceWan ? fmt0(priceWan) : '—'}<small>萬</small></span>
+              ${(p.lvr_records && p.lvr_records.length) ? `<span class="v2-lvr-icon v2-lvr-icon--sm" onmouseenter="v2.showLvrPopup(event, '${esc(id)}')" onmouseleave="v2.hideLvrPopup()" onclick="event.stopPropagation()">實</span>` : ''}
+            </span>
             ${perBld ? `<span class="v2-card__price-per">${perBld}/建</span>` : ''}
           </span>
           <span class="${multCls}" title="都更倍數">
