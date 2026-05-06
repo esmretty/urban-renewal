@@ -620,6 +620,8 @@
     // 第一次抓進 DB 的日期 badge — scrape_session_at 是 batch session 時間 (preserve 不被 reanalyze 重寫，CLAUDE.md PREFER_NEW_FIELDS 註解)
     // 24 小時內顯示紅色 NEW，更舊的顯示「M/D」灰色
     let dateBadge = '';
+    let isNewObject = false;
+    let newTitle = '';
     if (p.scrape_session_at) {
       const t = new Date(p.scrape_session_at);
       if (!isNaN(t)) {
@@ -629,9 +631,12 @@
         const yy = t.getFullYear();
         const sameYr = yy === new Date().getFullYear();
         const dateStr = sameYr ? `${m}/${d}` : `${yy.toString().slice(2)}/${m}/${d}`;
-        dateBadge = within24h
-          ? `<span class="v2-card__date v2-card__date--new" title="${t.toLocaleString('zh-TW')}">NEW</span>`
-          : `<span class="v2-card__date" title="第一次抓進 DB：${t.toLocaleString('zh-TW')}">${dateStr}</span>`;
+        if (within24h) {
+          isNewObject = true;
+          newTitle = t.toLocaleString('zh-TW');
+        } else {
+          dateBadge = `<span class="v2-card__date" title="第一次抓進 DB：${t.toLocaleString('zh-TW')}">${dateStr}</span>`;
+        }
       }
     }
     const archivedClass = p.archived ? 'v2-card--archived' : '';
@@ -685,20 +690,15 @@
     return `
       <article class="v2-card ${archivedClass} ${readClass} ${hotClass} ${cityClass}" data-id="${esc(id)}">
         ${archivedOverlay}
+        ${isNewObject ? `<div class="v2-card__corner-new" title="第一次抓進 DB：${esc(newTitle)}"><span>NEW</span></div>` : ''}
         <div class="v2-card__line1">
           <span class="v2-card__type">${typeIcon(p.building_type)}</span>
-          <span class="v2-card__addr-col">
-            <span class="v2-card__addr">
-              <span class="v2-card__district">${esc(p.district || '')}</span><span class="v2-card__sep" aria-hidden="true"></span>${esc(addr)}
-            </span>
-            ${p.title ? `<span class="v2-card__title-sub" title="${esc(p.title)}">${esc(p.title)}</span>` : ''}
+          <span class="v2-card__addr">
+            <span class="v2-card__district">${esc(p.district || '')}</span><span class="v2-card__sep" aria-hidden="true"></span>${esc(addr)}
           </span>
-          <span class="v2-card__price-col">
-            <span class="v2-card__price-block">
-              <span class="v2-card__price">${priceWan ? fmt0(priceWan) : '—'}<small>萬</small></span>
-              ${(p.lvr_records && p.lvr_records.length) ? `<span class="v2-lvr-icon v2-lvr-icon--sm" onmouseenter="v2.showLvrPopup(event, '${esc(id)}')" onmouseleave="v2.hideLvrPopup()" onclick="event.stopPropagation()">實</span>` : ''}
-            </span>
-            ${perBld ? `<span class="v2-card__price-per">${perBld}/建</span>` : ''}
+          <span class="v2-card__price-block">
+            <span class="v2-card__price">${priceWan ? fmt0(priceWan) : '—'}<small>萬</small></span>
+            ${(p.lvr_records && p.lvr_records.length) ? `<span class="v2-lvr-icon v2-lvr-icon--sm" onmouseenter="v2.showLvrPopup(event, '${esc(id)}')" onmouseleave="v2.hideLvrPopup()" onclick="event.stopPropagation()">實</span>` : ''}
           </span>
           <span class="${multCls}" title="都更倍數">
             ${mult != null ? mult.toFixed(1) : '—'}<small>×</small>
@@ -711,6 +711,10 @@
                 </svg>
               </button>`}
         </div>
+        ${(p.title || perBld) ? `<div class="v2-card__sub-row">
+          <span class="v2-card__title-sub" title="${esc(p.title || '')}">${esc(p.title || '')}</span>
+          ${perBld ? `<span class="v2-card__price-per">${perBld}/建</span>` : ''}
+        </div>` : ''}
         <div class="v2-card__line2">
           <span class="v2-stat" title="建坪"><b>建</b>${fmt1(p.building_area_ping)}</span>
           <span class="v2-stat" title="地坪 (原土地分區縮寫)"><b>地</b>${fmt1(p.land_area_ping)}${(p.zoning_original || p.zoning) ? ` <span class="v2-stat__zone">(${esc(zoneAbbr(p.zoning_original || p.zoning))})</span>` : ''}</span>
