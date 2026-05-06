@@ -1,0 +1,67 @@
+/* v2 地圖模式 — 獨立 CSS（跟 style2.css 分離）
+ * 只 retty.liu@gmail.com 看得到入口；其他用戶這 file 雖載但 .v2-view-toggle 不顯示
+ * 載入順序：index2.html 內 style2.css 之後（覆寫 default 樣式 + 提供地圖專用 class）
+ */
+
+/* ── 列表 / 地圖 切換 link (toolbar 右側) ── */
+.v2-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 12px;
+  font-size: 13px;
+}
+.v2-view-toggle__link {
+  color: var(--c-text-muted);
+  text-decoration: none;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.v2-view-toggle__link:hover { color: #c78a00; }
+.v2-view-toggle__link.is-active {
+  color: #c78a00;
+  font-weight: 700;
+  text-decoration: underline;
+}
+.v2-view-toggle__sep { color: #d8d2be; }
+
+/* ── 地圖容器 ── */
+.v2-map {
+  width: 100%;
+  height: calc(100vh - 220px);
+  min-height: 480px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  z-index: 0;            /* drawer / sidebar 蓋過去 */
+  background: #e8e2cc;   /* loading tile 之前不至於白板 */
+}
+@media (max-width: 1024px) {
+  .v2-map { height: calc(100vh - 200px); min-height: 400px; }
+}
+
+/* ── Marker 倍數 chip 樣式 ── */
+.v2-map-marker {
+  color: #fff;
+  border-radius: 14px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+/* ── Leaflet tooltip 客製 (default 太醜) ── */
+.leaflet-tooltip {
+  background: rgba(31, 41, 55, 0.95) !important;
+  color: #fff !important;
+  border: none !important;
+  font-size: 12px !important;
+  padding: 6px 10px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+.leaflet-tooltip-top:before {
+  border-top-color: rgba(31, 41, 55, 0.95) !important;
+}

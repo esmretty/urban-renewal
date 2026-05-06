@@ -53,6 +53,8 @@
 
   <!-- style2.css 仍 render-blocking，但量級小（~80KB 同源），且 critical CSS 已涵蓋 loader -->
   <link rel="stylesheet" href="/static/style2.css?v=1" />
+  <!-- 地圖模式專用樣式 (跟 style2.css 分離；非 retty.liu@gmail.com 不會看到入口) -->
+  <link rel="stylesheet" href="/static/map_mode.css?v=1" />
   <!-- Perf instrumentation：?perf=1 (or localStorage v2_perf=1) 顯示分階段時間表 -->
   <script>
     (function () {
@@ -466,5 +468,7 @@
 <!-- shared.js: v1/v2 共用算式 — 必須在 app2.js 之前 -->
 <script src="/static/shared.js?v=1"></script>
 <script src="/static/app2.js?v=1"></script>
+<!-- map_mode.js: 地圖模式獨立模組（透過 window.v2 attach；必須在 app2.js 之後） -->
+<script src="/static/map_mode.js?v=1"></script>
 </body>
 </html>
