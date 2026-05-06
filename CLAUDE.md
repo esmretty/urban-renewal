@@ -107,23 +107,7 @@
    - 過去踩雷：2026-05-04 21:23-22:23 多次 crash，pattern 都是 4 個 Explore subagent 平行打 API → 第一個清完 .output 後第二個踩到空檔 → ENOENT → extension restart
    - 注意跟 `stream_idle_partial`（API streaming 卡 15 秒）區分：stall 只是慢、不會 crash；ENOENT 才是真正讓 extension 死掉的元兇
 
-12. **Deploy 前必須先檢查 production 沒有正在跑的任務**
-   每次執行 `bash deploy.sh` 之前，先 curl production 的 `/api/busy_state`，
-   如果 `batch_running: true` 或 `url_inflight > 0` → **不可以 deploy**，安排在任務結束後才動。
-   原因：deploy 會 `systemctl restart taipei-urban`，把正在跑的 scrape session
-   攔腰砍斷，物件會落地殘缺資料（已抓 ~70% 的 doc，後段 zoning / road_width / 試算
-   全沒）。CLAUDE.md 規則 4 的「資料完整性」會被破壞。
-   檢查指令：
-   ```
-   curl -s https://taipei.retty-ai.com/api/busy_state
-   ```
-   - `batch_running: false`, `url_inflight: 0` → 可 deploy
-   - 任一非 0 / true → 等到都 0 / false 才 deploy（也可問用戶要不要強制：
-     「目前 batch 正在跑，要等 scheduler 完還是先 cancel？」）
-   - scheduler interval 通常 1-3 小時跑一次、單次 batch ~10-30 分鐘，等比強行打斷便宜
-   - 如果 admin 用戶當下正在跑單筆 reanalyze (url_inflight > 0)：等 1-2 分鐘即可
-
-13. **大範圍 try/except 必須用 logger.exception 印 stack trace，並且只包真正會拋例外的單一動作**
+12. **大範圍 try/except 必須用 logger.exception 印 stack trace，並且只包真正會拋例外的單一動作**
    pipeline / 分析路徑常見「整段業務邏輯包一個大 try/except: pass」，等 silent fail 累積到用戶回報才發現。
    過去踩雷（commit 53aa2a9）：[api/analysis_pipeline.py](api/analysis_pipeline.py) line 1075-1208 zoning + 試算 + AI recommendation 同 try block，line 1083 `"、".join(zone_list)` 對 list of dict 拋 TypeError → 連 zoning_source、ai_recommendation 都沒寫進 doc → 5 個跨分區物件 zoning 永遠空白，前端「待查」+ 倍數無法算。除錯時翻 prod log 也只看到 `zoning lookup 失敗 ...: sequence item 0: expected str instance, dict found` 這 1 行訊息，看不出哪行拋。
    **規則**：
