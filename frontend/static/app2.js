@@ -1777,15 +1777,15 @@
             <div class="v2-rv2-r">
               <span class="v2-rv2-op">+</span>
               <span class="v2-rv2-lbl">分回車位</span>
-              <span class="v2-rv2-val v2-rv2-val--bonus">
-                <span class="v2-rv2-bonus-line">
+              <span class="v2-rv2-val v2-rv2-val--parking">
+                <span class="v2-rv2-parking-line">
                   <span class="v2-rv2-tag">危老</span>
                   <span class="v2-rv2-parking">
                     <span class="v2-rv2-parking__val">${parkingValue(bonusW).toFixed(0)} 萬</span>
                     <span class="v2-rv2-parking__cnt">(${parkingCount(bonusW).toFixed(2)} 位)</span>
                   </span>
                 </span>
-                <span class="v2-rv2-bonus-line">
+                <span class="v2-rv2-parking-line">
                   <span class="v2-rv2-tag">都更</span>
                   <span class="v2-rv2-parking">
                     <span class="v2-rv2-parking__val">${parkingValue(bonusD).toFixed(0)} 萬</span>

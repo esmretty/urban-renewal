@@ -2360,6 +2360,21 @@ select.v2-d-input { text-align: left; }
   gap: 8px;
   width: 100%;
 }
+/* 分回車位：危老/都更 同列橫排（不堆疊），右對齊 — 跟容積獎勵堆疊不同 */
+.v2-rv2-val--parking {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+.v2-rv2-parking-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
 .v2-rv2-val--col { flex-direction: column; align-items: flex-end; gap: 2px; }
 .v2-rv2-note {
   font-size: 11px;
@@ -3093,6 +3108,8 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   .v2-lvr-tbl td { padding: 4px 5px; }
   .v2-lvr-tbl td.v2-lvr-addr { max-width: 120px; }
   /* mobile：拉桿 width:100% 已在 base CSS 套用，這裡不用再寫死 */
+  /* mobile Safari 對沒明確 spec 的 input 預設 16px (防 auto-zoom)，會跟其他 14px 欄位不一致 → 強制 14px */
+  .v2-rv2-edit { font-size: 14px !important; line-height: 1.3; }
   .v2-src-badge--big { font-size: 13px !important; padding: 5px 10px !important; }
   .v2-d-title { font-size: 16px; }
   .v2-d-tbl { font-size: 14px; }
