@@ -224,6 +224,24 @@
         fa.checked = all.length > 0 && all.every(c => c.checked);
       }
     }
+    // restore 完直接同步 slider DOM（input value 改了但 slider listener 沒被 dispatch
+    // → mobile 上 slider 仍顯示 default 值，看起來像 restore 失效）
+    _syncSlidersFromInputs();
+  }
+  // 把已 enhance 的 number input 當前 value 寫回對應的 slider + label
+  function _syncSlidersFromInputs() {
+    document.querySelectorAll('.v2-sidebar input.v2-input--num[data-slider-enhanced]').forEach(inp => {
+      const wrap = inp.nextElementSibling;
+      if (!wrap || !wrap.classList.contains('v2-mobile-slider-wrap')) return;
+      const slider = wrap.querySelector('.v2-mobile-slider');
+      const valSpan = wrap.querySelector('.v2-mobile-slider-label__val');
+      if (!slider) return;
+      const piecewise = inp.dataset.sliderCurve === 'piecewise';
+      slider.value = piecewise
+        ? _piecewiseValToPos(parseFloat(inp.value) || 0)
+        : (inp.value || 0);
+      if (valSpan) valSpan.textContent = inp.value;
+    });
   }
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -2629,11 +2647,10 @@
     return _PIECEWISE_BPS[_PIECEWISE_BPS.length - 1].pos;
   }
 
-  // 手機 sidebar 把 number input 換成 slider — 桌面保留 number input。
+  // PC + mobile 都把 sidebar number input 換成 slider — UX 一致
   // 條件：input 有 data-slider-max attr 才 enhance（避免動到地址分析卡的精確輸入）。
   // data-slider-curve="piecewise" → 非線性 mapping (0~3 億 區間)
   function _enhanceSlidersForMobile() {
-    if (!window.matchMedia('(max-width: 1024px)').matches) return;
     document.querySelectorAll('.v2-sidebar input.v2-input--num[type="number"]').forEach(inp => {
       if (inp.dataset.sliderEnhanced) return;
       const max = inp.dataset.sliderMax;
