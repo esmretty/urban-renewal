@@ -1240,7 +1240,9 @@ function zoningCellHTML(p) {
   const z = p.zoning;
   const src = p.zoning_source;
   const cands = p.zoning_candidates || [];
-  if (!z && !cands.length) return `<span class="text-muted">待查</span>`;
+  const zList = p.zoning_list;
+  // multi case backend 不寫 zoning string（避免武斷 splitter），zoning_list 才是 source of truth
+  if (!z && !cands.length && !(zList && zList.length)) return `<span class="text-muted">待查</span>`;
 
   const sourceLabel = {
     "arcgis_taipei": "北市都市計畫 GeoServer",

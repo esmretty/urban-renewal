@@ -1078,18 +1078,12 @@ def analyze_single_property(
                 city=city, ctx=ocr_ctx,
             )
             zone_list = z.get("zone_list")
-            # 物件座標跨多塊 polygon（如「住宅區+商業區」）→ zoning 顯示成「住宅區、商業區」全列出
-            # zone_list 來自 query_zoning_taipei = list of dict（含 zone_code/zone_name/...），
-            # 永慶 multi（line 1099 yc_multi）= list of string；兩種都要處理。
+            # 多分區物件（座標跨 ≥ 2 塊 polygon，如住宅區 + 商業區）：
+            # zoning string 統一設 None，由 zoning_list (structured) 當 source of truth。
+            # 前端 / LINE / Claude 各自從 zoning_list 取資料 render，不依賴 backend 武斷選 splitter。
+            # 單分區（含跨同類別子分區只剩 1 個 dict）：保留 zoning string 給下游簡單取用。
             if zone_list and len(zone_list) > 1:
-                _names = []
-                for zd in zone_list:
-                    if isinstance(zd, dict):
-                        _names.append(zd.get("zone_name") or zd.get("zone_label") or "")
-                    elif isinstance(zd, str):
-                        _names.append(zd)
-                _names = [n for n in _names if n]
-                zoning_display = "、".join(_names) if _names else z["zoning"]
+                zoning_display = None
             else:
                 zoning_display = z["zoning"]
             doc_data.update({
@@ -1108,7 +1102,8 @@ def analyze_single_property(
             yc_multi = item.get("_yongqing_zoning_multi")
             yc_orig = item.get("zoning_original")
             if yc_multi and len(yc_multi) > 1:
-                doc_data["zoning"] = "、".join(yc_multi)
+                # multi case：zoning string 設 None，zoning_list 當 source of truth（避免武斷 splitter）
+                doc_data["zoning"] = None
                 doc_data["zoning_list"] = list(yc_multi)
                 doc_data["zoning_original"] = yc_orig
                 doc_data["zoning_source"] = "yongqing_detail_multi"
