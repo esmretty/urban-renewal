@@ -1055,6 +1055,57 @@
     } catch (e) {
       console.warn('openDetail upgrade fetch failed', e);
     }
+    // 學區欄位 — async lookup 更新 (先 render 載入中…，這邊填實際值)
+    _loadSchoolDistrict(id);
+  }
+
+  // 排序學校名：純中文排前、含括號/數字/-/英文等符號排後；同類別字典序
+  function _sortSchoolNames(names) {
+    const allChinese = (s) => /^[一-鿿]+$/.test(s);
+    return (names || []).slice().sort((a, b) => {
+      const aPure = allChinese(a) ? 0 : 1;
+      const bPure = allChinese(b) ? 0 : 1;
+      if (aPure !== bPure) return aPure - bPure;
+      return String(a).localeCompare(String(b), 'zh-Hant');
+    });
+  }
+  async function _loadSchoolDistrict(id) {
+    const p = state.allProperties.find(x => (x.source_id || x.id) === id);
+    if (!p) return;
+    const lat = p.source_latitude ?? p.latitude;
+    const lng = p.source_longitude ?? p.longitude;
+    const host = document.getElementById(`v2-d-school-${id}`);
+    if (!host) return;
+    const renderRow = (kind, schools) => {
+      const rows = host.querySelectorAll('.v2-d-school-row');
+      const row = kind === '國小' ? rows[0] : rows[1];
+      if (!row) return;
+      const list = row.querySelector('.v2-d-school-list');
+      if (!list) return;
+      if (!schools || !schools.length) {
+        list.innerHTML = '<span style="color:#888">—</span>';
+        return;
+      }
+      list.innerHTML = _sortSchoolNames(schools).map(s =>
+        `<span class="v2-d-school-tag">${esc(s)}</span>`
+      ).join(' ');
+    };
+    if (!lat || !lng) {
+      renderRow('國小', []); renderRow('國中', []);
+      return;
+    }
+    try {
+      const r = await fetch(`/api/school_district/lookup?lat=${lat}&lng=${lng}`);
+      if (!r.ok) {
+        renderRow('國小', []); renderRow('國中', []);
+        return;
+      }
+      const data = await r.json();
+      renderRow('國小', data.school_elementary || []);
+      renderRow('國中', data.school_junior_high || []);
+    } catch (_e) {
+      renderRow('國小', []); renderRow('國中', []);
+    }
   }
 
   // drawer header「★ 加入最愛 / 從最愛移除」按鈕同步 + sources (591/永慶 連結)
@@ -1245,6 +1296,10 @@
                 <tr><td>使用分區</td><td>${zoningCellHTML(p)}</td></tr>
                 <tr><td>臨路寬度</td><td><input type="number" class="v2-d-input v2-d-input--narrow" min="0" step="0.5" value="${(p.road_width_m_override ?? p.road_width_m) ?? ''}"
                   onchange="v2.saveOverride('${esc(id)}','road_width_m_override',this.value)"> m${roadShotBtn}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">（寬度不明，有可能為私巷或特窄巷弄）</span>' : ''}${roadNameHint(p) ? `<div class="v2-d-road-name-hint">${esc(roadNameHint(p))}</div>` : ''}</td></tr>
+                <tr><td>學區</td><td><div class="v2-d-school" id="v2-d-school-${esc(id)}">
+                  <div class="v2-d-school-row"><span class="v2-d-school-kind">國小</span><span class="v2-d-school-list">載入中…</span></div>
+                  <div class="v2-d-school-row"><span class="v2-d-school-kind">國中</span><span class="v2-d-school-list">載入中…</span></div>
+                </div></td></tr>
               </table>
             </div>
           </div>

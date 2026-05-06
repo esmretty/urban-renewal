@@ -3293,6 +3293,42 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
 
 /* (slider rules 已搬到上方 PC + mobile 共用區塊) */
 
+/* === mobile 卡片地址字體小一號 ===================================== */
+@media (max-width: 1024px) {
+  .v2-card__addr { font-size: 17px; }
+}
+
+/* === detail page 學區欄位 ============================================ */
+.v2-d-school { display: flex; flex-direction: column; gap: 4px; }
+.v2-d-school-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.v2-d-school-kind {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--c-text-muted);
+  font-weight: 600;
+  min-width: 32px;
+}
+.v2-d-school-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.v2-d-school-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #eef5fb;
+  color: #2563eb;
+  border: 1px solid #c7ddf2;
+  border-radius: 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 /* 觸控裝置不沿用 :hover (避免 tap 後 hover sticky 把選中字蓋黑)；
    :hover 比 --active 特異度高 → 用 @media (hover: hover) 限定真 hover 環境才適用。
    再加一條 --active:hover 兜底，確保即便有 hover 環境，選中態也維持白字 */
