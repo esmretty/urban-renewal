@@ -2798,14 +2798,10 @@
     }
   }
 
-  // 路名 / 學區語音輸入 — MediaRecorder 錄音 + 後端 Whisper STT
-  // 流程：點 mic → MediaRecorder 開始錄音、icon 變 ⏹ → 點 ⏹ → MediaRecorder.stop()
-  //   + getTracks().stop()（保證 iOS mic indicator 立即關閉）→ 上傳 blob 到 /api/stt
-  //   → Whisper 回 transcript → 寫進 input。
-  // 跟舊 webkitSpeechRecognition 對比：MediaRecorder 可顯式停 stream tracks，
-  // iOS Safari OS 層 mic 會立刻 release，沒 retain bug。代價：辨識需打後端 Whisper API。
+  // 路名 / 學區語音輸入 — webkitSpeechRecognition (auto-end on speech pause)
+  // 點 mic → 開始辨識 → 偵測到 silence 後自動 end → 把 final transcript 寫入 input
+  // iOS WKWebView 的 OS 層 mic indicator 釋放有延遲是 known limitation，這版不處理。
   function _showVoiceStatus(text, kind) {
-    // kind: 'listening' | 'error' | 'success' | ''
     let host = $('#v2-voice-banner');
     if (!host) {
       host = document.createElement('div');
@@ -2819,147 +2815,80 @@
       setTimeout(() => { if (host.textContent === text) host.style.display = 'none'; }, 3000);
     }
   }
-  let _mediaRec = null;
-  let _mediaStream = null;
-  let _audioChunks = [];
-  let _activeBtnId = null;
-  let _activeInputId = null;
+  const _VOICE_ERR_TXT = {
+    'no-speech': '沒偵測到語音 — 請靠近麥克風再試一次',
+    'audio-capture': '麥克風無法使用 — 請檢查裝置麥克風',
+    'not-allowed': '瀏覽器拒絕麥克風權限 — 請在設定→Safari/Chrome 開啟麥克風',
+    'service-not-allowed': '系統拒絕語音服務 — 改用其他瀏覽器試試',
+    'network': '語音辨識需要網路連線',
+    'language-not-supported': '不支援中文辨識',
+    'aborted': '語音辨識被取消',
+  };
 
-  function _setMicBtnRecording(btnId, recording) {
+  function _startVoice(inputId, btnId) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const inp = $('#' + inputId);
     const btn = $('#' + btnId);
-    if (!btn) return;
-    if (recording) {
-      btn.classList.add('v2-road-mic--active');
-      btn.textContent = '⏹';
-      btn.setAttribute('title', '結束錄音並辨識');
-      btn.setAttribute('aria-label', '結束錄音並辨識');
-    } else {
-      btn.classList.remove('v2-road-mic--active');
-      btn.textContent = '🎤';
-      btn.setAttribute('title', '語音輸入');
-      btn.setAttribute('aria-label', '語音輸入');
-    }
-  }
-
-  function _releaseMediaStream() {
-    if (_mediaStream) {
-      try { _mediaStream.getTracks().forEach(t => { try { t.stop(); } catch (_e) {} }); } catch (_e) {}
-      _mediaStream = null;
-    }
-  }
-
-  async function _voiceStart(inputId, btnId) {
-    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-      _showVoiceStatus('此瀏覽器不支援錄音功能', 'error');
+    if (!SR) {
+      _showVoiceStatus('此瀏覽器不支援語音輸入。Chrome 或 iOS Safari 較新版本才支援', 'error');
       return;
     }
+    if (!inp) return;
     if (!window.isSecureContext) {
       _showVoiceStatus('語音輸入只能在 HTTPS 環境用', 'error');
       return;
     }
-    try {
-      _mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (e) {
-      _showVoiceStatus('麥克風權限被拒絕 — 請在設定中開啟', 'error');
-      return;
-    }
-    // 選最相容格式：Chrome/Android 偏 webm/opus；iOS Safari 用 mp4/aac
-    let mimeType = '';
-    for (const t of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/aac', 'audio/ogg']) {
-      try { if (MediaRecorder.isTypeSupported(t)) { mimeType = t; break; } } catch (_e) {}
-    }
-    _audioChunks = [];
-    try {
-      _mediaRec = mimeType ? new MediaRecorder(_mediaStream, { mimeType }) : new MediaRecorder(_mediaStream);
-    } catch (e) {
-      _showVoiceStatus('錄音器啟動失敗：' + (e.message || e), 'error');
-      _releaseMediaStream();
-      return;
-    }
-    _activeBtnId = btnId;
-    _activeInputId = inputId;
-    _mediaRec.ondataavailable = (ev) => { if (ev.data && ev.data.size > 0) _audioChunks.push(ev.data); };
-    _mediaRec.onstop = () => _voiceUpload();
-    _mediaRec.onerror = (ev) => {
-      _showVoiceStatus('錄音錯誤：' + (ev.error?.name || 'unknown'), 'error');
-      _releaseMediaStream();
-      _setMicBtnRecording(btnId, false);
-      _mediaRec = null;
-    };
-    _mediaRec.start();
-    _setMicBtnRecording(btnId, true);
-    _showVoiceStatus('🎤 錄音中（點 ⏹ 結束辨識）', 'listening');
-  }
-
-  async function _voiceUpload() {
-    const btnId = _activeBtnId;
-    const inputId = _activeInputId;
-    const mimeType = _mediaRec?.mimeType || 'audio/webm';
-    const blob = new Blob(_audioChunks, { type: mimeType });
-    _audioChunks = [];
-    _releaseMediaStream();   // 立即 release stream → iOS mic indicator 立刻關閉
-    _mediaRec = null;
-    _setMicBtnRecording(btnId, false);
-    _activeBtnId = null;
-    _activeInputId = null;
-    if (blob.size < 200) {
-      _showVoiceStatus('沒錄到聲音，再試一次', 'error');
-      return;
-    }
-    _showVoiceStatus('🔄 辨識中…', 'listening');
-    try {
-      const ext = (mimeType.split('/')[1] || 'webm').split(';')[0];
-      const fd = new FormData();
-      fd.append('file', blob, `recording.${ext}`);
-      const r = await fetch('/api/stt', { method: 'POST', body: fd });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        _showVoiceStatus(data?.error || `辨識失敗 (${r.status})`, 'error');
-        return;
+    const rec = new SR();
+    rec.lang = 'zh-TW';
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    rec.continuous = false;
+    if (btn) btn.classList.add('v2-road-mic--active');
+    let gotAnyResult = false;
+    rec.onaudiostart = () => _showVoiceStatus('🎤 麥克風已開啟，請說話…', 'listening');
+    rec.onspeechstart = () => _showVoiceStatus('🎙 偵測到聲音，繼續說…', 'listening');
+    rec.onresult = (e) => {
+      let interim = '', final = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const tr = e.results[i][0].transcript || '';
+        if (e.results[i].isFinal) final += tr;
+        else interim += tr;
       }
-      const text = (data.transcript || '').trim().replace(/\s+/g, '').replace(/[。.]$/, '');
-      if (!text) {
-        _showVoiceStatus('未辨識出文字', 'error');
-        return;
+      if (interim) {
+        gotAnyResult = true;
+        _showVoiceStatus('辨識中：' + interim, 'listening');
       }
-      const inp = $('#' + inputId);
-      if (inp) {
+      if (final) {
+        gotAnyResult = true;
+        const text = final.trim().replace(/\s+/g, '').replace(/。$/, '');
         inp.value = text;
         inp.dispatchEvent(new Event('input', { bubbles: true }));
+        _showVoiceStatus('✓ 已輸入：' + text, 'success');
       }
-      _showVoiceStatus('✓ 已輸入：' + text, 'success');
+    };
+    rec.onnomatch = () => _showVoiceStatus('沒辨識出內容，再試一次', 'error');
+    rec.onerror = (ev) => {
+      _showVoiceStatus(_VOICE_ERR_TXT[ev.error] || ('語音辨識錯誤：' + ev.error), 'error');
+      if (btn) btn.classList.remove('v2-road-mic--active');
+    };
+    rec.onend = () => {
+      if (btn) btn.classList.remove('v2-road-mic--active');
+      if (!gotAnyResult) {
+        const host = $('#v2-voice-banner');
+        if (!host || host.className.indexOf('--error') < 0) {
+          _showVoiceStatus('未偵測到語音，請靠近麥克風再試一次', 'error');
+        }
+      }
+    };
+    try {
+      rec.start();
     } catch (e) {
-      _showVoiceStatus('上傳失敗：' + (e.message || e), 'error');
+      _showVoiceStatus('語音啟動失敗：' + (e.message || e), 'error');
+      if (btn) btn.classList.remove('v2-road-mic--active');
     }
   }
-
-  function _voiceStop() {
-    if (_mediaRec && _mediaRec.state === 'recording') {
-      try { _mediaRec.stop(); } catch (_e) {
-        // stop 失敗就直接強制 release
-        _releaseMediaStream();
-        _setMicBtnRecording(_activeBtnId, false);
-        _mediaRec = null;
-        _activeBtnId = null;
-        _activeInputId = null;
-      }
-    }
-  }
-
-  // 切走 tab / app / 進背景 → 強制結束（會 trigger upload 流程跟釋放 mic）
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && _mediaRec) _voiceStop();
-  });
-  window.addEventListener('pagehide', () => { if (_mediaRec) _voiceStop(); });
-
-  function toggleVoiceRoad() {
-    if (_mediaRec) _voiceStop();
-    else _voiceStart('v2-road', 'v2-road-mic');
-  }
-  function toggleVoiceSchool() {
-    if (_mediaRec) _voiceStop();
-    else _voiceStart('v2-school', 'v2-school-mic');
-  }
+  function startVoiceRoad() { _startVoice('v2-road', 'v2-road-mic'); }
+  function startVoiceSchool() { _startVoice('v2-school', 'v2-school-mic'); }
 
   // ── Boot ─────────────────────────────────────────────────────────────────
   async function boot() {
@@ -3088,8 +3017,8 @@
     saveOverride, saveInferredChoice, setZonePing,
     openRoadOverlay, scanRoadWidth, deleteRow,
     hardReload,
-    toggleVoiceRoad,
-    toggleVoiceSchool,
+    startVoiceRoad,
+    startVoiceSchool,
     capInput,
   };
 

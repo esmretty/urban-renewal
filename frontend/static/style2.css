@@ -3290,21 +3290,22 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
 .v2-filter-group--inline-tight { margin-top: -10px; }
 /* 建單價/地單價 行緊貼總價 group */
 .v2-filter-group--num-tight { margin-top: -8px; }
-/* 行政區 hr 拉滿 sidebar 全寬：title + first-child col 都用 width 加大 + 負 margin
-   突破 sidebar inner padding (12px each side)；border-bottom 自然延伸到 sidebar 邊。
-   box-sizing: border-box 讓 padding 內縮，content 對齊原位置不會被推走。 */
+/* 行政區 hr 拉滿 sidebar 全寬：用兩側對稱負 margin (-12px) + 同尺寸 padding，
+   讓 title/col 的 outer box 兩邊各延伸 12px，border-bottom 自然 cover sidebar 全寬。
+   (之前用 width: calc(100%+24px) 在 grid item 上行為不一致；負 margin 是 well-tested
+   做法，CSS spec 明定 width:auto + 負 margin 會撐大 item) */
 #v2-district-chips .v2-city-col__title {
-  width: calc(100% + 24px);
-  margin-left: -12px;
-  padding-left: 12px;
-  padding-right: 12px;
+  margin-left: -12px !important;
+  margin-right: -12px !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
   box-sizing: border-box;
 }
 #v2-district-chips .v2-city-grid .v2-city-col:first-child {
-  width: calc(100% + 24px);
-  margin-left: -12px;
-  padding-left: 12px;
-  padding-right: 12px;
+  margin-left: -12px !important;
+  margin-right: -12px !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
   box-sizing: border-box;
 }
 /* 語音輸入按鈕：桌面隱藏，只在手機顯示 (語音輸入是手機場景) */

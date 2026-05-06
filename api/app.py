@@ -15,8 +15,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from typing import Optional, AsyncGenerator, List
 
-from fastapi import FastAPI, Query, HTTPException, Depends, Response, Request, UploadFile, File
-from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
+from fastapi import FastAPI, Query, HTTPException, Depends, Response, Request
+from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import os
 
@@ -3416,56 +3416,6 @@ async def set_filter_prefs(body: FilterPrefsReq, user: dict = Depends(get_curren
         logger.warning(f"set_filter_prefs failed uid={uid}: {e}")
         raise HTTPException(500, "filter_prefs save failed")
     return {"status": "ok"}
-
-
-# ── 語音輸入 STT ────────────────────────────────────────────────────────────
-# 前端用 MediaRecorder 錄音，停止後 POST 音檔到這裡，由 OpenAI Whisper 辨識回字串。
-# 為什麼用 OpenAI Whisper：iOS Safari MediaRecorder 預設輸出 audio/mp4 (AAC)，
-# Google Cloud Speech v1 不支援 mp4 直接餵入；Whisper API 自動辨識多種格式
-# (webm/mp4/m4a/mp3/wav/...)，中文表現也好。需要 server .env 設 OPENAI_API_KEY。
-@app.post("/api/stt")
-async def api_stt(
-    file: UploadFile = File(...),
-    user: dict = Depends(get_current_user),
-):
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        return JSONResponse(
-            status_code=503,
-            content={"transcript": "", "error": "語音辨識服務尚未設定（請聯絡管理者）"},
-        )
-    audio_bytes = await file.read()
-    if not audio_bytes or len(audio_bytes) < 200:
-        return JSONResponse(
-            status_code=400,
-            content={"transcript": "", "error": "音檔太短或空白"},
-        )
-    fname = file.filename or "audio.webm"
-    ctype = file.content_type or "audio/webm"
-    import httpx as _httpx
-    try:
-        async with _httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(
-                "https://api.openai.com/v1/audio/transcriptions",
-                headers={"Authorization": f"Bearer {api_key}"},
-                files={"file": (fname, audio_bytes, ctype)},
-                data={"model": "whisper-1", "language": "zh"},
-            )
-        if r.status_code != 200:
-            logger.warning(f"[stt] Whisper HTTP {r.status_code}: {r.text[:200]}")
-            return JSONResponse(
-                status_code=502,
-                content={"transcript": "", "error": f"辨識服務回應 {r.status_code}"},
-            )
-        data = r.json()
-        text = (data.get("text") or "").strip()
-        return {"transcript": text}
-    except Exception as e:
-        logger.exception("STT failed")
-        return JSONResponse(
-            status_code=500,
-            content={"transcript": "", "error": f"辨識失敗：{e}"},
-        )
 
 
 class WatchlistAddReq(BaseModel):
