@@ -1079,8 +1079,17 @@ def analyze_single_property(
             )
             zone_list = z.get("zone_list")
             # 物件座標跨多塊 polygon（如「住宅區+商業區」）→ zoning 顯示成「住宅區、商業區」全列出
+            # zone_list 來自 query_zoning_taipei = list of dict（含 zone_code/zone_name/...），
+            # 永慶 multi（line 1099 yc_multi）= list of string；兩種都要處理。
             if zone_list and len(zone_list) > 1:
-                zoning_display = "、".join(zone_list)
+                _names = []
+                for zd in zone_list:
+                    if isinstance(zd, dict):
+                        _names.append(zd.get("zone_name") or zd.get("zone_label") or "")
+                    elif isinstance(zd, str):
+                        _names.append(zd)
+                _names = [n for n in _names if n]
+                zoning_display = "、".join(_names) if _names else z["zoning"]
             else:
                 zoning_display = z["zoning"]
             doc_data.update({
