@@ -691,11 +691,8 @@
             <span class="v2-card__district">${esc(p.district || '')}</span><span class="v2-card__sep" aria-hidden="true"></span>${esc(addr)}
           </span>
           <span class="v2-card__price-block">
-            <span class="v2-card__price-line">
-              <span class="v2-card__price">${priceWan ? fmt0(priceWan) : '—'}<small>萬</small></span>
-              ${(p.lvr_records && p.lvr_records.length) ? `<span class="v2-lvr-icon v2-lvr-icon--sm" onmouseenter="v2.showLvrPopup(event, '${esc(id)}')" onmouseleave="v2.hideLvrPopup()" onclick="event.stopPropagation()">實</span>` : ''}
-            </span>
-            ${perBld ? `<span class="v2-card__price-per">${perBld}/建</span>` : ''}
+            <span class="v2-card__price">${priceWan ? fmt0(priceWan) : '—'}<small>萬</small></span>
+            ${(p.lvr_records && p.lvr_records.length) ? `<span class="v2-lvr-icon v2-lvr-icon--sm" onmouseenter="v2.showLvrPopup(event, '${esc(id)}')" onmouseleave="v2.hideLvrPopup()" onclick="event.stopPropagation()">實</span>` : ''}
           </span>
           <span class="${multCls}" title="都更倍數">
             ${mult != null ? mult.toFixed(1) : '—'}<small>×</small>
@@ -708,7 +705,10 @@
                 </svg>
               </button>`}
         </div>
-        ${p.title ? `<div class="v2-card__title-sub" title="${esc(p.title)}">${esc(p.title)}</div>` : ''}
+        ${(p.title || perBld) ? `<div class="v2-card__sub-row">
+          <span class="v2-card__title-sub" title="${esc(p.title || '')}">${esc(p.title || '')}</span>
+          ${perBld ? `<span class="v2-card__price-per">${perBld}/建</span>` : ''}
+        </div>` : ''}
         <div class="v2-card__line2">
           <span class="v2-stat" title="建坪"><b>建</b>${fmt1(p.building_area_ping)}</span>
           <span class="v2-stat" title="地坪 (原土地分區縮寫)"><b>地</b>${fmt1(p.land_area_ping)}${(p.zoning_original || p.zoning) ? ` <span class="v2-stat__zone">(${esc(zoneAbbr(p.zoning_original || p.zoning))})</span>` : ''}</span>
