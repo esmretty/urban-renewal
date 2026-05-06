@@ -271,15 +271,22 @@
 
       <div class="v2-filter-group">
         <label class="v2-filter-label">路名</label>
-        <input class="v2-input" type="text" id="v2-road" placeholder="輸入路名搜尋" oninput="v2.applyFilters()">
+        <div class="v2-road-input-wrap">
+          <input class="v2-input" type="text" id="v2-road" placeholder="輸入路名搜尋" oninput="v2.applyFilters()">
+          <button type="button" class="v2-road-mic" id="v2-road-mic" onclick="v2.startVoiceRoad()" aria-label="語音輸入路名" title="語音輸入">🎤</button>
+        </div>
       </div>
 
       <div class="v2-filter-group">
         <label class="v2-filter-label">總價（萬）</label>
         <div class="v2-range">
-          <input class="v2-input v2-input--num" type="number" id="v2-price-min" min="0" step="100" value="0" oninput="v2.applyFilters()">
+          <input class="v2-input v2-input--num" type="number" id="v2-price-min" min="0" step="100" value="0"
+                 data-slider-max="10000" data-slider-label="總價最低" data-slider-suffix="萬"
+                 oninput="v2.applyFilters()">
           <span class="v2-range__sep">–</span>
-          <input class="v2-input v2-input--num" type="number" id="v2-price-max" min="0" step="100" value="5000" oninput="v2.applyFilters()">
+          <input class="v2-input v2-input--num" type="number" id="v2-price-max" min="0" step="100" value="5000"
+                 data-slider-max="10000" data-slider-label="總價最高" data-slider-suffix="萬"
+                 oninput="v2.applyFilters()">
         </div>
       </div>
 
@@ -301,16 +308,22 @@
         <!-- 第 1 列：建單價 + 地單價 並排 -->
         <div class="v2-num-row v2-num-row--compact v2-num-row--pair">
           <span class="v2-num-row__label">建&lt;</span>
-          <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-bld-price-max" min="0" step="5" value="300" oninput="v2.applyFilters()">
+          <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-bld-price-max" min="0" step="5" value="300"
+                 data-slider-max="500" data-slider-label="建坪單價≤" data-slider-suffix="萬/坪"
+                 oninput="v2.applyFilters()">
           <span class="v2-num-row__sep"></span>
           <span class="v2-num-row__label">地&lt;</span>
-          <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-land-price-max" min="0" step="10" value="600" oninput="v2.applyFilters()">
+          <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-land-price-max" min="0" step="10" value="600"
+                 data-slider-max="1000" data-slider-label="地坪單價≤" data-slider-suffix="萬/坪"
+                 oninput="v2.applyFilters()">
           <span class="v2-num-row__suffix">萬/坪</span>
         </div>
         <!-- 第 2 列：地坪 ≥ (input 正常大小) -->
         <div class="v2-num-row v2-num-row--compact">
           <span class="v2-num-row__label">地坪≥</span>
-          <input class="v2-input v2-input--num" type="number" id="v2-land-min" min="0" step="1" value="0" oninput="v2.applyFilters()">
+          <input class="v2-input v2-input--num" type="number" id="v2-land-min" min="0" step="1" value="0"
+                 data-slider-max="50" data-slider-label="地坪≥" data-slider-suffix="坪"
+                 oninput="v2.applyFilters()">
           <span class="v2-num-row__suffix">坪</span>
         </div>
       </div>
@@ -335,7 +348,9 @@
             <input type="checkbox" id="v2-min-mult-on" onchange="v2.applySort()">
             <span>僅顯示獲利倍數</span>
           </label>
-          <input class="v2-input v2-input--num" type="number" id="v2-min-mult-val" min="0" step="0.1" value="3.0" oninput="v2.applySort()">
+          <input class="v2-input v2-input--num" type="number" id="v2-min-mult-val" min="0" step="0.1" value="3.0"
+                 data-slider-max="5" data-slider-label="獲利倍數≥" data-slider-suffix="倍"
+                 oninput="v2.applySort()">
           <span class="v2-num-row__suffix">倍以上</span>
         </div>
       </div>

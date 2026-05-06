@@ -2528,6 +2528,81 @@
     return new Promise(resolve => document.addEventListener('auth:ready', resolve, { once: true }));
   }
 
+  // 手機 sidebar 把 number input 換成 slider — 桌面保留 number input。
+  // 條件：input 有 data-slider-max attr 才 enhance（避免動到地址分析卡的精確輸入）。
+  function _enhanceSlidersForMobile() {
+    if (!window.matchMedia('(max-width: 1024px)').matches) return;
+    document.querySelectorAll('.v2-sidebar input.v2-input--num[type="number"]').forEach(inp => {
+      if (inp.dataset.sliderEnhanced) return;
+      const max = inp.dataset.sliderMax;
+      if (!max) return;
+      inp.dataset.sliderEnhanced = '1';
+      const wrap = document.createElement('div');
+      wrap.className = 'v2-mobile-slider-wrap';
+      const label = document.createElement('div');
+      label.className = 'v2-mobile-slider-label';
+      const labelText = inp.dataset.sliderLabel || '';
+      const suffix = inp.dataset.sliderSuffix || '';
+      label.innerHTML =
+        `<span class="v2-mobile-slider-label__txt">${labelText}</span>` +
+        `<span class="v2-mobile-slider-label__val">${inp.value}</span>` +
+        `<span class="v2-mobile-slider-label__suffix">${suffix}</span>`;
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.className = 'v2-mobile-slider';
+      slider.min = inp.min || 0;
+      slider.max = max;
+      slider.step = inp.step || 1;
+      slider.value = inp.value;
+      const valSpan = label.querySelector('.v2-mobile-slider-label__val');
+      slider.addEventListener('input', () => {
+        if (inp.value !== slider.value) {
+          inp.value = slider.value;
+          valSpan.textContent = slider.value;
+          inp.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      });
+      inp.addEventListener('input', () => {
+        if (slider.value !== inp.value) {
+          slider.value = inp.value;
+          valSpan.textContent = inp.value;
+        }
+      });
+      wrap.appendChild(label);
+      wrap.appendChild(slider);
+      inp.parentNode.insertBefore(wrap, inp.nextSibling);
+    });
+  }
+
+  // 路名語音輸入 — webkitSpeechRecognition
+  function startVoiceRoad() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const inp = $('#v2-road');
+    const btn = $('#v2-road-mic');
+    if (!SR) {
+      alert('此瀏覽器不支援語音輸入，請改用 Chrome / Safari');
+      return;
+    }
+    if (!inp) return;
+    const rec = new SR();
+    rec.lang = 'zh-TW';
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    if (btn) btn.classList.add('v2-road-mic--active');
+    rec.onresult = (e) => {
+      const text = (e.results[0][0].transcript || '').trim()
+        .replace(/\s+/g, '').replace(/。$/, '');
+      inp.value = text;
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    rec.onerror = (ev) => {
+      console.warn('voice rec error:', ev.error);
+      if (btn) btn.classList.remove('v2-road-mic--active');
+    };
+    rec.onend = () => { if (btn) btn.classList.remove('v2-road-mic--active'); };
+    try { rec.start(); } catch (_e) { /* already running */ }
+  }
+
   // ── Boot ─────────────────────────────────────────────────────────────────
   async function boot() {
     window.__perfMark && window.__perfMark('app2_boot_start');
@@ -2538,6 +2613,8 @@
     Object.entries(V1_DISTRICTS).forEach(([city, cfg]) => {
       cfg.enabled.forEach(d => state.districtPicks.add(`${city}|${d}`));
     });
+    // 手機把 sidebar number input 包成 slider（dom 寫死的，立刻可 enhance）
+    _enhanceSlidersForMobile();
     // 還原上次 filter 偏好：_filterKey() 用 currentUser.uid 做 key，必須等 auth ready
     // 才能讀到正確 uid 的儲存值（auth_gate 之前 uid 是 'anon' → 拿不到）。
     // 為了不擋 data fetch，這裡把 restore 排到 auth_ready 後背景跑；ready 後若資料已載完
@@ -2655,6 +2732,7 @@
     saveOverride, saveInferredChoice, setZonePing,
     openRoadOverlay, scanRoadWidth, deleteRow,
     hardReload,
+    startVoiceRoad,
   };
 
   // Boot
