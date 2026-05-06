@@ -816,23 +816,23 @@ a { color: inherit; text-decoration: none; }
   gap: 4px;
   overflow: hidden;   /* 給 NEW corner ribbon 用：旋轉斜貼超出邊界自然被切 */
 }
-/* NEW 緞帶 — 右下角斜貼 45° 紅色 ribbon */
+/* NEW 緞帶 — 左上角斜貼 ribbon，往外退避免擋住卡片內容 */
 .v2-card__corner-new {
   position: absolute;
-  bottom: 14px;
-  right: -34px;
-  width: 110px;
-  background: #c0392b;
+  top: 8px;
+  left: -28px;
+  width: 84px;
+  background: #a16b3a;          /* 溫暖焦糖色（質感溫和、不鮮紅） */
   color: #fff;
   text-align: center;
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 700;
-  letter-spacing: 1.5px;
-  padding: 2px 0;
-  transform: rotate(-45deg);
+  letter-spacing: 1.2px;
+  padding: 1px 0;
+  transform: rotate(-45deg);    /* 左上角斜向左下→右上 */
   transform-origin: center;
   pointer-events: none;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.18);
   z-index: 3;
 }
 .v2-card:hover {
