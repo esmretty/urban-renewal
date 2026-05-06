@@ -2482,33 +2482,6 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
 }
 /* 容積獎勵改 column 排列後，每行 slider 寬度跟其他欄位一致（不再縮窄） */
 
-/* ── 新成屋房價 ＋／－ 按鈕（mobile 才顯示）──
- * PC 用 input number 上下箭頭已夠；mobile 觸控不易，加圓形按鈕 ±5
- */
-.v2-rv2-price-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.v2-rv2-price-bump {
-  display: none;            /* PC 預設隱藏 */
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: none;
-  font-size: 14px;
-  font-weight: 700;
-  color: #fff;
-  cursor: pointer;
-  padding: 0;
-  line-height: 1;
-  flex-shrink: 0;
-}
-.v2-rv2-price-bump--plus { background: #16a34a; }
-.v2-rv2-price-bump--plus:hover { background: #15803d; }
-.v2-rv2-price-bump--minus { background: #dc2626; }
-.v2-rv2-price-bump--minus:hover { background: #b91c1c; }
-.v2-rv2-price-bump:active { transform: scale(0.92); }
 
 .v2-rv2-parking {
   display: inline-flex;
@@ -3091,8 +3064,6 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   .v2-detail-image { max-height: 240px; }
   .v2-d-header { flex-direction: column; gap: 8px; }
   .v2-d-sources-bar { width: 100%; }
-  /* mobile 才顯示新成屋房價 ＋／－ 按鈕 (touch device 操作較易) */
-  .v2-rv2-price-bump { display: inline-flex; align-items: center; justify-content: center; }
 }
 @media (max-width: 640px) {
   .v2-d-row { gap: 8px; margin-bottom: 8px; }

@@ -1775,13 +1775,11 @@
               <span class="v2-rv2-lbl">新成屋房價<span class="v2-rv2-lbl-unit">(萬/坪)</span></span>
               <span class="v2-rv2-val">
                 <span class="v2-rv2-note">${p.new_house_price_wan_override ? '(已覆寫)' : '(此為區域平均單價，您可自行調整)'}</span>
-                <span class="v2-rv2-price-wrap">
-                  <button type="button" class="v2-rv2-price-bump v2-rv2-price-bump--minus" aria-label="減 5"
-                    onclick="v2.bumpPrice(this, '${esc(id)}', -5)">－</button>
-                  <input type="number" class="v2-rv2-edit" step="5" value="${newPrice}"
+                <span class="v2-rv2-slider">
+                  <input type="range" class="v2-rv2-range" min="0" max="250" step="1" value="${Math.round(newPrice)}"
+                    oninput="this.nextElementSibling.textContent=this.value"
                     onchange="v2.saveOverride('${esc(id)}','new_house_price_wan_override',this.value)">
-                  <button type="button" class="v2-rv2-price-bump v2-rv2-price-bump--plus" aria-label="加 5"
-                    onclick="v2.bumpPrice(this, '${esc(id)}', 5)">＋</button>
+                  <span class="v2-rv2-slider-val">${Math.round(newPrice)}</span>
                 </span>
               </span>
             </div>
@@ -1876,18 +1874,6 @@
   // v1: input 永遠 editable，save 永遠 POST。POST 寫到 user 的 watchlist 子文件，
   //     不在 watchlist 就設 _ephemeral_edit_made flag。
   // closeDetail 時 if flag && !inWatchlist → toast 「沒有自動儲存」警示
-  // 新成屋房價 ＋／－ 按鈕 helper (mobile 用：點按鈕 ±5 萬，存進 DB)
-  function bumpPrice(btn, id, delta) {
-    const wrap = btn.closest('.v2-rv2-price-wrap');
-    if (!wrap) return;
-    const input = wrap.querySelector('input.v2-rv2-edit');
-    if (!input) return;
-    const cur = parseFloat(input.value) || 0;
-    const next = Math.max(0, Math.round((cur + delta) / 5) * 5);
-    input.value = next;
-    saveOverride(id, 'new_house_price_wan_override', next);
-  }
-
   async function saveOverride(id, field, value) {
     const p = state.allProperties.find(x => (x.source_id || x.id) === id);
     if (!p) return;
@@ -3118,7 +3104,7 @@
     triggerScrapeUrl, triggerManualAnalyze, populateManualDistricts,
     switchGridCity,
     showLvrPopup, hideLvrPopup,
-    saveOverride, saveInferredChoice, setZonePing, bumpPrice,
+    saveOverride, saveInferredChoice, setZonePing,
     // 給 map_mode.js (獨立檔) 用：state、helpers，map_mode.js 透過 window.v2 取
     state, getDistrictPrices, _saveFilters,
     openRoadOverlay, scanRoadWidth, deleteRow,
