@@ -444,10 +444,10 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   align-items: baseline;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;        /* row 不換行 — toggle 跟 slider wrap 永遠同 row */
 }
 .v2-min-mult-row .v2-toggle--inline {
-  flex: 0 0 auto;        /* checkbox 大小 */
+  flex: 0 0 auto;
   min-width: 0;
   font-size: 12px;
 }
@@ -460,9 +460,12 @@ a { color: inherit; text-decoration: none; }
   color: var(--c-text-muted);
   flex-shrink: 0;
 }
-/* slider wrap 跟 toggle 同 row，wrap 內 label 在第 1 行接 toggle 後，slider 換新行 */
+/* slider wrap 跟 toggle 同 row：
+   - min-width:0 讓 wrap 可以縮小，避免被 slider element 預設 min-width 撐爆把整個 wrap 推到下一行
+   - wrap 內：label flex 1 在第 1 行接 toggle 後；slider flex 0 0 100% 換到 wrap 第 2 行 */
 .v2-min-mult-row .v2-mobile-slider-wrap {
   flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 4px 8px;
@@ -471,10 +474,12 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-min-mult-row .v2-mobile-slider-wrap .v2-mobile-slider-label {
   flex: 1 1 auto;
+  min-width: 0;
   margin-bottom: 0;
 }
 .v2-min-mult-row .v2-mobile-slider-wrap .v2-mobile-slider {
   flex: 0 0 100%;
+  min-width: 0;
   margin-top: 2px;
 }
 
