@@ -39,7 +39,7 @@
     "新北市": {
       enabled:  ["新店區", "永和區", "中和區", "板橋區"],
       disabled: [],
-      labels:   { "新店區": "新店(市區)", "永和區": "永和", "中和區": "中和", "板橋區": "板橋(市區)" },
+      labels:   { "新店區": "新店", "永和區": "永和", "中和區": "中和", "板橋區": "板橋" },
     },
   };
 
@@ -87,6 +87,7 @@
   function _collectFilterObj() {
     return {
       road: $('#v2-road')?.value || '',
+      school: $('#v2-school')?.value || '',
       dists: Array.from(state.districtPicks),
       btypes: $$('.v2-filter-btype:not(:disabled)').filter(c => c.checked).map(c => c.value),
       floors: $$('#v2-floor-chips input[data-floor]').filter(c => c.checked).map(c => c.value),
@@ -184,6 +185,7 @@
       if (el && typeof v === 'boolean') el.checked = v;
     };
     setVal('v2-road', obj.road);
+    setVal('v2-school', obj.school);
     setVal('v2-price-min', obj.pmin);
     setVal('v2-price-max', obj.pmax);
     setVal('v2-bld-price-max', obj.maxBld);
@@ -898,6 +900,23 @@
     const road = ($('#v2-road')?.value || '').trim();
     if (road) {
       list = list.filter(p => (p.address || '').includes(road));
+    }
+    // school：比對 doc 上的 school_elementary / school_junior_high 學區清單
+    // 若 list 內完全沒 doc 帶 school 欄位 → 學區資料尚未 backfill，filter 視為 no-op
+    // (避免 user 設了 filter 卻 0 結果)
+    const school = ($('#v2-school')?.value || '').trim();
+    if (school) {
+      const anyHasSchool = list.some(p =>
+        (Array.isArray(p.school_elementary) && p.school_elementary.length) ||
+        (Array.isArray(p.school_junior_high) && p.school_junior_high.length)
+      );
+      if (anyHasSchool) {
+        list = list.filter(p => {
+          const es = (p.school_elementary || []).join(' ');
+          const jh = (p.school_junior_high || []).join(' ');
+          return es.includes(school) || jh.includes(school);
+        });
+      }
     }
     // price range
     const pmin = Number($('#v2-price-min')?.value) || 0;
@@ -2614,6 +2633,7 @@
       cfg.enabled.forEach(d => state.districtPicks.add(`${city}|${d}`));
     });
     $('#v2-road').value = '';
+    $('#v2-school') && ($('#v2-school').value = '');
     $('#v2-price-min').value = 0;
     $('#v2-price-max').value = 5000;
     $('#v2-bld-price-max').value = 300;
@@ -2806,10 +2826,29 @@
     'language-not-supported': '不支援中文辨識',
     'aborted': '語音辨識被取消',
   };
-  function startVoiceRoad() {
+  // module-scope active recognition — visibilitychange / pagehide 用來強制 release mic
+  // iOS Safari 的 webkitSpeechRecognition 即使 .stop() 之後 OS 層 mic indicator 仍會持續顯示
+  // 直到 SR 物件被 GC 或主動 abort()。所以結束時必須 abort + nullify reference。
+  let _activeRec = null;
+  function _killActiveVoice() {
+    if (!_activeRec) return;
+    try { _activeRec.abort(); } catch (_e) {}
+    _activeRec = null;
+  }
+  // 切走 tab / app / 進背景 → 強制 release mic（不等 onend）
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') _killActiveVoice();
+  });
+  window.addEventListener('pagehide', _killActiveVoice);
+  window.addEventListener('blur', () => {
+    // mobile: blur 通常代表 user 切走 app；iOS WKWebView 收得到
+    if (_activeRec) _killActiveVoice();
+  });
+
+  function _startVoice(inputId, btnId) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const inp = $('#v2-road');
-    const btn = $('#v2-road-mic');
+    const inp = $('#' + inputId);
+    const btn = $('#' + btnId);
     if (!SR) {
       _showVoiceStatus('此瀏覽器不支援語音輸入。Chrome 或 iOS Safari 較新版本才支援', 'error');
       return;
@@ -2819,7 +2858,10 @@
       _showVoiceStatus('語音輸入只能在 HTTPS 環境用', 'error');
       return;
     }
+    // 已有 active session 先 kill 再啟新的，避免兩個 SR 物件同時抓 mic
+    _killActiveVoice();
     const rec = new SR();
+    _activeRec = rec;
     rec.lang = 'zh-TW';
     rec.interimResults = true;     // 邊講邊顯示，方便確認 mic 有抓到
     rec.maxAlternatives = 1;
@@ -2858,11 +2900,16 @@
     rec.onend = () => {
       if (btn) btn.classList.remove('v2-road-mic--active');
       if (!gotAnyResult) {
-        // 沒任何結果且也沒 error 觸發 → 通常 mic 抓不到聲音
         const host = $('#v2-voice-banner');
         if (!host || host.className.indexOf('--error') < 0) {
           _showVoiceStatus('未偵測到語音，請靠近麥克風再試一次', 'error');
         }
+      }
+      // 主動 abort + 清掉 reference 讓 OS 層 mic indicator 立刻收掉
+      // (iOS 上 .stop() 走完不夠 — 必須 abort + 釋放 SR 物件才會 release mic)
+      if (_activeRec === rec) {
+        try { rec.abort(); } catch (_e) {}
+        _activeRec = null;
       }
     };
     try {
@@ -2870,8 +2917,11 @@
     } catch (e) {
       _showVoiceStatus('語音啟動失敗：' + (e.message || e), 'error');
       if (btn) btn.classList.remove('v2-road-mic--active');
+      _activeRec = null;
     }
   }
+  function startVoiceRoad() { _startVoice('v2-road', 'v2-road-mic'); }
+  function startVoiceSchool() { _startVoice('v2-school', 'v2-school-mic'); }
 
   // ── Boot ─────────────────────────────────────────────────────────────────
   async function boot() {
@@ -3001,6 +3051,7 @@
     openRoadOverlay, scanRoadWidth, deleteRow,
     hardReload,
     startVoiceRoad,
+    startVoiceSchool,
     capInput,
   };
 

@@ -3254,6 +3254,21 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
 }
 .v2-road-input-wrap { display: flex; gap: 6px; align-items: center; }
 .v2-road-input-wrap input { flex: 1; min-width: 0; }
+/* 路名 / 學區：label + input + mic 同一列不換行 */
+.v2-filter-group--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+.v2-filter-group--inline .v2-filter-label--inline {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  white-space: nowrap;
+  text-transform: none;
+  font-size: 11px;
+}
+.v2-filter-group--inline > .v2-input { flex: 1 1 auto; min-width: 0; }
 /* 語音輸入按鈕：桌面隱藏，只在手機顯示 (語音輸入是手機場景) */
 .v2-road-mic { display: none; }
 @media (max-width: 1024px) {
