@@ -361,6 +361,14 @@
 
   <!-- Sidebar overlay (mobile) -->
   <div class="v2-sidebar-backdrop" id="v2-sidebar-backdrop" onclick="v2.closeSidebar()"></div>
+  <!-- 手機側欄關閉按鈕：固定在 sidebar 右邊中央，sidebar 開啟才顯示 -->
+  <button type="button" class="v2-sidebar__close" id="v2-sidebar-close"
+          onclick="v2.closeSidebar()" aria-label="關閉側欄" title="關閉側欄">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+  </button>
 
   <!-- Main content area -->
   <main class="v2-main">

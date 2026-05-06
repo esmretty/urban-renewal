@@ -3099,6 +3099,43 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   cursor: pointer;
   transition: all var(--t-fast);
 }
+/* === 手機 sidebar 右邊中央關閉按鈕 ==========================================
+   button 是 sidebar sibling，用 fixed + 跟著 sidebar 的 translate 動 (transition 同步)。
+   sidebar 開啟時 (.v2-open) 顯示，關閉時 sidebar slide out → button 也 slide out。 */
+.v2-sidebar__close { display: none; }   /* 桌面 / sidebar 關閉時 隱藏 */
+@media (max-width: 1024px) {
+  .v2-sidebar__close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 50%;
+    /* 預設位置：跟在 sidebar 右邊外 4px (sidebar 280px - 36px overlap = 凸 4px)
+       sidebar 關閉時 translateX(-100%-4px) 跟著消失 */
+    left: 256px;            /* sidebar 280px - 24px button overlap → 凸出 sidebar 邊外 */
+    transform: translateY(-50%) translateX(-300px);   /* 預設 sidebar 關閉狀態 */
+    transition: transform var(--t-mid);
+    width: 32px;
+    height: 56px;
+    background: #c78a00;
+    color: #fff;
+    border: none;
+    border-radius: 0 18px 18px 0;
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.15);
+    cursor: pointer;
+    z-index: 51;            /* 比 sidebar (50) 高，比 backdrop (40) 高 */
+    padding: 0;
+  }
+  /* sidebar 開啟時 → button 滑進來顯示 */
+  .v2-sidebar.v2-open ~ .v2-sidebar__close {
+    transform: translateY(-50%) translateX(0);
+  }
+  .v2-sidebar__close:active { transform: translateY(-50%) scale(0.95); }
+  .v2-sidebar.v2-open ~ .v2-sidebar__close:active {
+    transform: translateY(-50%) translateX(0) scale(0.95);
+  }
+}
+
 /* === 手機 sidebar slider (number input → range) ============================ */
 /* 桌面：slider wrap 隱藏；手機：number input 隱藏，slider 顯示 */
 .v2-mobile-slider-wrap { display: none; }
