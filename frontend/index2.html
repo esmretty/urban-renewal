@@ -279,42 +279,42 @@
 
       <div class="v2-filter-group v2-filter-group--inline">
         <label class="v2-filter-label v2-filter-label--inline">路名</label>
-        <input class="v2-input" type="text" id="v2-road" placeholder="輸入路名搜尋" oninput="v2.applyFilters()">
-        <button type="button" class="v2-road-mic" id="v2-road-mic" onclick="v2.startVoiceRoad()" aria-label="語音輸入路名" title="語音輸入">🎤</button>
+        <input class="v2-input v2-input--inline" type="text" id="v2-road" placeholder="輸入路名搜尋" oninput="v2.applyFilters()">
+        <button type="button" class="v2-road-mic" id="v2-road-mic" onclick="v2.toggleVoiceRoad()" aria-label="語音輸入路名" title="語音輸入（再點一次強制結束）">🎤</button>
       </div>
 
-      <div class="v2-filter-group v2-filter-group--inline">
+      <div class="v2-filter-group v2-filter-group--inline v2-filter-group--inline-tight">
         <label class="v2-filter-label v2-filter-label--inline">學區</label>
-        <input class="v2-input" type="text" id="v2-school" placeholder="輸入學校名稱" oninput="v2.applyFilters()">
-        <button type="button" class="v2-road-mic" id="v2-school-mic" onclick="v2.startVoiceSchool()" aria-label="語音輸入學區" title="語音輸入">🎤</button>
+        <input class="v2-input v2-input--inline" type="text" id="v2-school" placeholder="輸入學校名稱" oninput="v2.applyFilters()">
+        <button type="button" class="v2-road-mic" id="v2-school-mic" onclick="v2.toggleVoiceSchool()" aria-label="語音輸入學區" title="語音輸入（再點一次強制結束）">🎤</button>
       </div>
 
       <div class="v2-filter-group">
-        <label class="v2-filter-label">數字條件（萬）</label>
+        <label class="v2-filter-label">數字條件</label>
         <div class="v2-range">
           <input class="v2-input v2-input--num" type="number" id="v2-price-min" min="0" max="30000" step="100" value="0"
                  data-slider-max="30000" data-slider-curve="piecewise"
-                 data-slider-label="總價最低"
+                 data-slider-label="總價最低" data-slider-suffix="萬"
                  oninput="v2.applyFilters()" onchange="v2.capInput(this)">
           <span class="v2-range__sep">–</span>
           <input class="v2-input v2-input--num" type="number" id="v2-price-max" min="0" max="30000" step="100" value="5000"
                  data-slider-max="30000" data-slider-curve="piecewise"
-                 data-slider-label="總價最高"
+                 data-slider-label="總價最高" data-slider-suffix="萬"
                  oninput="v2.applyFilters()" onchange="v2.capInput(this)">
         </div>
       </div>
 
-      <div class="v2-filter-group v2-filter-group--num-compact">
+      <div class="v2-filter-group v2-filter-group--num-compact v2-filter-group--num-tight">
         <!-- 第 1 列：建單價 + 地單價 並排 -->
         <div class="v2-num-row v2-num-row--compact v2-num-row--pair">
           <span class="v2-num-row__label">建&lt;</span>
           <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-bld-price-max" min="0" max="1000" step="5" value="300"
-                 data-slider-max="1000" data-slider-label="建單價≤"
+                 data-slider-max="1000" data-slider-label="建單價≤" data-slider-suffix="萬"
                  oninput="v2.applyFilters()" onchange="v2.capInput(this)">
           <span class="v2-num-row__sep"></span>
           <span class="v2-num-row__label">地&lt;</span>
           <input class="v2-input v2-input--num v2-input--xs" type="number" id="v2-land-price-max" min="0" max="1000" step="10" value="600"
-                 data-slider-max="1000" data-slider-label="地單價≤"
+                 data-slider-max="1000" data-slider-label="地單價≤" data-slider-suffix="萬"
                  oninput="v2.applyFilters()" onchange="v2.capInput(this)">
           <span class="v2-num-row__suffix">萬/坪</span>
         </div>

@@ -2939,6 +2939,16 @@
   }
   function startVoiceRoad() { _startVoice('v2-road', 'v2-road-mic'); }
   function startVoiceSchool() { _startVoice('v2-school', 'v2-school-mic'); }
+  // toggle：第一次點 = 開始；session 進行中再點 = 強制結束 + release mic
+  // (iOS WKWebView 內部 audio session 釋放有延遲，user 可主動點 mic 強制 kill)
+  function toggleVoiceRoad() {
+    if (_activeRec) { _killActiveVoice(); _showVoiceStatus('已結束語音輸入', 'success'); return; }
+    _startVoice('v2-road', 'v2-road-mic');
+  }
+  function toggleVoiceSchool() {
+    if (_activeRec) { _killActiveVoice(); _showVoiceStatus('已結束語音輸入', 'success'); return; }
+    _startVoice('v2-school', 'v2-school-mic');
+  }
 
   // ── Boot ─────────────────────────────────────────────────────────────────
   async function boot() {
@@ -3069,6 +3079,8 @@
     hardReload,
     startVoiceRoad,
     startVoiceSchool,
+    toggleVoiceRoad,
+    toggleVoiceSchool,
     capInput,
   };
 
