@@ -17,9 +17,6 @@
 (function () {
   'use strict';
 
-  // 切換 UI 入口的授權 email — 其他用戶看不到「列表模式 / 地圖模式」link
-  const ALLOWED_VIEW_TOGGLE_EMAIL = 'retty.liu@gmail.com';
-
   // 透過 window.v2 取 app2.js 內部 state / helpers — 必須等 app2.js 先載完
   function _v2() { return window.v2 || {}; }
   function _state() { return _v2().state || null; }
@@ -134,15 +131,6 @@
     if (typeof v2._saveFilters === 'function') v2._saveFilters();
   }
 
-  // ── Access control gate：auth ready 後檢查 email 才 reveal toggle UI ──
-  function _maybeShowViewToggle() {
-    const email = (window.currentUser && window.currentUser.email) || '';
-    if (email === ALLOWED_VIEW_TOGGLE_EMAIL) {
-      const tg = document.getElementById('v2-view-toggle');
-      if (tg) tg.style.display = '';
-    }
-  }
-
   // ── 安裝到 window.v2 (等 app2.js 先載完才有 v2 namespace) ──
   function _install() {
     const v2 = window.v2;
@@ -153,11 +141,6 @@
     }
     v2.setViewMode = setViewMode;
     v2._renderMap = renderMap;        // app2.js renderGrid short-circuit 呼叫
-    v2._maybeShowViewToggle = _maybeShowViewToggle;
-    v2._ALLOWED_MAP_EMAIL = ALLOWED_VIEW_TOGGLE_EMAIL;  // 給 app2.js 的 _restoreFilters guard 用
-    // auth 事件 ready 後檢查 email
-    document.addEventListener('auth:ready', _maybeShowViewToggle);
-    if (window.currentUser) _maybeShowViewToggle();
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _install);

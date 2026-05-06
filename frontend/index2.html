@@ -395,13 +395,27 @@
         </button>
       </div>
       <div class="v2-toolbar__right">
-        <!-- 列表 / 地圖 切換（預設 display:none，JS 檢查 email 才 reveal — 只 retty.liu@gmail.com 看得到） -->
-        <div class="v2-view-toggle" id="v2-view-toggle" style="display:none">
+        <!-- 列表 / 地圖 切換（PC 顯示文字，mobile 顯示 icon — CSS 控制） -->
+        <div class="v2-view-toggle" id="v2-view-toggle">
           <a href="#" class="v2-view-toggle__link is-active" data-view-mode="list"
-             onclick="event.preventDefault(); v2.setViewMode('list')">列表模式</a>
+             onclick="event.preventDefault(); v2.setViewMode('list')" aria-label="列表模式" title="列表模式">
+            <svg class="v2-view-toggle__icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+            <span class="v2-view-toggle__txt">列表模式</span>
+          </a>
           <span class="v2-view-toggle__sep">|</span>
           <a href="#" class="v2-view-toggle__link" data-view-mode="map"
-             onclick="event.preventDefault(); v2.setViewMode('map')">地圖模式</a>
+             onclick="event.preventDefault(); v2.setViewMode('map')" aria-label="地圖模式" title="地圖模式">
+            <svg class="v2-view-toggle__icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+              <line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/>
+            </svg>
+            <span class="v2-view-toggle__txt">地圖模式</span>
+          </a>
         </div>
         <!-- 8 排序選項對齊 v1，預設「新進優先」+ 降冪 -->
         <select class="v2-select" id="v2-sort" onchange="v2.applySort()">

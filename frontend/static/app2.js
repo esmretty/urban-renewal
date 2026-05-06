@@ -229,17 +229,13 @@
         fa.checked = all.length > 0 && all.every(c => c.checked);
       }
     }
-    // viewMode 還原：非授權 email 強制走列表模式（避免歷史 prefs 殘留繞過 access control）
-    // ALLOWED email 由 map_mode.js 提供 window.v2._ALLOWED_MAP_EMAIL — 沒載入 map_mode.js 永遠走 list
+    // viewMode 還原：地圖模式已開放給所有用戶（不再有 email guard）
+    // 沒載入 map_mode.js 時 setViewMode 不存在 → 自然 fallback 列表模式
     if (obj.viewMode === 'map' || obj.viewMode === 'list') {
-      const _email = (window.currentUser && window.currentUser.email) || '';
-      const _allowedEmail = (window.v2 && window.v2._ALLOWED_MAP_EMAIL) || '';
-      const _allowed = _allowedEmail && _email === _allowedEmail;
-      const _wantedMode = (obj.viewMode === 'map' && _allowed) ? 'map' : 'list';
       // 延遲套用：boot 結束 + state.allProperties 載入後才 setViewMode（避免 #v2-map 還沒 paint）
       setTimeout(() => {
         if (window.v2 && typeof window.v2.setViewMode === 'function') {
-          window.v2.setViewMode(_wantedMode);
+          window.v2.setViewMode(obj.viewMode);
         }
       }, 200);
     }
@@ -2977,11 +2973,11 @@
   function startVoiceSchool() { _startVoice('v2-school', 'v2-school-mic'); }
 
   // ── Boot ─────────────────────────────────────────────────────────────────
-  // 地圖模式 (setViewMode / renderMap / _initMap / _maybeShowViewToggle) 在獨立檔
-  // frontend/static/map_mode.js — 透過 window.v2 attach 進來。本檔只留 hook 點：
+  // 地圖模式 (setViewMode / renderMap / _initMap) 在獨立檔 frontend/static/map_mode.js
+  // 透過 window.v2 attach 進來。本檔只留 hook 點：
   //   - state.viewMode/_mapInst/_mapMarkers (initial state)
   //   - renderGrid 開頭 short-circuit (call window.v2._renderMap)
-  //   - _collectFilterObj / _restoreFilters viewMode 持久化 + access guard
+  //   - _collectFilterObj / _restoreFilters viewMode 持久化
 
   async function boot() {
     window.__perfMark && window.__perfMark('app2_boot_start');

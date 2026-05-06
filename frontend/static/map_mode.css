@@ -12,6 +12,9 @@
   font-size: 13px;
 }
 .v2-view-toggle__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--c-text-muted);
   text-decoration: none;
   padding: 2px 4px;
@@ -24,6 +27,24 @@
   text-decoration: underline;
 }
 .v2-view-toggle__sep { color: #d8d2be; }
+.v2-view-toggle__icon { display: none; }   /* PC 預設 hide icon, show text */
+
+/* mobile (≤640px)：改顯示 icon（text 隱藏，sep 隱藏，icon 點擊區放大） */
+@media (max-width: 640px) {
+  .v2-view-toggle { gap: 2px; margin-right: 8px; }
+  .v2-view-toggle__txt { display: none; }
+  .v2-view-toggle__icon { display: inline-block; width: 18px; height: 18px; }
+  .v2-view-toggle__sep { display: none; }
+  .v2-view-toggle__link {
+    padding: 6px 8px;
+    border-radius: var(--r-sm);
+    text-decoration: none !important;     /* 蓋過 .is-active underline */
+  }
+  .v2-view-toggle__link.is-active {
+    background: #fff5d6;
+    color: #c78a00;
+  }
+}
 
 /* ── 地圖容器 ── */
 .v2-map {
