@@ -2605,11 +2605,18 @@
       slider.step = inp.step || 1;
       slider.value = inp.value;
       const valSpan = label.querySelector('.v2-mobile-slider-label__val');
+      // 用哪個 callback：number input 的 oninput attribute 寫死了（applyFilters / applySort）
+      // 直接抓出來 call，不再依賴 dispatchEvent (mobile 上偶爾不 trigger oninput attribute)
+      const oninputAttr = (inp.getAttribute('oninput') || '').trim();
+      const callApply = () => {
+        if (oninputAttr.includes('applySort')) applySort();
+        else applyFilters();
+      };
       slider.addEventListener('input', () => {
         if (inp.value !== slider.value) {
           inp.value = slider.value;
           valSpan.textContent = slider.value;
-          inp.dispatchEvent(new Event('input', { bubbles: true }));
+          callApply();
         }
       });
       inp.addEventListener('input', () => {
