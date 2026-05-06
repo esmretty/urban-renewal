@@ -3268,7 +3268,9 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   /* 字體跟其他 sidebar v2-filter-label 一致 (10px uppercase) */
 }
 .v2-filter-group--inline > .v2-input { flex: 1 1 auto; min-width: 0; }
-/* mobile：路名/學區 input + mic 比一般小，跟 label 字體一致 */
+/* mobile：路名/學區 input + mic 比一般小，跟 label 字體一致；mic 高度 match input
+   input border-box 高 ≈ 11px * 1.3 line-height + 4px padding + 2px border = 20.3px
+   mic 用同樣的 padding/line-height/border-box，emoji 居中對齊 → 兩個 box 高度相等 */
 @media (max-width: 1024px) {
   .v2-sidebar .v2-filter-group--inline > .v2-input--inline {
     font-size: 11px !important;
@@ -3280,10 +3282,15 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
     box-sizing: border-box;
   }
   .v2-sidebar .v2-filter-group--inline .v2-road-mic {
-    padding: 1px 5px !important;
-    font-size: 13px !important;
+    height: 21px !important;
+    padding: 0 6px !important;
+    font-size: 12px !important;
     line-height: 1 !important;
     min-height: 0 !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
   }
 }
 /* 學區緊貼路名 — 抵消 sidebar 預設 16px gap，剩 6px */

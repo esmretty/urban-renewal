@@ -86,8 +86,7 @@
   let _saveDbPendingObj = null;
   function _collectFilterObj() {
     return {
-      road: $('#v2-road')?.value || '',
-      school: $('#v2-school')?.value || '',
+      // 路名 / 學區不儲存 — 每次重整當作空白，避免被舊輸入卡住結果
       dists: Array.from(state.districtPicks),
       btypes: $$('.v2-filter-btype:not(:disabled)').filter(c => c.checked).map(c => c.value),
       floors: $$('#v2-floor-chips input[data-floor]').filter(c => c.checked).map(c => c.value),
@@ -184,8 +183,7 @@
       const el = $('#' + id);
       if (el && typeof v === 'boolean') el.checked = v;
     };
-    setVal('v2-road', obj.road);
-    setVal('v2-school', obj.school);
+    // 路名 / 學區故意不 restore（每次重整都空白）
     setVal('v2-price-min', obj.pmin);
     setVal('v2-price-max', obj.pmax);
     setVal('v2-bld-price-max', obj.maxBld);
