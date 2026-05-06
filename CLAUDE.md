@@ -123,6 +123,15 @@
    - scheduler interval 通常 1-3 小時跑一次、單次 batch ~10-30 分鐘，等比強行打斷便宜
    - 如果 admin 用戶當下正在跑單筆 reanalyze (url_inflight > 0)：等 1-2 分鐘即可
 
+13. **大範圍 try/except 必須用 logger.exception 印 stack trace，並且只包真正會拋例外的單一動作**
+   pipeline / 分析路徑常見「整段業務邏輯包一個大 try/except: pass」，等 silent fail 累積到用戶回報才發現。
+   過去踩雷（commit 53aa2a9）：[api/analysis_pipeline.py](api/analysis_pipeline.py) line 1075-1208 zoning + 試算 + AI recommendation 同 try block，line 1083 `"、".join(zone_list)` 對 list of dict 拋 TypeError → 連 zoning_source、ai_recommendation 都沒寫進 doc → 5 個跨分區物件 zoning 永遠空白，前端「待查」+ 倍數無法算。除錯時翻 prod log 也只看到 `zoning lookup 失敗 ...: sequence item 0: expected str instance, dict found` 這 1 行訊息，看不出哪行拋。
+   **規則**：
+   - except block 內**用 `logger.exception` 不用 `logger.warning`**：自動印 traceback，下次能直接定位行號
+   - try block 範圍**盡量縮**：只包確定會拋例外的單一 IO/外部 call（GeoServer query / Claude API / file io）；business logic（join、加權算式）不該 silent 吞 exception，讓它噴上去比較好 debug
+   - 如果一定要包大範圍 try/except，**except 內要 explicit 寫「這條失敗對下游影響什麼」**：標旗標、寫 zoning_error 欄位、log 完整訊息 — 不能單純 `pass`
+   - 大範圍 try 寫好後 grep 一遍：所有「在 try 內 update doc_data」的欄位，是否在 except path 也要寫一個「失敗 marker」？沒寫 → DB 看起來「啥都沒發生」，但其實有 silent loss
+
 ### 違反檢查
 
 在 PR / 修改時若發現下列情況，必須立刻修正：

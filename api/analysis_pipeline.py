@@ -1207,7 +1207,9 @@ def analyze_single_property(
                 doc_data["ai_recommendation"] = final2["recommendation"]
                 doc_data["ai_reason"] = final2["reason"]
         except Exception as ze:
-            logger.warning(f"zoning lookup 失敗 {src_id}: {ze}")
+            # 用 .exception 印 stack trace — 過去 zoning_list join 的 TypeError 因為只 log 訊息看不到 traceback，
+            # 5 個多分區物件 silent fail 直到用戶回報才發現（cf. commit 53aa2a9）
+            logger.exception(f"zoning lookup 失敗 {src_id}: {ze}")
 
     doc_data["analysis_completed_at"] = now_tw_iso()
 
