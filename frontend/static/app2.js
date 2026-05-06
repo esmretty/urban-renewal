@@ -123,15 +123,33 @@
     const obj = _collectFilterObj();
     // 1) localStorage 立即寫 — 同 tab 重整看到瞬間 restore
     try { localStorage.setItem(_filterKey(), JSON.stringify(obj)); } catch {}
-    // 2) DB 寫 debounced（拖 slider 時不會噴）
+    // 2) DB 寫 debounced — 縮短到 500ms，避免 mobile 用戶改完馬上切走時 pending 沒 flush
+    //    (sendBeacon 在 mobile Safari 不可靠)
     _saveDbPendingObj = obj;
     clearTimeout(_saveDbDebounce);
     _saveDbDebounce = setTimeout(() => {
       const o = _saveDbPendingObj;
       _saveDbPendingObj = null;
       _flushFilterPrefsToDB(o);
-    }, 1200);
+    }, 500);
   }
+  // 用戶切走 tab / 進背景時 flush — 用 fetch keepalive (sendBeacon 沒帶 auth)
+  // visibilitychange 在 mobile 比 beforeunload 可靠
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && _saveDbPendingObj) {
+      const o = _saveDbPendingObj;
+      _saveDbPendingObj = null;
+      clearTimeout(_saveDbDebounce);
+      try {
+        fetch('/api/user/filter_prefs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prefs: o }),
+          keepalive: true,
+        });
+      } catch (_e) { /* best effort */ }
+    }
+  });
   // 關 tab 前若有 pending 寫入，用 sendBeacon flush（不依賴 fetch await）
   window.addEventListener('beforeunload', () => {
     if (!_saveDbPendingObj) return;
@@ -2578,8 +2596,42 @@
     return new Promise(resolve => document.addEventListener('auth:ready', resolve, { once: true }));
   }
 
+  // Piecewise mapping for 總價 (0~3 億)：低值精細、高值粗
+  // 低段拖時每格 50 萬，中段每格 ~200 萬，高段每格 ~500 萬
+  // slider position 0..1000 (linear) ↔ real value 0..30000 (萬)
+  // breakpoints: pos 0..500 → 0..3000, pos 500..800 → 3000..10000, pos 800..1000 → 10000..30000
+  const _PIECEWISE_BPS = [
+    { pos: 0,    val: 0     },
+    { pos: 500,  val: 3000  },   // 500 步 → 3000 萬，每步 6 萬 (但 step=10 萬實際)
+    { pos: 800,  val: 10000 },   // 300 步 → 7000 萬，每步 23 萬
+    { pos: 1000, val: 30000 },   // 200 步 → 20000 萬，每步 100 萬
+  ];
+  function _piecewisePosToVal(pos) {
+    pos = Math.max(0, Math.min(1000, pos));
+    for (let i = 0; i < _PIECEWISE_BPS.length - 1; i++) {
+      const a = _PIECEWISE_BPS[i], b = _PIECEWISE_BPS[i + 1];
+      if (pos >= a.pos && pos <= b.pos) {
+        const ratio = (pos - a.pos) / (b.pos - a.pos);
+        return Math.round((a.val + ratio * (b.val - a.val)) / 10) * 10;  // round to 10 萬
+      }
+    }
+    return _PIECEWISE_BPS[_PIECEWISE_BPS.length - 1].val;
+  }
+  function _piecewiseValToPos(val) {
+    val = Math.max(0, Math.min(30000, val));
+    for (let i = 0; i < _PIECEWISE_BPS.length - 1; i++) {
+      const a = _PIECEWISE_BPS[i], b = _PIECEWISE_BPS[i + 1];
+      if (val >= a.val && val <= b.val) {
+        const ratio = (val - a.val) / (b.val - a.val);
+        return Math.round(a.pos + ratio * (b.pos - a.pos));
+      }
+    }
+    return _PIECEWISE_BPS[_PIECEWISE_BPS.length - 1].pos;
+  }
+
   // 手機 sidebar 把 number input 換成 slider — 桌面保留 number input。
   // 條件：input 有 data-slider-max attr 才 enhance（避免動到地址分析卡的精確輸入）。
+  // data-slider-curve="piecewise" → 非線性 mapping (0~3 億 區間)
   function _enhanceSlidersForMobile() {
     if (!window.matchMedia('(max-width: 1024px)').matches) return;
     document.querySelectorAll('.v2-sidebar input.v2-input--num[type="number"]').forEach(inp => {
@@ -2587,6 +2639,7 @@
       const max = inp.dataset.sliderMax;
       if (!max) return;
       inp.dataset.sliderEnhanced = '1';
+      const piecewise = inp.dataset.sliderCurve === 'piecewise';
       const wrap = document.createElement('div');
       wrap.className = 'v2-mobile-slider-wrap';
       const label = document.createElement('div');
@@ -2600,28 +2653,40 @@
       const slider = document.createElement('input');
       slider.type = 'range';
       slider.className = 'v2-mobile-slider';
-      slider.min = inp.min || 0;
-      slider.max = max;
-      slider.step = inp.step || 1;
-      slider.value = inp.value;
+      if (piecewise) {
+        // slider 用 0..1000 線性，內部映射到 piecewise 區間
+        slider.min = 0;
+        slider.max = 1000;
+        slider.step = 1;
+        slider.value = _piecewiseValToPos(parseFloat(inp.value) || 0);
+      } else {
+        slider.min = inp.min || 0;
+        slider.max = max;
+        slider.step = inp.step || 1;
+        slider.value = inp.value;
+      }
       const valSpan = label.querySelector('.v2-mobile-slider-label__val');
-      // 用哪個 callback：number input 的 oninput attribute 寫死了（applyFilters / applySort）
-      // 直接抓出來 call，不再依賴 dispatchEvent (mobile 上偶爾不 trigger oninput attribute)
       const oninputAttr = (inp.getAttribute('oninput') || '').trim();
       const callApply = () => {
         if (oninputAttr.includes('applySort')) applySort();
         else applyFilters();
       };
       slider.addEventListener('input', () => {
-        if (inp.value !== slider.value) {
-          inp.value = slider.value;
-          valSpan.textContent = slider.value;
+        const realVal = piecewise
+          ? _piecewisePosToVal(parseInt(slider.value, 10))
+          : slider.value;
+        if (String(inp.value) !== String(realVal)) {
+          inp.value = realVal;
+          valSpan.textContent = realVal;
           callApply();
         }
       });
       inp.addEventListener('input', () => {
-        if (slider.value !== inp.value) {
-          slider.value = inp.value;
+        const desiredPos = piecewise
+          ? _piecewiseValToPos(parseFloat(inp.value) || 0)
+          : inp.value;
+        if (String(slider.value) !== String(desiredPos)) {
+          slider.value = desiredPos;
           valSpan.textContent = inp.value;
         }
       });
@@ -2629,6 +2694,25 @@
       wrap.appendChild(slider);
       inp.parentNode.insertBefore(wrap, inp.nextSibling);
     });
+  }
+
+  // 數字輸入 cap：onchange 時若超過 max / 低於 min 自動 clamp 並重新 trigger filter。
+  // 桌面用戶 type 超過 max 也會被砍回上限；mobile slider 已經 max 限制不會超過。
+  function capInput(el) {
+    if (!el) return;
+    const v = parseFloat(el.value);
+    if (isNaN(v)) return;
+    const max = parseFloat(el.max);
+    const min = parseFloat(el.min);
+    let changed = false;
+    if (!isNaN(max) && v > max) { el.value = max; changed = true; }
+    else if (!isNaN(min) && v < min) { el.value = min; changed = true; }
+    if (changed) {
+      // re-trigger 對應 callback (oninput attribute)
+      const oninputAttr = (el.getAttribute('oninput') || '').trim();
+      if (oninputAttr.includes('applySort')) applySort();
+      else applyFilters();
+    }
   }
 
   // 路名語音輸入 — webkitSpeechRecognition
@@ -2857,6 +2941,7 @@
     openRoadOverlay, scanRoadWidth, deleteRow,
     hardReload,
     startVoiceRoad,
+    capInput,
   };
 
   // Boot

@@ -3116,7 +3116,7 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
     transition: transform var(--t-mid);
     width: 32px;
     height: 56px;
-    background: #c78a00;
+    background: var(--c-accent);   /* 跟「重新搜尋」按鈕同青藍色 (#0891b2) */
     color: #fff;
     border: none;
     border-radius: 0 18px 18px 0;
@@ -3147,6 +3147,11 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
 .v2-mobile-slider-wrap { display: none; }
 .v2-road-input-wrap { display: flex; gap: 6px; align-items: center; }
 .v2-road-input-wrap input { flex: 1; min-width: 0; }
+/* 語音輸入按鈕：桌面隱藏，只在手機顯示 (語音輸入是手機場景) */
+.v2-road-mic { display: none; }
+@media (max-width: 1024px) {
+  .v2-road-mic { display: inline-flex; align-items: center; justify-content: center; }
+}
 .v2-road-mic {
   flex: 0 0 auto;
   background: #fffdf6;
