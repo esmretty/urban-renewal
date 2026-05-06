@@ -235,12 +235,19 @@
       if (!wrap || !wrap.classList.contains('v2-mobile-slider-wrap')) return;
       const slider = wrap.querySelector('.v2-mobile-slider');
       const valSpan = wrap.querySelector('.v2-mobile-slider-label__val');
+      const suffixSpan = wrap.querySelector('.v2-mobile-slider-label__suffix');
       if (!slider) return;
       const piecewise = inp.dataset.sliderCurve === 'piecewise';
-      slider.value = piecewise
-        ? _piecewiseValToPos(parseFloat(inp.value) || 0)
-        : (inp.value || 0);
-      if (valSpan) valSpan.textContent = inp.value;
+      const allowUnlimited = inp.dataset.sliderAllowUnlimited === '1';
+      const inpN = parseFloat(inp.value) || 0;
+      const unl = allowUnlimited && isUnlimitedVal(inpN);
+      if (unl) {
+        slider.value = parseInt(slider.max, 10);
+      } else {
+        slider.value = piecewise ? _piecewiseValToPos(inpN) : (inp.value || 0);
+      }
+      if (valSpan) valSpan.textContent = unl ? '不限' : inp.value;
+      if (suffixSpan) suffixSpan.style.display = unl ? 'none' : '';
     });
   }
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -2723,6 +2730,10 @@
     return new Promise(resolve => document.addEventListener('auth:ready', resolve, { once: true }));
   }
 
+  // 拉桿「不限」sentinel — 拉到最頂端時 input value 變這個大數字，filter `< val` 對任何值都 true
+  const UNLIMITED_VAL = 999999;
+  const isUnlimitedVal = (v) => Number(v) >= UNLIMITED_VAL;
+
   // Piecewise mapping for 總價 (0~3 億)：低值精細、高值粗
   // 低段拖時每格 50 萬，中段每格 ~200 萬，高段每格 ~500 萬
   // slider position 0..1000 (linear) ↔ real value 0..30000 (萬)
@@ -2766,55 +2777,76 @@
       if (!max) return;
       inp.dataset.sliderEnhanced = '1';
       const piecewise = inp.dataset.sliderCurve === 'piecewise';
+      const allowUnlimited = inp.dataset.sliderAllowUnlimited === '1';
       const wrap = document.createElement('div');
       wrap.className = 'v2-mobile-slider-wrap';
       const label = document.createElement('div');
       label.className = 'v2-mobile-slider-label';
       const labelText = inp.dataset.sliderLabel || '';
       const suffix = inp.dataset.sliderSuffix || '';
+      const initUnl = allowUnlimited && isUnlimitedVal(inp.value);
       label.innerHTML =
         `<span class="v2-mobile-slider-label__txt">${labelText}</span>` +
-        `<span class="v2-mobile-slider-label__val">${inp.value}</span>` +
-        `<span class="v2-mobile-slider-label__suffix">${suffix}</span>`;
+        `<span class="v2-mobile-slider-label__val">${initUnl ? '不限' : inp.value}</span>` +
+        `<span class="v2-mobile-slider-label__suffix"${initUnl ? ' style="display:none"' : ''}>${suffix}</span>`;
       const slider = document.createElement('input');
       slider.type = 'range';
       slider.className = 'v2-mobile-slider';
+      // 拉桿最頂端視為「不限」 — slider max 加一格 sentinel；piecewise 用 1001
+      const stepN = Number(inp.step) || 1;
       if (piecewise) {
-        // slider 用 0..1000 線性，內部映射到 piecewise 區間
         slider.min = 0;
-        slider.max = 1000;
+        slider.max = allowUnlimited ? 1001 : 1000;
         slider.step = 1;
-        slider.value = _piecewiseValToPos(parseFloat(inp.value) || 0);
+        slider.value = initUnl ? slider.max : _piecewiseValToPos(parseFloat(inp.value) || 0);
       } else {
         slider.min = inp.min || 0;
-        slider.max = max;
-        slider.step = inp.step || 1;
-        slider.value = inp.value;
+        slider.max = allowUnlimited ? (Number(max) + stepN) : max;
+        slider.step = stepN;
+        slider.value = initUnl ? slider.max : inp.value;
       }
       const valSpan = label.querySelector('.v2-mobile-slider-label__val');
+      const suffixSpan = label.querySelector('.v2-mobile-slider-label__suffix');
+      const setLabel = (v) => {
+        const unl = allowUnlimited && isUnlimitedVal(v);
+        valSpan.textContent = unl ? '不限' : v;
+        if (suffixSpan) suffixSpan.style.display = unl ? 'none' : '';
+      };
       const oninputAttr = (inp.getAttribute('oninput') || '').trim();
       const callApply = () => {
         if (oninputAttr.includes('applySort')) applySort();
         else applyFilters();
       };
       slider.addEventListener('input', () => {
-        const realVal = piecewise
-          ? _piecewisePosToVal(parseInt(slider.value, 10))
-          : slider.value;
+        const sliderN = parseInt(slider.value, 10);
+        let realVal;
+        if (allowUnlimited && sliderN === parseInt(slider.max, 10)) {
+          realVal = UNLIMITED_VAL;
+        } else if (piecewise) {
+          realVal = _piecewisePosToVal(sliderN);
+        } else {
+          realVal = sliderN;
+        }
         if (String(inp.value) !== String(realVal)) {
           inp.value = realVal;
-          valSpan.textContent = realVal;
+          setLabel(realVal);
           callApply();
         }
       });
       inp.addEventListener('input', () => {
-        const desiredPos = piecewise
-          ? _piecewiseValToPos(parseFloat(inp.value) || 0)
-          : inp.value;
+        const inpN = parseFloat(inp.value) || 0;
+        let desiredPos;
+        if (allowUnlimited && isUnlimitedVal(inpN)) {
+          desiredPos = parseInt(slider.max, 10);
+        } else if (piecewise) {
+          desiredPos = _piecewiseValToPos(inpN);
+        } else {
+          desiredPos = inpN;
+        }
         if (String(slider.value) !== String(desiredPos)) {
           slider.value = desiredPos;
-          valSpan.textContent = inp.value;
         }
+        setLabel(inp.value);
       });
       wrap.appendChild(label);
       wrap.appendChild(slider);
