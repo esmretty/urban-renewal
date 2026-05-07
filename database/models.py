@@ -538,14 +538,19 @@ def detect_foreclosure(item: dict, detail_text: str = "") -> tuple[bool, list]:
          591 代理人標記常用全形 ＃（U+FF03），也有半形 # — 兩種都要抓。
       2. 591「社區」欄位 RAW value（item["_community_raw"]）含「【」廣告詞 → 法拍。
          仲介在「社區」label 寫「【店長推薦】XX」這種廣告字串通常是法拍特徵。
+      3. 標題或「社區」欄位明寫「法拍」字樣 → 法拍。
     回 (是否法拍, [reason 列表])
     """
     title = item.get("title") or ""
     raw = item.get("_raw_text") or detail_text or ""
+    community_raw = item.get("_community_raw") or ""
+    if "法拍" in title:
+        return True, [f"標題含「法拍」：{title[:50]}"]
+    if "法拍" in community_raw:
+        return True, [f"591「社區」欄位含「法拍」：{community_raw[:50]}"]
     has_hash = "#" in title or "＃" in title
     if has_hash and "代理人" in raw:
         return True, ["標題含 # 或 ＃ + 代理人"]
-    community_raw = item.get("_community_raw") or ""
     if "【" in community_raw:
         return True, [f"591「社區」欄位含「【」廣告詞：{community_raw[:50]}"]
     return False, []
