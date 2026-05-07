@@ -146,7 +146,10 @@ def _card_fields_changed(item: dict, existing: dict) -> str:
 
     new_road = _card_road_name(item.get("address"))
     old_road = _card_road_name(existing.get("address"))
-    if new_road and old_road and new_road != old_road:
+    # existing 若被 verify_and_fix_road 改過名 → 591 listing 永遠回 raw 路名 → 比對得用 raw 對 raw
+    # 否則每次 batch 都會誤判「路名變了」trigger force_reanalyze (浪費 Claude/Google quota)
+    old_raw_road = _card_road_name((existing.get("address_road_fixed") or {}).get("from") or "")
+    if new_road and old_road and new_road != old_road and new_road != old_raw_road:
         reasons.append(f"路名 {old_road}→{new_road}")
 
     return "; ".join(reasons)

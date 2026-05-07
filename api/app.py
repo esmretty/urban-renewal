@@ -3695,6 +3695,9 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
             "address": _d.get("address") or "",
             "floor": _d.get("floor"),                 # 樓層 — 同棟不同戶建坪可能一樣，必須用樓層區分
             "total_floors": _d.get("total_floors"),
+            # verify_and_fix_road 改名過的物件，DB.address 是 fixed 後的路名
+            # 但 591 listing 永遠回 raw 路名 → dedup 比對需要 fallback raw 對 raw
+            "address_road_fixed": _d.get("address_road_fixed"),
         })
 
     def _extract_road_name(addr):
@@ -3724,8 +3727,12 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 continue
             if not (ex["building_area_ping"] and abs(ex["building_area_ping"] - area) <= 0.01):
                 continue
+            # 路名比對：先試 ex.address；若 ex 有 address_road_fixed (verify_and_fix 改名過) →
+            # 再試「改名前的 raw 路名」(對齊 591 listing 給的原始路名 — 否則永遠 mismatch)
             if _extract_road_name(ex["address"]) != road:
-                continue
+                raw_road = _extract_road_name(((ex.get("address_road_fixed") or {}).get("from")) or "")
+                if not raw_road or raw_road != road:
+                    continue
             # 樓層比對：兩邊都有值且不等 → 不同戶；單邊空或都空 → 信其他條件當同
             if floor is not None and ex.get("floor") is not None:
                 if str(floor).strip() != str(ex["floor"]).strip():
@@ -4826,9 +4833,14 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 _existing_items.append({
                     "id": target_doc_id,
                     "source_keys": list(doc_data.get("source_keys") or []),
-                    "price_ntd": item.get("price_ntd"),
-                    "building_area_ping": item.get("building_area_ping"),
-                    "address": item.get("address") or "",
+                    "price_ntd": doc_data.get("price_ntd") or item.get("price_ntd"),
+                    "building_area_ping": doc_data.get("building_area_ping") or item.get("building_area_ping"),
+                    "address": doc_data.get("address") or item.get("address") or "",
+                    "floor": doc_data.get("floor") or item.get("floor"),
+                    "total_floors": doc_data.get("total_floors") or item.get("total_floors"),
+                    # 同 batch 內後續物件 dedup 用：if first item 走 verify_and_fix 改名，address 是 fixed 後的路名
+                    # 後續同物件 raw 路名跟它對不上 → 靠 address_road_fixed.from fallback (find_duplicate 內處理)
+                    "address_road_fixed": doc_data.get("address_road_fixed"),
                 })
                 status_msg = {
                     "done": f"✓ 已入庫 {new_count} 筆：{(doc_data.get('address_inferred') or doc_data.get('address') or '')[:30]}",

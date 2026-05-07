@@ -59,17 +59,23 @@ def geocode_with_district(address: str) -> list[dict]:
                 types = c.get("types", [])
                 long_name = c.get("long_name", "")
                 if "administrative_area_level_1" in types:
-                    city = long_name.replace("臺北", "台北")
+                    city = long_name.replace("臺北", "台北").replace("台北市市", "台北市")
                 elif "administrative_area_level_2" in types or "administrative_area_level_3" in types:
                     # Taiwan 區常出現在 level_2 或 level_3
-                    if long_name.endswith("區") and district is None:
-                        district = long_name
+                    # Google 偶爾回簡體「区」(e.g. 「中和区」、「板桥区」) — normalize 成繁體
+                    # 否則 endswith("區") 失敗 → district=None → 下游 verify_and_fix_road 誤判路名不在目標區，
+                    # 觸發 Claude fuzzy fix 改成相近錯名（e.g. 中和區市民街 → 民享街）
+                    name_norm = long_name.replace("区", "區").replace("臺", "台")
+                    if name_norm.endswith("區") and district is None:
+                        district = name_norm
+            # formatted_address 也 normalize 簡繁，讓 caller 直接做字串 match 不踩簡繁地雷
+            fmt_addr = r.get("formatted_address", "").replace("臺北", "台北").replace("区", "區")
             out.append({
                 "lat": loc["lat"],
                 "lng": loc["lng"],
                 "city": city,
                 "district": district,
-                "formatted_address": r.get("formatted_address", "").replace("臺北", "台北"),
+                "formatted_address": fmt_addr,
                 "partial_match": bool(r.get("partial_match")),
             })
         return out
