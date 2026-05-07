@@ -1168,8 +1168,10 @@ def api_school_district_lookup(
     from analysis import school_district as sd
     if village and city and district:
         r = sd.lookup_by_village(city, district, village)
+        detail = sd.lookup_by_village_detail(city, district, village)
         return {"mode": "village", "city": city, "district": district, "village": village,
-                "school_elementary": r["elementary"], "school_junior_high": r["junior_high"]}
+                "school_elementary": r["elementary"], "school_junior_high": r["junior_high"],
+                "rows_detail": detail}
     if lat is not None and lng is not None:
         return {"mode": "coord", **sd.lookup_by_coord(lat, lng, city or "", district or "")}
     if address:

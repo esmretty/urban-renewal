@@ -1129,19 +1129,43 @@
     const lng = p.source_longitude ?? p.longitude;
     const host = document.getElementById(`v2-d-school-${id}`);
     if (!host) return;
-    const renderRow = (kind, schools) => {
+    // detail row 結構：[學校] (類型 — 鄰級切割)，跨區時前綴「X區跨區/」
+    // 例：實踐國小(基本 — 14–17鄰)、松山國小(松山區跨區/自由 — 1～4鄰)
+    function _detailChip(d, queryDistrict) {
+      const cross = d.school_district && d.school_district !== queryDistrict
+        ? esc(d.school_district) + '跨區/' : '';
+      const zone = d.zone_type ? esc(d.zone_type) : '';
+      const nb = d.neighborhoods_raw ? ' — ' + esc(d.neighborhoods_raw) : '';
+      const meta = (cross || zone || nb)
+        ? `<span class="v2-d-school-meta">(${cross}${zone}${nb})</span>`
+        : '';
+      return `<span class="v2-d-school-tag">${esc(d.school)}${meta}</span>`;
+    }
+    const renderRow = (kind, items, queryDistrict) => {
       const rows = host.querySelectorAll('.v2-d-school-row');
       const row = kind === '國小' ? rows[0] : rows[1];
       if (!row) return;
       const list = row.querySelector('.v2-d-school-list');
       if (!list) return;
-      if (!schools || !schools.length) {
+      if (!items || !items.length) {
         list.innerHTML = '<span style="color:#888">—</span>';
         return;
       }
-      list.innerHTML = _sortSchoolNames(schools).map(s =>
-        `<span class="v2-d-school-tag">${esc(s)}</span>`
-      ).join(' ');
+      // items 可能是 [string] (backward) 或 [detail row]
+      if (typeof items[0] === 'string') {
+        list.innerHTML = _sortSchoolNames(items).map(s =>
+          `<span class="v2-d-school-tag">${esc(s)}</span>`
+        ).join(' ');
+      } else {
+        // 排序：基本 > 自由；同類型按校名
+        const sorted = items.slice().sort((a, b) => {
+          const za = (a.zone_type === '基本') ? 0 : (a.zone_type === '自由' ? 1 : 2);
+          const zb = (b.zone_type === '基本') ? 0 : (b.zone_type === '自由' ? 1 : 2);
+          if (za !== zb) return za - zb;
+          return String(a.school || '').localeCompare(String(b.school || ''), 'zh-Hant');
+        });
+        list.innerHTML = sorted.map(d => _detailChip(d, queryDistrict)).join(' ');
+      }
     };
     if (!lat || !lng) {
       renderRow('國小', []); renderRow('國中', []);
@@ -1154,8 +1178,13 @@
         return;
       }
       const data = await r.json();
-      renderRow('國小', data.school_elementary || []);
-      renderRow('國中', data.school_junior_high || []);
+      const detail = data.rows_detail || [];
+      const queryDistrict = data.district || '';
+      const esItems = detail.filter(d => d.kind === 'elementary');
+      const jhItems = detail.filter(d => d.kind === 'junior_high');
+      // backward compat fallback: 若 rows_detail 缺，用校名 list
+      renderRow('國小', esItems.length ? esItems : (data.school_elementary || []), queryDistrict);
+      renderRow('國中', jhItems.length ? jhItems : (data.school_junior_high || []), queryDistrict);
     } catch (_e) {
       renderRow('國小', []); renderRow('國中', []);
     }
