@@ -2304,11 +2304,80 @@
           if (_DBG) _logV2Perf(_ts, items.length, _bytes, _serverTiming);
         });
       });
+      // 卡片 paint 完後 background enrich 學區資料 — 用 polygons_all + point-in-polygon
+      // 給每個物件補 school_elementary / school_junior_high，學區 filter input 才 work
+      _enrichSchoolsAsync();
     } catch (e) {
       console.error('loadProperties', e);
       toast('載入失敗', 'error');
     } finally {
       _hideBootstrapLoader();
+    }
+  }
+
+  // ── 學區 enrichment：根據物件 lat/lng 用 point-in-polygon 找 village → 學校 ──
+  // 完成後 trigger applyFilters 重 render（user 已輸入學區關鍵字會立刻生效）
+  let _SCHOOL_POLYGON_INDEX = null;   // [{ ft, bbox: [minLng,minLat,maxLng,maxLat], rings: [[[x,y]...]] }]
+  async function _ensureSchoolPolygonIndex() {
+    if (_SCHOOL_POLYGON_INDEX) return _SCHOOL_POLYGON_INDEX;
+    const r = await fetch('/api/school_district/polygons_all');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const geo = await r.json();
+    const features = geo.features || [];
+    _SCHOOL_POLYGON_INDEX = features.map(ft => {
+      const bbox = [Infinity, Infinity, -Infinity, -Infinity];
+      let rings = [];
+      const g = ft.geometry || {};
+      if (g.type === 'Polygon') rings = [g.coordinates[0]];
+      else if (g.type === 'MultiPolygon') rings = g.coordinates.map(p => p[0]);
+      rings.forEach(r => r.forEach(([x, y]) => {
+        if (x < bbox[0]) bbox[0] = x;
+        if (y < bbox[1]) bbox[1] = y;
+        if (x > bbox[2]) bbox[2] = x;
+        if (y > bbox[3]) bbox[3] = y;
+      }));
+      return { ft, bbox, rings };
+    });
+    return _SCHOOL_POLYGON_INDEX;
+  }
+  function _pointInRing(lng, lat, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0], yi = ring[i][1];
+      const xj = ring[j][0], yj = ring[j][1];
+      if (((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi)) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+  async function _enrichSchoolsAsync() {
+    if (!state.allProperties.length) return;
+    // per-property idempotent — 切換 explore/watchlist tab 時也會自動 enrich 新進 list
+    const todo = state.allProperties.filter(p => !p.school_elementary && !p.school_junior_high);
+    if (!todo.length) return;
+    try {
+      const idx = await _ensureSchoolPolygonIndex();
+      let n = 0;
+      todo.forEach(p => {
+        const lat = p.latitude || p.source_latitude;
+        const lng = p.longitude || p.source_longitude;
+        if (!lat || !lng) return;
+        for (const { ft, bbox, rings } of idx) {
+          if (lng < bbox[0] || lng > bbox[2] || lat < bbox[1] || lat > bbox[3]) continue;
+          if (rings.some(r => _pointInRing(lng, lat, r))) {
+            p.school_elementary = ft.properties.elementary || [];
+            p.school_junior_high = ft.properties.junior_high || [];
+            n++;
+            break;
+          }
+        }
+      });
+      console.info(`[school] enrich: +${n}/${todo.length} 物件補上學區`);
+      // user 已輸入學區關鍵字 → 立刻 re-filter
+      if (($('#v2-school')?.value || '').trim()) applyFilters();
+    } catch (e) {
+      console.warn('[school] enrich 失敗:', e);
     }
   }
 
