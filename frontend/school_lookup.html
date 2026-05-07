@@ -155,11 +155,32 @@ function renderResult(el, data, opts = {}) {
     el.innerHTML = `<span class="err">❌ ${esc(data.error)}</span>`;
     return;
   }
-  const es = data.school_elementary || [];
-  const jh = data.school_junior_high || [];
-  const tags = (arr, cls) => arr.length
-    ? arr.map(s => `<span class="school-tag ${cls}">${esc(s)}</span>`).join(' ')
-    : '<span style="color:#888;">—</span>';
+  const detail = data.rows_detail || [];
+  const queryDistrict = data.district || '';
+  const META_STYLE = 'margin-left:4px;color:#64748b;font-size:0.85em;font-weight:400;';
+  const detailChip = (d, cls) => {
+    const cross = d.school_district && d.school_district !== queryDistrict
+      ? esc(d.school_district) + '跨區/' : '';
+    const zone = d.zone_type ? esc(d.zone_type) : '';
+    const nb = d.neighborhoods_raw ? ' — ' + esc(d.neighborhoods_raw) : '';
+    const meta = (cross || zone || nb)
+      ? `<span style="${META_STYLE}">(${cross}${zone}${nb})</span>`
+      : '';
+    return `<span class="school-tag ${cls||''}">${esc(d.school)}${meta}</span>`;
+  };
+  const sortDetail = (items) => items.slice().sort((a, b) => {
+    const za = a.zone_type === '基本' ? 0 : a.zone_type === '自由' ? 1 : 2;
+    const zb = b.zone_type === '基本' ? 0 : b.zone_type === '自由' ? 1 : 2;
+    if (za !== zb) return za - zb;
+    return String(a.school || '').localeCompare(String(b.school || ''), 'zh-Hant');
+  });
+  const renderSchoolList = (detailItems, fallbackList, cls) => {
+    if (detailItems.length) return sortDetail(detailItems).map(d => detailChip(d, cls)).join(' ');
+    if (fallbackList && fallbackList.length) return fallbackList.map(s => `<span class="school-tag ${cls||''}">${esc(s)}</span>`).join(' ');
+    return '<span style="color:#888;">—</span>';
+  };
+  const esItems = detail.filter(d => d.kind === 'elementary');
+  const jhItems = detail.filter(d => d.kind === 'junior_high');
   let html = '';
   if (data.geocoded_address || data.input_address) {
     html += `<div>輸入地址：${esc(data.input_address || '')}</div>`;
@@ -176,8 +197,8 @@ function renderResult(el, data, opts = {}) {
   if (data.city || data.district) {
     html += `<div>位置：${esc(data.city || '')} ${esc(data.district || '')} <strong>${esc(data.village || '?里')}</strong></div>`;
   }
-  html += `<div>國小學區：<span class="schools">${tags(es, '')}</span></div>`;
-  html += `<div>國中學區：<span class="schools">${tags(jh, 'junior')}</span></div>`;
+  html += `<div>國小學區：<span class="schools">${renderSchoolList(esItems, data.school_elementary, '')}</span></div>`;
+  html += `<div>國中學區：<span class="schools">${renderSchoolList(jhItems, data.school_junior_high, 'junior')}</span></div>`;
   if (data.source && data.source !== 'lookup_hit') {
     html += `<div class="raw">source: ${esc(data.source)}</div>`;
   }
