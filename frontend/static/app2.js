@@ -1387,8 +1387,8 @@
                 <tr><td>臨路寬度</td><td><input type="number" class="v2-d-input v2-d-input--narrow" min="0" step="0.5" value="${(p.road_width_m_override ?? p.road_width_m) ?? ''}"
                   onchange="v2.saveOverride('${esc(id)}','road_width_m_override',this.value)"> m${roadShotBtn}${p.road_width_unknown ? ' <span class="v2-d-warn-inline">（寬度不明，有可能為私巷或特窄巷弄）</span>' : ''}${roadNameHint(p) ? `<div class="v2-d-road-name-hint">${esc(roadNameHint(p))}</div>` : ''}</td></tr>
                 <tr><td>學區</td><td><div class="v2-d-school" id="v2-d-school-${esc(id)}">
-                  <div class="v2-d-school-row"><span class="v2-d-school-kind">國小</span><span class="v2-d-school-list">載入中…</span></div>
-                  <div class="v2-d-school-row"><span class="v2-d-school-kind">國中</span><span class="v2-d-school-list">載入中…</span></div>
+                  <div class="v2-d-school-row"><span class="v2-d-school-list">載入中…</span></div>
+                  <div class="v2-d-school-row"><span class="v2-d-school-list">載入中…</span></div>
                 </div></td></tr>
               </table>
             </div>
