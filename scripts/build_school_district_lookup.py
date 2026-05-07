@@ -146,12 +146,16 @@ def parse_ntpc(pdf_path, kind, suffix):
                 village = m.group(2).strip()
             else:
                 village = p
-            # 過濾 PDF 描述性詞（非真實里名）：
+            # 過濾 PDF 描述性詞 / parser noise：
             #   「等N里」「等里」(例：「復興等4里」「景安等里」)
             #   「各里」「其餘里」「全里」
+            #   含括號殘字「）」「(」「【」「】」(PDF 跨頁 cell 切斷造成的 orphan paren — 例「17 鄰）里」)
+            #   含「鄰」字 (鄰級切割描述詞，e.g. 「N 鄰」 之類，括號處理失敗 leftover)
             if "等" in village:
                 continue
             if village in ("各里", "其餘里", "全里"):
+                continue
+            if any(c in village for c in "（）()【】鄰"):
                 continue
             # 尾巴為「N+里」(純數字+里) — 來自 PDF 描述「四里」「等4里」之類
             if re.fullmatch(r"[一二三四五六七八九十百0-9]+\s*里", village):
@@ -247,9 +251,13 @@ def parse_ntpc(pdf_path, kind, suffix):
                     last_schools_with_region = schools_with_region
 
                 # 解析里名 list — 每個里抓自己的 region (cell 內前綴 sticky scan)
-                # default region 用「該校所屬 region」(校名前綴 X區 + page_district fallback) 而非 page sticky
-                # 避免：page 25 sticky=中和區但實際 row 是「永和區永平國小」(該校的村里應歸永和區)
-                default_v_region = schools_with_region[0][0] if schools_with_region else page_district
+                # default region 用 page_district (該頁 section 主區)。
+                # PDF 視覺規律：page section 主區的 villages 不帶 prefix，外區用「X區」prefix 顯式標。
+                # 例：page 28 (中和區附錄) row「板橋區實踐國小」cell 內第一段「民生里、國光里、德穗里」
+                # 沒 prefix 因為 section 是中和區、這 row 是「中和區某些里也可去實踐國小」描述；
+                # 第二段「板橋區福祿里...」帶 prefix 因為跨到外區。
+                # 之前用 default = school region 是錯的，會把中和區的里誤歸到板橋區下。
+                default_v_region = page_district
                 villages_with_region = (
                     parse_villages_with_region(base_district_str, default_v_region) +
                     parse_villages_with_region(free_district_str, default_v_region)
