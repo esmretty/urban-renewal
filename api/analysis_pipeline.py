@@ -763,15 +763,30 @@ def analyze_single_property(
             # 3) 結尾加 F
             _f_str = (_f_clean + "F") if _f_clean else ""
             if _f_str:
-                # 4) 若 _addr_inf 末尾已含「{純樓層數字}{F|樓}」(不論大小寫 F、不論是否帶範圍)
-                #    → 不重複附加。處理 reverse_geocode 結果含「12號1樓」的 case，
-                #    避免變成「12號1樓 1F」雙重。
-                _f_alt_pattern = re.escape(_f_clean).replace(re.escape("~"), "[~\\-－]").replace(
-                    re.escape("-"), "[~\\-－]"
-                ) if _f_clean else ""
-                # 末尾正則：可能是 {N}F、{N}樓、{N}F樓、{N}樓F (容錯)
+                # 4) 先檢查 _addr_inf 末尾是否已含完整 floor 字串 (例：reverse_geocode 給
+                #    「12號1F~2F」整段、或 reanalyze 既有的「N號 2~3F」)。已含 → 不動。
+                #    分隔符 ~/-/－ 視為等義 → 用 char class `[~\-－]`。其他字元正常 escape。
+                #    舊版 chained replace (re.escape 後再 .replace(re.escape('~'), char_cls)
+                #    .replace(re.escape('-'), char_cls)) 會踩 nested replace bug — 第一次
+                #    replace 結果含 `\-`，第二次又把那段當 target 二次 replace 變 nested
+                #    `[~[~\-－]－]`，pattern 永遠 match 不到。
+                if _f_clean:
+                    _f_alt_pattern = "".join(
+                        "[~\\-－]" if _ch in "~-－" else re.escape(_ch)
+                        for _ch in _f_clean
+                    )
+                else:
+                    _f_alt_pattern = ""
                 _tail_re = rf"{_f_alt_pattern}\s*[Ff樓]+\s*$"
-                if not (_f_alt_pattern and re.search(_tail_re, _addr_inf)):
+                _already_has_full = _f_alt_pattern and re.search(_tail_re, _addr_inf)
+                if not _already_has_full:
+                    # 5) 未含 → 先 strip 末尾的「單層 N樓 / NF」LVR 殘留再 append 完整 floor。
+                    #    處理 LVR triangulate 給的地址尾自帶單層「2樓」(LVR 某筆分層登記)，
+                    #    但物件實際是複層 (floor='2~3F') 的 case：strip「2樓」→ append「 2~3F」
+                    #    → 「N號 2~3F」乾淨格式，不再雙寫「13號2樓 2~3F」。
+                    #    regex 只 match「單一數字 + F/樓 結尾」，不會誤動已含「~/-」連字符的
+                    #    複層 tail (那種會在 step 4 已含分支被攔)。
+                    _addr_inf = re.sub(r"\s*\d+\s*[Ff樓]\s*$", "", _addr_inf).rstrip()
                     _addr_inf = f"{_addr_inf} {_f_str}"
         doc_data["address_inferred"] = _addr_inf
         doc_data["address_inferred_confidence"] = item.get("address_inferred_confidence")
