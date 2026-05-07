@@ -175,6 +175,10 @@ def parse_ntpc(pdf_path, kind, suffix):
         return [v for _, v in parse_villages_with_region(text, "")]
 
     target_districts = {"板橋區", "新莊區", "新店區", "中和區", "永和區"}
+    # 跨頁 row sticky：PDF table 經常一個學校 row 內村里太多 → 跨頁切；下頁 row 第 0 欄校名空、
+    # base/free 有 villages — 屬上一個 row 的延續。要把這些 villages 加到上一個學校 list 下。
+    # last_schools_with_region 跨 page 維持，遇到空校名 row 用它當 schools。
+    last_schools_with_region = []
     for pg_i, page in enumerate(pdf.pages):
         # 國小 PDF：從 page 前文字找 district header
         if not page_to_district:
@@ -195,40 +199,52 @@ def parse_ntpc(pdf_path, kind, suffix):
                     continue
                 school_raw = (row[0] or "").strip()
                 base_district_str = (row[1] or "").strip()
-                if not school_raw or not base_district_str:
-                    continue
-                # 跨區共同學區 row 校名 cell 是「X區\n校名」(換行分區別 + 校名) — 黏回單字串
-                # 例：「永和區\n永平國小」 → 「永和區永平國小」
-                school_raw = re.sub(r"^([一-龥]{2,3}區)\s*\n\s*", r"\1", school_raw)
-                # 多校共用同 row case：cell 內用換行/頓號分校 (例：永和區國中只有永和+福和兩校
-                # 共用同 row → "永和國中\n福和國中")。要拆。
-                school_names = [s.strip() for s in re.split(r"[\n、,，]", school_raw) if s.strip()]
-                # 跳過 header row
-                if any(s in ("學校名稱", "學校") for s in school_names):
-                    continue
-                # 合併基本 + 自由學區（自由學區在 row[2]）— 多校共用同 villages
                 free_district_str = (row[2] or "").strip() if len(row) > 2 else ""
+                # 整 row 都空 → skip
+                if not school_raw and not base_district_str and not free_district_str:
+                    continue
+                # 跨頁延續 row：校名空但 base/free 有資料 → 屬上一個 row 的學校延續
+                # 用 last_schools_with_region (跨頁 sticky) 作該 row 的學校
+                if not school_raw and (base_district_str or free_district_str):
+                    if not last_schools_with_region:
+                        continue   # 還沒看到任何有效 row → skip
+                    schools_with_region = last_schools_with_region
+                else:
+                    # 新 row 的學校 cell — 解析後 update last_schools_with_region
 
-                # 解析每校 region + clean name
-                # 校名前綴若帶 X區 (例：「永和區永平國小」) → 該校屬該 X區；否則屬本頁主區 (sticky)
-                schools_with_region = []
-                for s in school_names:
-                    s_clean = re.sub(r"\([^)]*\)", "", s).strip()
-                    if not s_clean:
+                    # 跨區共同學區 row 校名 cell 是「X區\n校名」(換行分區別 + 校名) — 黏回單字串
+                    # 例：「永和區\n永平國小」 → 「永和區永平國小」
+                    school_raw = re.sub(r"^([一-龥]{2,3}區)\s*\n\s*", r"\1", school_raw)
+                    # 多校共用同 row case：cell 內用換行/頓號分校 (例：永和區國中只有永和+福和兩校
+                    # 共用同 row → "永和國中\n福和國中")。要拆。
+                    school_names = [s.strip() for s in re.split(r"[\n、,，]", school_raw) if s.strip()]
+                    # 跳過 header row (學校名稱 / 學校)
+                    if any(s in ("學校名稱", "學校") for s in school_names):
                         continue
-                    region_m = re.match(r"^([一-龥]{2,3}區)\s*(.+)$", s_clean)
-                    if region_m:
-                        s_region = region_m.group(1)
-                        s_clean = region_m.group(2).strip()
-                    else:
-                        s_region = page_district
-                    # 高中附設國中部 normalize：「錦和高中」(校名) + 「國中」(suffix) → 「錦和高中國中」
-                    # 真實校名通常稱「錦和國中」 → 拿掉中間「高中」
-                    if kind == "junior_high" and "高中" in s_clean and not s_clean.endswith("國中"):
-                        s_clean = s_clean.replace("高中", "")
-                    if not s_clean.endswith(suffix):
-                        s_clean = s_clean + suffix
-                    schools_with_region.append((s_region, s_clean))
+
+                    # 解析每校 region + clean name
+                    schools_with_region = []
+                    for s in school_names:
+                        s_clean = re.sub(r"\([^)]*\)", "", s).strip()
+                        if not s_clean:
+                            continue
+                        region_m = re.match(r"^([一-龥]{2,3}區)\s*(.+)$", s_clean)
+                        if region_m:
+                            s_region = region_m.group(1)
+                            s_clean = region_m.group(2).strip()
+                        else:
+                            s_region = page_district
+                        # 高中附設國中部 normalize
+                        if kind == "junior_high" and "高中" in s_clean and not s_clean.endswith("國中"):
+                            s_clean = s_clean.replace("高中", "")
+                        if not s_clean.endswith(suffix):
+                            s_clean = s_clean + suffix
+                        schools_with_region.append((s_region, s_clean))
+
+                    if not schools_with_region:
+                        continue
+                    # update sticky for next row (含跨頁延續)
+                    last_schools_with_region = schools_with_region
 
                 # 解析里名 list — 每個里抓自己的 region (cell 內前綴 sticky scan)
                 # default region 用「該校所屬 region」(校名前綴 X區 + page_district fallback) 而非 page sticky

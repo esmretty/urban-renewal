@@ -4408,6 +4408,77 @@
         ],
         "junior_high": []
       },
+      "新翠里": {
+        "elementary": [
+          "新埔國小"
+        ],
+        "junior_high": [
+          "新埔國中"
+        ]
+      },
+      "朝陽里": {
+        "elementary": [
+          "新埔國小"
+        ],
+        "junior_high": [
+          "新埔國中"
+        ]
+      },
+      "吉翠里": {
+        "elementary": [
+          "新埔國小"
+        ],
+        "junior_high": [
+          "新埔國中"
+        ]
+      },
+      "滿翠里": {
+        "elementary": [
+          "新埔國小"
+        ],
+        "junior_high": [
+          "新埔國中"
+        ]
+      },
+      "明翠里": {
+        "elementary": [
+          "新埔國小"
+        ],
+        "junior_high": [
+          "新埔國中"
+        ]
+      },
+      "介壽里": {
+        "elementary": [
+          "新埔國小"
+        ],
+        "junior_high": []
+      },
+      "百壽里": {
+        "elementary": [
+          "新埔國小"
+        ],
+        "junior_high": [
+          "中山國中"
+        ]
+      },
+      "新民里": {
+        "elementary": [
+          "新埔國小",
+          "海山國小"
+        ],
+        "junior_high": [
+          "中山國中"
+        ]
+      },
+      "文化里": {
+        "elementary": [
+          "新埔國小"
+        ],
+        "junior_high": [
+          "江翠國中"
+        ]
+      },
       "埔墘里": {
         "elementary": [
           "光復國小",
@@ -4572,13 +4643,11 @@
         ],
         "junior_high": []
       },
-      "新民里": {
+      "員山里": {
         "elementary": [
           "海山國小"
         ],
-        "junior_high": [
-          "中山國中"
-        ]
+        "junior_high": []
       },
       "江翠里": {
         "elementary": [
@@ -4718,6 +4787,30 @@
           "大觀國小"
         ],
         "junior_high": []
+      },
+      "德里": {
+        "elementary": [
+          "國光國小"
+        ],
+        "junior_high": []
+      },
+      "國光里": {
+        "elementary": [
+          "國光國小",
+          "實踐國小",
+          "文德國小"
+        ],
+        "junior_high": [
+          "板橋國中"
+        ]
+      },
+      "自立里": {
+        "elementary": [
+          "國光國小"
+        ],
+        "junior_high": [
+          "板橋國中"
+        ]
       },
       "大安里": {
         "elementary": [
@@ -4872,6 +4965,35 @@
         ],
         "junior_high": []
       },
+      "文德里": {
+        "elementary": [
+          "文德國小"
+        ],
+        "junior_high": [
+          "新埔國中"
+        ]
+      },
+      "新生里": {
+        "elementary": [
+          "文德國小"
+        ],
+        "junior_high": []
+      },
+      "金華里": {
+        "elementary": [
+          "文德國小"
+        ],
+        "junior_high": []
+      },
+      "港德里": {
+        "elementary": [
+          "文德國小"
+        ],
+        "junior_high": [
+          "新埔國中",
+          "板橋國中"
+        ]
+      },
       "福祿里": {
         "elementary": [
           "實踐國小"
@@ -4888,6 +5010,12 @@
           "忠孝國中",
           "海山國中"
         ]
+      },
+      "17 鄰）里": {
+        "elementary": [
+          "實踐國小"
+        ],
+        "junior_high": []
       },
       "華中里": {
         "elementary": [
@@ -5035,20 +5163,6 @@
         ],
         "junior_high": []
       },
-      "員山里": {
-        "elementary": [
-          "海山國小"
-        ],
-        "junior_high": []
-      },
-      "國光里": {
-        "elementary": [
-          "實踐國小"
-        ],
-        "junior_high": [
-          "板橋國中"
-        ]
-      },
       "德穗里": {
         "elementary": [
           "實踐國小"
@@ -5063,22 +5177,9 @@
           "忠孝國中"
         ]
       },
-      "自立里": {
-        "elementary": [],
-        "junior_high": [
-          "板橋國中"
-        ]
-      },
       "港尾里": {
         "elementary": [],
         "junior_high": [
-          "板橋國中"
-        ]
-      },
-      "港德里": {
-        "elementary": [],
-        "junior_high": [
-          "新埔國中",
           "板橋國中"
         ]
       },
@@ -5090,12 +5191,6 @@
         ]
       },
       "漢生里": {
-        "elementary": [],
-        "junior_high": [
-          "中山國中"
-        ]
-      },
-      "百壽里": {
         "elementary": [],
         "junior_high": [
           "中山國中"
@@ -5115,42 +5210,6 @@
           "江翠國中"
         ]
       },
-      "文德里": {
-        "elementary": [],
-        "junior_high": [
-          "新埔國中"
-        ]
-      },
-      "新翠里": {
-        "elementary": [],
-        "junior_high": [
-          "新埔國中"
-        ]
-      },
-      "朝陽里": {
-        "elementary": [],
-        "junior_high": [
-          "新埔國中"
-        ]
-      },
-      "吉翠里": {
-        "elementary": [],
-        "junior_high": [
-          "新埔國中"
-        ]
-      },
-      "滿翠里": {
-        "elementary": [],
-        "junior_high": [
-          "新埔國中"
-        ]
-      },
-      "明翠里": {
-        "elementary": [],
-        "junior_high": [
-          "新埔國中"
-        ]
-      },
       "宏翠里": {
         "elementary": [],
         "junior_high": [
@@ -5163,17 +5222,32 @@
           "江翠國中"
         ]
       },
-      "文化里": {
-        "elementary": [],
-        "junior_high": [
-          "江翠國中"
-        ]
-      },
       "留侯四里": {
         "elementary": [],
         "junior_high": [
           "忠孝國中"
         ]
+      }
+    },
+    "自由學區": {
+      "】二里": {
+        "elementary": [
+          "文德國小",
+          "新埔國小"
+        ],
+        "junior_high": []
+      },
+      "新埔里": {
+        "elementary": [
+          "新埔國小"
+        ],
+        "junior_high": []
+      },
+      "】里": {
+        "elementary": [
+          "秀朗國小"
+        ],
+        "junior_high": []
       }
     },
     "中和區": {
@@ -5185,6 +5259,31 @@
         "junior_high": [
           "海山國中",
           "積穗國中",
+          "自強國中"
+        ]
+      },
+      "民生里": {
+        "elementary": [
+          "實踐國小"
+        ],
+        "junior_high": [
+          "自強國中"
+        ]
+      },
+      "國光里": {
+        "elementary": [
+          "實踐國小"
+        ],
+        "junior_high": [
+          "自強國中"
+        ]
+      },
+      "德穗里": {
+        "elementary": [
+          "實踐國小",
+          "自強國小"
+        ],
+        "junior_high": [
           "自強國中"
         ]
       },
@@ -5409,6 +5508,12 @@
         "junior_high": [
           "漳和國中"
         ]
+      },
+      "小里": {
+        "elementary": [
+          "中和國小"
+        ],
+        "junior_high": []
       },
       "華新里": {
         "elementary": [
@@ -5751,14 +5856,6 @@
           "自強國中"
         ]
       },
-      "德穗里": {
-        "elementary": [
-          "自強國小"
-        ],
-        "junior_high": [
-          "自強國中"
-        ]
-      },
       "景本里": {
         "elementary": [
           "景新國小"
@@ -5972,18 +6069,6 @@
           "漳和國中"
         ]
       },
-      "國光里": {
-        "elementary": [],
-        "junior_high": [
-          "自強國中"
-        ]
-      },
-      "民生里": {
-        "elementary": [],
-        "junior_high": [
-          "自強國中"
-        ]
-      },
       "平和里": {
         "elementary": [],
         "junior_high": [
@@ -6066,6 +6151,14 @@
       }
     },
     "永和區": {
+      "永和里": {
+        "elementary": [
+          "中和國小",
+          "永和國小",
+          "永平國小"
+        ],
+        "junior_high": []
+      },
       "智光里": {
         "elementary": [
           "秀山國小",
@@ -6163,6 +6256,56 @@
         ],
         "junior_high": []
       },
+      "學區】二里": {
+        "elementary": [
+          "永平國小"
+        ],
+        "junior_high": []
+      },
+      "永平里": {
+        "elementary": [
+          "永平國小"
+        ],
+        "junior_high": []
+      },
+      "安和里": {
+        "elementary": [
+          "永和國小",
+          "永平國小"
+        ],
+        "junior_high": [
+          "永和國中",
+          "漳和國中",
+          "福和國中"
+        ]
+      },
+      "新生里": {
+        "elementary": [
+          "永平國小",
+          "頂溪國小"
+        ],
+        "junior_high": [
+          "永平國中"
+        ]
+      },
+      "中溪里": {
+        "elementary": [
+          "永平國小",
+          "頂溪國小"
+        ],
+        "junior_high": [
+          "永平國中"
+        ]
+      },
+      "下溪里": {
+        "elementary": [
+          "永平國小",
+          "頂溪國小"
+        ],
+        "junior_high": [
+          "永平國中"
+        ]
+      },
       "安平里": {
         "elementary": [
           "永和國小"
@@ -6174,16 +6317,6 @@
           "永和國小"
         ],
         "junior_high": []
-      },
-      "安和里": {
-        "elementary": [
-          "永和國小"
-        ],
-        "junior_high": [
-          "永和國中",
-          "漳和國中",
-          "福和國中"
-        ]
       },
       "安順里": {
         "elementary": [
@@ -6221,12 +6354,80 @@
           "福和國中"
         ]
       },
-      "永和里": {
+      "潭墘里": {
+        "elementary": [
+          "永和國小"
+        ],
+        "junior_high": [
+          "永和國中",
+          "福和國中"
+        ]
+      },
+      "潭安里": {
+        "elementary": [
+          "永和國小"
+        ],
+        "junior_high": [
+          "永和國中",
+          "福和國中"
+        ]
+      },
+      "店街里": {
+        "elementary": [
+          "永和國小"
+        ],
+        "junior_high": [
+          "永和國中",
+          "福和國中"
+        ]
+      },
+      "大新里": {
+        "elementary": [
+          "永和國小"
+        ],
+        "junior_high": [
+          "永和國中",
+          "福和國中"
+        ]
+      },
+      "福和里": {
+        "elementary": [
+          "永和國小"
+        ],
+        "junior_high": [
+          "永和國中",
+          "福和國中"
+        ]
+      },
+      "得和里": {
+        "elementary": [
+          "永和國小"
+        ],
+        "junior_high": [
+          "永和國中",
+          "福和國中"
+        ]
+      },
+      "水源里": {
+        "elementary": [
+          "永和國小"
+        ],
+        "junior_high": [
+          "永和國中",
+          "永平國中",
+          "漳和國中",
+          "福和國中"
+        ]
+      },
+      "永貞里": {
         "elementary": [
           "永和國小",
-          "永平國小"
+          "網溪國小"
         ],
-        "junior_high": []
+        "junior_high": [
+          "永和國中",
+          "福和國中"
+        ]
       },
       "網溪里": {
         "elementary": [
@@ -6355,16 +6556,6 @@
           "福和國中"
         ]
       },
-      "永貞里": {
-        "elementary": [
-          "永和國小",
-          "網溪國小"
-        ],
-        "junior_high": [
-          "永和國中",
-          "福和國中"
-        ]
-      },
       "忠義里": {
         "elementary": [
           "頂溪國小"
@@ -6447,30 +6638,6 @@
         "junior_high": [
           "永和國中",
           "福和國中"
-        ]
-      },
-      "新生里": {
-        "elementary": [
-          "頂溪國小"
-        ],
-        "junior_high": [
-          "永平國中"
-        ]
-      },
-      "中溪里": {
-        "elementary": [
-          "頂溪國小"
-        ],
-        "junior_high": [
-          "永平國中"
-        ]
-      },
-      "下溪里": {
-        "elementary": [
-          "頂溪國小"
-        ],
-        "junior_high": [
-          "永平國中"
         ]
       },
       "大同里": {
@@ -6583,71 +6750,6 @@
         ],
         "junior_high": [
           "永和國中",
-          "福和國中"
-        ]
-      },
-      "潭墘里": {
-        "elementary": [
-          "永和國小"
-        ],
-        "junior_high": [
-          "永和國中",
-          "福和國中"
-        ]
-      },
-      "潭安里": {
-        "elementary": [
-          "永和國小"
-        ],
-        "junior_high": [
-          "永和國中",
-          "福和國中"
-        ]
-      },
-      "店街里": {
-        "elementary": [
-          "永和國小"
-        ],
-        "junior_high": [
-          "永和國中",
-          "福和國中"
-        ]
-      },
-      "大新里": {
-        "elementary": [
-          "永和國小"
-        ],
-        "junior_high": [
-          "永和國中",
-          "福和國中"
-        ]
-      },
-      "福和里": {
-        "elementary": [
-          "永和國小"
-        ],
-        "junior_high": [
-          "永和國中",
-          "福和國中"
-        ]
-      },
-      "得和里": {
-        "elementary": [
-          "永和國小"
-        ],
-        "junior_high": [
-          "永和國中",
-          "福和國中"
-        ]
-      },
-      "水源里": {
-        "elementary": [
-          "永和國小"
-        ],
-        "junior_high": [
-          "永和國中",
-          "永平國中",
-          "漳和國中",
           "福和國中"
         ]
       },
@@ -6805,6 +6907,7 @@
       },
       "頂城里": {
         "elementary": [
+          "安坑國小",
           "新店國小"
         ],
         "junior_high": [
@@ -7106,6 +7209,46 @@
           "安康國中"
         ]
       },
+      "德安里": {
+        "elementary": [
+          "安坑國小"
+        ],
+        "junior_high": [
+          "達觀國中小國中"
+        ]
+      },
+      "明城里": {
+        "elementary": [
+          "安坑國小"
+        ],
+        "junior_high": [
+          "達觀國中小國中"
+        ]
+      },
+      "安昌里": {
+        "elementary": [
+          "安坑國小"
+        ],
+        "junior_high": [
+          "安康國中"
+        ]
+      },
+      "達觀里": {
+        "elementary": [
+          "安坑國小"
+        ],
+        "junior_high": [
+          "達觀國中小國中"
+        ]
+      },
+      "柴埕里": {
+        "elementary": [
+          "安坑國小"
+        ],
+        "junior_high": [
+          "安康國中"
+        ]
+      },
       "永安里": {
         "elementary": [
           "新和國小"
@@ -7268,37 +7411,7 @@
           "五峰國中"
         ]
       },
-      "柴埕里": {
-        "elementary": [],
-        "junior_high": [
-          "安康國中"
-        ]
-      },
-      "安昌里": {
-        "elementary": [],
-        "junior_high": [
-          "安康國中"
-        ]
-      },
-      "德安里": {
-        "elementary": [],
-        "junior_high": [
-          "達觀國中小國中"
-        ]
-      },
       "吉祥里": {
-        "elementary": [],
-        "junior_high": [
-          "達觀國中小國中"
-        ]
-      },
-      "明城里": {
-        "elementary": [],
-        "junior_high": [
-          "達觀國中小國中"
-        ]
-      },
-      "達觀里": {
         "elementary": [],
         "junior_high": [
           "達觀國中小國中"
@@ -7806,9 +7919,16 @@
         ],
         "junior_high": []
       },
+      "民里": {
+        "elementary": [
+          "裕民國小"
+        ],
+        "junior_high": []
+      },
       "丹鳳里": {
         "elementary": [
-          "丹鳳國小"
+          "丹鳳國小",
+          "民安國小"
         ],
         "junior_high": []
       },
@@ -7990,6 +8110,14 @@
         "junior_high": [
           "福營國中"
         ]
+      }
+    },
+    "由學區": {
+      "】三里": {
+        "elementary": [
+          "昌平國小"
+        ],
+        "junior_high": []
       }
     },
     "三重區": {
