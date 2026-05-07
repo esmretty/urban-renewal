@@ -79,8 +79,12 @@ def parse_ntpc(pdf_path, kind, suffix):
 
     pdf = pdfplumber.open(pdf_path)
     cur_district = None
-    DISTRICT_RE = re.compile(r"([一-龥]{2,3}區)\s*\d{2,3}\s*學年度")
-    # 國小 PDF 每頁有「板橋區 115 學年度國小學區一覽表」這種 header
+    # 國小 PDF 頁首：「中和區 115 學年度國小學區一覽表」(只有每區第一頁有，後續同區頁面沒)
+    # 過去寫 r"([一-龥]{2,3}區)\s*\d{2,3}\s*學年度" 太寬鬆，會被表格欄標題列「自由學區 114學年度前備註」
+    # 誤當行政區 header → cur_district 被覆寫成「自由學區」(不在白名單) → 後續同區整批頁面被跳過。
+    # 修法：要求 「學年度國[小中]學區一覽表」整段標題出現才算 header；只在 page 首字段內找 (避開
+    # 內文偶爾出現相似字樣)。其他無 header 頁保留 cur_district sticky 沿用上一頁的區。
+    DISTRICT_RE = re.compile(r"([一-龥]{2,3}區)\s*\d{2,3}\s*學年度國[小中]學區一覽表")
     # 國中 PDF 是「{N}.{區名}……P.{頁碼}」目錄式，但每頁本身沒明顯 district header
     # → 國中 PDF 改用目錄頁解析建立 page→district 映射
 
@@ -152,22 +156,30 @@ def parse_ntpc(pdf_path, kind, suffix):
             for row in tab:
                 if not row or len(row) < 2:
                     continue
-                school = (row[0] or "").replace("\n", "").strip()
+                school_raw = (row[0] or "").strip()
                 base_district_str = (row[1] or "").strip()
-                if not school or not base_district_str:
+                if not school_raw or not base_district_str:
                     continue
+                # PDF cell 內換行 / 頓號 通常代表「多校共用同學區」(例：永和區國中只有
+                # 永和國中 + 福和國中 兩校共用同 row → cell value = "永和國中\n福和國中")
+                # 過去 .replace("\n", "") 直接把換行去掉 → 變「永和國中福和國中」連字串。
+                # 改 split 拆多校，每校各 add() 一次。
+                school_names = [s.strip() for s in re.split(r"[\n、,，]", school_raw) if s.strip()]
                 # 跳過 header row
-                if school in ("學校名稱", "學校"):
+                if any(s in ("學校名稱", "學校") for s in school_names):
                     continue
-                # 學校名 normalize（移除 "(國中部)" "(高中國中部)" 並加後綴）
-                school_clean = re.sub(r"\([^)]*\)", "", school).strip()
-                if not school_clean.endswith(suffix):
-                    school_clean = school_clean + suffix
-                # 合併基本 + 自由學區（自由學區在 row[2]）
+                # 合併基本 + 自由學區（自由學區在 row[2]）— 多校共用同 villages
                 free_district_str = (row[2] or "").strip() if len(row) > 2 else ""
                 villages = parse_villages(base_district_str) + parse_villages(free_district_str)
-                for v in villages:
-                    add("新北市", page_district, v, kind, school_clean)
+                for school in school_names:
+                    # 學校名 normalize（移除 "(國中部)" "(高中國中部)" 並加後綴）
+                    school_clean = re.sub(r"\([^)]*\)", "", school).strip()
+                    if not school_clean:
+                        continue
+                    if not school_clean.endswith(suffix):
+                        school_clean = school_clean + suffix
+                    for v in villages:
+                        add("新北市", page_district, v, kind, school_clean)
 
 
 def main():
