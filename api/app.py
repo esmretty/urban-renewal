@@ -47,6 +47,7 @@ _PUBLIC_PATHS = {
     "/api/school_district/supported",
     "/api/school_district/by_district",
     "/api/school_district/polygons",
+    "/api/school_district/polygons_all",
     "/school_lookup.html",              # 學區查詢測試頁 HTML
     "/api/maintenance_status",   # 維護頁 polling 用，公開不需 auth
     "/api/busy_state",           # deploy.sh pre-check 用，無個資
@@ -1227,6 +1228,44 @@ def api_school_district_polygons(city: str = Query(...), district: str = Query(.
             "junior_high": info.get("junior_high") or [],
         }
         out.append(merged)
+    return {"type": "FeatureCollection", "features": out}
+
+
+@app.get("/api/school_district/polygons_all")
+def api_school_district_polygons_all():
+    """回所有 supported (city, district) 的 polygon 合集 — 給「全區學區地圖」用。
+    一次 response 含台北/新北所有里的 polygon + 學校資料。"""
+    from analysis import school_district as sd
+    if _POLYGON_CACHE["data"] is None:
+        try:
+            import json as _json
+            poly_path = BASE_DIR / "data" / "school_districts" / "villages_polygon.geojson"
+            with open(poly_path, encoding="utf-8") as f:
+                _POLYGON_CACHE["data"] = _json.load(f)
+        except Exception as e:
+            return {"error": f"polygon 檔案載入失敗: {e}"}
+    all_features = (_POLYGON_CACHE["data"] or {}).get("features") or []
+    supported = sd.get_supported_districts()  # {city: [district, ...]}
+    supported_pairs = {(c, d) for c, dists in supported.items() for d in dists}
+    villages_cache: dict = {}   # (city, district) → villages dict
+    out = []
+    for ft in all_features:
+        p = ft.get("properties") or {}
+        c, t, v = p.get("county"), p.get("town"), p.get("village")
+        if (c, t) not in supported_pairs:
+            continue
+        if (c, t) not in villages_cache:
+            villages_cache[(c, t)] = sd.get_district_villages(c, t)
+        info = villages_cache[(c, t)].get(v) or {}
+        out.append({
+            "type": "Feature",
+            "geometry": ft.get("geometry"),
+            "properties": {
+                "county": c, "town": t, "village": v,
+                "elementary": info.get("elementary") or [],
+                "junior_high": info.get("junior_high") or [],
+            },
+        })
     return {"type": "FeatureCollection", "features": out}
 
 
