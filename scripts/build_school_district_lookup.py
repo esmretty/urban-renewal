@@ -108,10 +108,15 @@ def parse_ntpc(pdf_path, kind, suffix):
                 # setdefault：同 page 多區時，第一個（toc 順序在前）的區獲得歸屬
                 page_to_district.setdefault(p, district_name)
 
-    def parse_villages(text):
-        """從「基本學區」cell 抽取里名 list。
-        e.g. "留侯里、流芳里、赤松里、黃石里" → ["留侯里", "流芳里", "赤松里", "黃石里"]
-        忽略括號內鄰級切割註記 (e.g. "華東里(1-6、19-21 鄰)" → "華東里")
+    def parse_villages_with_region(text, default_region):
+        """從「基本學區」/「自由學區」cell 抽取 (region, village) tuple list。
+
+        PDF 實際：跨區共同學區 cell 內會混雜本區跟外區里名：
+          「永和區前溪里、保平里、保安里」← 第一個帶「永和區」前綴，後續沿用 sticky region
+          「福祥里、永和區雙和里」← 前段沒前綴 (= default_region)，後段帶「永和區」
+        所以解析時要按順序 scan，遇到 X區 prefix 就 update sticky region，後續無前綴里沿用。
+
+        過濾「等N里」「N里」尾巴 (PDF 描述「復興等4里」會被誤拆) → 整個 token 丟。
         """
         if not text:
             return []
@@ -120,22 +125,54 @@ def parse_ntpc(pdf_path, kind, suffix):
         # 移除括號內容（中文+英文括號）
         t = re.sub(r"\([^)]*\)", "", t)
         t = re.sub(r"（[^）]*）", "", t)
-        # 移除「等里」尾標
-        t = re.sub(r"等里$", "", t)
         # 用「、」「，」分隔
         parts = re.split(r"[、,，]", t)
-        villages = []
+        out = []
+        cur_region = default_region
+        # PDF 「自由學區」cell 內常用「一、二、三、四、五」中文編號分段 (e.g.
+        # 「一、中原里(1-6 鄰) 二、景平里...」)，移括號後 split 「、」會把序號獨立成 token，
+        # 補「里」suffix 變假村里「一里」「四里」「五里」 — 直接濾掉純序號 token
+        SERIAL_TOKENS = {"一","二","三","四","五","六","七","八","九","十","1","2","3","4","5","6","7","8","9","10"}
         for p in parts:
             p = p.strip()
             if not p:
                 continue
-            # 補「里」字（有些「板橋國小」row 是 "留侯里、流芳里、赤松、黃石、挹秀..." 中後段省略「里」字）
-            if not p.endswith("里"):
-                p = p + "里"
+            if p in SERIAL_TOKENS:
+                continue
+            # 偵測 X區 prefix → update sticky region + 拆出後段當村里名
+            m = re.match(r"^([一-龥]{2,3}區)\s*(.+)$", p)
+            if m:
+                cur_region = m.group(1)
+                village = m.group(2).strip()
+            else:
+                village = p
+            # 過濾 PDF 描述性詞（非真實里名）：
+            #   「等N里」「等里」(例：「復興等4里」「景安等里」)
+            #   「各里」「其餘里」「全里」
+            if "等" in village:
+                continue
+            if village in ("各里", "其餘里", "全里"):
+                continue
+            # 尾巴為「N+里」(純數字+里) — 來自 PDF 描述「四里」「等4里」之類
+            if re.fullmatch(r"[一二三四五六七八九十百0-9]+\s*里", village):
+                continue
+            # 「{真名里}{序號}」黏字串：PDF 序號「N、」緊接前 row 末括號+換行造成 (例：
+            # 「六、留侯里(7、9鄰)\n七、雙玉里」移括號 + 移換行後變「留侯里七、雙玉里」，
+            # split 「、」 後「留侯里七」獨立 → 應 strip 尾序號 →「留侯里」)
+            m_serial = re.match(r"^(.+里)([一二三四五六七八九十0-9]+)$", village)
+            if m_serial:
+                village = m_serial.group(1)
+            # 補「里」字（PDF 中後段省略「里」字 — e.g. "留侯里、流芳里、赤松、黃石"）
+            if not village.endswith("里"):
+                village = village + "里"
             # 過濾明顯不是里的字串
-            if 1 < len(p) <= 6 and "里" in p:
-                villages.append(p)
-        return villages
+            if 1 < len(village) <= 6 and "里" in village:
+                out.append((cur_region, village))
+        return out
+
+    # 舊 API 兼容：parse_villages(text) 仍可用，回 list of village 名 (用 default_region 拋掉)
+    def parse_villages(text):
+        return [v for _, v in parse_villages_with_region(text, "")]
 
     target_districts = {"板橋區", "新莊區", "新店區", "中和區", "永和區"}
     for pg_i, page in enumerate(pdf.pages):
@@ -160,26 +197,55 @@ def parse_ntpc(pdf_path, kind, suffix):
                 base_district_str = (row[1] or "").strip()
                 if not school_raw or not base_district_str:
                     continue
-                # PDF cell 內換行 / 頓號 通常代表「多校共用同學區」(例：永和區國中只有
-                # 永和國中 + 福和國中 兩校共用同 row → cell value = "永和國中\n福和國中")
-                # 過去 .replace("\n", "") 直接把換行去掉 → 變「永和國中福和國中」連字串。
-                # 改 split 拆多校，每校各 add() 一次。
+                # 跨區共同學區 row 校名 cell 是「X區\n校名」(換行分區別 + 校名) — 黏回單字串
+                # 例：「永和區\n永平國小」 → 「永和區永平國小」
+                school_raw = re.sub(r"^([一-龥]{2,3}區)\s*\n\s*", r"\1", school_raw)
+                # 多校共用同 row case：cell 內用換行/頓號分校 (例：永和區國中只有永和+福和兩校
+                # 共用同 row → "永和國中\n福和國中")。要拆。
                 school_names = [s.strip() for s in re.split(r"[\n、,，]", school_raw) if s.strip()]
                 # 跳過 header row
                 if any(s in ("學校名稱", "學校") for s in school_names):
                     continue
                 # 合併基本 + 自由學區（自由學區在 row[2]）— 多校共用同 villages
                 free_district_str = (row[2] or "").strip() if len(row) > 2 else ""
-                villages = parse_villages(base_district_str) + parse_villages(free_district_str)
-                for school in school_names:
-                    # 學校名 normalize（移除 "(國中部)" "(高中國中部)" 並加後綴）
-                    school_clean = re.sub(r"\([^)]*\)", "", school).strip()
-                    if not school_clean:
+
+                # 解析每校 region + clean name
+                # 校名前綴若帶 X區 (例：「永和區永平國小」) → 該校屬該 X區；否則屬本頁主區 (sticky)
+                schools_with_region = []
+                for s in school_names:
+                    s_clean = re.sub(r"\([^)]*\)", "", s).strip()
+                    if not s_clean:
                         continue
-                    if not school_clean.endswith(suffix):
-                        school_clean = school_clean + suffix
-                    for v in villages:
-                        add("新北市", page_district, v, kind, school_clean)
+                    region_m = re.match(r"^([一-龥]{2,3}區)\s*(.+)$", s_clean)
+                    if region_m:
+                        s_region = region_m.group(1)
+                        s_clean = region_m.group(2).strip()
+                    else:
+                        s_region = page_district
+                    # 高中附設國中部 normalize：「錦和高中」(校名) + 「國中」(suffix) → 「錦和高中國中」
+                    # 真實校名通常稱「錦和國中」 → 拿掉中間「高中」
+                    if kind == "junior_high" and "高中" in s_clean and not s_clean.endswith("國中"):
+                        s_clean = s_clean.replace("高中", "")
+                    if not s_clean.endswith(suffix):
+                        s_clean = s_clean + suffix
+                    schools_with_region.append((s_region, s_clean))
+
+                # 解析里名 list — 每個里抓自己的 region (cell 內前綴 sticky scan)
+                # default region 用「該校所屬 region」(校名前綴 X區 + page_district fallback) 而非 page sticky
+                # 避免：page 25 sticky=中和區但實際 row 是「永和區永平國小」(該校的村里應歸永和區)
+                default_v_region = schools_with_region[0][0] if schools_with_region else page_district
+                villages_with_region = (
+                    parse_villages_with_region(base_district_str, default_v_region) +
+                    parse_villages_with_region(free_district_str, default_v_region)
+                )
+
+                # 注意：lookup 只 by (新北市, village_region, village_name) 索引；school 名 normalize
+                # 已不帶 X區 前綴。所以跨區共同學區的學校會出現在「他區的 lookup」下且校名不帶區別前綴。
+                # 例：中和區福祥里 → 「中和國小、永平國小」(永平本來屬永和區，跨區可去)。
+                # 用戶看到時可能不知「永平國小」是永和區的 — 接受 trade-off (跟既有 schema 一致)。
+                for s_region, school_clean in schools_with_region:
+                    for v_region, village in villages_with_region:
+                        add("新北市", v_region, village, kind, school_clean)
 
 
 def main():
