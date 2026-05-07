@@ -41,6 +41,7 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -67,6 +68,73 @@ SERIAL_TOKENS = {"一", "二", "三", "四", "五", "六", "七", "八", "九", 
 NON_VILLAGE_NAMES = {"全區", "轄區", "全區轄區", "全區里", "轄區里", "全區轄區里"}
 # 直轄市/縣市名 — 用於從「里／鄰」前綴抓「跨區」prefix（例「中和區民生里」、「板橋區後埔里」）
 REGION_RE = re.compile(r"^([一-龥]{1,4}區)\s*(.+)$")
+VILLAGE_VALID_RE = re.compile(r"^[一-龥]{2,3}里$")
+
+
+def _looks_like_real_village(name: str) -> bool:
+    """檢查是否像真實台灣里名 — base 2-3 純中文 + 「里」字結尾。
+    NLSC 台北/新北 1474 里全是 base=2 中文字，這個驗證濾掉 source CSV
+    整理時混入的非里字串（「集英。2里」/「建成共同學里」/「(美潭里」/「木里」/「1里」等）。
+    """
+    return bool(VILLAGE_VALID_RE.match(name or ""))
+
+
+# (city, village) → set of valid district — 用 NLSC TownVillagePoint 數據建 ground truth
+# 用途：source CSV 跨區共同學區 row 沒寫「X區」前綴時 (例「行政區=中和區, 里=下溪里」
+# 但下溪里實際是永和區里)，用此校正 row['district'] 成正確區
+_VILLAGE_REGION_MAP: Optional[dict] = None
+
+
+def _load_village_region_map() -> dict:
+    global _VILLAGE_REGION_MAP
+    if _VILLAGE_REGION_MAP is not None:
+        return _VILLAGE_REGION_MAP
+    src = DATA / "_raw_twvillage.json"
+    mp: dict = {}
+    if src.exists():
+        with open(src, encoding="utf-8") as fp:
+            d = json.load(fp)
+        for f in d.get("features", []):
+            p = f.get("properties") or {}
+            cnty = p.get("county")
+            town = p.get("town")
+            vill = p.get("village")
+            if cnty and town and vill:
+                mp.setdefault((cnty, vill), set()).add(town)
+    _VILLAGE_REGION_MAP = mp
+    return mp
+
+
+# 異體字 normalize — source CSV 偶爾用異體字 (恒/恆、磘/瑤、舘/館 等)，NLSC 用標準字
+_VARIANT_MAP = str.maketrans({
+    "恒": "恆",
+    "舘": "館",
+})
+
+
+def _normalize_village_name(v: str) -> str:
+    """里名 normalize 異體字。"""
+    if not v:
+        return v
+    return v.translate(_VARIANT_MAP)
+
+
+def _resolve_district(city: str, district: str, village: str) -> Optional[str]:
+    """用 NLSC ground truth 校正 (city, village) 應該屬於哪個 district。
+    - 若 (city, village) NLSC 唯一 → 回該 district (不論 source 寫的對不對)
+    - 多區重名 + source district 在 valid set → 保留 source
+    - 多區重名 + source district 不在 set → 回 None (skip emit)
+    - NLSC 沒收這個 (city, village) → 回 source district (信任 source)
+    """
+    mp = _load_village_region_map()
+    valid = mp.get((city, village))
+    if not valid:
+        return district
+    if district in valid:
+        return district
+    if len(valid) == 1:
+        return next(iter(valid))
+    return None
 
 
 def parse_village_field(raw: str) -> tuple[str | None, str | None, str, str | None]:
@@ -101,31 +169,34 @@ def parse_village_field(raw: str) -> tuple[str | None, str | None, str, str | No
         return None, None, s_normalized, None
 
     # 找「里」的位置 — 拆 village（「里」前 + 「里」字）跟 neighborhoods（「里」後）
-    m_li = re.search(r"^(.+?里)(.*)$", s_after_region)
+    # group1 限定中文 — 避免「轄區(除和美里」這種把「(除和美」吃進 village
+    m_li = re.search(r"^([一-龥]+里)(.*)$", s_after_region)
     if m_li:
         village = m_li.group(1).strip()
         rest = m_li.group(2).strip()
-        # 若 village 是純序號 + 里 (例「四里」「等4里」) → 視為 noise
-        if re.fullmatch(r"[一二三四五六七八九十百0-9]+\s*里", village):
-            return None, None, s_normalized, None
-        if village in NON_VILLAGE_NAMES:
+        village = _normalize_village_name(village)
+        if not _looks_like_real_village(village):
             return None, None, s_normalized, None
         return village, (rest if rest else None), s_normalized, target_dist
 
-    # 沒「里」字 — 找鄰級 marker 拆（台北 CSV 「介壽（1～4鄰）」這種）
-    m_paren = re.search(r"^(.+?)([（(].*[)）].*|\d.*鄰.*|[除\d].*)$", s_after_region)
+    # 沒「里」字 — 找鄰級 marker 拆（台北 CSV「介壽（1～4鄰）」/「全安（1-4鄰」/「松隆（7-12鄰」這種）
+    # group1 只允許中文／中點符號 — 不能吃進括號／數字／鄰字（避免「全安（」變 village）
+    # 即使 source 沒右括號（「全安（1-4鄰」），也能正確切「全安」+「（1-4鄰」
+    m_paren = re.search(r"^([一-龥・·•]+)([（(\d除].*)$", s_after_region)
     if m_paren:
         name = m_paren.group(1).strip()
         rest = m_paren.group(2).strip()
-        if name in NON_VILLAGE_NAMES:
-            return None, None, s_normalized, None
         village = name + "里" if not name.endswith("里") else name
+        village = _normalize_village_name(village)
+        if not _looks_like_real_village(village):
+            return None, None, s_normalized, None
         return village, (rest if rest else None), s_normalized, target_dist
 
     # 沒鄰級切割也沒「里」— 純里名（台北慣例）
-    if s_after_region in NON_VILLAGE_NAMES:
-        return None, None, s_normalized, None
     village = s_after_region if s_after_region.endswith("里") else (s_after_region + "里")
+    village = _normalize_village_name(village)
+    if not _looks_like_real_village(village):
+        return None, None, s_normalized, None
     return village, None, s_normalized, target_dist
 
 
@@ -173,11 +244,14 @@ def parse_ntpc_es(path: Path) -> list[dict]:
             if not village:
                 logger.info(f"[ntpc_es] skip non-village: {village_field!r}")
                 continue
+            obj_dist = _resolve_district("新北市", target_dist or district, village)
+            if not obj_dist:
+                continue   # NLSC 多區重名無法 disambiguate → skip
             for sch_one in split_school_names(school):
                 sch_d, sch_clean = _extract_school_region(sch_one, default_region=district)
                 out.append({
                     "city": "新北市",
-                    "district": (target_dist or district),  # 跨區 prefix override
+                    "district": obj_dist,
                     "school_district": sch_d,
                     "kind": "elementary",
                     "school": sch_clean,
@@ -209,11 +283,14 @@ def parse_ntpc_jh(path: Path) -> list[dict]:
             if not village:
                 logger.info(f"[ntpc_jh] skip non-village: {village_field!r}")
                 continue
+            obj_dist = _resolve_district("新北市", target_dist or district, village)
+            if not obj_dist:
+                continue
             for sch_one in split_school_names(school):
                 sch_d, sch_clean = _extract_school_region(sch_one, default_region=district)
                 out.append({
                     "city": "新北市",
-                    "district": (target_dist or district),
+                    "district": obj_dist,
                     "school_district": sch_d,
                     "kind": "junior_high",
                     "school": sch_clean,
@@ -248,12 +325,15 @@ def parse_taipei_es(path: Path) -> list[dict]:
             # 台北 CSV「行政區」=學校所在區、「學區所在區」=該里所屬區（跨區時 ≠ 行政區）
             obj_district = sch_d_csv  # 物件實際所在區（lookup key）
             school_position_district = district
+            final_dist = _resolve_district("台北市", target_dist or obj_district, village)
+            if not final_dist:
+                continue
             for sch_one in split_school_names(school):
                 if not sch_one.endswith("國小"):
                     sch_one = sch_one + "國小"
                 out.append({
                     "city": "台北市",
-                    "district": (target_dist or obj_district),
+                    "district": final_dist,
                     "school_district": school_position_district,
                     "kind": "elementary",
                     "school": sch_one,
@@ -287,12 +367,15 @@ def parse_taipei_jh(path: Path) -> list[dict]:
             if not village:
                 logger.info(f"[taipei_jh] skip non-village: {village_field!r}")
                 continue
+            final_dist = _resolve_district("台北市", target_dist or obj_district_csv, village)
+            if not final_dist:
+                continue
             for sch_one in split_school_names(school):
                 if not (sch_one.endswith("國中") or "國中部" in sch_one):
                     sch_one = sch_one + "國中"
                 out.append({
                     "city": "台北市",
-                    "district": (target_dist or obj_district_csv),
+                    "district": final_dist,
                     "school_district": district,  # 學校位置區=「行政區」column
                     "kind": "junior_high",
                     "school": sch_one,

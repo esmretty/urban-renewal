@@ -1,14 +1,14 @@
 {
   "_meta": {
     "version": "2",
-    "generated_at": "2026-05-07T16:25:05.056486+00:00",
+    "generated_at": "2026-05-07T16:59:43.180207+00:00",
     "source_files": [
       "ntpc_elementary.csv",
       "ntpc_junior_high.csv",
       "taipei_elementary.csv",
       "taipei_junior_high.csv"
     ],
-    "total_rows": 4596
+    "total_rows": 4474
   },
   "rows": [
     {
@@ -949,7 +949,7 @@
     },
     {
       "city": "新北市",
-      "district": "板橋區",
+      "district": "中和區",
       "school_district": "板橋區",
       "kind": "elementary",
       "school": "海山國小",
@@ -1617,19 +1617,6 @@
       "kind": "elementary",
       "school": "文德國小",
       "zone_type": "基本",
-      "village": "公?里",
-      "village_raw": "公?里",
-      "neighborhoods_raw": null,
-      "source_page": 6,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "板橋區",
-      "school_district": "板橋區",
-      "kind": "elementary",
-      "school": "文德國小",
-      "zone_type": "基本",
       "village": "幸福里",
       "village_raw": "幸福里",
       "neighborhoods_raw": null,
@@ -1846,7 +1833,7 @@
     },
     {
       "city": "新北市",
-      "district": "板橋區",
+      "district": "中和區",
       "school_district": "板橋區",
       "kind": "elementary",
       "school": "實踐國小",
@@ -2165,19 +2152,6 @@
       "zone_type": "自由",
       "village": "壽德里",
       "village_raw": "中和區壽德里",
-      "neighborhoods_raw": null,
-      "source_page": 9,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "板橋區",
-      "school_district": "板橋區",
-      "kind": "elementary",
-      "school": "重慶國小",
-      "zone_type": "自由",
-      "village": "明德里",
-      "village_raw": "明德里",
       "neighborhoods_raw": null,
       "source_page": 9,
       "extra": {}
@@ -3068,7 +3042,7 @@
     },
     {
       "city": "新北市",
-      "district": "土城區",
+      "district": "板橋區",
       "school_district": "板橋區",
       "kind": "elementary",
       "school": "信義國小",
@@ -3081,20 +3055,7 @@
     },
     {
       "city": "新北市",
-      "district": "土城區",
-      "school_district": "板橋區",
-      "kind": "elementary",
-      "school": "信義國小",
-      "zone_type": "基本",
-      "village": "信義里",
-      "village_raw": "信義里",
-      "neighborhoods_raw": null,
-      "source_page": 13,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "土城區",
+      "district": "板橋區",
       "school_district": "板橋區",
       "kind": "elementary",
       "school": "信義國小",
@@ -3270,19 +3231,6 @@
       "zone_type": "基本",
       "village": "金寮里",
       "village_raw": "金寮里",
-      "neighborhoods_raw": null,
-      "source_page": 14,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "樹林區",
-      "school_district": "樹林區",
-      "kind": "elementary",
-      "school": "武林國小",
-      "zone_type": "基本",
-      "village": "?寮里",
-      "village_raw": "?寮里",
       "neighborhoods_raw": null,
       "source_page": 14,
       "extra": {}
@@ -4321,61 +4269,9 @@
       "kind": "elementary",
       "school": "鶯歌國小",
       "zone_type": "自由",
-      "village": "2里",
-      "village_raw": "20鄰",
-      "neighborhoods_raw": "0鄰",
-      "source_page": 18,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "elementary",
-      "school": "鶯歌國小",
-      "zone_type": "自由",
-      "village": "三峽文化部落龍恩里",
-      "village_raw": "三峽文化部落龍恩里30",
-      "neighborhoods_raw": "30",
-      "source_page": 18,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "elementary",
-      "school": "鶯歌國小",
-      "zone_type": "自由",
-      "village": "3里",
-      "village_raw": "31鄰",
-      "neighborhoods_raw": "1鄰",
-      "source_page": 18,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "elementary",
-      "school": "鶯歌國小",
-      "zone_type": "自由",
       "village": "尖山里",
       "village_raw": "尖山里5",
       "neighborhoods_raw": "5",
-      "source_page": 18,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "elementary",
-      "school": "鶯歌國小",
-      "zone_type": "自由",
-      "village": "1里",
-      "village_raw": "10鄰",
-      "neighborhoods_raw": "0鄰",
       "source_page": 18,
       "extra": {}
     },
@@ -4449,32 +4345,6 @@
       "district": "鶯歌區",
       "school_district": "鶯歌區",
       "kind": "elementary",
-      "school": "鳳鳴國小",
-      "zone_type": "自由",
-      "village": "桃園市八德區大發里",
-      "village_raw": "桃園市八德區大發里6、19–21鄰",
-      "neighborhoods_raw": "6、19–21鄰",
-      "source_page": 18,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "elementary",
-      "school": "鳳鳴國小",
-      "zone_type": "自由",
-      "village": "桃園市八德區大明里",
-      "village_raw": "桃園市八德區大明里16–19鄰",
-      "neighborhoods_raw": "16–19鄰",
-      "source_page": 18,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "elementary",
       "school": "二橋國小",
       "zone_type": "基本",
       "village": "二橋里",
@@ -4519,19 +4389,6 @@
       "village": "尖山里",
       "village_raw": "尖山里5",
       "neighborhoods_raw": "5",
-      "source_page": 19,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "elementary",
-      "school": "二橋國小",
-      "zone_type": "自由",
-      "village": "1里",
-      "village_raw": "10鄰",
-      "neighborhoods_raw": "0鄰",
       "source_page": 19,
       "extra": {}
     },
@@ -4657,32 +4514,6 @@
       "district": "鶯歌區",
       "school_district": "鶯歌區",
       "kind": "elementary",
-      "school": "建國國小",
-      "zone_type": "自由",
-      "village": "三峽文化部落龍恩里",
-      "village_raw": "三峽文化部落龍恩里30",
-      "neighborhoods_raw": "30",
-      "source_page": 19,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "elementary",
-      "school": "建國國小",
-      "zone_type": "自由",
-      "village": "3里",
-      "village_raw": "31鄰",
-      "neighborhoods_raw": "1鄰",
-      "source_page": 19,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "elementary",
       "school": "永吉國小",
       "zone_type": "基本",
       "village": "永吉里",
@@ -4722,32 +4553,6 @@
       "district": "鶯歌區",
       "school_district": "鶯歌區",
       "kind": "elementary",
-      "school": "永吉國小",
-      "zone_type": "自由",
-      "village": "桃園市八德區大發里",
-      "village_raw": "桃園市八德區大發里6鄰福德一路177巷",
-      "neighborhoods_raw": "6鄰福德一路177巷",
-      "source_page": 20,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "elementary",
-      "school": "永吉國小",
-      "zone_type": "自由",
-      "village": "桃園市八德區大發里",
-      "village_raw": "桃園市八德區大發里7–8鄰",
-      "neighborhoods_raw": "7–8鄰",
-      "source_page": 20,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "elementary",
       "school": "昌福國小",
       "zone_type": "基本",
       "village": "永昌里",
@@ -4766,19 +4571,6 @@
       "village": "中湖里",
       "village_raw": "中湖里26–27鄰",
       "neighborhoods_raw": "26–27鄰",
-      "source_page": 20,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "elementary",
-      "school": "昌福國小",
-      "zone_type": "自由",
-      "village": ")中湖里",
-      "village_raw": ")中湖里1–3鄰",
-      "neighborhoods_raw": "1–3鄰",
       "source_page": 20,
       "extra": {}
     },
@@ -4826,32 +4618,6 @@
       "district": "三峽區",
       "school_district": "三峽區",
       "kind": "elementary",
-      "school": "龍埔國小",
-      "zone_type": "自由",
-      "village": "三峽文化部落龍恩里",
-      "village_raw": "三峽文化部落龍恩里30",
-      "neighborhoods_raw": "30",
-      "source_page": 21,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "elementary",
-      "school": "龍埔國小",
-      "zone_type": "自由",
-      "village": "3里",
-      "village_raw": "31鄰",
-      "neighborhoods_raw": "1鄰",
-      "source_page": 21,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "elementary",
       "school": "北大國小",
       "zone_type": "基本",
       "village": "龍埔里",
@@ -4870,58 +4636,6 @@
       "village": "龍恩里",
       "village_raw": "龍恩里2–10、15–29鄰",
       "neighborhoods_raw": "2–10、15–29鄰",
-      "source_page": 21,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "elementary",
-      "school": "北大國小",
-      "zone_type": "基本",
-      "village": "永?里",
-      "village_raw": "永?里1、22–25鄰",
-      "neighborhoods_raw": "1、22–25鄰",
-      "source_page": 21,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "elementary",
-      "school": "北大國小",
-      "zone_type": "自由",
-      "village": "三峽文化部落龍恩里",
-      "village_raw": "三峽文化部落龍恩里30",
-      "neighborhoods_raw": "30",
-      "source_page": 21,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "elementary",
-      "school": "北大國小",
-      "zone_type": "自由",
-      "village": "3里",
-      "village_raw": "31鄰",
-      "neighborhoods_raw": "1鄰",
-      "source_page": 21,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "elementary",
-      "school": "三峽國小",
-      "zone_type": "基本",
-      "village": "永?里",
-      "village_raw": "永?里2–21鄰",
-      "neighborhoods_raw": "2–21鄰",
       "source_page": 21,
       "extra": {}
     },
@@ -4961,32 +4675,6 @@
       "village": "三峽里",
       "village_raw": "三峽里",
       "neighborhoods_raw": null,
-      "source_page": 21,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "elementary",
-      "school": "三峽國小",
-      "zone_type": "自由",
-      "village": "三峽文化部落龍恩里",
-      "village_raw": "三峽文化部落龍恩里30",
-      "neighborhoods_raw": "30",
-      "source_page": 21,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "elementary",
-      "school": "三峽國小",
-      "zone_type": "自由",
-      "village": "3里",
-      "village_raw": "31鄰",
-      "neighborhoods_raw": "1鄰",
       "source_page": 21,
       "extra": {}
     },
@@ -5356,19 +5044,6 @@
     },
     {
       "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "elementary",
-      "school": "介壽國小",
-      "zone_type": "自由",
-      "village": "溪北里",
-      "village_raw": "溪北里中正里正義街",
-      "neighborhoods_raw": "中正里正義街",
-      "source_page": 22,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
       "district": "中和區",
       "school_district": "中和區",
       "kind": "elementary",
@@ -5582,19 +5257,6 @@
       "kind": "elementary",
       "school": "中和國小",
       "zone_type": "基本",
-      "village": "瓦?里",
-      "village_raw": "瓦?里16、21、22、27鄰",
-      "neighborhoods_raw": "16、21、22、27鄰",
-      "source_page": 23,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
-      "school_district": "中和區",
-      "kind": "elementary",
-      "school": "中和國小",
-      "zone_type": "基本",
       "village": "佳和里",
       "village_raw": "佳和里1–6、30–40鄰",
       "neighborhoods_raw": "1–6、30–40鄰",
@@ -5676,19 +5338,6 @@
       "village": "佳和里",
       "village_raw": "佳和里7–29鄰",
       "neighborhoods_raw": "7–29鄰",
-      "source_page": 23,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
-      "school_district": "中和區",
-      "kind": "elementary",
-      "school": "中和國小",
-      "zone_type": "自由",
-      "village": "瓦?里",
-      "village_raw": "瓦?里1–15、17–20、23–26、28、29鄰",
-      "neighborhoods_raw": "1–15、17–20、23–26、28、29鄰",
       "source_page": 23,
       "extra": {}
     },
@@ -6024,19 +5673,6 @@
       "kind": "elementary",
       "school": "積穗國小",
       "zone_type": "自由",
-      "village": "灰?里",
-      "village_raw": "灰?里7鄰",
-      "neighborhoods_raw": "7鄰",
-      "source_page": 24,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
-      "school_district": "中和區",
-      "kind": "elementary",
-      "school": "積穗國小",
-      "zone_type": "自由",
       "village": "中原里",
       "village_raw": "中原里9、11、12、18–20鄰",
       "neighborhoods_raw": "9、11、12、18–20鄰",
@@ -6357,26 +5993,13 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "永和區",
       "school_district": "中和區",
       "kind": "elementary",
       "school": "秀山國小",
       "zone_type": "自由",
       "village": "民治里",
       "village_raw": "民治里",
-      "neighborhoods_raw": null,
-      "source_page": 25,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
-      "school_district": "中和區",
-      "kind": "elementary",
-      "school": "秀山國小",
-      "zone_type": "自由",
-      "village": "民權里",
-      "village_raw": "民權里",
       "neighborhoods_raw": null,
       "source_page": 25,
       "extra": {}
@@ -6565,7 +6188,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "土城區",
       "school_district": "中和區",
       "kind": "elementary",
       "school": "自強國小",
@@ -6578,7 +6201,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "土城區",
       "school_district": "中和區",
       "kind": "elementary",
       "school": "自強國小",
@@ -6842,32 +6465,6 @@
       "school_district": "中和區",
       "kind": "elementary",
       "school": "錦和國小",
-      "zone_type": "基本",
-      "village": "灰?里",
-      "village_raw": "灰?里1–6鄰",
-      "neighborhoods_raw": "1–6鄰",
-      "source_page": 26,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
-      "school_district": "中和區",
-      "kind": "elementary",
-      "school": "錦和國小",
-      "zone_type": "自由",
-      "village": "灰?里",
-      "village_raw": "灰?里7鄰",
-      "neighborhoods_raw": "7鄰",
-      "source_page": 26,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
-      "school_district": "中和區",
-      "kind": "elementary",
-      "school": "錦和國小",
       "zone_type": "自由",
       "village": "德行里",
       "village_raw": "德行里22–37、42鄰",
@@ -6903,7 +6500,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "板橋區",
       "school_district": "中和區",
       "kind": "elementary",
       "school": "光復國小",
@@ -6916,20 +6513,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
-      "school_district": "中和區",
-      "kind": "elementary",
-      "school": "光復國小",
-      "zone_type": "基本",
-      "village": "富貴里",
-      "village_raw": "富貴里",
-      "neighborhoods_raw": null,
-      "source_page": 26,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
+      "district": "板橋區",
       "school_district": "中和區",
       "kind": "elementary",
       "school": "光復國小",
@@ -6942,20 +6526,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
-      "school_district": "中和區",
-      "kind": "elementary",
-      "school": "光復國小",
-      "zone_type": "基本",
-      "village": "光復里",
-      "village_raw": "光復里",
-      "neighborhoods_raw": null,
-      "source_page": 26,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
+      "district": "板橋區",
       "school_district": "中和區",
       "kind": "elementary",
       "school": "光復國小",
@@ -7033,7 +6604,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "永和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永平國小",
@@ -7046,20 +6617,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
-      "school_district": "永和區",
-      "kind": "elementary",
-      "school": "永平國小",
-      "zone_type": "基本",
-      "village": "保安里",
-      "village_raw": "保安里",
-      "neighborhoods_raw": null,
-      "source_page": 27,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
+      "district": "永和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永平國小",
@@ -7072,20 +6630,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
-      "school_district": "永和區",
-      "kind": "elementary",
-      "school": "永平國小",
-      "zone_type": "基本",
-      "village": "和平里",
-      "village_raw": "和平里",
-      "neighborhoods_raw": null,
-      "source_page": 27,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
+      "district": "永和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永平國小",
@@ -7137,19 +6682,6 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
-      "school_district": "永和區",
-      "kind": "elementary",
-      "school": "永平國小",
-      "zone_type": "自由",
-      "village": "瓦?里",
-      "village_raw": "瓦?里1–15、17–20、23–26、28–29鄰",
-      "neighborhoods_raw": "1–15、17–20、23–26、28–29鄰",
-      "source_page": 27,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
       "district": "永和區",
       "school_district": "永和區",
       "kind": "elementary",
@@ -7176,19 +6708,6 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
-      "school_district": "永和區",
-      "kind": "elementary",
-      "school": "永平國小",
-      "zone_type": "自由",
-      "village": "水源里",
-      "village_raw": "水源里1、7–21鄰",
-      "neighborhoods_raw": "1、7–21鄰",
-      "source_page": 27,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
       "district": "永和區",
       "school_district": "永和區",
       "kind": "elementary",
@@ -7202,20 +6721,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
-      "school_district": "永和區",
-      "kind": "elementary",
-      "school": "永平國小",
-      "zone_type": "自由",
-      "village": "新生里",
-      "village_raw": "新生里15–18鄰",
-      "neighborhoods_raw": "15–18鄰",
-      "source_page": 27,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
+      "district": "永和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永平國小",
@@ -7228,7 +6734,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "永和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永平國小",
@@ -7236,19 +6742,6 @@
       "village": "下溪里",
       "village_raw": "下溪里9、12–15鄰",
       "neighborhoods_raw": "9、12–15鄰",
-      "source_page": 27,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
-      "school_district": "永和區",
-      "kind": "elementary",
-      "school": "永平國小",
-      "zone_type": "自由",
-      "village": "大同里",
-      "village_raw": "大同里10–18鄰",
-      "neighborhoods_raw": "10–18鄰",
       "source_page": 27,
       "extra": {}
     },
@@ -7345,20 +6838,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
-      "school_district": "永和區",
-      "kind": "elementary",
-      "school": "永和國小",
-      "zone_type": "基本",
-      "village": "永樂里",
-      "village_raw": "永樂里",
-      "neighborhoods_raw": null,
-      "source_page": 28,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
+      "district": "永和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永和國小",
@@ -7371,7 +6851,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "永和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永和國小",
@@ -7384,7 +6864,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "永和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永和國小",
@@ -7397,7 +6877,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "永和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永和國小",
@@ -7423,7 +6903,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "永和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永和國小",
@@ -7436,20 +6916,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
-      "school_district": "永和區",
-      "kind": "elementary",
-      "school": "永和國小",
-      "zone_type": "基本",
-      "village": "水源里",
-      "village_raw": "水源里2–6鄰",
-      "neighborhoods_raw": "2–6鄰",
-      "source_page": 28,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
+      "district": "永和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永和國小",
@@ -7483,19 +6950,6 @@
       "village": "安和里",
       "village_raw": "永和區安和里",
       "neighborhoods_raw": null,
-      "source_page": 28,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
-      "school_district": "永和區",
-      "kind": "elementary",
-      "school": "永和國小",
-      "zone_type": "自由",
-      "village": "水源里",
-      "village_raw": "水源里1、7–21鄰",
-      "neighborhoods_raw": "1、7–21鄰",
       "source_page": 28,
       "extra": {}
     },
@@ -7540,7 +6994,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "板橋區",
       "school_district": "板橋區",
       "kind": "elementary",
       "school": "海山國小",
@@ -7553,7 +7007,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "板橋區",
       "school_district": "板橋區",
       "kind": "elementary",
       "school": "海山國小",
@@ -7566,33 +7020,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
-      "school_district": "板橋區",
-      "kind": "elementary",
-      "school": "海山國小",
-      "zone_type": "基本",
-      "village": "海山里",
-      "village_raw": "海山里",
-      "neighborhoods_raw": null,
-      "source_page": 29,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
-      "school_district": "板橋區",
-      "kind": "elementary",
-      "school": "海山國小",
-      "zone_type": "基本",
-      "village": "長安里",
-      "village_raw": "長安里",
-      "neighborhoods_raw": null,
-      "source_page": 29,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
+      "district": "板橋區",
       "school_district": "板橋區",
       "kind": "elementary",
       "school": "海山國小",
@@ -7605,7 +7033,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "板橋區",
       "school_district": "板橋區",
       "kind": "elementary",
       "school": "海山國小",
@@ -7618,7 +7046,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "板橋區",
       "school_district": "板橋區",
       "kind": "elementary",
       "school": "海山國小",
@@ -7626,19 +7054,6 @@
       "village": "九如里",
       "village_raw": "九如里12、13鄰",
       "neighborhoods_raw": "12、13鄰",
-      "source_page": 29,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
-      "school_district": "板橋區",
-      "kind": "elementary",
-      "school": "海山國小",
-      "zone_type": "基本",
-      "village": "新民里",
-      "village_raw": "新民里1、10–25鄰",
-      "neighborhoods_raw": "1、10–25鄰",
       "source_page": 29,
       "extra": {}
     },
@@ -7696,33 +7111,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
-      "school_district": "板橋區",
-      "kind": "elementary",
-      "school": "實踐國小",
-      "zone_type": "基本",
-      "village": "福德里",
-      "village_raw": "福德里8–25鄰",
-      "neighborhoods_raw": "8–25鄰",
-      "source_page": 29,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
-      "school_district": "板橋區",
-      "kind": "elementary",
-      "school": "實踐國小",
-      "zone_type": "基本",
-      "village": "國泰里",
-      "village_raw": "國泰里",
-      "neighborhoods_raw": null,
-      "source_page": 29,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
+      "district": "板橋區",
       "school_district": "板橋區",
       "kind": "elementary",
       "school": "實踐國小",
@@ -7735,7 +7124,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "板橋區",
       "school_district": "板橋區",
       "kind": "elementary",
       "school": "實踐國小",
@@ -8080,19 +7469,6 @@
       "zone_type": "基本",
       "village": "文化里",
       "village_raw": "文化里",
-      "neighborhoods_raw": null,
-      "source_page": 30,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "永和區",
-      "school_district": "永和區",
-      "kind": "elementary",
-      "school": "頂溪國小",
-      "zone_type": "基本",
-      "village": "新?里",
-      "village_raw": "新?里",
       "neighborhoods_raw": null,
       "source_page": 30,
       "extra": {}
@@ -8580,7 +7956,7 @@
     },
     {
       "city": "新北市",
-      "district": "永和區",
+      "district": "中和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永平國小",
@@ -8593,7 +7969,7 @@
     },
     {
       "city": "新北市",
-      "district": "永和區",
+      "district": "中和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永平國小",
@@ -8601,19 +7977,6 @@
       "village": "佳和里",
       "village_raw": "佳和里7–29鄰",
       "neighborhoods_raw": "7–29鄰",
-      "source_page": 31,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "永和區",
-      "school_district": "永和區",
-      "kind": "elementary",
-      "school": "永平國小",
-      "zone_type": "自由",
-      "village": "瓦?里",
-      "village_raw": "瓦?里1–15、17–20、23–26、28–29鄰",
-      "neighborhoods_raw": "1–15、17–20、23–26、28–29鄰",
       "source_page": 31,
       "extra": {}
     },
@@ -8671,7 +8034,7 @@
     },
     {
       "city": "新北市",
-      "district": "永和區",
+      "district": "中和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永和國小",
@@ -8684,7 +8047,7 @@
     },
     {
       "city": "新北市",
-      "district": "永和區",
+      "district": "中和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永和國小",
@@ -8710,7 +8073,7 @@
     },
     {
       "city": "新北市",
-      "district": "永和區",
+      "district": "中和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永和國小",
@@ -8723,7 +8086,7 @@
     },
     {
       "city": "新北市",
-      "district": "永和區",
+      "district": "中和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永和國小",
@@ -8736,7 +8099,7 @@
     },
     {
       "city": "新北市",
-      "district": "永和區",
+      "district": "中和區",
       "school_district": "永和區",
       "kind": "elementary",
       "school": "永和國小",
@@ -9376,19 +8739,6 @@
       "district": "汐止區",
       "school_district": "汐止區",
       "kind": "elementary",
-      "school": "北港國小",
-      "zone_type": "自由",
-      "village": ")八連里",
-      "village_raw": ")八連里1–4鄰",
-      "neighborhoods_raw": "1–4鄰",
-      "source_page": 34,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "汐止區",
-      "school_district": "汐止區",
-      "kind": "elementary",
       "school": "長安國小",
       "zone_type": "基本",
       "village": "鄉長里",
@@ -9529,52 +8879,13 @@
     },
     {
       "city": "新北市",
-      "district": "汐止區",
-      "school_district": "汐止區",
-      "kind": "elementary",
-      "school": "白雲國小",
-      "zone_type": "自由",
-      "village": "臺北市南港區中研里",
-      "village_raw": "臺北市南港區中研里",
-      "neighborhoods_raw": null,
-      "source_page": 34,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "汐止區",
+      "district": "板橋區",
       "school_district": "汐止區",
       "kind": "elementary",
       "school": "白雲國小",
       "zone_type": "自由",
       "village": "九如里",
       "village_raw": "九如里",
-      "neighborhoods_raw": null,
-      "source_page": 34,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "汐止區",
-      "school_district": "汐止區",
-      "kind": "elementary",
-      "school": "白雲國小",
-      "zone_type": "自由",
-      "village": "臺北市南港區舊莊里",
-      "village_raw": "臺北市南港區舊莊里",
-      "neighborhoods_raw": null,
-      "source_page": 34,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "汐止區",
-      "school_district": "汐止區",
-      "kind": "elementary",
-      "school": "白雲國小",
-      "zone_type": "自由",
-      "village": "臺北市南港區新富里",
-      "village_raw": "臺北市南港區新富里",
       "neighborhoods_raw": null,
       "source_page": 34,
       "extra": {}
@@ -9820,9 +9131,9 @@
       "kind": "elementary",
       "school": "萬里國小",
       "zone_type": "基本",
-      "village": "萬里",
+      "village": "萬里里",
       "village_raw": "萬里里",
-      "neighborhoods_raw": "里",
+      "neighborhoods_raw": null,
       "source_page": 36,
       "extra": {}
     },
@@ -10174,19 +9485,6 @@
       "village": "六股里",
       "village_raw": "六股里7、8鄰",
       "neighborhoods_raw": "7、8鄰",
-      "source_page": 37,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "金山區",
-      "school_district": "金山區",
-      "kind": "elementary",
-      "school": "三和國小",
-      "zone_type": "自由",
-      "village": ")六股里",
-      "village_raw": ")六股里第6鄰因地理環境特殊",
-      "neighborhoods_raw": "第6鄰因地理環境特殊",
       "source_page": 37,
       "extra": {}
     },
@@ -10889,19 +10187,6 @@
       "village": "仁愛里",
       "village_raw": "仁愛里1–12鄰",
       "neighborhoods_raw": "1–12鄰",
-      "source_page": 38,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "新店區",
-      "school_district": "新店區",
-      "kind": "elementary",
-      "school": "北新國小",
-      "zone_type": "自由",
-      "village": ")美潭里",
-      "village_raw": ")美潭里16–20鄰",
-      "neighborhoods_raw": "16–20鄰",
       "source_page": 38,
       "extra": {}
     },
@@ -12223,19 +11508,6 @@
       "district": "瑞芳區",
       "school_district": "瑞芳區",
       "kind": "elementary",
-      "school": "吉慶國小",
-      "zone_type": "自由",
-      "village": ")上天里",
-      "village_raw": ")上天里7–8鄰",
-      "neighborhoods_raw": "7–8鄰",
-      "source_page": 46,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "瑞芳區",
-      "school_district": "瑞芳區",
-      "kind": "elementary",
       "school": "瑞亭國小",
       "zone_type": "基本",
       "village": "傑魚里",
@@ -12550,9 +11822,9 @@
       "kind": "elementary",
       "school": "澳底國小",
       "zone_type": "基本",
-      "village": "仁里",
+      "village": "仁里里",
       "village_raw": "仁里里",
-      "neighborhoods_raw": "里",
+      "neighborhoods_raw": null,
       "source_page": 48,
       "extra": {}
     },
@@ -14123,9 +13395,9 @@
       "kind": "elementary",
       "school": "乾華國小",
       "zone_type": "基本",
-      "village": "草里",
+      "village": "草里里",
       "village_raw": "草里里",
-      "neighborhoods_raw": "里",
+      "neighborhoods_raw": null,
       "source_page": 59,
       "extra": {}
     },
@@ -16773,19 +16045,6 @@
       "district": "蘆洲區",
       "school_district": "蘆洲區",
       "kind": "elementary",
-      "school": "鷺江國小",
-      "zone_type": "自由",
-      "village": ")溪墘里",
-      "village_raw": ")溪墘里13–15鄰",
-      "neighborhoods_raw": "13–15鄰",
-      "source_page": 66,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "蘆洲區",
-      "school_district": "蘆洲區",
-      "kind": "elementary",
       "school": "仁愛國小",
       "zone_type": "基本",
       "village": "保新里",
@@ -17888,20 +17147,7 @@
     },
     {
       "city": "新北市",
-      "district": "新莊區",
-      "school_district": "新莊區",
-      "kind": "elementary",
-      "school": "頭前國小",
-      "zone_type": "自由",
-      "village": ")三重區中興里",
-      "village_raw": ")三重區中興里",
-      "neighborhoods_raw": null,
-      "source_page": 70,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "新莊區",
+      "district": "三重區",
       "school_district": "新莊區",
       "kind": "elementary",
       "school": "頭前國小",
@@ -18226,7 +17472,7 @@
     },
     {
       "city": "新北市",
-      "district": "新莊區",
+      "district": "樹林區",
       "school_district": "新莊區",
       "kind": "elementary",
       "school": "裕民國小",
@@ -19009,19 +18255,6 @@
       "district": "泰山區",
       "school_district": "泰山區",
       "kind": "elementary",
-      "school": "泰山國小",
-      "zone_type": "自由",
-      "village": "1里",
-      "village_raw": "15鄰",
-      "neighborhoods_raw": "5鄰",
-      "source_page": 74,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "泰山區",
-      "school_district": "泰山區",
-      "kind": "elementary",
       "school": "明志國小",
       "zone_type": "基本",
       "village": "明志里",
@@ -19552,7 +18785,7 @@
     },
     {
       "city": "新北市",
-      "district": "五股區",
+      "district": "泰山區",
       "school_district": "五股區",
       "kind": "elementary",
       "school": "德音國小",
@@ -19560,19 +18793,6 @@
       "village": "黎明里",
       "village_raw": "黎明里1",
       "neighborhoods_raw": "1",
-      "source_page": 77,
-      "extra": {}
-    },
-    {
-      "city": "新北市",
-      "district": "五股區",
-      "school_district": "五股區",
-      "kind": "elementary",
-      "school": "德音國小",
-      "zone_type": "自由",
-      "village": "1里",
-      "village_raw": "15鄰",
-      "neighborhoods_raw": "5鄰",
       "source_page": 77,
       "extra": {}
     },
@@ -20163,7 +19383,7 @@
     },
     {
       "city": "新北市",
-      "district": "林口區",
+      "district": "中和區",
       "school_district": "林口區",
       "kind": "elementary",
       "school": "南勢國小",
@@ -20176,7 +19396,7 @@
     },
     {
       "city": "新北市",
-      "district": "林口區",
+      "district": "中和區",
       "school_district": "林口區",
       "kind": "elementary",
       "school": "南勢國小",
@@ -20384,7 +19604,7 @@
     },
     {
       "city": "新北市",
-      "district": "林口區",
+      "district": "中和區",
       "school_district": "林口區",
       "kind": "elementary",
       "school": "新林國小",
@@ -20397,7 +19617,7 @@
     },
     {
       "city": "新北市",
-      "district": "林口區",
+      "district": "中和區",
       "school_district": "林口區",
       "kind": "elementary",
       "school": "新林國小",
@@ -20475,7 +19695,7 @@
     },
     {
       "city": "新北市",
-      "district": "林口區",
+      "district": "中和區",
       "school_district": "林口區",
       "kind": "elementary",
       "school": "東湖國小",
@@ -20928,7 +20148,7 @@
       "kind": "junior_high",
       "school": "中山國中",
       "zone_type": "自由",
-      "village": "公舘里",
+      "village": "公館里",
       "village_raw": "公舘里",
       "neighborhoods_raw": null,
       "source_page": 2,
@@ -21378,7 +20598,7 @@
       "kind": "junior_high",
       "school": "新埔國中",
       "zone_type": "自由",
-      "village": "公舘里",
+      "village": "公館里",
       "village_raw": "公舘里",
       "neighborhoods_raw": null,
       "source_page": 2,
@@ -21873,21 +21093,6 @@
       "kind": "junior_high",
       "school": "海山高中(國中部)",
       "zone_type": "自由",
-      "village": "如里",
-      "village_raw": "如里",
-      "neighborhoods_raw": null,
-      "source_page": 3,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "板橋區",
-      "school_district": "板橋區",
-      "kind": "junior_high",
-      "school": "海山高中(國中部)",
-      "zone_type": "自由",
       "village": "正泰里",
       "village_raw": "正泰里",
       "neighborhoods_raw": null,
@@ -22098,21 +21303,6 @@
       "kind": "junior_high",
       "school": "光復高中(國中部)",
       "zone_type": "自由",
-      "village": "如里",
-      "village_raw": "如里",
-      "neighborhoods_raw": null,
-      "source_page": 3,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "板橋區",
-      "school_district": "板橋區",
-      "kind": "junior_high",
-      "school": "光復高中(國中部)",
-      "zone_type": "自由",
       "village": "正泰里",
       "village_raw": "正泰里",
       "neighborhoods_raw": null,
@@ -22160,21 +21350,6 @@
       "zone_type": "自由",
       "village": "雙玉里",
       "village_raw": "雙玉里",
-      "neighborhoods_raw": null,
-      "source_page": 3,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
-      "school_district": "板橋區",
-      "kind": "junior_high",
-      "school": "光復高中(國中部)",
-      "zone_type": "自由",
-      "village": "各里",
-      "village_raw": "中和區各里",
       "neighborhoods_raw": null,
       "source_page": 3,
       "extra": {
@@ -22278,21 +21453,6 @@
       "kind": "junior_high",
       "school": "重慶國中",
       "zone_type": "基本",
-      "village": "權里",
-      "village_raw": "權里",
-      "neighborhoods_raw": null,
-      "source_page": 3,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "板橋區",
-      "school_district": "板橋區",
-      "kind": "junior_high",
-      "school": "重慶國中",
-      "zone_type": "基本",
       "village": "華德里",
       "village_raw": "華德里",
       "neighborhoods_raw": null,
@@ -22348,22 +21508,7 @@
     },
     {
       "city": "新北市",
-      "district": "板橋區",
-      "school_district": "板橋區",
-      "kind": "junior_high",
-      "school": "重慶國中",
-      "zone_type": "自由",
-      "village": "明德里",
-      "village_raw": "明德里",
-      "neighborhoods_raw": null,
-      "source_page": 3,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "板橋區",
+      "district": "中和區",
       "school_district": "板橋區",
       "kind": "junior_high",
       "school": "重慶國中",
@@ -22978,22 +22123,7 @@
     },
     {
       "city": "新北市",
-      "district": "板橋區",
-      "school_district": "板橋區",
-      "kind": "junior_high",
-      "school": "溪崑國中",
-      "zone_type": "基本",
-      "village": "保安里",
-      "village_raw": "保安里",
-      "neighborhoods_raw": null,
-      "source_page": 4,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "板橋區",
+      "district": "樹林區",
       "school_district": "板橋區",
       "kind": "junior_high",
       "school": "溪崑國中",
@@ -23008,7 +22138,7 @@
     },
     {
       "city": "新北市",
-      "district": "板橋區",
+      "district": "樹林區",
       "school_district": "板橋區",
       "kind": "junior_high",
       "school": "溪崑國中",
@@ -23038,7 +22168,7 @@
     },
     {
       "city": "新北市",
-      "district": "板橋區",
+      "district": "樹林區",
       "school_district": "板橋區",
       "kind": "junior_high",
       "school": "溪崑國中",
@@ -23053,7 +22183,7 @@
     },
     {
       "city": "新北市",
-      "district": "板橋區",
+      "district": "樹林區",
       "school_district": "板橋區",
       "kind": "junior_high",
       "school": "溪崑國中",
@@ -24238,7 +23368,7 @@
     },
     {
       "city": "新北市",
-      "district": "樹林區",
+      "district": "板橋區",
       "school_district": "樹林區",
       "kind": "junior_high",
       "school": "樹林高中(國中部)",
@@ -24538,7 +23668,7 @@
     },
     {
       "city": "新北市",
-      "district": "峽區",
+      "district": "三峽區",
       "school_district": "樹林區",
       "kind": "junior_high",
       "school": "桃子腳國中小(國中部)",
@@ -24568,7 +23698,7 @@
     },
     {
       "city": "新北市",
-      "district": "峽區",
+      "district": "三峽區",
       "school_district": "樹林區",
       "kind": "junior_high",
       "school": "桃子腳國中小(國中部)",
@@ -24583,7 +23713,7 @@
     },
     {
       "city": "新北市",
-      "district": "樹林區",
+      "district": "三峽區",
       "school_district": "樹林區",
       "kind": "junior_high",
       "school": "桃子腳國中小(國中部)",
@@ -24598,7 +23728,7 @@
     },
     {
       "city": "新北市",
-      "district": "峽區",
+      "district": "三峽區",
       "school_district": "樹林區",
       "kind": "junior_high",
       "school": "桃子腳國中小(國中部)",
@@ -24606,66 +23736,6 @@
       "village": "龍學里",
       "village_raw": "峽區龍學里(1-14、25、27-28、30-31鄰)",
       "neighborhoods_raw": "(1-14、25、27-28、30-31鄰)",
-      "source_page": 6,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "樹林區",
-      "school_district": "樹林區",
-      "kind": "junior_high",
-      "school": "三多國中",
-      "zone_type": "基本",
-      "village": "興里",
-      "village_raw": "興里",
-      "neighborhoods_raw": null,
-      "source_page": 6,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "樹林區",
-      "school_district": "樹林區",
-      "kind": "junior_high",
-      "school": "三多國中",
-      "zone_type": "基本",
-      "village": "福里",
-      "village_raw": "福里",
-      "neighborhoods_raw": null,
-      "source_page": 6,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "樹林區",
-      "school_district": "樹林區",
-      "kind": "junior_high",
-      "school": "三多國中",
-      "zone_type": "基本",
-      "village": "龍里",
-      "village_raw": "龍里",
-      "neighborhoods_raw": null,
-      "source_page": 6,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "樹林區",
-      "school_district": "樹林區",
-      "kind": "junior_high",
-      "school": "三多國中",
-      "zone_type": "基本",
-      "village": "多里",
-      "village_raw": "多里",
-      "neighborhoods_raw": null,
       "source_page": 6,
       "extra": {
         "source_table": "主表"
@@ -25037,36 +24107,6 @@
       "school_district": "鶯歌區",
       "kind": "junior_high",
       "school": "尖山國中",
-      "zone_type": "基本",
-      "village": "橋里",
-      "village_raw": "橋里",
-      "neighborhoods_raw": null,
-      "source_page": 7,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "junior_high",
-      "school": "尖山國中",
-      "zone_type": "基本",
-      "village": "甲里",
-      "village_raw": "甲里",
-      "neighborhoods_raw": null,
-      "source_page": 7,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "junior_high",
-      "school": "尖山國中",
       "zone_type": "自由",
       "village": "尖山里",
       "village_raw": "尖山里(2、13-14鄰)",
@@ -25248,36 +24288,6 @@
       "kind": "junior_high",
       "school": "鳳鳴國中",
       "zone_type": "自由",
-      "village": "桃園市八德區大發里",
-      "village_raw": "桃園市八德區大發里(6鄰福德1路177巷、7至8鄰、19至21鄰)",
-      "neighborhoods_raw": "(6鄰福德1路177巷、7至8鄰、19至21鄰)",
-      "source_page": 7,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "junior_high",
-      "school": "鳳鳴國中",
-      "zone_type": "自由",
-      "village": "桃園市八德區大明里",
-      "village_raw": "桃園市八德區大明里",
-      "neighborhoods_raw": null,
-      "source_page": 7,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "鶯歌區",
-      "school_district": "鶯歌區",
-      "kind": "junior_high",
-      "school": "鳳鳴國中",
-      "zone_type": "自由",
       "village": "大仁里",
       "village_raw": "大仁里",
       "neighborhoods_raw": null,
@@ -25293,7 +24303,7 @@
       "kind": "junior_high",
       "school": "三峽國中",
       "zone_type": "基本",
-      "village": "永舘里",
+      "village": "永館里",
       "village_raw": "永舘里",
       "neighborhoods_raw": null,
       "source_page": 8,
@@ -25340,21 +24350,6 @@
       "zone_type": "基本",
       "village": "鳶山里",
       "village_raw": "鳶山里",
-      "neighborhoods_raw": null,
-      "source_page": 8,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "junior_high",
-      "school": "三峽國中",
-      "zone_type": "基本",
-      "village": "峽里",
-      "village_raw": "峽里",
       "neighborhoods_raw": null,
       "source_page": 8,
       "extra": {
@@ -25415,21 +24410,6 @@
       "zone_type": "自由",
       "village": "弘道里",
       "village_raw": "弘道里",
-      "neighborhoods_raw": null,
-      "source_page": 8,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "junior_high",
-      "school": "三峽國中",
-      "zone_type": "自由",
-      "village": "張里",
-      "village_raw": "張里",
       "neighborhoods_raw": null,
       "source_page": 8,
       "extra": {
@@ -25603,7 +24583,7 @@
     },
     {
       "city": "新北市",
-      "district": "三峽區",
+      "district": "樹林區",
       "school_district": "樹林區",
       "kind": "junior_high",
       "school": "桃子腳國中小(國中部)",
@@ -25713,21 +24693,6 @@
       "kind": "junior_high",
       "school": "明德高中(國中部)",
       "zone_type": "基本",
-      "village": "寮里",
-      "village_raw": "寮里",
-      "neighborhoods_raw": null,
-      "source_page": 8,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "junior_high",
-      "school": "明德高中(國中部)",
-      "zone_type": "基本",
       "village": "插角里",
       "village_raw": "插角里",
       "neighborhoods_raw": null,
@@ -25760,21 +24725,6 @@
       "zone_type": "自由",
       "village": "弘道里",
       "village_raw": "弘道里",
-      "neighborhoods_raw": null,
-      "source_page": 8,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "junior_high",
-      "school": "明德高中(國中部)",
-      "zone_type": "自由",
-      "village": "張里",
-      "village_raw": "張里",
       "neighborhoods_raw": null,
       "source_page": 8,
       "extra": {
@@ -25925,21 +24875,6 @@
       "zone_type": "自由",
       "village": "添福里",
       "village_raw": "添福里",
-      "neighborhoods_raw": null,
-      "source_page": 8,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "junior_high",
-      "school": "明德高中(國中部)",
-      "zone_type": "自由",
-      "village": "鬮里",
-      "village_raw": "鬮里",
       "neighborhoods_raw": null,
       "source_page": 8,
       "extra": {
@@ -26028,21 +24963,6 @@
       "kind": "junior_high",
       "school": "安溪國中",
       "zone_type": "自由",
-      "village": "張里",
-      "village_raw": "張里",
-      "neighborhoods_raw": null,
-      "source_page": 9,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "junior_high",
-      "school": "安溪國中",
-      "zone_type": "自由",
       "village": "中埔里",
       "village_raw": "中埔里",
       "neighborhoods_raw": null,
@@ -26180,21 +25100,6 @@
       "zone_type": "自由",
       "village": "添福里",
       "village_raw": "添福里",
-      "neighborhoods_raw": null,
-      "source_page": 9,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三峽區",
-      "school_district": "三峽區",
-      "kind": "junior_high",
-      "school": "安溪國中",
-      "zone_type": "自由",
-      "village": "鬮里",
-      "village_raw": "鬮里",
       "neighborhoods_raw": null,
       "source_page": 9,
       "extra": {
@@ -26743,28 +25648,13 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "新店區",
       "school_district": "中和區",
       "kind": "junior_high",
       "school": "中和國中",
       "zone_type": "自由",
       "village": "永平里",
       "village_raw": "永平里",
-      "neighborhoods_raw": null,
-      "source_page": 10,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
-      "school_district": "中和區",
-      "kind": "junior_high",
-      "school": "中和國中",
-      "zone_type": "自由",
-      "village": "永安里",
-      "village_raw": "永安里",
       "neighborhoods_raw": null,
       "source_page": 10,
       "extra": {
@@ -27148,7 +26038,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "永和區",
       "school_district": "中和區",
       "kind": "junior_high",
       "school": "漳和國中",
@@ -27178,22 +26068,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
-      "school_district": "中和區",
-      "kind": "junior_high",
-      "school": "漳和國中",
-      "zone_type": "自由",
-      "village": "水源里",
-      "village_raw": "水源里",
-      "neighborhoods_raw": null,
-      "source_page": 10,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
+      "district": "永和區",
       "school_district": "中和區",
       "kind": "junior_high",
       "school": "漳和國中",
@@ -27208,22 +26083,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
-      "school_district": "中和區",
-      "kind": "junior_high",
-      "school": "漳和國中",
-      "zone_type": "自由",
-      "village": "和平里",
-      "village_raw": "和平里",
-      "neighborhoods_raw": null,
-      "source_page": 10,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
+      "district": "永和區",
       "school_district": "中和區",
       "kind": "junior_high",
       "school": "漳和國中",
@@ -27463,22 +26323,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
-      "school_district": "中和區",
-      "kind": "junior_high",
-      "school": "自強國中",
-      "zone_type": "自由",
-      "village": "平和里",
-      "village_raw": "平和里",
-      "neighborhoods_raw": null,
-      "source_page": 11,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
+      "district": "土城區",
       "school_district": "中和區",
       "kind": "junior_high",
       "school": "自強國中",
@@ -27493,7 +26338,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "土城區",
       "school_district": "中和區",
       "kind": "junior_high",
       "school": "自強國中",
@@ -27508,7 +26353,7 @@
     },
     {
       "city": "新北市",
-      "district": "中和區",
+      "district": "土城區",
       "school_district": "中和區",
       "kind": "junior_high",
       "school": "自強國中",
@@ -30258,21 +29103,6 @@
       "kind": "junior_high",
       "school": "汐止國中",
       "zone_type": "基本",
-      "village": "連里",
-      "village_raw": "連里",
-      "neighborhoods_raw": null,
-      "source_page": 13,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "汐止區",
-      "school_district": "汐止區",
-      "kind": "junior_high",
-      "school": "汐止國中",
-      "zone_type": "基本",
       "village": "拱北里",
       "village_raw": "拱北里",
       "neighborhoods_raw": null,
@@ -30678,21 +29508,6 @@
       "kind": "junior_high",
       "school": "萬里國中",
       "zone_type": "基本",
-      "village": "萬里",
-      "village_raw": "萬里",
-      "neighborhoods_raw": null,
-      "source_page": 13,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "萬里區",
-      "school_district": "萬里區",
-      "kind": "junior_high",
-      "school": "萬里國中",
-      "zone_type": "基本",
       "village": "龜吼里",
       "village_raw": "龜吼里",
       "neighborhoods_raw": null,
@@ -30838,22 +29653,7 @@
     },
     {
       "city": "新北市",
-      "district": "金山區",
-      "school_district": "金山區",
-      "kind": "junior_high",
-      "school": "金山高中(國中部)",
-      "zone_type": "自由",
-      "village": "大鵬里",
-      "village_raw": "大鵬里",
-      "neighborhoods_raw": null,
-      "source_page": 13,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "金山區",
+      "district": "萬里區",
       "school_district": "金山區",
       "kind": "junior_high",
       "school": "金山高中(國中部)",
@@ -30868,7 +29668,7 @@
     },
     {
       "city": "新北市",
-      "district": "金山區",
+      "district": "萬里區",
       "school_district": "金山區",
       "kind": "junior_high",
       "school": "金山高中(國中部)",
@@ -31363,7 +30163,7 @@
     },
     {
       "city": "新北市",
-      "district": "新店區",
+      "district": "石碇區",
       "school_district": "新店區",
       "kind": "junior_high",
       "school": "文山國中",
@@ -31625,21 +30425,6 @@
       "zone_type": "基本",
       "village": "張北里",
       "village_raw": "張北里",
-      "neighborhoods_raw": null,
-      "source_page": 14,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "新店區",
-      "school_district": "新店區",
-      "kind": "junior_high",
-      "school": "五峰國中",
-      "zone_type": "基本",
-      "village": "峰里",
-      "village_raw": "峰里",
       "neighborhoods_raw": null,
       "source_page": 14,
       "extra": {
@@ -32233,7 +31018,7 @@
     },
     {
       "city": "新北市",
-      "district": "坪林區",
+      "district": "石碇區",
       "school_district": "坪林區",
       "kind": "junior_high",
       "school": "坪林實中",
@@ -32878,21 +31663,6 @@
     },
     {
       "city": "新北市",
-      "district": "全區轄區",
-      "school_district": "貢寮區",
-      "kind": "junior_high",
-      "school": "貢寮實中",
-      "zone_type": "基本",
-      "village": "(除和美里",
-      "village_raw": "全區轄區(除和美里13-20鄰)",
-      "neighborhoods_raw": "13-20鄰)",
-      "source_page": 16,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
       "district": "貢寮區",
       "school_district": "貢寮區",
       "kind": "junior_high",
@@ -33208,7 +31978,7 @@
     },
     {
       "city": "新北市",
-      "district": "淡水區",
+      "district": "三芝區",
       "school_district": "淡水區",
       "kind": "junior_high",
       "school": "正德國中",
@@ -33223,7 +31993,7 @@
     },
     {
       "city": "新北市",
-      "district": "淡水區",
+      "district": "三芝區",
       "school_district": "淡水區",
       "kind": "junior_high",
       "school": "正德國中",
@@ -33538,7 +32308,7 @@
     },
     {
       "city": "新北市",
-      "district": "淡水區",
+      "district": "三芝區",
       "school_district": "淡水區",
       "kind": "junior_high",
       "school": "正德國中(賢孝校區)",
@@ -33553,7 +32323,7 @@
     },
     {
       "city": "新北市",
-      "district": "淡水區",
+      "district": "三芝區",
       "school_district": "淡水區",
       "kind": "junior_high",
       "school": "正德國中(賢孝校區)",
@@ -33977,21 +32747,6 @@
       "school_district": "淡水區",
       "kind": "junior_high",
       "school": "竹圍高中(國中部)",
-      "zone_type": "基本",
-      "village": "勢里",
-      "village_raw": "勢里",
-      "neighborhoods_raw": null,
-      "source_page": 18,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "淡水區",
-      "school_district": "淡水區",
-      "kind": "junior_high",
-      "school": "竹圍高中(國中部)",
       "zone_type": "自由",
       "village": "竿蓁里",
       "village_raw": "竿蓁里",
@@ -34040,21 +32795,6 @@
       "zone_type": "自由",
       "village": "坪頂里",
       "village_raw": "坪頂里",
-      "neighborhoods_raw": null,
-      "source_page": 18,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三芝區",
-      "school_district": "三芝區",
-      "kind": "junior_high",
-      "school": "三芝國中",
-      "zone_type": "基本",
-      "village": "賢里",
-      "village_raw": "賢里",
       "neighborhoods_raw": null,
       "source_page": 18,
       "extra": {
@@ -34653,21 +33393,6 @@
       "kind": "junior_high",
       "school": "二重國中",
       "zone_type": "基本",
-      "village": "重里",
-      "village_raw": "重里",
-      "neighborhoods_raw": null,
-      "source_page": 19,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三重區",
-      "school_district": "三重區",
-      "kind": "junior_high",
-      "school": "二重國中",
-      "zone_type": "基本",
       "village": "福田里",
       "village_raw": "福田里",
       "neighborhoods_raw": null,
@@ -34745,21 +33470,6 @@
       "zone_type": "基本",
       "village": "田心里",
       "village_raw": "田心里",
-      "neighborhoods_raw": null,
-      "source_page": 19,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三重區",
-      "school_district": "三重區",
-      "kind": "junior_high",
-      "school": "二重國中",
-      "zone_type": "基本",
-      "village": "谷里",
-      "village_raw": "谷里",
       "neighborhoods_raw": null,
       "source_page": 19,
       "extra": {
@@ -34863,21 +33573,6 @@
       "kind": "junior_high",
       "school": "二重國中",
       "zone_type": "自由",
-      "village": "福里",
-      "village_raw": "福里",
-      "neighborhoods_raw": null,
-      "source_page": 19,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三重區",
-      "school_district": "三重區",
-      "kind": "junior_high",
-      "school": "二重國中",
-      "zone_type": "自由",
       "village": "立德里",
       "village_raw": "立德里",
       "neighborhoods_raw": null,
@@ -34918,7 +33613,7 @@
     },
     {
       "city": "新北市",
-      "district": "股區",
+      "district": "五股區",
       "school_district": "三重區",
       "kind": "junior_high",
       "school": "二重國中",
@@ -34933,7 +33628,7 @@
     },
     {
       "city": "新北市",
-      "district": "三重區",
+      "district": "五股區",
       "school_district": "三重區",
       "kind": "junior_high",
       "school": "二重國中",
@@ -35255,21 +33950,6 @@
       "zone_type": "基本",
       "village": "萬壽里",
       "village_raw": "萬壽里",
-      "neighborhoods_raw": null,
-      "source_page": 19,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三重區",
-      "school_district": "三重區",
-      "kind": "junior_high",
-      "school": "光榮國中",
-      "zone_type": "基本",
-      "village": "安里",
-      "village_raw": "安里",
       "neighborhoods_raw": null,
       "source_page": 19,
       "extra": {
@@ -35628,21 +34308,6 @@
       "kind": "junior_high",
       "school": "明志國中",
       "zone_type": "基本",
-      "village": "合里",
-      "village_raw": "合里",
-      "neighborhoods_raw": null,
-      "source_page": 19,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三重區",
-      "school_district": "三重區",
-      "kind": "junior_high",
-      "school": "明志國中",
-      "zone_type": "基本",
       "village": "幸福里",
       "village_raw": "幸福里",
       "neighborhoods_raw": null,
@@ -35868,39 +34533,9 @@
       "kind": "junior_high",
       "school": "明志國中",
       "zone_type": "基本",
-      "village": "民里",
-      "village_raw": "民里",
-      "neighborhoods_raw": null,
-      "source_page": 19,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三重區",
-      "school_district": "三重區",
-      "kind": "junior_high",
-      "school": "明志國中",
-      "zone_type": "基本",
       "village": "文化里",
       "village_raw": "文化里",
       "neighborhoods_raw": null,
-      "source_page": 19,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三重區",
-      "school_district": "三重區",
-      "kind": "junior_high",
-      "school": "明志國中",
-      "zone_type": "基本",
-      "village": "福里",
-      "village_raw": "福里(19鄰)",
-      "neighborhoods_raw": "(19鄰)",
       "source_page": 19,
       "extra": {
         "source_table": "主表"
@@ -35990,21 +34625,6 @@
       "zone_type": "自由",
       "village": "田安里",
       "village_raw": "田安里",
-      "neighborhoods_raw": null,
-      "source_page": 19,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三重區",
-      "school_district": "三重區",
-      "kind": "junior_high",
-      "school": "明志國中",
-      "zone_type": "自由",
-      "village": "福里",
-      "village_raw": "福里",
       "neighborhoods_raw": null,
       "source_page": 19,
       "extra": {
@@ -36123,38 +34743,8 @@
       "kind": "junior_high",
       "school": "碧華國中",
       "zone_type": "基本",
-      "village": "福里",
-      "village_raw": "福里",
-      "neighborhoods_raw": null,
-      "source_page": 20,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三重區",
-      "school_district": "三重區",
-      "kind": "junior_high",
-      "school": "碧華國中",
-      "zone_type": "基本",
       "village": "仁忠里",
       "village_raw": "仁忠里",
-      "neighborhoods_raw": null,
-      "source_page": 20,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三重區",
-      "school_district": "三重區",
-      "kind": "junior_high",
-      "school": "碧華國中",
-      "zone_type": "基本",
-      "village": "常里",
-      "village_raw": "常里",
       "neighborhoods_raw": null,
       "source_page": 20,
       "extra": {
@@ -36185,21 +34775,6 @@
       "zone_type": "基本",
       "village": "慈祐里",
       "village_raw": "慈祐里",
-      "neighborhoods_raw": null,
-      "source_page": 20,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三重區",
-      "school_district": "三重區",
-      "kind": "junior_high",
-      "school": "碧華國中",
-      "zone_type": "基本",
-      "village": "華里",
-      "village_raw": "華里",
       "neighborhoods_raw": null,
       "source_page": 20,
       "extra": {
@@ -36260,21 +34835,6 @@
       "zone_type": "基本",
       "village": "慈福里",
       "village_raw": "慈福里",
-      "neighborhoods_raw": null,
-      "source_page": 20,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "三重區",
-      "school_district": "三重區",
-      "kind": "junior_high",
-      "school": "碧華國中",
-      "zone_type": "基本",
-      "village": "順里",
-      "village_raw": "順里",
       "neighborhoods_raw": null,
       "source_page": 20,
       "extra": {
@@ -36395,21 +34955,6 @@
       "zone_type": "基本",
       "village": "延平里",
       "village_raw": "延平里",
-      "neighborhoods_raw": null,
-      "source_page": 21,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "蘆洲區",
-      "school_district": "蘆洲區",
-      "kind": "junior_high",
-      "school": "蘆洲國中",
-      "zone_type": "基本",
-      "village": "芎里",
-      "village_raw": "芎里",
       "neighborhoods_raw": null,
       "source_page": 21,
       "extra": {
@@ -36688,7 +35233,7 @@
     },
     {
       "city": "新北市",
-      "district": "股區",
+      "district": "五股區",
       "school_district": "蘆洲區",
       "kind": "junior_high",
       "school": "蘆洲國中",
@@ -36703,7 +35248,7 @@
     },
     {
       "city": "新北市",
-      "district": "蘆洲區",
+      "district": "五股區",
       "school_district": "蘆洲區",
       "kind": "junior_high",
       "school": "蘆洲國中",
@@ -36718,7 +35263,7 @@
     },
     {
       "city": "新北市",
-      "district": "蘆洲區",
+      "district": "五股區",
       "school_district": "蘆洲區",
       "kind": "junior_high",
       "school": "蘆洲國中",
@@ -36733,22 +35278,7 @@
     },
     {
       "city": "新北市",
-      "district": "蘆洲區",
-      "school_district": "蘆洲區",
-      "kind": "junior_high",
-      "school": "蘆洲國中",
-      "zone_type": "自由",
-      "village": "成德里",
-      "village_raw": "成德里",
-      "neighborhoods_raw": null,
-      "source_page": 21,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "蘆洲區",
+      "district": "五股區",
       "school_district": "蘆洲區",
       "kind": "junior_high",
       "school": "蘆洲國中",
@@ -36763,7 +35293,7 @@
     },
     {
       "city": "新北市",
-      "district": "股區",
+      "district": "五股區",
       "school_district": "蘆洲區",
       "kind": "junior_high",
       "school": "蘆洲國中",
@@ -36778,7 +35308,7 @@
     },
     {
       "city": "新北市",
-      "district": "蘆洲區",
+      "district": "五股區",
       "school_district": "蘆洲區",
       "kind": "junior_high",
       "school": "蘆洲國中",
@@ -37138,7 +35668,7 @@
     },
     {
       "city": "新北市",
-      "district": "股區",
+      "district": "五股區",
       "school_district": "蘆洲區",
       "kind": "junior_high",
       "school": "鷺江國中",
@@ -37153,7 +35683,7 @@
     },
     {
       "city": "新北市",
-      "district": "蘆洲區",
+      "district": "五股區",
       "school_district": "蘆洲區",
       "kind": "junior_high",
       "school": "鷺江國中",
@@ -37168,7 +35698,7 @@
     },
     {
       "city": "新北市",
-      "district": "蘆洲區",
+      "district": "五股區",
       "school_district": "蘆洲區",
       "kind": "junior_high",
       "school": "鷺江國中",
@@ -37183,22 +35713,7 @@
     },
     {
       "city": "新北市",
-      "district": "蘆洲區",
-      "school_district": "蘆洲區",
-      "kind": "junior_high",
-      "school": "鷺江國中",
-      "zone_type": "自由",
-      "village": "成德里",
-      "village_raw": "成德里",
-      "neighborhoods_raw": null,
-      "source_page": 21,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "蘆洲區",
+      "district": "五股區",
       "school_district": "蘆洲區",
       "kind": "junior_high",
       "school": "鷺江國中",
@@ -37843,7 +36358,7 @@
     },
     {
       "city": "新北市",
-      "district": "新莊區",
+      "district": "泰山區",
       "school_district": "新莊區",
       "kind": "junior_high",
       "school": "新泰國中",
@@ -38203,7 +36718,7 @@
     },
     {
       "city": "新北市",
-      "district": "股區",
+      "district": "五股區",
       "school_district": "新莊區",
       "kind": "junior_high",
       "school": "頭前國中",
@@ -38218,22 +36733,7 @@
     },
     {
       "city": "新北市",
-      "district": "重區",
-      "school_district": "新莊區",
-      "kind": "junior_high",
-      "school": "頭前國中",
-      "zone_type": "自由",
-      "village": "中興里",
-      "village_raw": "重區中興里",
-      "neighborhoods_raw": null,
-      "source_page": 22,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "新莊區",
+      "district": "三重區",
       "school_district": "新莊區",
       "kind": "junior_high",
       "school": "頭前國中",
@@ -38360,21 +36860,6 @@
       "zone_type": "基本",
       "village": "民本里",
       "village_raw": "民本里",
-      "neighborhoods_raw": null,
-      "source_page": 22,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "新莊區",
-      "school_district": "新莊區",
-      "kind": "junior_high",
-      "school": "福營國中",
-      "zone_type": "基本",
-      "village": "維里",
-      "village_raw": "維里",
       "neighborhoods_raw": null,
       "source_page": 22,
       "extra": {
@@ -38526,21 +37011,6 @@
       "village": "龍安里",
       "village_raw": "龍安里(除第15鄰)",
       "neighborhoods_raw": "(除第15鄰)",
-      "source_page": 22,
-      "extra": {
-        "source_table": "主表"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "新莊區",
-      "school_district": "新莊區",
-      "kind": "junior_high",
-      "school": "福營國中",
-      "zone_type": "基本",
-      "village": "德里",
-      "village_raw": "德里",
-      "neighborhoods_raw": null,
       "source_page": 22,
       "extra": {
         "source_table": "主表"
@@ -40278,21 +38748,6 @@
       "kind": "junior_high",
       "school": "光復高中(國中部)",
       "zone_type": "自由",
-      "village": "如里",
-      "village_raw": "如里",
-      "neighborhoods_raw": null,
-      "source_page": 26,
-      "extra": {
-        "source_table": "附件"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "板橋區",
-      "school_district": "板橋區",
-      "kind": "junior_high",
-      "school": "光復高中(國中部)",
-      "zone_type": "自由",
       "village": "正泰里",
       "village_raw": "正泰里",
       "neighborhoods_raw": null,
@@ -40355,21 +38810,6 @@
       "zone_type": "自由",
       "village": "雙玉里",
       "village_raw": "雙玉里",
-      "neighborhoods_raw": null,
-      "source_page": 26,
-      "extra": {
-        "source_table": "附件"
-      }
-    },
-    {
-      "city": "新北市",
-      "district": "中和區",
-      "school_district": "板橋區",
-      "kind": "junior_high",
-      "school": "光復高中(國中部)",
-      "zone_type": "自由",
-      "village": "各里",
-      "village_raw": "中和區各里",
       "neighborhoods_raw": null,
       "source_page": 26,
       "extra": {
@@ -41038,7 +39478,7 @@
     },
     {
       "city": "新北市",
-      "district": "淡水區",
+      "district": "三芝區",
       "school_district": "淡水區",
       "kind": "junior_high",
       "school": "正德國中",
@@ -41053,7 +39493,7 @@
     },
     {
       "city": "新北市",
-      "district": "淡水區",
+      "district": "三芝區",
       "school_district": "淡水區",
       "kind": "junior_high",
       "school": "正德國中",
@@ -41398,7 +39838,7 @@
     },
     {
       "city": "新北市",
-      "district": "淡水區",
+      "district": "三芝區",
       "school_district": "淡水區",
       "kind": "junior_high",
       "school": "正德國中(賢孝校區)",
@@ -41413,7 +39853,7 @@
     },
     {
       "city": "新北市",
-      "district": "淡水區",
+      "district": "三芝區",
       "school_district": "淡水區",
       "kind": "junior_high",
       "school": "正德國中(賢孝校區)",
@@ -41863,7 +40303,7 @@
     },
     {
       "city": "新北市",
-      "district": "林口區",
+      "district": "中和區",
       "school_district": "林口區",
       "kind": "junior_high",
       "school": "林口國中",
@@ -42028,7 +40468,7 @@
     },
     {
       "city": "新北市",
-      "district": "林口區",
+      "district": "中和區",
       "school_district": "林口區",
       "kind": "junior_high",
       "school": "崇林國中",
@@ -42433,7 +40873,7 @@
     },
     {
       "city": "新北市",
-      "district": "林口區",
+      "district": "中和區",
       "school_district": "林口區",
       "kind": "junior_high",
       "school": "南勢國中",
@@ -54041,9 +52481,9 @@
       "kind": "junior_high",
       "school": "敦化國中",
       "zone_type": "基本",
-      "village": "松基（里",
+      "village": "松基里",
       "village_raw": "松基（13、15-16鄰",
-      "neighborhoods_raw": "13、15-16鄰",
+      "neighborhoods_raw": "（13、15-16鄰",
       "source_page": null,
       "extra": {
         "school_code": "313505",
@@ -54160,9 +52600,9 @@
       "kind": "junior_high",
       "school": "中山國中",
       "zone_type": "基本",
-      "village": "松基（里",
+      "village": "松基里",
       "village_raw": "松基（1-12、14鄰",
-      "neighborhoods_raw": "1-12、14鄰",
+      "neighborhoods_raw": "（1-12、14鄰",
       "source_page": null,
       "extra": {
         "school_code": "313504",
@@ -54602,9 +53042,9 @@
       "kind": "junior_high",
       "school": "興雅國中",
       "zone_type": "基本",
-      "village": "松隆（里",
+      "village": "松隆里",
       "village_raw": "松隆（7-12鄰",
-      "neighborhoods_raw": "7-12鄰",
+      "neighborhoods_raw": "（7-12鄰",
       "source_page": null,
       "extra": {
         "school_code": "323502",
@@ -55350,9 +53790,9 @@
       "kind": "junior_high",
       "school": "大安國中",
       "zone_type": "基本",
-      "village": "全安（里",
+      "village": "全安里",
       "village_raw": "全安（1-4鄰",
-      "neighborhoods_raw": "1-4鄰",
+      "neighborhoods_raw": "（1-4鄰",
       "source_page": null,
       "extra": {
         "school_code": "333502",
@@ -55605,9 +54045,9 @@
       "kind": "junior_high",
       "school": "仁愛國中",
       "zone_type": "基本",
-      "village": "通安（里",
+      "village": "通安里",
       "village_raw": "通安（1-3鄰",
-      "neighborhoods_raw": "1-3鄰",
+      "neighborhoods_raw": "（1-3鄰",
       "source_page": null,
       "extra": {
         "school_code": "333501",
@@ -55826,9 +54266,9 @@
       "kind": "junior_high",
       "school": "懷生國中",
       "zone_type": "基本",
-      "village": "幸福（里",
+      "village": "幸福里",
       "village_raw": "幸福（9-19鄰",
-      "neighborhoods_raw": "9-19鄰",
+      "neighborhoods_raw": "（9-19鄰",
       "source_page": null,
       "extra": {
         "school_code": "333506",
@@ -55962,9 +54402,9 @@
       "kind": "junior_high",
       "school": "懷生國中",
       "zone_type": "基本",
-      "village": "民炤（里",
+      "village": "民炤里",
       "village_raw": "民炤（1、18-24鄰",
-      "neighborhoods_raw": "1、18-24鄰",
+      "neighborhoods_raw": "（1、18-24鄰",
       "source_page": null,
       "extra": {
         "school_code": "333506",
@@ -56081,9 +54521,9 @@
       "kind": "junior_high",
       "school": "和平高中國中部",
       "zone_type": "基本",
-      "village": "芳和（里",
+      "village": "芳和里",
       "village_raw": "芳和（3-5、19-21鄰",
-      "neighborhoods_raw": "3-5、19-21鄰",
+      "neighborhoods_raw": "（3-5、19-21鄰",
       "source_page": null,
       "extra": {
         "school_code": "333301",
@@ -56302,9 +54742,9 @@
       "kind": "junior_high",
       "school": "和平高中國中部",
       "zone_type": "基本",
-      "village": "黎平（里",
+      "village": "黎平里",
       "village_raw": "黎平（1-13鄰",
-      "neighborhoods_raw": "1-13鄰",
+      "neighborhoods_raw": "（1-13鄰",
       "source_page": null,
       "extra": {
         "school_code": "333301",
@@ -56404,9 +54844,9 @@
       "kind": "junior_high",
       "school": "金華國中",
       "zone_type": "基本",
-      "village": "民炤（里",
+      "village": "民炤里",
       "village_raw": "民炤（2-17鄰",
-      "neighborhoods_raw": "2-17鄰",
+      "neighborhoods_raw": "（2-17鄰",
       "source_page": null,
       "extra": {
         "school_code": "333505",
@@ -57186,9 +55626,9 @@
       "kind": "junior_high",
       "school": "中正國中",
       "zone_type": "基本",
-      "village": "南福（里",
+      "village": "南福里",
       "village_raw": "南福（1-13、19-29鄰",
-      "neighborhoods_raw": "1-13、19-29鄰",
+      "neighborhoods_raw": "（1-13、19-29鄰",
       "source_page": null,
       "extra": {
         "school_code": "353505",
@@ -57747,9 +56187,9 @@
       "kind": "junior_high",
       "school": "弘道國中",
       "zone_type": "基本",
-      "village": "幸福（里",
+      "village": "幸福里",
       "village_raw": "幸福（1-8鄰",
-      "neighborhoods_raw": "1-8鄰",
+      "neighborhoods_raw": "（1-8鄰",
       "source_page": null,
       "extra": {
         "school_code": "353504",
@@ -58682,9 +57122,9 @@
       "kind": "junior_high",
       "school": "建成國中",
       "zone_type": "基本",
-      "village": "星明（里",
+      "village": "星明里",
       "village_raw": "星明（1、2、4-7、10、11、13、14、16、18、21鄰",
-      "neighborhoods_raw": "1、2、4-7、10、11、13、14、16、18、21鄰",
+      "neighborhoods_raw": "（1、2、4-7、10、11、13、14、16、18、21鄰",
       "source_page": null,
       "extra": {
         "school_code": "363501",
@@ -58835,43 +57275,9 @@
       "kind": "junior_high",
       "school": "成淵高中國中部",
       "zone_type": "基本",
-      "village": "民權（里",
+      "village": "民權里",
       "village_raw": "民權（3、6、10-25鄰",
-      "neighborhoods_raw": "3、6、10-25鄰",
-      "source_page": null,
-      "extra": {
-        "school_code": "363302",
-        "school_address": "大同區承德路2段235號。",
-        "school_phone": "TEL:25531969FAX:25574692"
-      }
-    },
-    {
-      "city": "台北市",
-      "district": "中山區",
-      "school_district": "大同區",
-      "kind": "junior_high",
-      "school": "成淵高中國中部",
-      "zone_type": "基本",
-      "village": "1里",
-      "village_raw": "1",
-      "neighborhoods_raw": null,
-      "source_page": null,
-      "extra": {
-        "school_code": "363302",
-        "school_address": "大同區承德路2段235號。",
-        "school_phone": "TEL:25531969FAX:25574692"
-      }
-    },
-    {
-      "city": "台北市",
-      "district": "中山區",
-      "school_district": "大同區",
-      "kind": "junior_high",
-      "school": "成淵高中國中部",
-      "zone_type": "基本",
-      "village": "集英。里",
-      "village_raw": "集英。2",
-      "neighborhoods_raw": "2",
+      "neighborhoods_raw": "（3、6、10-25鄰",
       "source_page": null,
       "extra": {
         "school_code": "363302",
@@ -58889,23 +57295,6 @@
       "village": "民安里",
       "village_raw": "民安（16、21鄰）:成淵",
       "neighborhoods_raw": "（16、21鄰）:成淵",
-      "source_page": null,
-      "extra": {
-        "school_code": "363302",
-        "school_address": "大同區承德路2段235號。",
-        "school_phone": "TEL:25531969FAX:25574692"
-      }
-    },
-    {
-      "city": "台北市",
-      "district": "中山區",
-      "school_district": "大同區",
-      "kind": "junior_high",
-      "school": "成淵高中國中部",
-      "zone_type": "基本",
-      "village": "建成共同學里",
-      "village_raw": "建成共同學",
-      "neighborhoods_raw": null,
       "source_page": null,
       "extra": {
         "school_code": "363302",
@@ -59022,9 +57411,9 @@
       "kind": "junior_high",
       "school": "忠孝國中",
       "zone_type": "基本",
-      "village": "大有（里",
+      "village": "大有里",
       "village_raw": "大有（4、10-11、13-19鄰",
-      "neighborhoods_raw": "4、10-11、13-19鄰",
+      "neighborhoods_raw": "（4、10-11、13-19鄰",
       "source_page": null,
       "extra": {
         "school_code": "363502",
@@ -59141,9 +57530,9 @@
       "kind": "junior_high",
       "school": "民權國中",
       "zone_type": "基本",
-      "village": "民權（里",
+      "village": "民權里",
       "village_raw": "民權（1、2、4、5、7-9、26鄰",
-      "neighborhoods_raw": "1、2、4、5、7-9、26鄰",
+      "neighborhoods_raw": "（1、2、4、5、7-9、26鄰",
       "source_page": null,
       "extra": {
         "school_code": "363504",
@@ -59277,26 +57666,9 @@
       "kind": "junior_high",
       "school": "蘭州國中",
       "zone_type": "基本",
-      "village": "鄰江。老師里",
-      "village_raw": "鄰江。老師（1-3、5-11、18-20鄰）",
-      "neighborhoods_raw": "（1-3、5-11、18-20鄰）",
-      "source_page": null,
-      "extra": {
-        "school_code": "363506",
-        "school_address": "大同區大龍街187巷1號。",
-        "school_phone": "TEL:25918269FEX:25850236"
-      }
-    },
-    {
-      "city": "台北市",
-      "district": "大同區",
-      "school_district": "大同區",
-      "kind": "junior_high",
-      "school": "蘭州國中",
-      "zone_type": "基本",
-      "village": "保安（里",
+      "village": "保安里",
       "village_raw": "保安（1-2、5、11-13、15鄰",
-      "neighborhoods_raw": "1-2、5、11-13、15鄰",
+      "neighborhoods_raw": "（1-2、5、11-13、15鄰",
       "source_page": null,
       "extra": {
         "school_code": "363506",
@@ -59413,9 +57785,9 @@
       "kind": "junior_high",
       "school": "重慶國中",
       "zone_type": "基本",
-      "village": "老師（里",
+      "village": "老師里",
       "village_raw": "老師（13-15、17鄰",
-      "neighborhoods_raw": "13-15、17鄰",
+      "neighborhoods_raw": "（13-15、17鄰",
       "source_page": null,
       "extra": {
         "school_code": "363507",
@@ -59736,9 +58108,9 @@
       "kind": "junior_high",
       "school": "長安國中",
       "zone_type": "基本",
-      "village": "中原（里",
+      "village": "中原里",
       "village_raw": "中原（1-6鄰",
-      "neighborhoods_raw": "1-6鄰",
+      "neighborhoods_raw": "（1-6鄰",
       "source_page": null,
       "extra": {
         "school_code": "343502",
@@ -59991,9 +58363,9 @@
       "kind": "junior_high",
       "school": "五常國中",
       "zone_type": "基本",
-      "village": "民福（里",
+      "village": "民福里",
       "village_raw": "民福（1-21、26-27鄰",
-      "neighborhoods_raw": "1-21、26-27鄰",
+      "neighborhoods_raw": "（1-21、26-27鄰",
       "source_page": null,
       "extra": {
         "school_code": "343506",
@@ -60212,7 +58584,7 @@
       "kind": "junior_high",
       "school": "新興國中",
       "zone_type": "基本",
-      "village": "恒安里",
+      "village": "恆安里",
       "village_raw": "恒安",
       "neighborhoods_raw": null,
       "source_page": null,
@@ -60365,9 +58737,9 @@
       "kind": "junior_high",
       "school": "新興國中",
       "zone_type": "基本",
-      "village": "中原（里",
+      "village": "中原里",
       "village_raw": "中原（7-18鄰",
-      "neighborhoods_raw": "7-18鄰",
+      "neighborhoods_raw": "（7-18鄰",
       "source_page": null,
       "extra": {
         "school_code": "343505",
@@ -60671,9 +59043,9 @@
       "kind": "junior_high",
       "school": "景美國中",
       "zone_type": "基本",
-      "village": "景華（里",
+      "village": "景華里",
       "village_raw": "景華（1-7、9-12鄰",
-      "neighborhoods_raw": "1-7、9-12鄰",
+      "neighborhoods_raw": "（1-7、9-12鄰",
       "source_page": null,
       "extra": {
         "school_code": "383504",
@@ -60790,9 +59162,9 @@
       "kind": "junior_high",
       "school": "木柵國中",
       "zone_type": "基本",
-      "village": "博嘉（里",
+      "village": "博嘉里",
       "village_raw": "博嘉（1-12、20鄰",
-      "neighborhoods_raw": "1-12、20鄰",
+      "neighborhoods_raw": "（1-12、20鄰",
       "source_page": null,
       "extra": {
         "school_code": "383501",
@@ -60892,23 +59264,6 @@
       "kind": "junior_high",
       "school": "木柵國中",
       "zone_type": "基本",
-      "village": "明義:實踐里",
-      "village_raw": "明義:實踐",
-      "neighborhoods_raw": null,
-      "source_page": null,
-      "extra": {
-        "school_code": "383501",
-        "school_address": "文山區木柵路3段102巷12號。",
-        "school_phone": "TEL:29393031FAX:29397866"
-      }
-    },
-    {
-      "city": "台北市",
-      "district": "文山區",
-      "school_district": "文山區",
-      "kind": "junior_high",
-      "school": "木柵國中",
-      "zone_type": "基本",
       "village": "萬芳里",
       "village_raw": "萬芳",
       "neighborhoods_raw": null,
@@ -60917,57 +59272,6 @@
         "school_code": "383501",
         "school_address": "文山區木柵路3段102巷12號。",
         "school_phone": "TEL:29393031FAX:29397866"
-      }
-    },
-    {
-      "city": "台北市",
-      "district": "文山區",
-      "school_district": "文山區",
-      "kind": "junior_high",
-      "school": "木柵國中",
-      "zone_type": "基本",
-      "village": "木里",
-      "village_raw": "木",
-      "neighborhoods_raw": null,
-      "source_page": null,
-      "extra": {
-        "school_code": "383501",
-        "school_address": "文山區木柵路3段102巷12號。",
-        "school_phone": "TEL:29393031FAX:29397866"
-      }
-    },
-    {
-      "city": "台北市",
-      "district": "文山區",
-      "school_district": "文山區",
-      "kind": "junior_high",
-      "school": "實踐國中",
-      "zone_type": "基本",
-      "village": "柵老共泉同里",
-      "village_raw": "柵老共泉同",
-      "neighborhoods_raw": null,
-      "source_page": null,
-      "extra": {
-        "school_code": "383502",
-        "school_address": "文山區辛亥路7段67號。",
-        "school_phone": "TEL:22362852FAX:22366485"
-      }
-    },
-    {
-      "city": "台北市",
-      "district": "學華區",
-      "school_district": "文山區",
-      "kind": "junior_high",
-      "school": "實踐國中",
-      "zone_type": "基本",
-      "village": "興里",
-      "village_raw": "學華區興",
-      "neighborhoods_raw": null,
-      "source_page": null,
-      "extra": {
-        "school_code": "383502",
-        "school_address": "文山區辛亥路7段67號。",
-        "school_phone": "TEL:22362852FAX:22366485"
       }
     },
     {
@@ -61419,9 +59723,9 @@
       "kind": "junior_high",
       "school": "萬芳高中國中部",
       "zone_type": "基本",
-      "village": "萬美（里",
+      "village": "萬美里",
       "village_raw": "萬美（11鄰",
-      "neighborhoods_raw": "11鄰",
+      "neighborhoods_raw": "（11鄰",
       "source_page": null,
       "extra": {
         "school_code": "383302",
@@ -61623,9 +59927,9 @@
       "kind": "junior_high",
       "school": "景興國中",
       "zone_type": "基本",
-      "village": "萬和（里",
+      "village": "萬和里",
       "village_raw": "萬和（9-14鄰",
-      "neighborhoods_raw": "9-14鄰",
+      "neighborhoods_raw": "（9-14鄰",
       "source_page": null,
       "extra": {
         "school_code": "383507",
@@ -61997,9 +60301,9 @@
       "kind": "junior_high",
       "school": "格致國中",
       "zone_type": "基本",
-      "village": "湖山（里",
+      "village": "湖山里",
       "village_raw": "湖山（4-13鄰",
-      "neighborhoods_raw": "4-13鄰",
+      "neighborhoods_raw": "（4-13鄰",
       "source_page": null,
       "extra": {
         "school_code": "413505",
@@ -62184,9 +60488,9 @@
       "kind": "junior_high",
       "school": "蘭雅國中",
       "zone_type": "基本",
-      "village": "天壽（里",
+      "village": "天壽里",
       "village_raw": "天壽（1-4鄰、8-12鄰",
-      "neighborhoods_raw": "1-4鄰、8-12鄰",
+      "neighborhoods_raw": "（1-4鄰、8-12鄰",
       "source_page": null,
       "extra": {
         "school_code": "413502",
@@ -62337,9 +60641,9 @@
       "kind": "junior_high",
       "school": "士林國中",
       "zone_type": "基本",
-      "village": "福林（里",
+      "village": "福林里",
       "village_raw": "福林（6-18鄰",
-      "neighborhoods_raw": "6-18鄰",
+      "neighborhoods_raw": "（6-18鄰",
       "source_page": null,
       "extra": {
         "school_code": "413501",
@@ -62524,9 +60828,9 @@
       "kind": "junior_high",
       "school": "陽明高中國中部",
       "zone_type": "基本",
-      "village": "社子（里",
+      "village": "社子里",
       "village_raw": "社子（2-5、8-11、17-23鄰",
-      "neighborhoods_raw": "2-5、8-11、17-23鄰",
+      "neighborhoods_raw": "（2-5、8-11、17-23鄰",
       "source_page": null,
       "extra": {
         "school_code": "413301",
@@ -63017,9 +61321,9 @@
       "kind": "junior_high",
       "school": "天母國中",
       "zone_type": "基本",
-      "village": "三玉（里",
+      "village": "三玉里",
       "village_raw": "三玉（6、10鄰",
-      "neighborhoods_raw": "6、10鄰",
+      "neighborhoods_raw": "（6、10鄰",
       "source_page": null,
       "extra": {
         "school_code": "413508",
@@ -63034,9 +61338,9 @@
       "kind": "junior_high",
       "school": "天母國中",
       "zone_type": "基本",
-      "village": "天壽（里",
+      "village": "天壽里",
       "village_raw": "天壽（5-7、13-16鄰",
-      "neighborhoods_raw": "5-7、13-16鄰",
+      "neighborhoods_raw": "（5-7、13-16鄰",
       "source_page": null,
       "extra": {
         "school_code": "413508",
@@ -63085,9 +61389,9 @@
       "kind": "junior_high",
       "school": "天母國中",
       "zone_type": "基本",
-      "village": "永欣（里",
+      "village": "永欣里",
       "village_raw": "永欣（8-9鄰",
-      "neighborhoods_raw": "8-9鄰",
+      "neighborhoods_raw": "（8-9鄰",
       "source_page": null,
       "extra": {
         "school_code": "413508",
@@ -63187,9 +61491,9 @@
       "kind": "junior_high",
       "school": "北投國中",
       "zone_type": "基本",
-      "village": "中央（里",
+      "village": "中央里",
       "village_raw": "中央（1-6、8-15、17、19鄰",
-      "neighborhoods_raw": "1-6、8-15、17、19鄰",
+      "neighborhoods_raw": "（1-6、8-15、17、19鄰",
       "source_page": null,
       "extra": {
         "school_code": "423501",
@@ -63493,9 +61797,9 @@
       "kind": "junior_high",
       "school": "新民國中",
       "zone_type": "基本",
-      "village": "湖田（里",
+      "village": "湖田里",
       "village_raw": "湖田（1、3-10鄰",
-      "neighborhoods_raw": "1、3-10鄰",
+      "neighborhoods_raw": "（1、3-10鄰",
       "source_page": null,
       "extra": {
         "school_code": "423502",
@@ -63612,9 +61916,9 @@
       "kind": "junior_high",
       "school": "桃源國中",
       "zone_type": "基本",
-      "village": "豐年（里",
+      "village": "豐年里",
       "village_raw": "豐年（2-11、13-15鄰",
-      "neighborhoods_raw": "2-11、13-15鄰",
+      "neighborhoods_raw": "（2-11、13-15鄰",
       "source_page": null,
       "extra": {
         "school_code": "423504",
@@ -63799,9 +62103,9 @@
       "kind": "junior_high",
       "school": "石牌國中",
       "zone_type": "基本",
-      "village": "八仙（里",
+      "village": "八仙里",
       "village_raw": "八仙（7-9、16、17鄰",
-      "neighborhoods_raw": "7-9、16、17鄰",
+      "neighborhoods_raw": "（7-9、16、17鄰",
       "source_page": null,
       "extra": {
         "school_code": "423505",
@@ -64241,9 +62545,9 @@
       "kind": "junior_high",
       "school": "成德國中",
       "zone_type": "基本",
-      "village": "萬福（里",
+      "village": "萬福里",
       "village_raw": "萬福（1-5、9-17鄰",
-      "neighborhoods_raw": "1-5、9-17鄰",
+      "neighborhoods_raw": "（1-5、9-17鄰",
       "source_page": null,
       "extra": {
         "school_code": "393503",
@@ -64513,9 +62817,9 @@
       "kind": "junior_high",
       "school": "內湖國中",
       "zone_type": "基本",
-      "village": "瑞光（里",
+      "village": "瑞光里",
       "village_raw": "瑞光（19鄰",
-      "neighborhoods_raw": "19鄰",
+      "neighborhoods_raw": "（19鄰",
       "source_page": null,
       "extra": {
         "school_code": "403501",
@@ -64584,23 +62888,6 @@
       "village": "寶湖里",
       "village_raw": "寶湖（2鄰）",
       "neighborhoods_raw": "（2鄰）",
-      "source_page": null,
-      "extra": {
-        "school_code": "403501",
-        "school_address": "內湖區陽光街1號。",
-        "school_phone": "TEL:27900843FAX:27941510"
-      }
-    },
-    {
-      "city": "台北市",
-      "district": "內湖區",
-      "school_district": "內湖區",
-      "kind": "junior_high",
-      "school": "內湖國中",
-      "zone_type": "共同",
-      "village": "新北市汐止區長青里",
-      "village_raw": "新北市汐止區長青里",
-      "neighborhoods_raw": null,
       "source_page": null,
       "extra": {
         "school_code": "403501",
@@ -64700,9 +62987,9 @@
       "kind": "junior_high",
       "school": "三民國中",
       "zone_type": "基本",
-      "village": "寶湖（里",
+      "village": "寶湖里",
       "village_raw": "寶湖（1、3-29鄰",
-      "neighborhoods_raw": "1、3-29鄰",
+      "neighborhoods_raw": "（1、3-29鄰",
       "source_page": null,
       "extra": {
         "school_code": "403503",
@@ -65057,23 +63344,6 @@
       "kind": "junior_high",
       "school": "東湖國中",
       "zone_type": "共同",
-      "village": "新北市汐止區忠山里",
-      "village_raw": "新北市汐止區忠山",
-      "neighborhoods_raw": null,
-      "source_page": null,
-      "extra": {
-        "school_code": "403505",
-        "school_address": "內湖區康樂街131號。",
-        "school_phone": "TEL:26330373FAX:26330377"
-      }
-    },
-    {
-      "city": "台北市",
-      "district": "內湖區",
-      "school_district": "內湖區",
-      "kind": "junior_high",
-      "school": "東湖國中",
-      "zone_type": "共同",
       "village": "湖蓮里",
       "village_raw": "湖蓮",
       "neighborhoods_raw": null,
@@ -65210,9 +63480,9 @@
       "kind": "junior_high",
       "school": "麗山國中",
       "zone_type": "基本",
-      "village": "麗山（里",
+      "village": "麗山里",
       "village_raw": "麗山（1-6、8鄰",
-      "neighborhoods_raw": "1-6、8鄰",
+      "neighborhoods_raw": "（1-6、8鄰",
       "source_page": null,
       "extra": {
         "school_code": "403502",
