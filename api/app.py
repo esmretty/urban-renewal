@@ -2404,6 +2404,9 @@ async def admin_reanalyze(property_id: str, source: str = "all", admin: dict = D
                 col.document(property_id).update({"analysis_in_progress": False})
             except Exception:
                 pass
+            # invalidate central_search query cache — 讓下次前端 ctrl+f5 list 拿到 fresh doc
+            # 不 invalidate 的話 cache TTL 120 秒內前端看不到新欄位 (例：is_foreclosure / is_basement)
+            invalidate_query_cache()
     asyncio.create_task(_do())
     logger.warning("[admin] %s 觸發重新分析（完整重爬） %s", admin.get("email"), property_id)
     return {"status": "started"}
@@ -4948,6 +4951,9 @@ async def _run_pending_analysis(property_id: str):
             logger.exception(f"分析失敗 {property_id}: {e}")
             # 失敗也要清掉 in_progress 讓 UI 脫困
             col.document(property_id).update({"analysis_in_progress": False})
+        finally:
+            # invalidate central_search query cache — 跟 admin_reanalyze 同理
+            invalidate_query_cache()
 
     await asyncio.to_thread(_do)
 
