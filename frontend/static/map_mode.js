@@ -132,9 +132,13 @@
       try { center = L.geoJSON(ft).getBounds().getCenter(); } catch (_e) {}
       if (!center) return;
       // 每校一行 — 多校用 <br> 分隔，single 校直接 escape
-      const html = schools.map(s => _esc(s)).join('<br>');
+      // wrapper iconSize=[0,0] → leaflet anchor 在 polygon center；inner div 用
+      // absolute + translate(-50%,-50%) 自己中心對齊 anchor → 整文字方塊中心置中
+      const inner = schools.map(s => _esc(s)).join('<br>');
       const ic = L.divIcon({
-        className: 'v2-school-label', html: html, iconSize: null,
+        className: '',  // 不用 leaflet 預設 class style
+        html: `<div class="v2-school-label-inner">${inner}</div>`,
+        iconSize: [0, 0],
       });
       L.marker(center, { icon: ic, interactive: false }).addTo(st._schoolLabelLayer);
     });
