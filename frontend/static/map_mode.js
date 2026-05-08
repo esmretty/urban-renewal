@@ -215,7 +215,7 @@
       st._mapMarkers.push(mk);
       bounds.push([p.latitude, p.longitude]);
     });
-    if (bounds.length) m.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+    // user 要求：地圖永遠以大安公園為預設中心，不要 fitBounds 把所有物件包進視野
   }
 
   // ── 切換 view mode ──
@@ -230,6 +230,9 @@
                   || document.getElementById('v2-map');
     if (grid) grid.style.display = mode === 'list' ? '' : 'none';
     if (mapWrap) mapWrap.style.display = mode === 'map' ? '' : 'none';
+    // 地圖模式不需要頁碼（地圖一次顯示所有 markers，沒有分頁概念）
+    const pag = document.getElementById('v2-pagination');
+    if (pag) pag.style.display = mode === 'map' ? 'none' : '';
     document.querySelectorAll('.v2-view-toggle__link').forEach(a =>
       a.classList.toggle('is-active', a.dataset.viewMode === mode));
     if (mode === 'map') {
