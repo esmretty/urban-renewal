@@ -45,6 +45,100 @@
     }).addTo(m);
     st._mapInst = m;
     st._mapMarkers = [];
+    st._schoolLayer = null;
+    st._schoolLabelLayer = null;
+    st._schoolGeo = null;          // 全部 polygons (cached)
+    st._schoolKind = 'off';        // 'off' | 'elementary' | 'junior_high'
+    // toolbar radio 監聽
+    document.addEventListener('change', (e) => {
+      if (e.target && e.target.matches('input[name="v2-school-layer"]')) {
+        st._schoolKind = e.target.value;
+        _renderSchoolLayer();
+      }
+    });
+  }
+
+  // ── 同學校永遠同色 (string hash → HSL) ──
+  function _colorForSchool(name) {
+    if (!name) return '#888';
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+    return `hsl(${Math.abs(h) % 360}, 65%, 60%)`;
+  }
+
+  function _clearSchoolLayer() {
+    const st = _state();
+    if (!st || !st._mapInst) return;
+    if (st._schoolLayer) { st._mapInst.removeLayer(st._schoolLayer); st._schoolLayer = null; }
+    if (st._schoolLabelLayer) { st._mapInst.removeLayer(st._schoolLabelLayer); st._schoolLabelLayer = null; }
+  }
+
+  async function _renderSchoolLayer() {
+    const st = _state();
+    if (!st || !st._mapInst) return;
+    const m = st._mapInst;
+    const kind = st._schoolKind || 'off';
+    const hint = document.getElementById('v2-school-layer-hint');
+    _clearSchoolLayer();
+    if (kind === 'off') {
+      if (hint) hint.textContent = '';
+      return;
+    }
+    // Lazy fetch polygons_all (only once)
+    if (!st._schoolGeo) {
+      if (hint) hint.textContent = '載入中…';
+      try {
+        const r = await fetch('/api/school_district/polygons_all');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        st._schoolGeo = await r.json();
+      } catch (e) {
+        if (hint) hint.textContent = '學區資料載入失敗：' + e.message;
+        return;
+      }
+    }
+    const features = (st._schoolGeo && st._schoolGeo.features) || [];
+    if (!features.length) {
+      if (hint) hint.textContent = '無學區資料';
+      return;
+    }
+    // GeoJSON polygon layer (按學校 hash 配色)
+    st._schoolLayer = L.geoJSON(st._schoolGeo, {
+      style: (ft) => {
+        const schools = (ft.properties || {})[kind] || [];
+        const main = schools[0] || '';
+        return {
+          color: '#444', weight: 0.8, opacity: 0.7,
+          fillColor: _colorForSchool(main),
+          fillOpacity: schools.length ? 0.42 : 0.06,
+        };
+      },
+      onEachFeature: (ft, layer) => {
+        const p = ft.properties || {};
+        const es = (p.elementary || []).join('、') || '—';
+        const jh = (p.junior_high || []).join('、') || '—';
+        layer.bindTooltip(
+          `<b>${_esc(p.village)}</b> (${_esc(p.county)}${_esc(p.town)})<br>` +
+          `國小：${_esc(es)}<br>國中：${_esc(jh)}`,
+          { sticky: true }
+        );
+      },
+    }).addTo(m);
+    // label：學校名置中 polygon，純文字 + 描邊，無邊框
+    st._schoolLabelLayer = L.layerGroup();
+    features.forEach(ft => {
+      const schools = (ft.properties || {})[kind] || [];
+      if (!schools.length) return;
+      let center = null;
+      try { center = L.geoJSON(ft).getBounds().getCenter(); } catch (_e) {}
+      if (!center) return;
+      const txt = schools.length > 1 ? schools.join('/') : schools[0];
+      const ic = L.divIcon({
+        className: 'v2-school-label', html: _esc(txt), iconSize: null,
+      });
+      L.marker(center, { icon: ic, interactive: false }).addTo(st._schoolLabelLayer);
+    });
+    st._schoolLabelLayer.addTo(m);
+    if (hint) hint.textContent = `已載入 ${features.length} 里`;
   }
 
   // ── render 當前 filtered list 到地圖 ──
@@ -113,9 +207,11 @@
     if (!st) return;
     st.viewMode = mode;
     const grid = document.getElementById('v2-grid');
-    const mapEl = document.getElementById('v2-map');
+    // toggle wrap (含 toolbar + map)；wrap 不在時 fallback toggle inner v2-map (backward compat)
+    const mapWrap = document.getElementById('v2-map-wrap')
+                  || document.getElementById('v2-map');
     if (grid) grid.style.display = mode === 'list' ? '' : 'none';
-    if (mapEl) mapEl.style.display = mode === 'map' ? '' : 'none';
+    if (mapWrap) mapWrap.style.display = mode === 'map' ? '' : 'none';
     document.querySelectorAll('.v2-view-toggle__link').forEach(a =>
       a.classList.toggle('is-active', a.dataset.viewMode === mode));
     if (mode === 'map') {

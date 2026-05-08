@@ -438,7 +438,16 @@
     </div>
 
     <!-- 地圖容器（地圖模式才 show） -->
-    <div id="v2-map" class="v2-map" style="display:none"></div>
+    <div id="v2-map-wrap" class="v2-map-wrap" style="display:none">
+      <div class="v2-map-toolbar">
+        <span class="v2-map-toolbar__label">學區圖層：</span>
+        <label class="v2-map-toolbar__radio"><input type="radio" name="v2-school-layer" value="off" checked> 無</label>
+        <label class="v2-map-toolbar__radio"><input type="radio" name="v2-school-layer" value="elementary"> 國小</label>
+        <label class="v2-map-toolbar__radio"><input type="radio" name="v2-school-layer" value="junior_high"> 國中</label>
+        <span class="v2-map-toolbar__hint" id="v2-school-layer-hint"></span>
+      </div>
+      <div id="v2-map" class="v2-map"></div>
+    </div>
 
     <!-- Empty state -->
     <div class="v2-empty" id="v2-empty" style="display:none">

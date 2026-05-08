@@ -47,18 +47,59 @@
 }
 
 /* ── 地圖容器 ── */
+.v2-map-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.v2-map-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 7px 12px;
+  background: #f5f0e3;
+  border: 1px solid var(--c-border);
+  border-bottom: none;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.v2-map-toolbar__label { color: #555; font-weight: 600; }
+.v2-map-toolbar__radio {
+  cursor: pointer;
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+.v2-map-toolbar__radio input { vertical-align: middle; cursor: pointer; }
+.v2-map-toolbar__hint { color: #888; font-size: 12px; margin-left: auto; }
 .v2-map {
   width: 100%;
-  height: calc(100vh - 220px);
-  min-height: 480px;
+  height: calc(100vh - 260px);
+  min-height: 460px;
   border: 1px solid var(--c-border);
-  border-radius: var(--r-md);
+  border-radius: 0 0 var(--r-md) var(--r-md);
   overflow: hidden;
   z-index: 0;            /* drawer / sidebar 蓋過去 */
   background: #e8e2cc;   /* loading tile 之前不至於白板 */
 }
 @media (max-width: 1024px) {
-  .v2-map { height: calc(100vh - 200px); min-height: 400px; }
+  .v2-map { height: calc(100vh - 240px); min-height: 380px; }
+}
+
+/* ── 學區圖層學校名稱 label：純文字 + 描邊，無邊框 / 無背景 ── */
+.v2-school-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1f2937;
+  white-space: nowrap;
+  text-align: center;
+  pointer-events: none;
+  /* 8 方向白色描邊讓字在花花地圖上仍清楚 */
+  text-shadow:
+    -1px -1px 0 #fff, 1px -1px 0 #fff,
+    -1px  1px 0 #fff, 1px  1px 0 #fff,
+     0   -1px 0 #fff, 0    1px 0 #fff,
+    -1px  0   0 #fff, 1px  0   0 #fff;
 }
 
 /* ── Marker 倍數 chip 樣式 ── */
