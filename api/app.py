@@ -6140,6 +6140,9 @@ def _scrape_single_url_591_inner(url: str, src_id: str, is_reanalyze: bool = Fal
                 "land_area_ping": m.get("land_area_ping"),
                 "building_age": m.get("building_age"),
                 "floor": m.get("floor"),
+                # mobile parser 從 floor 字串 ('7F/9F') 拆出 total_floors int — 給下游
+                # floor>=6 skip check 用 (沒 total_floors 時 check 拿到 0 失效)
+                "total_floors": m.get("total_floors"),
                 # mobile API address：可能完整 (含號) 或 hide_addr_detail=1 case 只到「街X段」
                 "address": m.get("address") or "",
             }
@@ -6375,7 +6378,12 @@ def _scrape_single_url_591_inner(url: str, src_id: str, is_reanalyze: bool = Fal
             "_published_text": published_text,     # 591 詳情頁「刊登時間」文字
             "_updated_text": updated_text,         # 591 詳情頁「最後更新」文字
             # 591「社區」欄位 RAW value，給 detect_foreclosure 偵測「【」廣告詞用（跟 batch 路徑一致）
-            "_community_raw": getattr(detail_ret, "community_raw", "") or "",
+            # mobile path 用 m.community_raw（從 casesname 規範化），desktop fallback 用 detail_ret
+            "_community_raw": (
+                (_mobile_data_url.get("community_raw") if _mobile_data_url else "")
+                or getattr(detail_ret, "community_raw", "")
+                or ""
+            ),
         }
 
         # 必要欄位至少要有 city/district/price/bld 才能入庫
@@ -6394,22 +6402,29 @@ def _scrape_single_url_591_inner(url: str, src_id: str, is_reanalyze: bool = Fal
             return {"status": "error", "message": f"{city}{district} 不在分析範圍內。目前僅支援：{allowed}"}
 
         # 只用總樓層過濾（591 filter 已選公寓；OCR 建物類型不可靠，易誤判）
-        # admin 重新分析跳過此檢查，讓 admin 能修正既有物件的資料
-        if not is_reanalyze:
-            _tf = item.get("total_floors") or 0
-            try: _tf = int(_tf)
-            except Exception: _tf = 0
-            try: _f = int(item.get("floor")) if item.get("floor") else 0
-            except Exception: _f = 0
-            eff = max(_tf, _f)
-            if eff >= 6:
-                _cleanup_shots(src_id)
+        # 不論 reanalyze 與否：總樓層 >=6 永遠不可能是公寓（公寓定義 5F 以下無電梯），
+        # 是邏輯衝突資料。reanalyze 命中時加 db.delete — 把既存誤入庫 doc 從 DB 移除。
+        _tf = item.get("total_floors") or 0
+        try: _tf = int(_tf)
+        except Exception: _tf = 0
+        try: _f = int(item.get("floor")) if item.get("floor") else 0
+        except Exception: _f = 0
+        eff = max(_tf, _f)
+        if eff >= 6:
+            _cleanup_shots(src_id)
+            if is_reanalyze:
                 try:
-                    from database.retry_queue import dequeue_by_source_id
-                    dequeue_by_source_id(src_id)
-                except Exception: pass
-                return {"status": "skipped_non_apartment", "source_id": src_id,
-                        "message": f"樓層 {item.get('floor')}/{item.get('total_floors')} ≥6，非公寓（5F 以下），跳過。"}
+                    col.document(src_id).delete()
+                    logger.warning(f"已從 DB 移除非公寓 {src_id} (樓層 {item.get('floor')}/{_tf}F)")
+                except Exception as _de:
+                    logger.warning(f"移除非公寓 doc 失敗 {src_id}: {_de}")
+            try:
+                from database.retry_queue import dequeue_by_source_id
+                dequeue_by_source_id(src_id)
+            except Exception: pass
+            return {"status": "skipped_non_apartment", "source_id": src_id,
+                    "message": f"樓層 {item.get('floor')}/{item.get('total_floors')} ≥6，非公寓（5F 以下），跳過。"
+                               + (" Doc 已從 DB 移除。" if is_reanalyze else "")}
         # 源頭已 filter 公寓，直接標公寓
         if not item.get("building_type"):
             item["building_type"] = "公寓"
