@@ -104,6 +104,9 @@
         transparent: true,
         opacity: OPACITY,
         pane: paneName,
+        // L.tileLayer 預設 maxZoom=18，會比底圖 OSM (maxZoom=19) 早消失 → 顯式拉高
+        // 22 留 buffer 給未來底圖換成更高 zoom 的 tile source
+        maxZoom: 22,
         // server 預期 EPSG:3857 (Leaflet 預設)
       });
       // 政府 server 偶爾失敗 → tile 拿 504 / non-image → silent skip
