@@ -39,10 +39,12 @@
       console.warn('[map_mode] Leaflet 未載入，地圖模式不可用');
       return;
     }
-    // 預設中心：大安森林公園；zoom 14（之前 12 整個雙北太遠）；maxZoom 19 (OSM tile 上限，再放大也沒新解析度)
-    const m = L.map('v2-map', { maxZoom: 19 }).setView([25.0294, 121.5359], 14);
+    // 預設中心：大安森林公園；zoom 14；maxZoom 20 (OSM tile 上限 19 但 maxNativeZoom 處理)
+    const m = L.map('v2-map', { maxZoom: 20 }).setView([25.0294, 121.5359], 14);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap', maxZoom: 19,
+      attribution: '© OpenStreetMap',
+      maxZoom: 20,         // 用戶可放大到 20
+      maxNativeZoom: 19,   // OSM 實際只到 19，z=20 用 z=19 tile 放大顯示
     }).addTo(m);
     st._mapInst = m;
     st._mapMarkers = [];

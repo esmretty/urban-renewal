@@ -36,8 +36,9 @@
       label: '地籍圖',
       paneZ: 402,
       backends: [
-        { name: 'cadastral_lines_tpe', minZoom: 18 },       // 地籍線 z=18+
-        { name: 'cadastral_numbers_tpe', minZoom: 18 },     // 地號文字 z=18+
+        { name: 'cadastral_lines_tpe', minZoom: 18 },       // 台北 GeoServer 地籍線 (含詳細邊界)
+        { name: 'cadastral_numbers_tpe', minZoom: 18 },     // 台北 GeoServer 地號文字
+        { name: 'cadastral_ntpc', minZoom: 18 },            // 全國 NLSC LANDSECT (補新北，台北重疊但不傷)
       ],
       hint: 'z=18+',
     },
@@ -45,9 +46,10 @@
       label: '建物套繪圖',
       paneZ: 403,
       backends: [
-        { name: 'building_floors_tpe', minZoom: 18 },
+        { name: 'building_floors_tpe', minZoom: 18 },       // 台北獨家：含 4R/5R/T 樓層+結構 label
+        { name: 'building_ntpc', minZoom: 18 },             // 全國 NLSC BUILDX (補新北，純 polygon 沒 label)
       ],
-      hint: 'z=18+',
+      hint: 'z=18+，新北只有形狀無 4R/5R 標記',
     },
     renewal: {
       label: '都更地區 (已劃定)',

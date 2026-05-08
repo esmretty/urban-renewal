@@ -75,6 +75,17 @@ _LAYER_DEFS: dict[str, dict] = {
         "upstream": "https://www.historygis.udd.gov.taipei/arcgis/rest/services/UrbanPlan2/PlanTheme/MapServer/export",
         "layer_show": "0",
     },
+    # NLSC 全國地籍圖 (LANDSECT) — 補新北地籍 (台北也涵蓋但 GeoServer 詳細優先)
+    # NLSC 不需 token、無 CORS issue；WMTS protocol 用 z/y/x tile path
+    "cadastral_ntpc": {
+        "kind": "nlsc_wmts",
+        "layer_id": "LANDSECT",
+    },
+    # NLSC 全國建物 (BUILDX) — 補新北建物 (純 polygon 沒 4R/T label，那個是台北獨有)
+    "building_ntpc": {
+        "kind": "nlsc_wmts",
+        "layer_id": "BUILDX",
+    },
     # ── 新北市（ArcGIS REST export，需要 token） ────────────────────────────
     "zoning_ntpc": {
         "kind": "arcgis_export",
@@ -157,6 +168,55 @@ def _fetch_wms(upstream: str, layer_names: str, bbox: str, width: int, height: i
         return r.content
     except Exception as e:
         logger.warning(f"WMS upstream 例外: {e}")
+        return None
+
+
+def _fetch_nlsc_wmts(cfg: dict, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
+    """NLSC WMTS — 把 Leaflet WMS-style request 轉成 WMTS GetTile (z/y/x)。
+
+    NLSC WMTS 是 tile-based service (https://wmts.nlsc.gov.tw/wmts/{layer}/default/EPSG:3857/{z}/{y}/{x})。
+    Leaflet `L.tileLayer.wms` 每個 tile request 的 bbox 剛好對應一個 web mercator tile (256×256)，
+    所以 bbox→(z,x,y) 是 1:1 mapping，不會 lossy。
+    """
+    import math
+    try:
+        parts = [float(v) for v in bbox.split(",")]
+        if len(parts) != 4:
+            return None
+        xmin, ymin, xmax, ymax = parts
+    except ValueError:
+        return None
+
+    # 從 bbox 反算 web mercator tile 座標
+    EARTH_HALF = 20037508.342789244
+    tile_span = xmax - xmin   # 每 tile 寬 (web mercator meters)
+    if tile_span <= 0:
+        return None
+    z = round(math.log2(2 * EARTH_HALF / tile_span))
+    if z < 0 or z > 22:
+        return None
+    n = 2 ** z
+    full_span = 2 * EARTH_HALF / n
+    x = round((xmin + EARTH_HALF) / full_span)
+    y = round((EARTH_HALF - ymax) / full_span)
+    if x < 0 or x >= n or y < 0 or y >= n:
+        # 跨日界線或極區 — 直接 fail，前端拿透明
+        return None
+
+    layer_id = cfg["layer_id"]
+    url = f"https://wmts.nlsc.gov.tw/wmts/{layer_id}/default/EPSG:3857/{z}/{y}/{x}"
+    try:
+        r = httpx.get(url, timeout=10, verify=False)
+        if r.status_code != 200:
+            logger.debug(f"NLSC WMTS http={r.status_code} {url}")
+            return None
+        if "image" not in r.headers.get("content-type", ""):
+            return None
+        if len(r.content) < 100:
+            return None
+        return r.content
+    except Exception as e:
+        logger.warning(f"NLSC WMTS 例外: {e}")
         return None
 
 
@@ -248,6 +308,8 @@ async def gis_overlay(layer: str, request: Request) -> Response:
         content = _fetch_wms(cfg["upstream"], cfg["layers"], bbox, width, height, srs)
     elif cfg["kind"] == "arcgis_export":
         content = _fetch_arcgis_export(cfg, bbox, width, height, srs)
+    elif cfg["kind"] == "nlsc_wmts":
+        content = _fetch_nlsc_wmts(cfg, bbox, width, height, srs)
     else:
         raise HTTPException(500, f"unknown kind: {cfg['kind']}")
 
