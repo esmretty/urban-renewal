@@ -25,6 +25,7 @@
 
   // 圖層定義 — 每個含「同時要載入的 server-side layer 名稱」
   // server 會根據 bbox 自動 short-circuit 不在該市範圍的 request
+  // backend 可寫成字串 (任 zoom) 或 { name, minZoom } 物件 (zoom 限制)
   const LAYERS = {
     zoning: {
       label: '土地分區',
@@ -34,13 +35,19 @@
     cadastral: {
       label: '地籍 + 地號',
       paneZ: 402,
-      backends: ['cadastral_tpe'],   // 新北 phase A.5 補
+      backends: [
+        'cadastral_lines_tpe',                              // 地籍線任 zoom
+        { name: 'cadastral_numbers_tpe', minZoom: 18 },     // 地號文字 z=18,19 才顯示
+      ],
+      hint: '地號需 z=18 或 19',
     },
     building_floors: {
-      label: '建物形狀',
-      paneZ: 403,   // 在地籍上方 (要看到建物投影到地籍上)
-      backends: ['building_floors_tpe'],
-      hint: '需 zoom 17+',   // minScale=5000，太遠看不到
+      label: '建物套繪圖',
+      paneZ: 403,
+      backends: [
+        { name: 'building_floors_tpe', minZoom: 18 },
+      ],
+      hint: '需 z=18 或 19',
     },
     renewal: {
       label: '都更/危老',
@@ -103,11 +110,14 @@
       pane.style.pointerEvents = 'none';   // overlay 不擋 marker click
     }
 
-    cfg.backends.forEach(backend => {
+    cfg.backends.forEach(b => {
+      // backend 可寫成 'name' 或 { name, minZoom } — 統一拆出
+      const name = typeof b === 'string' ? b : b.name;
+      const minZoom = (typeof b === 'object' && b.minZoom) ? b.minZoom : undefined;
       // 每個 backend 一個 L.tileLayer.wms（Leaflet 會自己分塊抓）
       // server-side 會根據 bbox 自動只給該市範圍，跨市的 tile 會回透明 PNG (504)
-      const layer = L.tileLayer.wms('/api/gis_overlay/' + backend, {
-        layers: backend,   // server 用 path 認 layer，這個 query param 對 Leaflet 不重要但 WMS spec 要有
+      const wmsOpts = {
+        layers: name,   // server 用 path 認 layer，這個 query param 對 Leaflet 不重要但 WMS spec 要有
         format: 'image/png',
         transparent: true,
         opacity: OPACITY,
@@ -116,11 +126,13 @@
         // 22 留 buffer 給未來底圖換成更高 zoom 的 tile source
         maxZoom: 22,
         // server 預期 EPSG:3857 (Leaflet 預設)
-      });
+      };
+      if (minZoom != null) wmsOpts.minZoom = minZoom;   // z<minZoom Leaflet 自動不請求 tile
+      const layer = L.tileLayer.wms('/api/gis_overlay/' + name, wmsOpts);
       // 政府 server 偶爾失敗 → tile 拿 504 / non-image → silent skip
       layer.on('tileerror', (e) => {
         // 不噴 alert / toast，只 console.debug；單 tile fail 是正常 (跨市)
-        console.debug('[overlay tile error]', backend, e.tile?.src);
+        console.debug('[overlay tile error]', name, e.tile && e.tile.src);
       });
       layer.addTo(m);
       _state.layerRefs[key].push(layer);

@@ -48,12 +48,16 @@ _LAYER_DEFS: dict[str, dict] = {
         # 主圖 + 文字（住三/商二）兩層 — text layer 不一定每個 zoom 都有，但 GeoServer 會自動處理
         "layers": "Taipei:ublock97-TWD97,Taipei:ublock97-TWD97-text",
     },
-    "cadastral_tpe": {
+    # 地籍拆兩個 backend：線任 zoom 顯示，地號文字只 z=18 或 19 才顯示 (前端 minZoom 控制)
+    "cadastral_lines_tpe": {
         "kind": "wms",
         "upstream": _TPE_WMS_URL,
-        # 地籍線 + 地號文字 (LAND-ALL-TWD97-TEXT)；GeoServer 自身會處理 scale-dependent rendering，
-        # 低 zoom 文字過密時會自動省略
-        "layers": "Taipei:LAND-ALL-TWD97,Taipei:LAND-ALL-TWD97-TEXT",
+        "layers": "Taipei:LAND-ALL-TWD97",
+    },
+    "cadastral_numbers_tpe": {
+        "kind": "wms",
+        "upstream": _TPE_WMS_URL,
+        "layers": "Taipei:LAND-ALL-TWD97-TEXT",
     },
     # 台北建物樓層 — 都發局 GISDB layer 19 (建物_Build polygon)
     # 此 service 公開無 token，但 layer 19 minScale=5000，zoom < ~17 不會顯示 polygon (政府 server scale-dependent)
