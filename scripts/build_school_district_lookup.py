@@ -251,7 +251,7 @@ def parse_ntpc_es(path: Path) -> list[dict]:
                 continue
             obj_dist = _resolve_district("新北市", target_dist or district, village)
             if not obj_dist:
-                continue   # NLSC 多區重名無法 disambiguate → skip
+                continue
             for sch_one in split_school_names(school):
                 sch_d, sch_clean = _extract_school_region(sch_one, default_region=district)
                 out.append({
@@ -419,6 +419,48 @@ def _try_int(s: str) -> int | None:
         return None
 
 
+# ── Manual patches: source CSV 整理錯誤的 known cases ──
+# user 整理 CSV 時對「共同學區」row 的「里／鄰」欄位偶爾整段塞、序號 marker 黏字，
+# 導致 build 出 broken entries。這 function 直接覆寫 build 結果（不靠重整 source CSV）。
+def _apply_school_patches(rows: list[dict]) -> list[dict]:
+    # 1. 中正/螢橋國中（共同學區）row 的「里／鄰」=「螢橋4.富水（6-12鄰）」黏錯：
+    #    「螢橋」是學校名誤當里名 → 假里「螢橋里」要刪。
+    #    富水/文盛/水源 entries 因序號 marker 沒被拆出 → 用「原始項目」reconstruct。
+    rows = [r for r in rows if not (
+        r["city"] == "台北市" and r["district"] == "中正區" and r["village"] == "螢橋里"
+    )]
+    # 2. 中正/頂東里 螢橋國中 row 的 raw 含 noise「3.富水（1-5鄰）」→ 還原成「頂東」
+    for r in rows:
+        if (r["city"] == "台北市" and r["district"] == "中正區"
+                and r["village"] == "頂東里" and r["kind"] == "junior_high"
+                and r["school"] == "螢橋國中"
+                and r.get("village_raw", "").startswith("頂東")):
+            r["village_raw"] = "頂東"
+    # 3. 補螢橋國中 + 民族實驗國中 漏抓的 entries（從「原始項目」reconstruct）：
+    #    螢橋國中：富水(1-5鄰) 共同 / 富水(6-12鄰) / 文盛(1-4鄰) / 文盛(5-10鄰) 共同 / 水源 共同
+    #    民族實驗國中（大安區）：富水(1-5鄰) 共同 / 文盛(5-10鄰) 共同
+    base_yingqiao = {
+        "city": "台北市", "district": "中正區", "school_district": "中正區",
+        "kind": "junior_high", "school": "螢橋國中", "zone_type": "共同",
+        "source_page": None, "extra": {},
+    }
+    base_minzu = {
+        "city": "台北市", "district": "中正區", "school_district": "大安區",
+        "kind": "junior_high", "school": "民族實驗國中", "zone_type": "共同",
+        "source_page": None, "extra": {},
+    }
+    rows.extend([
+        {**base_yingqiao, "village": "富水里", "village_raw": "富水（1-5鄰）",  "neighborhoods_raw": "（1-5鄰）"},
+        {**base_yingqiao, "village": "富水里", "village_raw": "富水（6-12鄰）", "neighborhoods_raw": "（6-12鄰）"},
+        {**base_yingqiao, "village": "文盛里", "village_raw": "文盛（1-4鄰）",  "neighborhoods_raw": "（1-4鄰）"},
+        {**base_yingqiao, "village": "文盛里", "village_raw": "文盛（5-10鄰）", "neighborhoods_raw": "（5-10鄰）"},
+        {**base_yingqiao, "village": "水源里", "village_raw": "水源",            "neighborhoods_raw": None},
+        {**base_minzu,    "village": "富水里", "village_raw": "富水（1-5鄰）",  "neighborhoods_raw": "（1-5鄰）"},
+        {**base_minzu,    "village": "文盛里", "village_raw": "文盛（5-10鄰）", "neighborhoods_raw": "（5-10鄰）"},
+    ])
+    return rows
+
+
 # ── Main build ──
 def main():
     sources = [
@@ -436,6 +478,11 @@ def main():
         rows = fn(path)
         logger.info(f"[{fname}] parsed {len(rows)} rows")
         all_rows.extend(rows)
+
+    # source CSV 整理錯誤的 known cases — 直接 inject 正確 entries 蓋過 build 結果
+    _before = len(all_rows)
+    all_rows = _apply_school_patches(all_rows)
+    logger.info(f"manual patches applied: {_before} → {len(all_rows)} rows")
 
     logger.info(f"\n總 rows: {len(all_rows)}")
 

@@ -1,14 +1,14 @@
 {
   "_meta": {
     "version": "2",
-    "generated_at": "2026-05-08T00:47:36.564034+00:00",
+    "generated_at": "2026-05-08T02:04:59.972221+00:00",
     "source_files": [
       "ntpc_elementary.csv",
       "ntpc_junior_high.csv",
       "taipei_elementary.csv",
       "taipei_junior_high.csv"
     ],
-    "total_rows": 4474
+    "total_rows": 4480
   },
   "rows": [
     {
@@ -55729,25 +55729,8 @@
       "school": "螢橋國中",
       "zone_type": "共同",
       "village": "頂東里",
-      "village_raw": "頂東3.富水（1-5鄰）",
+      "village_raw": "頂東",
       "neighborhoods_raw": "3.富水（1-5鄰）",
-      "source_page": null,
-      "extra": {
-        "school_code": "353501",
-        "school_address": "中正區汀洲路3段4號。",
-        "school_phone": "TEL:23688749FAX:23675720"
-      }
-    },
-    {
-      "city": "台北市",
-      "district": "中正區",
-      "school_district": "中正區",
-      "kind": "junior_high",
-      "school": "螢橋國中",
-      "zone_type": "共同",
-      "village": "螢橋里",
-      "village_raw": "螢橋4.富水（6-12鄰）",
-      "neighborhoods_raw": "4.富水（6-12鄰）",
       "source_page": null,
       "extra": {
         "school_code": "353501",
@@ -63778,6 +63761,97 @@
         "school_address": "內湖區康寧路3段60號。",
         "school_phone": "TEL:26320616FAX:26325471"
       }
+    },
+    {
+      "city": "台北市",
+      "district": "中正區",
+      "school_district": "中正區",
+      "kind": "junior_high",
+      "school": "螢橋國中",
+      "zone_type": "共同",
+      "source_page": null,
+      "extra": {},
+      "village": "富水里",
+      "village_raw": "富水（1-5鄰）",
+      "neighborhoods_raw": "（1-5鄰）"
+    },
+    {
+      "city": "台北市",
+      "district": "中正區",
+      "school_district": "中正區",
+      "kind": "junior_high",
+      "school": "螢橋國中",
+      "zone_type": "共同",
+      "source_page": null,
+      "extra": {},
+      "village": "富水里",
+      "village_raw": "富水（6-12鄰）",
+      "neighborhoods_raw": "（6-12鄰）"
+    },
+    {
+      "city": "台北市",
+      "district": "中正區",
+      "school_district": "中正區",
+      "kind": "junior_high",
+      "school": "螢橋國中",
+      "zone_type": "共同",
+      "source_page": null,
+      "extra": {},
+      "village": "文盛里",
+      "village_raw": "文盛（1-4鄰）",
+      "neighborhoods_raw": "（1-4鄰）"
+    },
+    {
+      "city": "台北市",
+      "district": "中正區",
+      "school_district": "中正區",
+      "kind": "junior_high",
+      "school": "螢橋國中",
+      "zone_type": "共同",
+      "source_page": null,
+      "extra": {},
+      "village": "文盛里",
+      "village_raw": "文盛（5-10鄰）",
+      "neighborhoods_raw": "（5-10鄰）"
+    },
+    {
+      "city": "台北市",
+      "district": "中正區",
+      "school_district": "中正區",
+      "kind": "junior_high",
+      "school": "螢橋國中",
+      "zone_type": "共同",
+      "source_page": null,
+      "extra": {},
+      "village": "水源里",
+      "village_raw": "水源",
+      "neighborhoods_raw": null
+    },
+    {
+      "city": "台北市",
+      "district": "中正區",
+      "school_district": "大安區",
+      "kind": "junior_high",
+      "school": "民族實驗國中",
+      "zone_type": "共同",
+      "source_page": null,
+      "extra": {},
+      "village": "富水里",
+      "village_raw": "富水（1-5鄰）",
+      "neighborhoods_raw": "（1-5鄰）"
+    },
+    {
+      "city": "台北市",
+      "district": "中正區",
+      "school_district": "大安區",
+      "kind": "junior_high",
+      "school": "民族實驗國中",
+      "zone_type": "共同",
+      "source_page": null,
+      "extra": {},
+      "village": "文盛里",
+      "village_raw": "文盛（5-10鄰）",
+      "neighborhoods_raw": "（5-10鄰）"
     }
   ]
 }
