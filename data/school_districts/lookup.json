@@ -1,14 +1,14 @@
 {
   "_meta": {
     "version": "2",
-    "generated_at": "2026-05-08T03:04:17.961754+00:00",
+    "generated_at": "2026-05-08T03:08:08.497496+00:00",
     "source_files": [
       "ntpc_elementary.csv",
       "ntpc_junior_high.csv",
       "taipei_elementary.csv",
       "taipei_junior_high.csv"
     ],
-    "total_rows": 4490
+    "total_rows": 4496
   },
   "rows": [
     {
@@ -63951,6 +63951,84 @@
       "village": "灰磘里",
       "village_raw": "灰磘里1-6鄰",
       "neighborhoods_raw": "1-6鄰",
+      "source_page": null,
+      "extra": {}
+    },
+    {
+      "city": "台北市",
+      "district": "中山區",
+      "school_district": "中山區",
+      "kind": "junior_high",
+      "school": "成淵高中(國中部)",
+      "zone_type": "基本",
+      "village": "集英里",
+      "village_raw": "集英里",
+      "neighborhoods_raw": null,
+      "source_page": null,
+      "extra": {}
+    },
+    {
+      "city": "新北市",
+      "district": "板橋區",
+      "school_district": "板橋區",
+      "kind": "junior_high",
+      "school": "海山高中(國中部)",
+      "zone_type": "自由",
+      "village": "九如里",
+      "village_raw": "九如里",
+      "neighborhoods_raw": null,
+      "source_page": null,
+      "extra": {}
+    },
+    {
+      "city": "新北市",
+      "district": "板橋區",
+      "school_district": "板橋區",
+      "kind": "junior_high",
+      "school": "光復高中(國中部)",
+      "zone_type": "自由",
+      "village": "九如里",
+      "village_raw": "九如里",
+      "neighborhoods_raw": null,
+      "source_page": null,
+      "extra": {}
+    },
+    {
+      "city": "新北市",
+      "district": "板橋區",
+      "school_district": "板橋區",
+      "kind": "junior_high",
+      "school": "海山高中(國中部)",
+      "zone_type": "自由",
+      "village": "正泰里",
+      "village_raw": "正泰里",
+      "neighborhoods_raw": null,
+      "source_page": null,
+      "extra": {}
+    },
+    {
+      "city": "新北市",
+      "district": "板橋區",
+      "school_district": "板橋區",
+      "kind": "junior_high",
+      "school": "光復高中(國中部)",
+      "zone_type": "自由",
+      "village": "正泰里",
+      "village_raw": "正泰里",
+      "neighborhoods_raw": null,
+      "source_page": null,
+      "extra": {}
+    },
+    {
+      "city": "新北市",
+      "district": "板橋區",
+      "school_district": "板橋區",
+      "kind": "junior_high",
+      "school": "重慶國中",
+      "zone_type": "自由",
+      "village": "五權里",
+      "village_raw": "五權里",
+      "neighborhoods_raw": null,
       "source_page": null,
       "extra": {}
     },

@@ -505,6 +505,37 @@ def _apply_school_patches(rows: list[dict]) -> list[dict]:
          "village": "灰磘里", "village_raw": "灰磘里1-6鄰", "neighborhoods_raw": "1-6鄰",
          "source_page": None, "extra": {}},
     ])
+    # 9. 中山/集英 JH + 板橋/九如、正泰、五權 JH — source 沒寫，user 對照 PDF 後補上
+    rows.extend([
+        # 中山/集英里 JH = 成淵高中(國中部) 基本
+        {"city": "台北市", "district": "中山區", "school_district": "中山區",
+         "kind": "junior_high", "school": "成淵高中(國中部)", "zone_type": "基本",
+         "village": "集英里", "village_raw": "集英里", "neighborhoods_raw": None,
+         "source_page": None, "extra": {}},
+        # 板橋/九如里 JH = 海山高中(國中部) + 光復高中(國中部) 自由
+        {"city": "新北市", "district": "板橋區", "school_district": "板橋區",
+         "kind": "junior_high", "school": "海山高中(國中部)", "zone_type": "自由",
+         "village": "九如里", "village_raw": "九如里", "neighborhoods_raw": None,
+         "source_page": None, "extra": {}},
+        {"city": "新北市", "district": "板橋區", "school_district": "板橋區",
+         "kind": "junior_high", "school": "光復高中(國中部)", "zone_type": "自由",
+         "village": "九如里", "village_raw": "九如里", "neighborhoods_raw": None,
+         "source_page": None, "extra": {}},
+        # 板橋/正泰里 JH 同樣海山+光復 自由 (PDF 兩里同列)
+        {"city": "新北市", "district": "板橋區", "school_district": "板橋區",
+         "kind": "junior_high", "school": "海山高中(國中部)", "zone_type": "自由",
+         "village": "正泰里", "village_raw": "正泰里", "neighborhoods_raw": None,
+         "source_page": None, "extra": {}},
+        {"city": "新北市", "district": "板橋區", "school_district": "板橋區",
+         "kind": "junior_high", "school": "光復高中(國中部)", "zone_type": "自由",
+         "village": "正泰里", "village_raw": "正泰里", "neighborhoods_raw": None,
+         "source_page": None, "extra": {}},
+        # 板橋/五權里 JH = 重慶國中 自由
+        {"city": "新北市", "district": "板橋區", "school_district": "板橋區",
+         "kind": "junior_high", "school": "重慶國中", "zone_type": "自由",
+         "village": "五權里", "village_raw": "五權里", "neighborhoods_raw": None,
+         "source_page": None, "extra": {}},
+    ])
     # 8. 中和/瓦磘里 ES — NLSC 自身缺字「瓦?里」，source 也沒寫 ES。user 對照 PDF：
     #    永平國小（永和區跨區）: 瓦磘里 1-15、17-20、23-26、28-29鄰 自由
     #    中和國小: 瓦磘里 16、21、22、27鄰 基本
