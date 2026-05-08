@@ -72,6 +72,16 @@
 }
 .v2-map-toolbar__radio input { vertical-align: middle; cursor: pointer; }
 .v2-map-toolbar__hint { color: #888; font-size: 12px; margin-left: auto; }
+.v2-zoom-indicator {
+  background: rgba(255, 255, 255, 0.85);
+  padding: 2px 6px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+  font: 11px/1.4 monospace;
+  color: #555;
+  user-select: none;
+  pointer-events: none;
+}
 .v2-map {
   width: 100%;
   height: calc(100vh - 260px);

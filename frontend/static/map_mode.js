@@ -61,6 +61,16 @@
     if (window.v2 && window.v2._overlays && typeof window.v2._overlays.init === 'function') {
       window.v2._overlays.init(m);
     }
+    // 右上角 zoom 數字 — debug 用，讓用戶知道目前 zoom level
+    const zoomCtrl = L.control({ position: 'topright' });
+    zoomCtrl.onAdd = function () {
+      const el = L.DomUtil.create('div', 'v2-zoom-indicator');
+      const update = () => { el.textContent = 'z=' + m.getZoom(); };
+      update();
+      m.on('zoomend', update);
+      return el;
+    };
+    zoomCtrl.addTo(m);
   }
 
   // ── 同學校永遠同色 (string hash → HSL) ──
