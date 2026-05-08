@@ -38,9 +38,10 @@
       backends: [
         { name: 'cadastral_lines_tpe', minZoom: 18 },       // 台北 GeoServer 地籍線 (含詳細邊界)
         { name: 'cadastral_numbers_tpe', minZoom: 18 },     // 台北 GeoServer 地號文字
-        { name: 'cadastral_ntpc', minZoom: 18 },            // 全國 NLSC LANDSECT (補新北，台北重疊但不傷)
+        { name: 'cadastral_ntpc', minZoom: 18 },            // 全國 NLSC LANDSECT 段邊界 (補新北)
+        { name: 'cadastral_public_ntpc', minZoom: 18 },     // 全國 NLSC 公有土地地籍 (補新北公有地)
       ],
-      hint: 'z=18+',
+      hint: 'z=18+，新北僅段邊界+公有地（個別地塊政府未公開）',
     },
     building_floors: {
       label: '建物套繪圖',

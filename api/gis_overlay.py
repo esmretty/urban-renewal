@@ -75,11 +75,18 @@ _LAYER_DEFS: dict[str, dict] = {
         "upstream": "https://www.historygis.udd.gov.taipei/arcgis/rest/services/UrbanPlan2/PlanTheme/MapServer/export",
         "layer_show": "0",
     },
-    # NLSC 全國地籍圖 (LANDSECT) — 補新北地籍 (台北也涵蓋但 GeoServer 詳細優先)
-    # NLSC 不需 token、無 CORS issue；WMTS protocol 用 z/y/x tile path
+    # NLSC 全國地籍段邊界 (LANDSECT) — 補新北地籍
+    # ⚠️ 限制：NLSC WMTS 沒有「個別地塊」polygon 公開層 (個別地塊資料各縣市地政自有
+    # 不開 free WMS)，LANDSECT 只是地籍「段」邊界 (一段含 ~ 數百地號)，不是地塊邊界。
+    # 新北市要看「一塊一塊」地塊只能 scrape 地政局網站或用 NLSC 付費 API。
     "cadastral_ntpc": {
         "kind": "nlsc_wmts",
         "layer_id": "LANDSECT",
+    },
+    # NLSC 公有土地地籍圖 (LAND_OPENDATA) — 補新北「公有地」polygon (私有地不含)
+    "cadastral_public_ntpc": {
+        "kind": "nlsc_wmts",
+        "layer_id": "LAND_OPENDATA",
     },
     # NLSC 全國建物 (BUILDX) — 補新北建物 (純 polygon 沒 4R/T label，那個是台北獨有)
     "building_ntpc": {
