@@ -58,6 +58,8 @@ _PUBLIC_PREFIXES = (
     "/static/",
     "/server/",               # admin portal 靜態資源
     "/data/screenshots/",
+    "/api/gis_overlay/",      # 政府 GIS 圖磚 forward proxy，內容公開無個資；
+                              # Leaflet tile fetch 不帶 Authorization header → 必須 public
 )
 
 
