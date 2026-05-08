@@ -39,7 +39,8 @@
       console.warn('[map_mode] Leaflet 未載入，地圖模式不可用');
       return;
     }
-    const m = L.map('v2-map').setView([25.05, 121.55], 12);
+    // 預設中心：大安森林公園；zoom 14（之前 12 整個雙北太遠）
+    const m = L.map('v2-map').setView([25.0294, 121.5359], 14);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap', maxZoom: 19,
     }).addTo(m);
