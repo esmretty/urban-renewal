@@ -67,6 +67,14 @@ _LAYER_DEFS: dict[str, dict] = {
         "upstream": "https://www.historygis.udd.gov.taipei/arcgis/rest/services/Urban/GISDB/MapServer/export",
         "layer_show": "19",   # 用 layers=show:N 模式，不用 dynamicLayers (此 service 不支援 dynamicLayers)
     },
+    # 台北市「已劃定」都市更新地區範圍 — 都發局 PlanTheme layer 0 (332 個 polygon)
+    # attributes: PROJNUM (案號)、PLANDES (公告說明)、PLANDATE (公告日期)、PLANLEV
+    # 這是「政府已公告劃定」的都更地區；「審議/申請中個案」在 uro.gov.taipei 要另外 scrape
+    "renewal_planned_tpe": {
+        "kind": "arcgis_export",
+        "upstream": "https://www.historygis.udd.gov.taipei/arcgis/rest/services/UrbanPlan2/PlanTheme/MapServer/export",
+        "layer_show": "0",
+    },
     # ── 新北市（ArcGIS REST export，需要 token） ────────────────────────────
     "zoning_ntpc": {
         "kind": "arcgis_export",

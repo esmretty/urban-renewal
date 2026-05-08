@@ -50,10 +50,10 @@
       hint: '需 z=18 或 19',
     },
     renewal: {
-      label: '都更/危老',
+      label: '都更地區 (已劃定)',
       paneZ: 404,
-      backends: [],   // Phase C 待 spike，暫時 disabled
-      disabled: true,
+      backends: ['renewal_planned_tpe'],
+      hint: '政府已公告劃定範圍；審議中個案下次補',
     },
   };
 
