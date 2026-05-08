@@ -221,6 +221,16 @@ def fetch_mobile_detail(houseid: str, *, timeout: float = 20.0) -> Optional[dict
     # 樓層 — 直接給字串，下游 parse_floor_range 處理 'B1/5F' / '4F~5F/5F' 等
     if d.get("floor"):
         out["floor"] = d["floor"]
+        # 同時拆出 total_floors 供 _scrape_single_url 提早 skip 非公寓用
+        # (591 mobile API 給 floor='7F/9F'，total=9。沒 total_floors int 時下游 skip
+        #  check 拿到 0 失效，這個物件就會被誤當公寓進 DB)
+        try:
+            from database.models import parse_floor_range
+            _, _, _tot = parse_floor_range(d["floor"], None)
+            if _tot is not None:
+                out["total_floors"] = _tot
+        except Exception:
+            pass
 
     # 建坪
     bld = _parse_ping(d.get("area_value") or d.get("area"))
@@ -263,6 +273,13 @@ def fetch_mobile_detail(houseid: str, *, timeout: float = 20.0) -> Optional[dict
     # 社區名（591 用戶有填的話）
     if d.get("community"):
         out["community_name"] = d["community"]
+    # 「社區」欄位 raw value（給 detect_foreclosure 規則 2 用 — 仲介常在 casesname 寫
+    # 「【店長推薦】」「【自備二成】【銀行-配合】」這種廣告詞，是法拍特徵）
+    # 591 desktop 詳情頁的「社區」label 對應 mobile API 的 casesname 欄位
+    # （`community` 是純社區名通常空字串；`casesname` 是建案名 591 仲介拿來放廣告詞）
+    cn = (d.get("casesname") or d.get("community") or "").strip()
+    if cn:
+        out["community_raw"] = cn[:100]
 
     # 建物類型
     if d.get("shape"):

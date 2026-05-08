@@ -4275,10 +4275,12 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     # → 用 mobile photos[0]（已升級到 !2000x.water2.jpg）覆蓋主圖
                     if m591.get("photos"):
                         item["image_url"] = m591["photos"][0]
-                    # _community_raw 應該對應 desktop 詳情頁「社區」label 的 RAW value
+                    # _community_raw 對應 desktop 詳情頁「社區」label 的 RAW value
                     # （仲介在社區 label 寫「【店長推薦】XX」是法拍特徵），不是 title!
-                    # Mobile API community 欄位是屋主填的社區名（住宅大樓名），等價較弱但安全
-                    item["_community_raw"] = m591.get("community") or ""
+                    # 591 mobile API 真正對應「社區」label 的 raw value 是 casesname 欄位
+                    # （「community」是純社區名通常空字串，「casesname」才是仲介廣告詞欄）。
+                    # scraper_591_mobile 把 casesname 規範化成 community_raw 欄位 expose 出來
+                    item["_community_raw"] = m591.get("community_raw") or m591.get("community") or ""
                     # _raw_text 給 detect_foreclosure rule 1（標題含 # + 代理人）
                     _fc_text_591 = (m591.get("title") or "") + "\n" + (m591.get("remark") or "")
                     if _fc_text_591.strip():
@@ -4538,21 +4540,28 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
 
                 # ─ 只用總樓層過濾（591 filter 已選公寓；OCR 建物類型不可靠，易誤判）──
                 # total_floors >= 6 視為非公寓（公寓定義：5F 以下無電梯）
+                # reanalyze 抓到非公寓 → 同時 delete 既存 doc（避免「曾經誤入庫」物件
+                # 再次 reanalyze 時仍留在 DB）
                 _total_f = item.get("total_floors") or 0
                 try: _total_f = int(_total_f)
                 except Exception: _total_f = 0
                 if _total_f >= 6:
+                    try:
+                        db.collection("properties").document(src_id).delete()
+                        logger.warning(f"已從 DB 移除非公寓 {src_id} (總樓層 {_total_f}F)")
+                    except Exception as _de:
+                        logger.warning(f"移除非公寓 doc 失敗 {src_id}: {_de}")
                     progress_callback(
-                        f"  ⛔ 跳過非公寓（{_total_f}F≥6）：{(item.get('title') or '')[:25]}",
+                        f"  ⛔ 移除非公寓（{_total_f}F≥6）：{(item.get('title') or '')[:25]}",
                         pct,
                     )
                     log_action(trigger_label, "skip_non_apartment",
                                source_id=src_id,
-                               message=f"非公寓（總樓層 {_total_f}F ≥ 6）：{(item.get('title') or '')[:25]}",
+                               message=f"非公寓（總樓層 {_total_f}F ≥ 6）— 已從 DB 移除：{(item.get('title') or '')[:25]}",
                                details={"url": item.get("url"), "title": item.get("title"),
                                         "district": item.get("district"),
                                         "total_floors": _total_f})
-                    _record_outcome(item, "non_apartment", f"總樓層 {_total_f}F ≥ 6")
+                    _record_outcome(item, "non_apartment", f"總樓層 {_total_f}F ≥ 6 — 已移除")
                     continue
 
                 # ─ 重複物件偵測：同 district + road + 建坪 + 價格 ─
