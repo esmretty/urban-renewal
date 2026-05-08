@@ -329,6 +329,18 @@ def _pick_closest_by_address(candidates: list[str], ref_addr: str) -> str:
     return ranked[0]
 
 
+def _zhtw_normalize(s: str) -> str:
+    """把 Google reverse geocode 偶爾回的簡體 / 異體字一次轉成台灣繁體。
+    至少涵蓋 reverse_geocode 已踩到的字 (区→區，板桥→板橋，縣字、臺/台異體)；
+    不做的：庄、湾 等繁簡都是有效台灣字、誤改風險高。"""
+    if not s:
+        return s
+    return (s.replace("区", "區")
+             .replace("桥", "橋")
+             .replace("县", "縣")
+             .replace("臺", "台"))
+
+
 def _reverse_geocode_loose(lat: float, lng: float, road_hint: str, prefer_distance: bool = False) -> Optional[str]:
     """寬鬆版 reverse geocode：只要 Google 回的結果含同路名 + 號就接受最近的一筆。
 
@@ -356,7 +368,10 @@ def _reverse_geocode_loose(lat: float, lng: float, road_hint: str, prefer_distan
         road_short = re.sub(r"[一二三四五六七八九十]段$", "", road_hint)
         candidates = []
         for res in data.get("results", []):
-            addr = res.get("formatted_address", "")
+            # Google reverse geocode 偶爾回簡體「区/桥」即使指定 zh-TW (踩雷物件 yongqing_7349452)；
+            # 後面剝里名 regex r"(區)[一-龥]{1,4}里" 只認繁體「區」，simplified 進來整條漏網 →
+            # 拿到 formatted_address 就先 normalize 掉再進下游所有處理
+            addr = _zhtw_normalize(res.get("formatted_address", ""))
             if road_short not in addr or not re.search(r"\d+號", addr):
                 continue
             loc = res.get("geometry", {}).get("location", {})
@@ -421,7 +436,10 @@ def _reverse_geocode_lane(lat: float, lng: float, road_hint: str, lane_hint: str
             types = res.get("types", [])
             if not any(t in types for t in ("street_address", "premise", "subpremise")):
                 continue
-            addr = res.get("formatted_address", "")
+            # Google reverse geocode 偶爾回簡體「区/桥」即使指定 zh-TW (踩雷物件 yongqing_7349452)；
+            # 後面剝里名 regex r"(區)[一-龥]{1,4}里" 只認繁體「區」，simplified 進來整條漏網 →
+            # 拿到 formatted_address 就先 normalize 掉再進下游所有處理
+            addr = _zhtw_normalize(res.get("formatted_address", ""))
             if road_short not in addr or not re.search(r"\d+號", addr):
                 continue
             if lane_hint and lane_hint not in addr:

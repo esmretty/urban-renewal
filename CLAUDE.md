@@ -107,7 +107,16 @@
    - 過去踩雷：2026-05-04 21:23-22:23 多次 crash，pattern 都是 4 個 Explore subagent 平行打 API → 第一個清完 .output 後第二個踩到空檔 → ENOENT → extension restart
    - 注意跟 `stream_idle_partial`（API streaming 卡 15 秒）區分：stall 只是慢、不會 crash；ENOENT 才是真正讓 extension 死掉的元兇
 
-12. **大範圍 try/except 必須用 logger.exception 印 stack trace，並且只包真正會拋例外的單一動作**
+12. **改 normalize 邏輯時要同時涵蓋繁體 + 簡體 input — Google API 即使指定 zh-TW 偶爾仍回簡體**
+   即使 Geocoding API 帶了 `language=zh-TW&region=tw`，**reverse geocode** 仍偶爾回簡體 formatted_address（「永和**区**」、「板**桥**区」）— 已踩雷物件 `yongqing_7349452`。
+   過去 commit 3bcf59e 加了剝里名 regex `(區)[一-龥]{1,4}里`，但只認**繁體「區」**；今天 Google 回 simplified「永和区豫溪里警光街27號3樓」整條漏網 → 用戶看到地址含「区」+ 里名雙重 bug。
+   **規則**：
+   - 任何 normalize / strip / regex 邏輯處理 Google geocode/reverse_geocode 結果時，**第一件事是 normalize 簡繁**，再做下游所有判斷 — 用 `analysis.lvr_index._zhtw_normalize`（区→區、桥→橋、县→縣、臺→台）統一處理
+   - **forward 跟 reverse 兩條 path 都要做** — `geocoder.py` 的 forward path 早就 normalize 了，但 `lvr_index.py` 的 reverse path 漏了，導致這次踩雷
+   - regex 看似「中文字 = `[一-龥]`」就涵蓋繁簡，但**字面字符 mismatch**（「區」≠「区」）→ regex 認的是字符不是「中文性質」，繁簡必須先統一
+   - 寫測試 / 驗證時要至少塞一個 simplified case（「板桥区」、「中和区」），不能只測繁體 happy path
+
+13. **大範圍 try/except 必須用 logger.exception 印 stack trace，並且只包真正會拋例外的單一動作**
    pipeline / 分析路徑常見「整段業務邏輯包一個大 try/except: pass」，等 silent fail 累積到用戶回報才發現。
    過去踩雷（commit 53aa2a9）：[api/analysis_pipeline.py](api/analysis_pipeline.py) line 1075-1208 zoning + 試算 + AI recommendation 同 try block，line 1083 `"、".join(zone_list)` 對 list of dict 拋 TypeError → 連 zoning_source、ai_recommendation 都沒寫進 doc → 5 個跨分區物件 zoning 永遠空白，前端「待查」+ 倍數無法算。除錯時翻 prod log 也只看到 `zoning lookup 失敗 ...: sequence item 0: expected str instance, dict found` 這 1 行訊息，看不出哪行拋。
    **規則**：
