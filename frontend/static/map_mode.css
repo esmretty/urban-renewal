@@ -88,12 +88,14 @@
 
 /* ── 學區圖層學校名稱 label：純文字 + 描邊，無邊框 / 無背景 ── */
 .v2-school-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: #1f2937;
-  white-space: nowrap;
   text-align: center;
   pointer-events: none;
+  line-height: 1.25;
+  /* 多校時 JS 用 <br> 分隔，每校一行；transform 把整 label 視為一體置中 polygon */
+  transform: translate(-50%, -50%);
   /* 8 方向白色描邊讓字在花花地圖上仍清楚 */
   text-shadow:
     -1px -1px 0 #fff, 1px -1px 0 #fff,

@@ -131,9 +131,10 @@
       let center = null;
       try { center = L.geoJSON(ft).getBounds().getCenter(); } catch (_e) {}
       if (!center) return;
-      const txt = schools.length > 1 ? schools.join('/') : schools[0];
+      // 每校一行 — 多校用 <br> 分隔，single 校直接 escape
+      const html = schools.map(s => _esc(s)).join('<br>');
       const ic = L.divIcon({
-        className: 'v2-school-label', html: _esc(txt), iconSize: null,
+        className: 'v2-school-label', html: html, iconSize: null,
       });
       L.marker(center, { icon: ic, interactive: false }).addTo(st._schoolLabelLayer);
     });
