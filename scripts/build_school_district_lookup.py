@@ -110,10 +110,12 @@ def _load_village_region_map() -> dict:
     return mp
 
 
-# 異體字 normalize — source CSV 偶爾用異體字 (恒/恆、磘/瑤、舘/館 等)，NLSC 用標準字
+# 異體字 normalize — source CSV 偶爾用異體字，全系統 canonicalize 對齊 user CSV / 一般口語
+# 「峯」(政府用) → 「峰」(user CSV 跟通俗用法)
 _VARIANT_MAP = str.maketrans({
     "恒": "恆",
     "舘": "館",
+    "峯": "峰",
 })
 
 
@@ -458,6 +460,13 @@ def _apply_school_patches(rows: list[dict]) -> list[dict]:
         {**base_minzu,    "village": "富水里", "village_raw": "富水（1-5鄰）",  "neighborhoods_raw": "（1-5鄰）"},
         {**base_minzu,    "village": "文盛里", "village_raw": "文盛（5-10鄰）", "neighborhoods_raw": "（5-10鄰）"},
     ])
+    # 4. 新店區/五峰里 JH 補上（user CSV 「五峰國中」row 漏字寫「峰里」假里被 parser reject）
+    rows.append({
+        "city": "新北市", "district": "新店區", "school_district": "新店區",
+        "kind": "junior_high", "school": "五峰國中", "zone_type": "基本",
+        "village": "五峰里", "village_raw": "五峰里", "neighborhoods_raw": None,
+        "source_page": 14, "extra": {"source_table": "主表"},
+    })
     return rows
 
 

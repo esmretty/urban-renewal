@@ -1,14 +1,14 @@
 {
   "_meta": {
     "version": "2",
-    "generated_at": "2026-05-08T02:04:59.972221+00:00",
+    "generated_at": "2026-05-08T02:14:32.535064+00:00",
     "source_files": [
       "ntpc_elementary.csv",
       "ntpc_junior_high.csv",
       "taipei_elementary.csv",
       "taipei_junior_high.csv"
     ],
-    "total_rows": 4480
+    "total_rows": 4481
   },
   "rows": [
     {
@@ -63852,6 +63852,21 @@
       "village": "文盛里",
       "village_raw": "文盛（5-10鄰）",
       "neighborhoods_raw": "（5-10鄰）"
+    },
+    {
+      "city": "新北市",
+      "district": "新店區",
+      "school_district": "新店區",
+      "kind": "junior_high",
+      "school": "五峰國中",
+      "zone_type": "基本",
+      "village": "五峰里",
+      "village_raw": "五峰里",
+      "neighborhoods_raw": null,
+      "source_page": 14,
+      "extra": {
+        "source_table": "主表"
+      }
     }
   ]
 }
