@@ -482,6 +482,17 @@ def _apply_school_patches(rows: list[dict]) -> list[dict]:
         {**base_shijian, "village": "老泉里", "village_raw": "老泉"},
         {**base_shijian, "village": "華興里", "village_raw": "華興"},
     ])
+    # 6. 永和/新廍里 ES + 板橋/公館里 ES — source CSV 沒寫，user 對照 PDF 後補上
+    rows.extend([
+        {"city": "新北市", "district": "永和區", "school_district": "永和區",
+         "kind": "elementary", "school": "頂溪國小", "zone_type": "基本",
+         "village": "新廍里", "village_raw": "新廍里", "neighborhoods_raw": None,
+         "source_page": None, "extra": {}},
+        {"city": "新北市", "district": "板橋區", "school_district": "板橋區",
+         "kind": "elementary", "school": "文德國小", "zone_type": "基本",
+         "village": "公館里", "village_raw": "公館里", "neighborhoods_raw": None,
+         "source_page": None, "extra": {}},
+    ])
     return rows
 
 

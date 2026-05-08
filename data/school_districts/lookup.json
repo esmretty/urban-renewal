@@ -1,14 +1,14 @@
 {
   "_meta": {
     "version": "2",
-    "generated_at": "2026-05-08T02:58:07.071944+00:00",
+    "generated_at": "2026-05-08T03:00:31.393193+00:00",
     "source_files": [
       "ntpc_elementary.csv",
       "ntpc_junior_high.csv",
       "taipei_elementary.csv",
       "taipei_junior_high.csv"
     ],
-    "total_rows": 4483
+    "total_rows": 4485
   },
   "rows": [
     {
@@ -63901,6 +63901,32 @@
       },
       "village": "華興里",
       "village_raw": "華興"
+    },
+    {
+      "city": "新北市",
+      "district": "永和區",
+      "school_district": "永和區",
+      "kind": "elementary",
+      "school": "頂溪國小",
+      "zone_type": "基本",
+      "village": "新廍里",
+      "village_raw": "新廍里",
+      "neighborhoods_raw": null,
+      "source_page": null,
+      "extra": {}
+    },
+    {
+      "city": "新北市",
+      "district": "板橋區",
+      "school_district": "板橋區",
+      "kind": "elementary",
+      "school": "文德國小",
+      "zone_type": "基本",
+      "village": "公館里",
+      "village_raw": "公館里",
+      "neighborhoods_raw": null,
+      "source_page": null,
+      "extra": {}
     }
   ]
 }
