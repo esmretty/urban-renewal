@@ -1082,6 +1082,10 @@ app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR / "static")), name="
 app.mount("/server/static", StaticFiles(directory=str(SERVER_DIR / "static")), name="server_static")
 app.mount("/data/screenshots", StaticFiles(directory=str(BASE_DIR / "data" / "screenshots")), name="screenshots")
 
+# GIS overlay proxy — v2 地圖模式 optional 圖層用 (隔離 module，revert 拿掉這 1 行 + 刪 file 即可)
+from api.gis_overlay import router as gis_overlay_router
+app.include_router(gis_overlay_router)
+
 
 _INDEX2_HTML_CACHE = {"sha": None, "html": None, "mtime": 0.0}
 

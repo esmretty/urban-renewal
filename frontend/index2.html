@@ -55,6 +55,7 @@
   <link rel="stylesheet" href="/static/style2.css?v=1" />
   <!-- 地圖模式專用樣式 (跟 style2.css 分離；非 retty.liu@gmail.com 不會看到入口) -->
   <link rel="stylesheet" href="/static/map_mode.css?v=1" />
+  <link rel="stylesheet" href="/static/map_overlays.css?v=1" />
   <!-- Perf instrumentation：?perf=1 (or localStorage v2_perf=1) 顯示分階段時間表 -->
   <script>
     (function () {
@@ -446,6 +447,8 @@
         <label class="v2-map-toolbar__radio"><input type="radio" name="v2-school-layer" value="junior_high"> 國中</label>
         <span class="v2-map-toolbar__hint" id="v2-school-layer-hint"></span>
       </div>
+      <!-- optional 圖層 toolbar — 內容由 map_overlays.js 動態 render（隔離 module，revert 拿掉 script + 此 div 即可） -->
+      <div id="v2-map-overlays-toolbar" class="v2-map-overlays-toolbar"></div>
       <div id="v2-map" class="v2-map"></div>
     </div>
 
@@ -493,5 +496,7 @@
 <script src="/static/app2.js?v=1"></script>
 <!-- map_mode.js: 地圖模式獨立模組（透過 window.v2 attach；必須在 app2.js 之後） -->
 <script src="/static/map_mode.js?v=1"></script>
+<!-- map_overlays.js: optional 圖層（地籍/分區/都更）— 隔離 module，必須在 map_mode.js 之後 -->
+<script src="/static/map_overlays.js?v=1"></script>
 </body>
 </html>

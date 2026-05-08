@@ -1,0 +1,48 @@
+/* v2 地圖模式 — optional 圖層 toolbar 樣式
+ * 跟既有 v2-map-toolbar 視覺對齊但 class 完全獨立 (v2-map-overlays-*)
+ * 隔離原則：刪本 file + index2.html link tag = 完整 revert
+ */
+
+.v2-map-overlays-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 7px 12px;
+  background: #f5f0e3;
+  border: 1px solid var(--c-border, #d8cdb6);
+  border-top: none;     /* 跟上面 v2-map-toolbar 共用底邊 */
+  border-bottom: none;  /* 跟下面 .v2-map 共用邊 */
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.v2-overlays-label {
+  color: #555;
+  font-weight: 600;
+}
+
+.v2-overlays-checkbox {
+  cursor: pointer;
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.v2-overlays-checkbox input {
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.v2-overlays-checkbox.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.v2-overlays-checkbox.is-disabled input {
+  cursor: not-allowed;
+}
+
+.v2-overlays-note {
+  color: #888;
+  font-size: 11px;
+}

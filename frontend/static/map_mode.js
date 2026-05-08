@@ -57,6 +57,10 @@
         _renderSchoolLayer();
       }
     });
+    // optional 圖層 (地籍/分區/都更) — 隔離 module map_overlays.js attach，這裡只呼叫 init
+    if (window.v2 && window.v2._overlays && typeof window.v2._overlays.init === 'function') {
+      window.v2._overlays.init(m);
+    }
   }
 
   // ── 同學校永遠同色 (string hash → HSL) ──
