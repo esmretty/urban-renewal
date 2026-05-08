@@ -59,13 +59,19 @@
   }
 
   // ── 同學校永遠同色 (string hash → HSL) ──
-  // lightness 50% 而非 60% — 色調較深讓白字 label 對比夠看得清
   function _colorForSchool(name) {
     if (!name) return '#888';
     let h = 0;
     for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
-    return `hsl(${Math.abs(h) % 360}, 65%, 50%)`;
+    return `hsl(${Math.abs(h) % 360}, 65%, 60%)`;
   }
+
+  // 都更神探 R 9 個目標區（跟 config.py SCHEDULED_SCRAPE_DISTRICTS 對齊）
+  // 學區圖層只 render 這 9 區的 polygon，其他區不顯示
+  const _TARGET_DISTRICTS = new Set([
+    '大安區', '信義區', '中山區', '中正區', '文山區',
+    '新店區', '永和區', '中和區', '板橋區',
+  ]);
 
   function _clearSchoolLayer() {
     const st = _state();
@@ -102,16 +108,20 @@
       if (hint) hint.textContent = '無學區資料';
       return;
     }
+    // 只 render 9 個目標區的 polygon (其他區即便 NLSC 有也不顯示)
+    const filteredGeo = {
+      type: 'FeatureCollection',
+      features: features.filter(ft => _TARGET_DISTRICTS.has((ft.properties || {}).town)),
+    };
     // GeoJSON polygon layer (按學校 hash 配色)
-    st._schoolLayer = L.geoJSON(st._schoolGeo, {
+    st._schoolLayer = L.geoJSON(filteredGeo, {
       style: (ft) => {
         const schools = (ft.properties || {})[kind] || [];
         const main = schools[0] || '';
         return {
           color: '#444', weight: 0.8, opacity: 0.7,
           fillColor: _colorForSchool(main),
-          // 著色加深 0.42 → 0.65：底色夠深讓白字 label 對比清楚
-          fillOpacity: schools.length ? 0.65 : 0.08,
+          fillOpacity: schools.length ? 0.42 : 0.06,
         };
       },
       onEachFeature: (ft, layer) => {
@@ -125,9 +135,9 @@
         );
       },
     }).addTo(m);
-    // label：學校名置中 polygon，純文字 + 描邊，無邊框
+    // label：學校名置中 polygon，純文字 + 描邊，無邊框（同樣只 9 區）
     st._schoolLabelLayer = L.layerGroup();
-    features.forEach(ft => {
+    filteredGeo.features.forEach(ft => {
       const schools = (ft.properties || {})[kind] || [];
       if (!schools.length) return;
       let center = null;
