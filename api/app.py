@@ -1231,6 +1231,17 @@ def api_school_district_polygons(city: str = Query(...), district: str = Query(.
     return {"type": "FeatureCollection", "features": out}
 
 
+# NLSC _raw_twvillage.json 自身缺字 → lookup canonical name 的 alias 表。
+# 例：NLSC 「五里」實際是「五峰里」(峰字 dump 失敗)、「灰■里」是「灰磘里」(磘字)
+# polygons_all 用此 alias 把 NLSC polygon 的 village name 對到 lookup entry，
+# 並覆寫 properties.village 顯示 canonical name (user 看地圖標籤才不會 confuse)
+_NLSC_VILLAGE_ALIAS = {
+    ("新北市", "新店區", "五里"): "五峰里",
+    ("新北市", "中和區", "灰■里"): "灰磘里",
+    ("新北市", "中和區", "瓦■里"): "瓦磘里",
+}
+
+
 @app.get("/api/school_district/polygons_all")
 def api_school_district_polygons_all():
     """回所有 supported (city, district) 的 polygon 合集 — 給「全區學區地圖」用。
@@ -1254,14 +1265,16 @@ def api_school_district_polygons_all():
         c, t, v = p.get("county"), p.get("town"), p.get("village")
         if (c, t) not in supported_pairs:
             continue
+        # NLSC 自身缺字 → alias 對到 lookup canonical name (五里→五峰里, 灰■里→灰磘里)
+        canonical_v = _NLSC_VILLAGE_ALIAS.get((c, t, v), v)
         if (c, t) not in villages_cache:
             villages_cache[(c, t)] = sd.get_district_villages(c, t)
-        info = villages_cache[(c, t)].get(v) or {}
+        info = villages_cache[(c, t)].get(canonical_v) or {}
         out.append({
             "type": "Feature",
             "geometry": ft.get("geometry"),
             "properties": {
-                "county": c, "town": t, "village": v,
+                "county": c, "town": t, "village": canonical_v,  # 顯示 canonical
                 "elementary": info.get("elementary") or [],
                 "junior_high": info.get("junior_high") or [],
             },
