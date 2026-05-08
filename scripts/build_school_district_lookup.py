@@ -493,6 +493,18 @@ def _apply_school_patches(rows: list[dict]) -> list[dict]:
          "village": "公館里", "village_raw": "公館里", "neighborhoods_raw": None,
          "source_page": None, "extra": {}},
     ])
+    # 7. 中和/灰磘里 ES — NLSC 自身缺字「灰?里」，source CSV 也沒寫 ES。
+    #    user 對照 PDF 後提供：積穗國小（7鄰）+ 錦和國小（1-6鄰）瓜分整里
+    rows.extend([
+        {"city": "新北市", "district": "中和區", "school_district": "中和區",
+         "kind": "elementary", "school": "積穗國小", "zone_type": "基本",
+         "village": "灰磘里", "village_raw": "灰磘里7鄰", "neighborhoods_raw": "7鄰",
+         "source_page": None, "extra": {}},
+        {"city": "新北市", "district": "中和區", "school_district": "中和區",
+         "kind": "elementary", "school": "錦和國小", "zone_type": "基本",
+         "village": "灰磘里", "village_raw": "灰磘里1-6鄰", "neighborhoods_raw": "1-6鄰",
+         "source_page": None, "extra": {}},
+    ])
     return rows
 
 
