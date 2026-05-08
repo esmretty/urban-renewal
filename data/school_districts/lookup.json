@@ -1,14 +1,14 @@
 {
   "_meta": {
     "version": "2",
-    "generated_at": "2026-05-08T03:01:47.704521+00:00",
+    "generated_at": "2026-05-08T03:04:17.961754+00:00",
     "source_files": [
       "ntpc_elementary.csv",
       "ntpc_junior_high.csv",
       "taipei_elementary.csv",
       "taipei_junior_high.csv"
     ],
-    "total_rows": 4487
+    "total_rows": 4490
   },
   "rows": [
     {
@@ -63951,6 +63951,45 @@
       "village": "灰磘里",
       "village_raw": "灰磘里1-6鄰",
       "neighborhoods_raw": "1-6鄰",
+      "source_page": null,
+      "extra": {}
+    },
+    {
+      "city": "新北市",
+      "district": "中和區",
+      "school_district": "永和區",
+      "kind": "elementary",
+      "school": "永平國小",
+      "zone_type": "自由",
+      "village": "瓦磘里",
+      "village_raw": "瓦磘里1-15、17-20、23-26、28-29鄰",
+      "neighborhoods_raw": "1-15、17-20、23-26、28-29鄰",
+      "source_page": null,
+      "extra": {}
+    },
+    {
+      "city": "新北市",
+      "district": "中和區",
+      "school_district": "中和區",
+      "kind": "elementary",
+      "school": "中和國小",
+      "zone_type": "基本",
+      "village": "瓦磘里",
+      "village_raw": "瓦磘里16、21、22、27鄰",
+      "neighborhoods_raw": "16、21、22、27鄰",
+      "source_page": null,
+      "extra": {}
+    },
+    {
+      "city": "新北市",
+      "district": "中和區",
+      "school_district": "中和區",
+      "kind": "elementary",
+      "school": "中和國小",
+      "zone_type": "自由",
+      "village": "瓦磘里",
+      "village_raw": "瓦磘里1-15、17-20、23-26、28-29鄰",
+      "neighborhoods_raw": "1-15、17-20、23-26、28-29鄰",
       "source_page": null,
       "extra": {}
     }

@@ -505,6 +505,26 @@ def _apply_school_patches(rows: list[dict]) -> list[dict]:
          "village": "灰磘里", "village_raw": "灰磘里1-6鄰", "neighborhoods_raw": "1-6鄰",
          "source_page": None, "extra": {}},
     ])
+    # 8. 中和/瓦磘里 ES — NLSC 自身缺字「瓦?里」，source 也沒寫 ES。user 對照 PDF：
+    #    永平國小（永和區跨區）: 瓦磘里 1-15、17-20、23-26、28-29鄰 自由
+    #    中和國小: 瓦磘里 16、21、22、27鄰 基本
+    #    中和國小: 瓦磘里 1-15、17-20、23-26、28-29鄰 自由
+    nb_other = "1-15、17-20、23-26、28-29鄰"
+    nb_main = "16、21、22、27鄰"
+    rows.extend([
+        {"city": "新北市", "district": "中和區", "school_district": "永和區",
+         "kind": "elementary", "school": "永平國小", "zone_type": "自由",
+         "village": "瓦磘里", "village_raw": f"瓦磘里{nb_other}", "neighborhoods_raw": nb_other,
+         "source_page": None, "extra": {}},
+        {"city": "新北市", "district": "中和區", "school_district": "中和區",
+         "kind": "elementary", "school": "中和國小", "zone_type": "基本",
+         "village": "瓦磘里", "village_raw": f"瓦磘里{nb_main}", "neighborhoods_raw": nb_main,
+         "source_page": None, "extra": {}},
+        {"city": "新北市", "district": "中和區", "school_district": "中和區",
+         "kind": "elementary", "school": "中和國小", "zone_type": "自由",
+         "village": "瓦磘里", "village_raw": f"瓦磘里{nb_other}", "neighborhoods_raw": nb_other,
+         "source_page": None, "extra": {}},
+    ])
     return rows
 
 
