@@ -539,6 +539,9 @@ def detect_foreclosure(item: dict, detail_text: str = "") -> tuple[bool, list]:
       2. 591「社區」欄位 RAW value（item["_community_raw"]）含「【」廣告詞 → 法拍。
          仲介在「社區」label 寫「【店長推薦】XX」這種廣告字串通常是法拍特徵。
       3. 標題或「社區」欄位明寫「法拍」字樣 → 法拍。
+      4. 標題含「店長推薦」+「市價」+「折」 → 法拍。
+         「【店長推薦-市價五折】」是 591 法拍仲介專用術語（明示低於市價 X 折），
+         一般仲介不會這樣標。專補 591 詳情頁無「社區」label 時規則 2 漏網的 case。
     回 (是否法拍, [reason 列表])
     """
     title = item.get("title") or ""
@@ -553,6 +556,8 @@ def detect_foreclosure(item: dict, detail_text: str = "") -> tuple[bool, list]:
         return True, ["標題含 # 或 ＃ + 代理人"]
     if "【" in community_raw:
         return True, [f"591「社區」欄位含「【」廣告詞：{community_raw[:50]}"]
+    if "店長推薦" in title and "市價" in title and "折" in title:
+        return True, [f"標題含「店長推薦+市價+折」廣告詞：{title[:50]}"]
     return False, []
 
 
