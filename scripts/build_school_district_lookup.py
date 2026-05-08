@@ -467,6 +467,21 @@ def _apply_school_patches(rows: list[dict]) -> list[dict]:
         "village": "五峰里", "village_raw": "五峰里", "neighborhoods_raw": None,
         "source_page": 14, "extra": {"source_table": "主表"},
     })
+    # 5. 文山區/老泉里、華興里 JH 補上 — taipei_jh「實踐國中」row 整理錯：
+    #    「老泉」變成「柵老共泉同」(混入「木柵」「共同」)、「華興」變成「學華區興」(混入「學區」)。
+    #    parser 已 reject 假里，補正確 entries。
+    base_shijian = {
+        "city": "台北市", "district": "文山區", "school_district": "文山區",
+        "kind": "junior_high", "school": "實踐國中", "zone_type": "基本",
+        "neighborhoods_raw": None, "source_page": None,
+        "extra": {"school_code": "383502",
+                  "school_address": "文山區辛亥路7段67號。",
+                  "school_phone": "TEL:22362852FAX:22366485"},
+    }
+    rows.extend([
+        {**base_shijian, "village": "老泉里", "village_raw": "老泉"},
+        {**base_shijian, "village": "華興里", "village_raw": "華興"},
+    ])
     return rows
 
 

@@ -1,14 +1,14 @@
 {
   "_meta": {
     "version": "2",
-    "generated_at": "2026-05-08T02:14:32.535064+00:00",
+    "generated_at": "2026-05-08T02:58:07.071944+00:00",
     "source_files": [
       "ntpc_elementary.csv",
       "ntpc_junior_high.csv",
       "taipei_elementary.csv",
       "taipei_junior_high.csv"
     ],
-    "total_rows": 4481
+    "total_rows": 4483
   },
   "rows": [
     {
@@ -63867,6 +63867,40 @@
       "extra": {
         "source_table": "主表"
       }
+    },
+    {
+      "city": "台北市",
+      "district": "文山區",
+      "school_district": "文山區",
+      "kind": "junior_high",
+      "school": "實踐國中",
+      "zone_type": "基本",
+      "neighborhoods_raw": null,
+      "source_page": null,
+      "extra": {
+        "school_code": "383502",
+        "school_address": "文山區辛亥路7段67號。",
+        "school_phone": "TEL:22362852FAX:22366485"
+      },
+      "village": "老泉里",
+      "village_raw": "老泉"
+    },
+    {
+      "city": "台北市",
+      "district": "文山區",
+      "school_district": "文山區",
+      "kind": "junior_high",
+      "school": "實踐國中",
+      "zone_type": "基本",
+      "neighborhoods_raw": null,
+      "source_page": null,
+      "extra": {
+        "school_code": "383502",
+        "school_address": "文山區辛亥路7段67號。",
+        "school_phone": "TEL:22362852FAX:22366485"
+      },
+      "village": "華興里",
+      "village_raw": "華興"
     }
   ]
 }
