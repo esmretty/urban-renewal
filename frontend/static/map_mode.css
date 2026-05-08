@@ -88,13 +88,13 @@
 
 /* ── 學區圖層學校名稱 label：純紅字、無描邊、多字置中、過寬折行 ── */
 .v2-school-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   color: #c0392b;             /* 紅字 */
   text-shadow: none;          /* 不要白光暈 */
   text-align: center;
   pointer-events: none;
-  max-width: 300px;           /* 超過 300px 自動折行 */
+  max-width: 90px;            /* 超過 90px 自動折行 */
   white-space: normal;        /* 允許 wrap */
   word-break: break-word;
   line-height: 1.2;
