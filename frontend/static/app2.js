@@ -2251,7 +2251,7 @@
         params.set('districts', Object.values(V1_DISTRICTS)
           .flatMap(cfg => cfg.enabled).join(','));
         params.set('slim', 'true');
-        params.set('limit', '1000');
+        params.set('limit', '50000');
         url = '/api/central_search?' + params.toString();
       }
       _mark('fetch_start');
@@ -2750,7 +2750,7 @@
         const params = new URLSearchParams();
         params.set('districts', Object.values(V1_DISTRICTS).flatMap(c => c.enabled).join(','));
         params.set('slim', 'true');
-        params.set('limit', '1000');
+        params.set('limit', '50000');
         const r = await fetch('/api/central_search?' + params.toString());
         const data = await r.json();
         const items = data.items || [];

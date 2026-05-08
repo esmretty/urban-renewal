@@ -255,7 +255,7 @@ function _buildExploreParams() {
   if (maxLand && parseFloat(maxLand) > 0) params.set("max_land_price_per_ping", maxLand);
   const minLandP = document.getElementById("filter-min-land-ping")?.value;
   if (minLandP && parseFloat(minLandP) > 0) params.set("min_land_ping", minLandP);
-  params.set("limit", "1000");
+  params.set("limit", "50000");
   return params;
 }
 
