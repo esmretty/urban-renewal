@@ -59,11 +59,12 @@
   }
 
   // ── 同學校永遠同色 (string hash → HSL) ──
+  // lightness 50% 而非 60% — 色調較深讓白字 label 對比夠看得清
   function _colorForSchool(name) {
     if (!name) return '#888';
     let h = 0;
     for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
-    return `hsl(${Math.abs(h) % 360}, 65%, 60%)`;
+    return `hsl(${Math.abs(h) % 360}, 65%, 50%)`;
   }
 
   function _clearSchoolLayer() {
@@ -109,7 +110,8 @@
         return {
           color: '#444', weight: 0.8, opacity: 0.7,
           fillColor: _colorForSchool(main),
-          fillOpacity: schools.length ? 0.42 : 0.06,
+          // 著色加深 0.42 → 0.65：底色夠深讓白字 label 對比清楚
+          fillOpacity: schools.length ? 0.65 : 0.08,
         };
       },
       onEachFeature: (ft, layer) => {
