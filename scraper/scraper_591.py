@@ -87,21 +87,16 @@ def _parse_floors(text: str) -> tuple[Optional[str], Optional[int]]:
 
 
 def _detect_building_type(text: str) -> Optional[str]:
-    """從詳情頁文字推測 building_type。
-    優先序：透天/店面/華廈/大樓 都是 specific term，先 match；「公寓」放最後是因為 591 詳情頁
-    推薦物件 list 常含其他公寓物件，fulltext「公寓」字樣非常容易誤撞，必須讓 specific term 先命中。
-    aliases: 「住宅大樓」「電梯大樓」當「大樓」；「華夏」誤字當「華廈」。
-    """
     if "透天" in text:
         return "透天厝"
     if "店面" in text or "店舖" in text:
         return "店面"
-    if "華廈" in text or "華夏" in text:
-        return "華廈"
-    if "住宅大樓" in text or "電梯大樓" in text or "大樓" in text:
-        return "大樓"
     if "公寓" in text:
         return "公寓"
+    if "華廈" in text:
+        return "華廈"
+    if "大樓" in text:
+        return "大樓"
     return None
 
 
