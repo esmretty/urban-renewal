@@ -158,6 +158,9 @@ def _build_template_vars(doc: dict, multiple: float, scenario: str,
             scen_lines.append(f"  • {name}: {m:.2f} 倍")
     scen_text = "\n".join(scen_lines) or "  • (無試算)"
 
+    # building/land 坪數同時 expose 短名 + 長名 (短名給 admin UI 用，長名為相容性保留 — 舊 template 可能引用)
+    _land_ping = doc.get("land_area_ping") or ""
+    _bld_ping = doc.get("building_area_ping") or ""
     return {
         "address": addr,
         "address_with_floor": addr_with_floor,
@@ -166,8 +169,10 @@ def _build_template_vars(doc: dict, multiple: float, scenario: str,
         "floor_str": floor_str,
         "price_wan": f"{price_wan:,}",
         "building_age": doc.get("building_age") or "",
-        "land_area_ping": doc.get("land_area_ping") or "",
-        "building_area_ping": doc.get("building_area_ping") or "",
+        "land_ping": _land_ping,
+        "building_ping": _bld_ping,
+        "land_area_ping": _land_ping,
+        "building_area_ping": _bld_ping,
         "zoning": doc.get("zoning") or "",
         "scenario": scenario or "",
         "multiple": f"{multiple:.2f}" if multiple is not None else "",
