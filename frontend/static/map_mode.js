@@ -61,8 +61,8 @@
     if (window.v2 && window.v2._overlays && typeof window.v2._overlays.init === 'function') {
       window.v2._overlays.init(m);
     }
-    // 右上角 zoom 數字 — debug 用，讓用戶知道目前 zoom level
-    const zoomCtrl = L.control({ position: 'topright' });
+    // 左上 +/- zoom control 正下方的 zoom 數字 — Leaflet 同 position 自動 vertical stack
+    const zoomCtrl = L.control({ position: 'topleft' });
     zoomCtrl.onAdd = function () {
       const el = L.DomUtil.create('div', 'v2-zoom-indicator');
       const update = () => { el.textContent = 'z=' + m.getZoom(); };

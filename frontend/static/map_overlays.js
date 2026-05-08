@@ -33,13 +33,13 @@
       backends: ['zoning_tpe', 'zoning_ntpc'],   // 兩個 WMS source 同時疊
     },
     cadastral: {
-      label: '地籍 + 地號',
+      label: '地籍圖',
       paneZ: 402,
       backends: [
-        'cadastral_lines_tpe',                              // 地籍線任 zoom
-        { name: 'cadastral_numbers_tpe', minZoom: 18 },     // 地號文字 z=18,19 才顯示
+        { name: 'cadastral_lines_tpe', minZoom: 18 },       // 地籍線 z=18+
+        { name: 'cadastral_numbers_tpe', minZoom: 18 },     // 地號文字 z=18+
       ],
-      hint: '地號需 z=18 或 19',
+      hint: 'z=18+',
     },
     building_floors: {
       label: '建物套繪圖',
@@ -47,7 +47,7 @@
       backends: [
         { name: 'building_floors_tpe', minZoom: 18 },
       ],
-      hint: '需 z=18 或 19',
+      hint: 'z=18+',
     },
     renewal: {
       label: '都更地區 (已劃定)',
@@ -72,7 +72,7 @@
     if (!host) return;   // index2.html 沒這 div = 沒掛載 = no-op
     if (host.dataset.rendered === '1') return;   // 已 render 過
     host.dataset.rendered = '1';
-    host.innerHTML = '<span class="v2-overlays-label">圖層：</span>' +
+    host.innerHTML = '<span class="v2-overlays-label">地籍圖層：</span>' +
       Object.entries(LAYERS).map(([key, cfg]) => {
         const disabled = cfg.disabled ? ' disabled' : '';
         const note = cfg.disabled
