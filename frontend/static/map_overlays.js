@@ -23,7 +23,7 @@
 (function () {
   'use strict';
 
-  // 三個圖層定義 — 每個含「同時要載入的 server-side layer 名稱」
+  // 圖層定義 — 每個含「同時要載入的 server-side layer 名稱」
   // server 會根據 bbox 自動 short-circuit 不在該市範圍的 request
   const LAYERS = {
     zoning: {
@@ -32,13 +32,19 @@
       backends: ['zoning_tpe', 'zoning_ntpc'],   // 兩個 WMS source 同時疊
     },
     cadastral: {
-      label: '地籍圖',
+      label: '地籍 + 地號',
       paneZ: 402,
-      backends: ['cadastral_tpe'],   // Phase A 只台北；新北 phase A.5 補
+      backends: ['cadastral_tpe'],   // 新北 phase A.5 補
+    },
+    building_floors: {
+      label: '建物形狀',
+      paneZ: 403,   // 在地籍上方 (要看到建物投影到地籍上)
+      backends: ['building_floors_tpe'],
+      hint: '需 zoom 17+',   // minScale=5000，太遠看不到
     },
     renewal: {
       label: '都更/危老',
-      paneZ: 403,
+      paneZ: 404,
       backends: [],   // Phase C 待 spike，暫時 disabled
       disabled: true,
     },
@@ -50,8 +56,8 @@
   const _state = {
     map: null,
     inited: false,
-    on: { zoning: false, cadastral: false, renewal: false },
-    layerRefs: { zoning: [], cadastral: [], renewal: [] },
+    on: { zoning: false, cadastral: false, building_floors: false, renewal: false },
+    layerRefs: { zoning: [], cadastral: [], building_floors: [], renewal: [] },
   };
 
   function _renderToolbar() {
@@ -62,7 +68,9 @@
     host.innerHTML = '<span class="v2-overlays-label">圖層：</span>' +
       Object.entries(LAYERS).map(([key, cfg]) => {
         const disabled = cfg.disabled ? ' disabled' : '';
-        const note = cfg.disabled ? ' <span class="v2-overlays-note">(準備中)</span>' : '';
+        const note = cfg.disabled
+          ? ' <span class="v2-overlays-note">(準備中)</span>'
+          : (cfg.hint ? ` <span class="v2-overlays-note">(${cfg.hint})</span>` : '');
         return `<label class="v2-overlays-checkbox${cfg.disabled ? ' is-disabled' : ''}">` +
           `<input type="checkbox" data-overlay="${key}"${disabled}> ${cfg.label}${note}</label>`;
       }).join('');

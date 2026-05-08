@@ -51,8 +51,17 @@ _LAYER_DEFS: dict[str, dict] = {
     "cadastral_tpe": {
         "kind": "wms",
         "upstream": _TPE_WMS_URL,
-        # 純地籍線（地號文字 LAND-ALL-TWD97-TEXT 太多在低 zoom 會擠成黑塊，先不疊）
-        "layers": "Taipei:LAND-ALL-TWD97",
+        # 地籍線 + 地號文字 (LAND-ALL-TWD97-TEXT)；GeoServer 自身會處理 scale-dependent rendering，
+        # 低 zoom 文字過密時會自動省略
+        "layers": "Taipei:LAND-ALL-TWD97,Taipei:LAND-ALL-TWD97-TEXT",
+    },
+    # 台北建物樓層 — 都發局 GISDB layer 19 (建物_Build polygon)
+    # 此 service 公開無 token，但 layer 19 minScale=5000，zoom < ~17 不會顯示 polygon (政府 server scale-dependent)
+    # 純色塊 polygon，沒含「4R 5R T」label (那是 Build_NO/Build_STR attribute，要另用 query 拿，下階段補)
+    "building_floors_tpe": {
+        "kind": "arcgis_export",
+        "upstream": "https://www.historygis.udd.gov.taipei/arcgis/rest/services/Urban/GISDB/MapServer/export",
+        "layer_show": "19",   # 用 layers=show:N 模式，不用 dynamicLayers (此 service 不支援 dynamicLayers)
     },
     # ── 新北市（ArcGIS REST export，需要 token） ────────────────────────────
     "zoning_ntpc": {
@@ -60,6 +69,7 @@ _LAYER_DEFS: dict[str, dict] = {
         "upstream": "https://arcgis.planning.ntpc.gov.tw/server/rest/services/NTPC_Urban/LandUse_WMS/MapServer/export",
         # ArcGIS dynamicLayers payload — 隱藏 labels 避免低 zoom 字塊
         "dynamic_layers": '[{"id":0,"source":{"type":"mapLayer","mapLayerId":0},"drawingInfo":{"showLabels":false}}]',
+        "needs_token": True,   # NTPC 要 token，台北 historygis 不用
     },
     # cadastral_ntpc 待 Phase A.5 確認新北 ArcGIS 有無對應地籍 layer
 }
@@ -138,26 +148,37 @@ def _fetch_wms(upstream: str, layer_names: str, bbox: str, width: int, height: i
         return None
 
 
-def _fetch_arcgis_export(upstream: str, dynamic_layers: str, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
+def _fetch_arcgis_export(cfg: dict, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
     """ArcGIS MapServer/export — Leaflet 給的 WMS-style bbox 轉成 ArcGIS 格式。
-    bbox 格式相同（W,S,E,N comma-separated），SRS 數字部分 ('EPSG:3857' → 3857) 給 bboxSR/imageSR。"""
+    bbox 格式相同（W,S,E,N comma-separated），SRS 數字部分 ('EPSG:3857' → 3857) 給 bboxSR/imageSR。
+
+    cfg 支援兩種 layer 指定模式：
+      - cfg['layer_show'] = '19'        → params['layers'] = 'show:19' (台北 historygis 走這個)
+      - cfg['dynamic_layers'] = '[...]' → params['dynamicLayers'] = json (新北 NTPC 走這個)
+    cfg['needs_token'] = True 才帶 NTPC token (historygis 是公開不需要)。
+    """
     sr_num = srs.split(":")[-1] if ":" in srs else srs   # "EPSG:3857" → "3857"
-    token = _get_ntpc_token()
+    upstream = cfg["upstream"]
+    params = {
+        "bbox": bbox,
+        "bboxSR": sr_num,
+        "imageSR": sr_num,
+        "size": f"{width},{height}",
+        "format": "png",
+        "dpi": "96",
+        "transparent": "true",
+        "f": "image",
+    }
+    if cfg.get("layer_show"):
+        params["layers"] = "show:" + cfg["layer_show"]
+    if cfg.get("dynamic_layers"):
+        params["dynamicLayers"] = cfg["dynamic_layers"]
+    if cfg.get("needs_token"):
+        params["token"] = _get_ntpc_token()
     try:
         r = httpx.get(
             upstream,
-            params={
-                "bbox": bbox,
-                "bboxSR": sr_num,
-                "imageSR": sr_num,
-                "size": f"{width},{height}",
-                "format": "png",
-                "dpi": "96",
-                "transparent": "true",
-                "dynamicLayers": dynamic_layers,
-                "f": "image",
-                "token": token,
-            },
+            params=params,
             timeout=12,
             verify=False,
         )
@@ -214,7 +235,7 @@ async def gis_overlay(layer: str, request: Request) -> Response:
     if cfg["kind"] == "wms":
         content = _fetch_wms(cfg["upstream"], cfg["layers"], bbox, width, height, srs)
     elif cfg["kind"] == "arcgis_export":
-        content = _fetch_arcgis_export(cfg["upstream"], cfg["dynamic_layers"], bbox, width, height, srs)
+        content = _fetch_arcgis_export(cfg, bbox, width, height, srs)
     else:
         raise HTTPException(500, f"unknown kind: {cfg['kind']}")
 
