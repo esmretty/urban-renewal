@@ -1232,13 +1232,22 @@ def api_school_district_polygons(city: str = Query(...), district: str = Query(.
 
 
 # NLSC _raw_twvillage.json 自身缺字 → lookup canonical name 的 alias 表。
-# 例：NLSC 「五里」實際是「五峰里」(峰字 dump 失敗)、「灰■里」是「灰磘里」(磘字)
-# polygons_all 用此 alias 把 NLSC polygon 的 village name 對到 lookup entry，
-# 並覆寫 properties.village 顯示 canonical name (user 看地圖標籤才不會 confuse)
+# 例：NLSC 「五?里」實際是「五峰里」(峰字 dump 失敗)、「灰?里」是「灰磘里」(磘字)
+# 注意 NLSC 缺字 placeholder 不統一—中和用 ■「■」、新店用  PUA。
+# 用 _normalize_nlsc_village 統一替成「?」，alias key 才一致。
+import re as _re_nlsc
+_NLSC_UNKNOWN_RE = _re_nlsc.compile(r"[^一-鿿 -~]")
+
+
+def _normalize_nlsc_village(v: str) -> str:
+    """把 NLSC dump 內非標準中文/ASCII 的字符（缺字 placeholder ■、PUA 區）替成「?」。"""
+    return _NLSC_UNKNOWN_RE.sub("?", v or "")
+
+
 _NLSC_VILLAGE_ALIAS = {
-    ("新北市", "新店區", "五里"): "五峰里",
-    ("新北市", "中和區", "灰■里"): "灰磘里",
-    ("新北市", "中和區", "瓦■里"): "瓦磘里",
+    ("新北市", "新店區", "五?里"): "五峰里",
+    ("新北市", "中和區", "灰?里"): "灰磘里",
+    ("新北市", "中和區", "瓦?里"): "瓦磘里",
 }
 
 
@@ -1265,8 +1274,8 @@ def api_school_district_polygons_all():
         c, t, v = p.get("county"), p.get("town"), p.get("village")
         if (c, t) not in supported_pairs:
             continue
-        # NLSC 自身缺字 → alias 對到 lookup canonical name (五里→五峰里, 灰■里→灰磘里)
-        canonical_v = _NLSC_VILLAGE_ALIAS.get((c, t, v), v)
+        # NLSC 自身缺字 → alias 對到 lookup canonical name (五?里→五峰里, 灰?里→灰磘里)
+        canonical_v = _NLSC_VILLAGE_ALIAS.get((c, t, _normalize_nlsc_village(v)), v)
         if (c, t) not in villages_cache:
             villages_cache[(c, t)] = sd.get_district_villages(c, t)
         info = villages_cache[(c, t)].get(canonical_v) or {}
