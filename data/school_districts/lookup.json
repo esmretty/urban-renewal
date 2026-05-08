@@ -1,7 +1,7 @@
 {
   "_meta": {
     "version": "2",
-    "generated_at": "2026-05-07T16:59:43.180207+00:00",
+    "generated_at": "2026-05-08T00:47:36.564034+00:00",
     "source_files": [
       "ntpc_elementary.csv",
       "ntpc_junior_high.csv",
@@ -48343,7 +48343,7 @@
     },
     {
       "city": "台北市",
-      "district": "新北市汐止區",
+      "district": "松山區",
       "school_district": "南港區",
       "kind": "elementary",
       "school": "舊莊國小",
@@ -48551,7 +48551,7 @@
     },
     {
       "city": "台北市",
-      "district": "新北市汐止區",
+      "district": "松山區",
       "school_district": "南港區",
       "kind": "elementary",
       "school": "胡適國小",
@@ -51476,7 +51476,7 @@
     },
     {
       "city": "台北市",
-      "district": "新北市淡水區",
+      "district": "士林區",
       "school_district": "北投區",
       "kind": "elementary",
       "school": "關渡國小",
@@ -53598,7 +53598,7 @@
     },
     {
       "city": "台北市",
-      "district": "信義區",
+      "district": "大安區",
       "school_district": "信義區",
       "kind": "junior_high",
       "school": "信義國中",
@@ -53615,7 +53615,7 @@
     },
     {
       "city": "台北市",
-      "district": "信義區",
+      "district": "大安區",
       "school_district": "信義區",
       "kind": "junior_high",
       "school": "信義國中",
@@ -53632,7 +53632,7 @@
     },
     {
       "city": "台北市",
-      "district": "信義區",
+      "district": "大安區",
       "school_district": "信義區",
       "kind": "junior_high",
       "school": "信義國中",
@@ -60568,7 +60568,7 @@
     },
     {
       "city": "台北市",
-      "district": "士林區",
+      "district": "北投區",
       "school_district": "士林區",
       "kind": "junior_high",
       "school": "蘭雅國中",

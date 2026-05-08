@@ -86,6 +86,11 @@ _VILLAGE_REGION_MAP: Optional[dict] = None
 
 
 def _load_village_region_map() -> dict:
+    """NLSC TownVillagePoint 反查 (city, village) → {valid districts}。
+    NLSC source 用「臺北市」(繁體)，但 source CSV 跟 lookup.json 用「台北市」
+    (簡體) — 不 normalize 會 query miss 永遠 fallback 信任 source，跨區共同
+    學區 row 永遠不被校正。
+    """
     global _VILLAGE_REGION_MAP
     if _VILLAGE_REGION_MAP is not None:
         return _VILLAGE_REGION_MAP
@@ -96,7 +101,7 @@ def _load_village_region_map() -> dict:
             d = json.load(fp)
         for f in d.get("features", []):
             p = f.get("properties") or {}
-            cnty = p.get("county")
+            cnty = (p.get("county") or "").replace("臺", "台")
             town = p.get("town")
             vill = p.get("village")
             if cnty and town and vill:
