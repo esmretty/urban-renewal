@@ -17,26 +17,28 @@
 (function () {
   'use strict';
 
-  // ── 地籍圖層 (cadastral group) — 跟既有結構一致 ──────────────────────
+  // ── 地籍圖層 (cadastral group) ──────────────────────────────────
+  // z-index 由下到上：分區(401) → 建物套繪(402) → 地籍(403) → 都更(404)
+  // 用戶要求：建物套繪圖在地籍圖下方；都更圖層在地籍圖上方
   const LAYERS = {
     zoning: {
       label: '土地分區',
       paneZ: 401,
       backends: ['zoning_tpe', 'zoning_ntpc'],
     },
+    building_floors: {
+      label: '建物套繪圖',
+      paneZ: 402,
+      backends: [{ name: 'building_floors_tpe', minZoom: 17 }],
+      hint: 'z=17+，僅台北市',
+    },
     cadastral: {
       label: '地籍圖',
-      paneZ: 402,
+      paneZ: 403,
       backends: [
         { name: 'cadastral_lines_tpe', minZoom: 17 },
         { name: 'cadastral_numbers_tpe', minZoom: 17 },
       ],
-      hint: 'z=17+，僅台北市',
-    },
-    building_floors: {
-      label: '建物套繪圖',
-      paneZ: 403,
-      backends: [{ name: 'building_floors_tpe', minZoom: 17 }],
       hint: 'z=17+，僅台北市',
     },
   };
@@ -131,7 +133,7 @@
       <div class="v2-renewal-header">
         <span class="v2-overlays-label">都更圖層：</span>
         <label class="v2-renewal-all"><input type="checkbox" data-renewal-all> 全選</label>
-        <span class="v2-overlays-note">僅台北市，對齊 UDDPlanMap</span>
+        <span class="v2-overlays-note">僅台北市</span>
       </div>
       <div class="v2-renewal-grid">${subItems}</div>`;
     host.addEventListener('change', (e) => {
