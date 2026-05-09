@@ -76,22 +76,18 @@ _LAYER_DEFS: dict[str, dict] = {
         "layer_show": "0",
     },
     # NLSC 全國地籍段邊界 (LANDSECT) — 補新北地籍
-    # ⚠️ 限制：NLSC WMTS 沒有「個別地塊」polygon 公開層 (個別地塊資料各縣市地政自有
-    # 不開 free WMS)，LANDSECT 只是地籍「段」邊界 (一段含 ~ 數百地號)，不是地塊邊界。
-    # 新北市要看「一塊一塊」地塊只能 scrape 地政局網站或用 NLSC 付費 API。
+    # 用 WMS (maps.nlsc.gov.tw/S_Maps/wms) 而非 WMTS：dynamic render detail 多 20× (板橋
+    # 1024×1024 22KB vs WMTS 256×256 1KB)。注意 LANDSECT 是「地段外圍圖(段籍圖)」=
+    # 段邊界 (一段含數百地號)，不是個別地塊邊界。
     "cadastral_ntpc": {
-        "kind": "nlsc_wmts",
+        "kind": "nlsc_wms",
         "layer_id": "LANDSECT",
     },
     # NLSC 公有土地地籍圖 (LAND_OPENDATA) — 補新北「公有地」polygon (私有地不含)
+    # 此 layer 只在 WMTS catalog (GetCapabilities 219 layer)，不在 WMS (66 layer) → 用 WMTS
     "cadastral_public_ntpc": {
         "kind": "nlsc_wmts",
         "layer_id": "LAND_OPENDATA",
-    },
-    # NLSC 全國建物 (BUILDX) — 補新北建物 (純 polygon 沒 4R/T label，那個是台北獨有)
-    "building_ntpc": {
-        "kind": "nlsc_wmts",
-        "layer_id": "BUILDX",
     },
     # ── 新北市（ArcGIS REST export，需要 token） ────────────────────────────
     "zoning_ntpc": {
@@ -175,6 +171,46 @@ def _fetch_wms(upstream: str, layer_names: str, bbox: str, width: int, height: i
         return r.content
     except Exception as e:
         logger.warning(f"WMS upstream 例外: {e}")
+        return None
+
+
+def _fetch_nlsc_wms(cfg: dict, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
+    """NLSC WMS (maps.nlsc.gov.tw/S_Maps/wms → wms.nlsc.gov.tw/wms) — dynamic GetMap。
+
+    比 WMTS 強：WMTS 是 pre-cached tile (LANDSECT 板橋 256x256 = 1KB 幾乎空白)；
+    WMS 是 dynamic render，同 bbox 1024x1024 = 22KB，detail 多 20×。
+    無 token、無 referer 限制（用戶提供官方 doc 確認免費可用）。
+    """
+    try:
+        r = httpx.get(
+            "https://maps.nlsc.gov.tw/S_Maps/wms",
+            params={
+                "service": "WMS",
+                "version": "1.1.1",
+                "request": "GetMap",
+                "layers": cfg["layer_id"],
+                "bbox": bbox,
+                "srs": srs,
+                "width": str(width),
+                "height": str(height),
+                "format": "image/png",
+                "transparent": "true",
+                "styles": "",
+            },
+            timeout=12,
+            verify=False,
+            follow_redirects=True,
+        )
+        if r.status_code != 200:
+            logger.debug(f"NLSC WMS http={r.status_code} layer={cfg['layer_id']}")
+            return None
+        if "image" not in r.headers.get("content-type", ""):
+            return None
+        if len(r.content) < 100:
+            return None
+        return r.content
+    except Exception as e:
+        logger.warning(f"NLSC WMS 例外: {e}")
         return None
 
 
@@ -315,6 +351,8 @@ async def gis_overlay(layer: str, request: Request) -> Response:
         content = _fetch_wms(cfg["upstream"], cfg["layers"], bbox, width, height, srs)
     elif cfg["kind"] == "arcgis_export":
         content = _fetch_arcgis_export(cfg, bbox, width, height, srs)
+    elif cfg["kind"] == "nlsc_wms":
+        content = _fetch_nlsc_wms(cfg, bbox, width, height, srs)
     elif cfg["kind"] == "nlsc_wmts":
         content = _fetch_nlsc_wmts(cfg, bbox, width, height, srs)
     else:
