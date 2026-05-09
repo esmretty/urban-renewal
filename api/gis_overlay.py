@@ -76,9 +76,11 @@ _LAYER_DEFS: dict[str, dict] = {
         "layer_show": "0",
     },
     # NLSC 全國地籍段邊界 (LANDSECT) — 補新北地籍
-    # 用 WMS (maps.nlsc.gov.tw/S_Maps/wms) 而非 WMTS：dynamic render detail 多 20× (板橋
-    # 1024×1024 22KB vs WMTS 256×256 1KB)。注意 LANDSECT 是「地段外圍圖(段籍圖)」=
-    # 段邊界 (一段含數百地號)，不是個別地塊邊界。
+    # 走 WMS (maps.nlsc.gov.tw/S_Maps/wms) 不是 WMTS：兩者是並存 OGC 標準不是升級關係。
+    # WMS 可給任意 bbox + size 較有彈性 (前端日後可改 nonTiledLayer 抓視窗整圖)，
+    # 但對「detail」沒幫助 — LANDSECT 本身只有「地段外圍圖(段籍圖)」= 段邊界 (一段
+    # 含數百地號)，**沒個別地塊**。要拿個別地塊+地號，NLSC 限政府機關/學術單位申請
+    # 「地籍圖 API/WFS」；民間付費走內政部地政司「地政電子資料流通服務網」每筆約 1 元。
     "cadastral_ntpc": {
         "kind": "nlsc_wms",
         "layer_id": "LANDSECT",
@@ -177,9 +179,17 @@ def _fetch_wms(upstream: str, layer_names: str, bbox: str, width: int, height: i
 def _fetch_nlsc_wms(cfg: dict, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
     """NLSC WMS (maps.nlsc.gov.tw/S_Maps/wms → wms.nlsc.gov.tw/wms) — dynamic GetMap。
 
-    比 WMTS 強：WMTS 是 pre-cached tile (LANDSECT 板橋 256x256 = 1KB 幾乎空白)；
-    WMS 是 dynamic render，同 bbox 1024x1024 = 22KB，detail 多 20×。
-    無 token、無 referer 限制（用戶提供官方 doc 確認免費可用）。
+    NLSC 同時提供 WMS 跟 WMTS 兩個獨立的 OGC 標準 (WMS 2013/06、WMTS 2013/08，
+    並存多年；不是升級關係)：
+      WMTS — 預切 tile，固定 size (256×256)、速度快，解析度由 zoom level 決定
+      WMS  — dynamic render，可指定任意 bbox + 任意 size
+
+    對 LANDSECT 這種低密度 layer，給政府 server 較大 size (e.g. 1024×1024) 時
+    image bytes 變大但「政府 render 出來的 polygon 資料密度」一樣 — image bytes
+    多是因為 raster pixel 數變多 + 線條較平滑，不代表「detail 多」。NLSC LANDSECT
+    本身就是「段外圍圖」，無論 zoom 多大都只有段邊界 (一段含數百地號)，沒個別地塊。
+
+    無 token、無 referer 限制 (官方 doc 列為免費 OGC 標準介接)。
     """
     try:
         r = httpx.get(
