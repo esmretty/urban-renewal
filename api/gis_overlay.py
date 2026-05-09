@@ -86,16 +86,17 @@ _LAYER_DEFS: dict[str, dict] = {
     # UDDPlanMap fillcolor。
     # 用戶 2026-05-09 移除：redev_revoked (廢止89.91年)、redev_107expired (107年停用)、
     # redev_taipei_view (臺北好好看 II) → 13 個降到 10 個
-    "redev_pub_renew":     {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=10", "fill_color": "#FF0000"},   # 公劃更新地區(依都更條例)
-    "redev_chloride":      {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=44", "fill_color": "#D0B17A"},   # 高氯離子混凝土
-    "redev_urgent":        {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=48", "fill_color": "#FFD0FF"},   # 迅行劃定
-    "redev_self_announce": {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=20", "fill_color": "#0000FF"},   # 公告自劃(事業權變)
-    "redev_self_approved": {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=30", "fill_color": "#FF7F00"},   # 核准自劃(事業權變)
-    "redev_planned":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=40", "fill_color": "#FF00FF"},   # 都計劃定更新地區
-    "redev_invalid":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=50", "fill_color": "#00FFFF"},   # 已失效/廢止
-    "redev_pub_business":  {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=12", "fill_color": "#6495ED"},   # 公劃內事業(權變)
-    "redev_115_revised":   {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:115PublicPlanREArea-5", "fill_color": "#FF9966"},                            # 115年修訂公劃
-    "redev_63y_building":  {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:63yAgoBud", "fill_color": "#1F4E79"},                                        # 63年以前建築物
+    # 都更案隨時變動 (新申請/核准/廢止)，disk_cache TTL 設 15 天 (其他 layer 30 天)
+    "redev_pub_renew":     {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=10", "fill_color": "#FF0000", "disk_cache": True, "disk_cache_ttl_days": 15},
+    "redev_chloride":      {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=44", "fill_color": "#D0B17A", "disk_cache": True, "disk_cache_ttl_days": 15},
+    "redev_urgent":        {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=48", "fill_color": "#FFD0FF", "disk_cache": True, "disk_cache_ttl_days": 15},
+    "redev_self_announce": {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=20", "fill_color": "#0000FF", "disk_cache": True, "disk_cache_ttl_days": 15},
+    "redev_self_approved": {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=30", "fill_color": "#FF7F00", "disk_cache": True, "disk_cache_ttl_days": 15},
+    "redev_planned":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=40", "fill_color": "#FF00FF", "disk_cache": True, "disk_cache_ttl_days": 15},
+    "redev_invalid":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=50", "fill_color": "#00FFFF", "disk_cache": True, "disk_cache_ttl_days": 15},
+    "redev_pub_business":  {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=12", "fill_color": "#6495ED", "disk_cache": True, "disk_cache_ttl_days": 15},
+    "redev_115_revised":   {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:115PublicPlanREArea-5", "fill_color": "#FF9966", "disk_cache": True, "disk_cache_ttl_days": 15},
+    "redev_63y_building":  {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:63yAgoBud", "fill_color": "#1F4E79", "disk_cache": True, "disk_cache_ttl_days": 15},
     # NLSC 全國地籍段邊界 (LANDSECT) — 補新北地籍
     # 走 WMS (maps.nlsc.gov.tw/S_Maps/wms) 不是 WMTS：兩者是並存 OGC 標準不是升級關係。
     # WMS 可給任意 bbox + size 較有彈性 (前端日後可改 nonTiledLayer 抓視窗整圖)，
@@ -381,16 +382,16 @@ def _bbox_to_tile_xyz(bbox: str) -> Optional[tuple[int, int, int]]:
 import os as _os
 from pathlib import Path as _Path
 _DISK_CACHE_BASE = _Path(__file__).resolve().parent.parent / "data" / "cache"
-_DISK_CACHE_TTL = 30 * 24 * 3600   # 30 天
+_DISK_CACHE_DEFAULT_TTL_DAYS = 30
 
 
-def _disk_cache_get(layer: str, z: int, y: int, x: int) -> Optional[bytes]:
+def _disk_cache_get(layer: str, z: int, y: int, x: int, ttl_days: int = _DISK_CACHE_DEFAULT_TTL_DAYS) -> Optional[bytes]:
     import time as _t
     p = _DISK_CACHE_BASE / layer / f"{z}" / f"{y}" / f"{x}.png"
     if not p.exists():
         return None
     try:
-        if (_t.time() - p.stat().st_mtime) > _DISK_CACHE_TTL:
+        if (_t.time() - p.stat().st_mtime) > ttl_days * 24 * 3600:
             return None
         return p.read_bytes()
     except Exception as e:
@@ -622,8 +623,8 @@ async def gis_overlay(layer: str, request: Request) -> Response:
         raise HTTPException(400, "bbox 必須是 W,S,E,N (4 個 number)")
 
     cfg = _LAYER_DEFS[layer]
-    # 591 forward proxy 故意不 cache：純 forward (非重製)，每次 user 請求才走 591
-    skip_cache = cfg["kind"] == "591_dmaps_proxy"
+    # skip_cache：都更圖層 (動態變動) + 591 forward proxy (不 cache 重製) 都不該 cache
+    skip_cache = cfg["kind"] == "591_dmaps_proxy" or bool(cfg.get("skip_cache"))
     cache_key = (layer, bbox, width, height, srs)
 
     # 1. memory cache (10 min TTL，所有 layer 共用)
@@ -632,13 +633,14 @@ async def gis_overlay(layer: str, request: Request) -> Response:
         if cached:
             return Response(content=cached, media_type="image/png", headers={"X-Cache": "HIT"})
 
-    # 2. disk cache (30 天 TTL，opt-in by layer config "disk_cache": True)
+    # 2. disk cache (TTL 由 layer config "disk_cache_ttl_days" 指定，預設 30 天)
     # 只對 Leaflet 預設 256×256 標準 tile request 才 cache (其他 size 是 ad-hoc)
     disk_cache_on = bool(cfg.get("disk_cache")) and width == 256 and height == 256
+    disk_ttl = cfg.get("disk_cache_ttl_days", _DISK_CACHE_DEFAULT_TTL_DAYS)
     tile_xyz = _bbox_to_tile_xyz(bbox) if disk_cache_on else None
     if disk_cache_on and tile_xyz:
         z, y, x = tile_xyz
-        disk_content = _disk_cache_get(layer, z, y, x)
+        disk_content = _disk_cache_get(layer, z, y, x, disk_ttl)
         if disk_content:
             # 順便回填 memory cache (下個 user 同 tile 也 hit memory)
             if not skip_cache:
