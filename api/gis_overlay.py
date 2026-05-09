@@ -76,25 +76,22 @@ _LAYER_DEFS: dict[str, dict] = {
         "layer_show": "0",
     },
     # 台北市都更審議子類型 — 對齊 https://bim.udd.gov.taipei/UDDPlanMap/Layer_Redevelop.json
-    # 主 GeoServer layer Taipei:uro-redevelop-ALL-5 配 cql_filter (layer=N) 篩選子類型；
-    # 另兩個獨立 layer (Taipei:115PublicPlanREArea-5, Taipei:63yAgoBud) 無 cql_filter
-    # 整建住宅 (113_RenovateHome.geojson) + 產業生活 (queryData_Tudd.aspx) 是 GeoJSON
-    # 不在這個 batch (待後續實作)
-    "redev_pub_renew":     {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=10"},   # 公劃更新地區(依都更條例) 紅
-    "redev_revoked":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=17"},   # 廢止89.91年公劃更新地區 深紅
-    "redev_chloride":      {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=44"},   # 高氯離子混凝土建築地區 褐
-    "redev_urgent":        {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=48"},   # 迅行劃定更新地區 粉
-    "redev_107expired":    {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=42"},   # (停止適用)107年公劃更新地區 黃
-    "redev_self_announce": {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=20"},   # 公告自劃單元(事業權變) 藍
-    "redev_self_approved": {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=30"},   # 核准自劃單元(事業權變) 橘
-    "redev_planned":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=40"},   # 都市計畫劃定更新地區 洋紅
-    "redev_taipei_view":   {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=55"},   # 臺北好好看系列二 紫
-    "redev_invalid":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=50"},   # 已失效/廢止 青
-    "redev_pub_business":  {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=12"},   # 公劃地區內事業(權變案件) 矢車菊藍
-    "redev_115_revised":   {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:115PublicPlanREArea-5"},                          # 115年修訂公劃更新地區 橘紅
-    "redev_63y_building":  {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:63yAgoBud"},                                       # 63年以前建築物 深藍
-    # 完整 8 子類型 + 2 獨立 layer 一次疊 (給「全選」一鍵用，省 14 個 request)
-    "redev_all":           {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5,Taipei:115PublicPlanREArea-5,Taipei:63yAgoBud"},
+    # 主 GeoServer layer Taipei:uro-redevelop-ALL-5 配 cql_filter (layer=N) 篩子類型；
+    # 兩個獨立 layer (Taipei:115PublicPlanREArea-5, Taipei:63yAgoBud) 無 cql_filter
+    # fill_color 必填：GeoServer 預設 SLD 是 grayscale，必須用 SLD_BODY override 對齊
+    # UDDPlanMap fillcolor。
+    # 用戶 2026-05-09 移除：redev_revoked (廢止89.91年)、redev_107expired (107年停用)、
+    # redev_taipei_view (臺北好好看 II) → 13 個降到 10 個
+    "redev_pub_renew":     {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=10", "fill_color": "#FF0000"},   # 公劃更新地區(依都更條例)
+    "redev_chloride":      {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=44", "fill_color": "#D0B17A"},   # 高氯離子混凝土
+    "redev_urgent":        {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=48", "fill_color": "#FFD0FF"},   # 迅行劃定
+    "redev_self_announce": {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=20", "fill_color": "#0000FF"},   # 公告自劃(事業權變)
+    "redev_self_approved": {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=30", "fill_color": "#FF7F00"},   # 核准自劃(事業權變)
+    "redev_planned":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=40", "fill_color": "#FF00FF"},   # 都計劃定更新地區
+    "redev_invalid":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=50", "fill_color": "#00FFFF"},   # 已失效/廢止
+    "redev_pub_business":  {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=12", "fill_color": "#6495ED"},   # 公劃內事業(權變)
+    "redev_115_revised":   {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:115PublicPlanREArea-5", "fill_color": "#FF9966"},                            # 115年修訂公劃
+    "redev_63y_building":  {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:63yAgoBud", "fill_color": "#1F4E79"},                                        # 63年以前建築物
     # NLSC 全國地籍段邊界 (LANDSECT) — 補新北地籍
     # 走 WMS (maps.nlsc.gov.tw/S_Maps/wms) 不是 WMTS：兩者是並存 OGC 標準不是升級關係。
     # WMS 可給任意 bbox + size 較有彈性 (前端日後可改 nonTiledLayer 抓視窗整圖)，
@@ -168,7 +165,12 @@ def _get_ntpc_token() -> str:
 # ── 上游 dispatch ──────────────────────────────────────────────────────────
 def _fetch_wms(upstream: str, layer_names: str, bbox: str, width: int, height: int, srs: str, cql_filter: Optional[str] = None) -> Optional[bytes]:
     """直接 forward WMS GetMap 到 GeoServer。
-    cql_filter: GeoServer CQL filter（用來在同一個 layer 下篩 sub-set，例如 'layer=10'）"""
+    cql_filter: GeoServer CQL filter（用來在同一個 layer 下篩 sub-set，例如 'layer=10'）
+
+    注意：zonegeo.udd.gov.taipei GeoServer **不接受 SLD_BODY 或 user-supplied STYLES**，
+    layer 預設 SLD render 是 grayscale (170,170,170 + 0,0,0 outline)。要彩色對齊
+    UDDPlanMap 必須在前端用 SVG filter colorize tile image (見 map_overlays.css)。
+    """
     params = {
         "service": "WMS",
         "version": "1.1.1",

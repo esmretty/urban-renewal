@@ -449,8 +449,25 @@
       </div>
       <!-- 地籍圖層 toolbar — 內容由 map_overlays.js 動態 render -->
       <div id="v2-map-overlays-toolbar" class="v2-map-overlays-toolbar"></div>
-      <!-- 都更圖層 toolbar — 13 個 sub-checkbox 對齊 UDDPlanMap -->
+      <!-- 都更圖層 toolbar — 10 個 sub-checkbox 對齊 UDDPlanMap -->
       <div id="v2-map-renewal-toolbar" class="v2-map-renewal-toolbar"></div>
+      <!-- SVG filter defs — 把 GeoServer grayscale tile 染成 UDDPlanMap fillcolor。
+           server zonegeo 不接受 SLD_BODY，必須前端 colorize。原 image alpha=255 像素都
+           被 flood 成指定色 + alpha 保留 → 透明區仍透明，灰色塊變彩色塊 -->
+      <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <defs>
+          <filter id="redev-flt-pub_renew"><feFlood flood-color="#FF0000"/><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <filter id="redev-flt-self_announce"><feFlood flood-color="#0000FF"/><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <filter id="redev-flt-self_approved"><feFlood flood-color="#FF7F00"/><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <filter id="redev-flt-planned"><feFlood flood-color="#FF00FF"/><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <filter id="redev-flt-115_revised"><feFlood flood-color="#FF9966"/><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <filter id="redev-flt-chloride"><feFlood flood-color="#D0B17A"/><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <filter id="redev-flt-63y_building"><feFlood flood-color="#1F4E79"/><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <filter id="redev-flt-urgent"><feFlood flood-color="#FFD0FF"/><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <filter id="redev-flt-pub_business"><feFlood flood-color="#6495ED"/><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <filter id="redev-flt-invalid"><feFlood flood-color="#00FFFF"/><feComposite in2="SourceAlpha" operator="in"/></filter>
+        </defs>
+      </svg>
       <div id="v2-map" class="v2-map"></div>
     </div>
 

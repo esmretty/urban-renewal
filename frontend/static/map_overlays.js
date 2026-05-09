@@ -47,20 +47,16 @@
   const RENEWAL_PANE_Z = 404;
   const RENEWAL_SUBS = [
     { id: 'pub_renew',     label: '公劃更新地區(依都更條例)',    color: '#FF0000', backend: 'redev_pub_renew' },
-    { id: 'revoked',       label: '廢止89.91年公劃',          color: '#B84A5B', backend: 'redev_revoked' },
     { id: 'self_announce', label: '公告自劃(事業權變)',         color: '#0000FF', backend: 'redev_self_announce' },
     { id: 'self_approved', label: '核准自劃(事業權變)',         color: '#FF7F00', backend: 'redev_self_approved' },
     { id: 'planned',       label: '都計劃定更新地區',           color: '#FF00FF', backend: 'redev_planned' },
-    { id: '107expired',    label: '107年公劃(停用)',           color: '#FFD800', backend: 'redev_107expired' },
     { id: '115_revised',   label: '115年修訂公劃',             color: '#FF9966', backend: 'redev_115_revised' },
     { id: 'chloride',      label: '高氯離子混凝土',             color: '#D0B17A', backend: 'redev_chloride' },
     { id: '63y_building',  label: '63年以前建築物',             color: '#1F4E79', backend: 'redev_63y_building' },
     { id: 'urgent',        label: '迅行劃定',                  color: '#FFD0FF', backend: 'redev_urgent' },
     { id: 'pub_business',  label: '公劃內事業(權變)',           color: '#6495ED', backend: 'redev_pub_business' },
-    { id: 'taipei_view',   label: '臺北好好看 II',             color: '#A500A5', backend: 'redev_taipei_view' },
     { id: 'invalid',       label: '已失效/廢止',                color: '#00FFFF', backend: 'redev_invalid' },
   ];
-  const RENEWAL_ALL_BACKEND = 'redev_all';   // 「全選」一鍵走 1 個 request 含全部子類型
 
   const OPACITY = 0.5;
 
@@ -71,9 +67,7 @@
     on: { zoning: false, cadastral: false, building_floors: false },   // cadastral group
     layerRefs: { zoning: [], cadastral: [], building_floors: [] },     // cadastral group
     renewal: {
-      all: false,                  // 「全選」狀態
-      subs: {},                    // { sub_id: bool } 個別勾選
-      layerAll: null,              // 「全選」用單一 wms layer instance
+      subs: {},                    // { sub_id: bool } 個別勾選狀態
       layerSubs: {},               // { sub_id: wmsLayer } 個別 sub layer instances
     },
   };
@@ -162,67 +156,31 @@
     return 'v2-overlay-renewal';
   }
 
-  function _clearAllRenewal() {
-    const m = _state.map;
-    if (!m) return;
-    if (_state.renewal.layerAll) {
-      m.removeLayer(_state.renewal.layerAll);
-      _state.renewal.layerAll = null;
-    }
-    Object.values(_state.renewal.layerSubs).forEach(l => m.removeLayer(l));
-    _state.renewal.layerSubs = {};
-  }
-
-  // 「全選」toggle: 用 1 個 redev_all layer 取代 13 個 sub layer (省 12 個 request)
+  // 「全選」: 勾起 / 取消所有 sub-checkbox + 觸發各自 toggle (彩色 SLD 必須 per-layer 帶 fill_color，
+  // 不能再用單一 redev_all 覆蓋全部)
   function _toggleRenewalAll(on) {
-    const m = _state.map;
-    if (!m) return;
-    _state.renewal.all = on;
-    _clearAllRenewal();
-
-    // 同步 sub-checkbox 視覺 (跟 state)
-    _state.renewal.subs = {};
-    RENEWAL_SUBS.forEach(s => { _state.renewal.subs[s.id] = on; });
-    document.querySelectorAll('input[data-renewal-sub]').forEach(cb => { cb.checked = on; });
-
-    if (!on) return;
-    const paneName = _ensureRenewalPane();
-    _state.renewal.layerAll = _makeWmsLayer(RENEWAL_ALL_BACKEND, paneName);
-    _state.renewal.layerAll.addTo(m);
+    document.querySelectorAll('input[data-renewal-sub]').forEach(cb => {
+      if (cb.checked !== on) {
+        cb.checked = on;
+        _toggleRenewalSub(cb.dataset.renewalSub, on);
+      }
+    });
   }
 
-  // 個別 sub toggle: 一旦用戶單獨勾，從「全選」模式切到「個別模式」
+  // 個別 sub toggle: add/remove 單個 sub layer。任一取消會 sync 全選 checkbox
   function _toggleRenewalSub(subId, on) {
     const m = _state.map;
     const sub = RENEWAL_SUBS.find(s => s.id === subId);
     if (!m || !sub) return;
     _state.renewal.subs[subId] = on;
 
-    // 如果之前在「全選」模式 → 切換到「個別模式」: 移除 redev_all，把已勾的 sub 一個個 add
-    if (_state.renewal.all) {
-      _state.renewal.all = false;
-      const allCheckbox = document.querySelector('input[data-renewal-all]');
-      if (allCheckbox) allCheckbox.checked = false;
-      if (_state.renewal.layerAll) {
-        m.removeLayer(_state.renewal.layerAll);
-        _state.renewal.layerAll = null;
-      }
-      // 把當前所有 checked 的 sub 重新 add (不含剛取消的)
-      const paneName = _ensureRenewalPane();
-      RENEWAL_SUBS.forEach(s => {
-        if (_state.renewal.subs[s.id]) {
-          const layer = _makeWmsLayer(s.backend, paneName);
-          layer.addTo(m);
-          _state.renewal.layerSubs[s.id] = layer;
-        }
-      });
-      return;
-    }
-
-    // 個別模式：add/remove 單個 sub layer
     const paneName = _ensureRenewalPane();
     if (on) {
-      const layer = _makeWmsLayer(sub.backend, paneName);
+      // 已存在的先清，避免 toggle 過快累積
+      const old = _state.renewal.layerSubs[subId];
+      if (old) m.removeLayer(old);
+      // className 給 CSS SVG filter 染色用 (server 是 grayscale，前端 colorize)
+      const layer = _makeWmsLayer(sub.backend, paneName, 'redev-color-' + subId);
       layer.addTo(m);
       _state.renewal.layerSubs[subId] = layer;
     } else {
@@ -232,12 +190,18 @@
         delete _state.renewal.layerSubs[subId];
       }
     }
+    // sync 「全選」checkbox：所有 sub 都 checked → 勾起；任一 unchecked → 取消
+    const allCheckbox = document.querySelector('input[data-renewal-all]');
+    if (allCheckbox) {
+      const allOn = RENEWAL_SUBS.every(s => _state.renewal.subs[s.id]);
+      allCheckbox.checked = allOn;
+    }
   }
 
   // ════════════════════════════════════════════════════════════
   // 共用 helper：build L.tileLayer.wms instance
   // ════════════════════════════════════════════════════════════
-  function _makeWmsLayer(backend, paneName) {
+  function _makeWmsLayer(backend, paneName, extraClassName) {
     const name = typeof backend === 'string' ? backend : backend.name;
     const minZoom = (typeof backend === 'object' && backend.minZoom) ? backend.minZoom : undefined;
     const opts = {
@@ -249,6 +213,7 @@
       maxZoom: 22,
     };
     if (minZoom != null) opts.minZoom = minZoom;
+    if (extraClassName) opts.className = extraClassName;   // 給 SVG filter colorize 用
     const layer = L.tileLayer.wms('/api/gis_overlay/' + name, opts);
     layer.on('tileerror', (e) => {
       console.debug('[overlay tile error]', name, e.tile && e.tile.src);

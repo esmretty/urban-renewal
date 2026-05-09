@@ -107,3 +107,17 @@
 .v2-renewal-text {
   color: #444;
 }
+
+/* SVG filter colorize — server (zonegeo) 拒絕 SLD_BODY，只給 grayscale tile，
+ * 前端用 SVG filter 把 alpha 區域 flood 成 UDDPlanMap 對應 fillcolor。
+ * Leaflet 把 className 設到 layer 後會 propagate 到所有 tile <img> element。 */
+.leaflet-tile.redev-color-pub_renew      { filter: url(#redev-flt-pub_renew); }
+.leaflet-tile.redev-color-self_announce  { filter: url(#redev-flt-self_announce); }
+.leaflet-tile.redev-color-self_approved  { filter: url(#redev-flt-self_approved); }
+.leaflet-tile.redev-color-planned        { filter: url(#redev-flt-planned); }
+.leaflet-tile.redev-color-115_revised    { filter: url(#redev-flt-115_revised); }
+.leaflet-tile.redev-color-chloride       { filter: url(#redev-flt-chloride); }
+.leaflet-tile.redev-color-63y_building   { filter: url(#redev-flt-63y_building); }
+.leaflet-tile.redev-color-urgent         { filter: url(#redev-flt-urgent); }
+.leaflet-tile.redev-color-pub_business   { filter: url(#redev-flt-pub_business); }
+.leaflet-tile.redev-color-invalid        { filter: url(#redev-flt-invalid); }
