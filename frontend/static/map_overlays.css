@@ -46,3 +46,64 @@
   color: #888;
   font-size: 11px;
 }
+
+/* ── 都更圖層 toolbar (renewal group) ───────────────────────────── */
+.v2-map-renewal-toolbar {
+  background: #f5f0e3;
+  border: 1px solid var(--c-border, #d8cdb6);
+  border-top: none;
+  border-bottom: none;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.v2-renewal-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.v2-renewal-all {
+  cursor: pointer;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.v2-renewal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 4px 12px;
+  font-size: 12px;
+}
+
+.v2-renewal-sub {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0;
+  user-select: none;
+}
+
+.v2-renewal-sub input {
+  cursor: pointer;
+  margin: 0;
+  vertical-align: middle;
+}
+
+.v2-renewal-dot {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  flex: 0 0 auto;
+}
+
+.v2-renewal-text {
+  color: #444;
+}

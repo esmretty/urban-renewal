@@ -75,23 +75,26 @@ _LAYER_DEFS: dict[str, dict] = {
         "upstream": "https://www.historygis.udd.gov.taipei/arcgis/rest/services/UrbanPlan2/PlanTheme/MapServer/export",
         "layer_show": "0",
     },
-    # 台北市都更審議 — zonegeo.udd.gov.taipei GeoServer Taipei:uro-redevelop-ALL-5
-    # 對齊 https://bim.udd.gov.taipei/UDDPlanMap/「都市更新審議」面板，含 8 個子類型疊圖：
-    #   layer=10 公劃更新地區(依都更條例)         紅色
-    #   layer=17 廢止89.91年公劃更新地區         深紅
-    #   layer=20 公告自劃單元(自劃事業權變計畫案件) 藍
-    #   layer=30 核准自劃單元                    橘
-    #   layer=40 都市計畫劃定更新地區
-    #   layer=42 (停止適用)107年公劃更新地區     黃
-    #   layer=44 高氯離子混凝土建築地區          褐
-    #   layer=48 迅行劃定更新地區                粉
-    # 點擊每個區塊 ID 在 https://gis.uro.taipei/showproj_uro.html?case_id=${ID} 看詳情
-    # 不加 cql_filter → GeoServer render 全部 8 子類型疊一起 (跟 UDDPlanMap 全勾的視覺一致)
-    "redevelop_uro_tpe": {
-        "kind": "wms",
-        "upstream": _TPE_WMS_URL,
-        "layers": "Taipei:uro-redevelop-ALL-5",
-    },
+    # 台北市都更審議子類型 — 對齊 https://bim.udd.gov.taipei/UDDPlanMap/Layer_Redevelop.json
+    # 主 GeoServer layer Taipei:uro-redevelop-ALL-5 配 cql_filter (layer=N) 篩選子類型；
+    # 另兩個獨立 layer (Taipei:115PublicPlanREArea-5, Taipei:63yAgoBud) 無 cql_filter
+    # 整建住宅 (113_RenovateHome.geojson) + 產業生活 (queryData_Tudd.aspx) 是 GeoJSON
+    # 不在這個 batch (待後續實作)
+    "redev_pub_renew":     {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=10"},   # 公劃更新地區(依都更條例) 紅
+    "redev_revoked":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=17"},   # 廢止89.91年公劃更新地區 深紅
+    "redev_chloride":      {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=44"},   # 高氯離子混凝土建築地區 褐
+    "redev_urgent":        {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=48"},   # 迅行劃定更新地區 粉
+    "redev_107expired":    {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=42"},   # (停止適用)107年公劃更新地區 黃
+    "redev_self_announce": {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=20"},   # 公告自劃單元(事業權變) 藍
+    "redev_self_approved": {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=30"},   # 核准自劃單元(事業權變) 橘
+    "redev_planned":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=40"},   # 都市計畫劃定更新地區 洋紅
+    "redev_taipei_view":   {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=55"},   # 臺北好好看系列二 紫
+    "redev_invalid":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=50"},   # 已失效/廢止 青
+    "redev_pub_business":  {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=12"},   # 公劃地區內事業(權變案件) 矢車菊藍
+    "redev_115_revised":   {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:115PublicPlanREArea-5"},                          # 115年修訂公劃更新地區 橘紅
+    "redev_63y_building":  {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:63yAgoBud"},                                       # 63年以前建築物 深藍
+    # 完整 8 子類型 + 2 獨立 layer 一次疊 (給「全選」一鍵用，省 14 個 request)
+    "redev_all":           {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5,Taipei:115PublicPlanREArea-5,Taipei:63yAgoBud"},
     # NLSC 全國地籍段邊界 (LANDSECT) — 補新北地籍
     # 走 WMS (maps.nlsc.gov.tw/S_Maps/wms) 不是 WMTS：兩者是並存 OGC 標準不是升級關係。
     # WMS 可給任意 bbox + size 較有彈性 (前端日後可改 nonTiledLayer 抓視窗整圖)，
@@ -163,24 +166,28 @@ def _get_ntpc_token() -> str:
 
 
 # ── 上游 dispatch ──────────────────────────────────────────────────────────
-def _fetch_wms(upstream: str, layer_names: str, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
-    """直接 forward WMS GetMap 到 GeoServer。"""
+def _fetch_wms(upstream: str, layer_names: str, bbox: str, width: int, height: int, srs: str, cql_filter: Optional[str] = None) -> Optional[bytes]:
+    """直接 forward WMS GetMap 到 GeoServer。
+    cql_filter: GeoServer CQL filter（用來在同一個 layer 下篩 sub-set，例如 'layer=10'）"""
+    params = {
+        "service": "WMS",
+        "version": "1.1.1",
+        "request": "GetMap",
+        "layers": layer_names,
+        "bbox": bbox,
+        "width": str(width),
+        "height": str(height),
+        "srs": srs,
+        "format": "image/png",
+        "transparent": "true",
+        "styles": "",
+    }
+    if cql_filter:
+        params["cql_filter"] = cql_filter
     try:
         r = httpx.get(
             upstream,
-            params={
-                "service": "WMS",
-                "version": "1.1.1",
-                "request": "GetMap",
-                "layers": layer_names,
-                "bbox": bbox,
-                "width": str(width),
-                "height": str(height),
-                "srs": srs,
-                "format": "image/png",
-                "transparent": "true",
-                "styles": "",
-            },
+            params=params,
             timeout=12,
             verify=False,
         )
@@ -448,7 +455,7 @@ async def gis_overlay(layer: str, request: Request) -> Response:
 
     cfg = _LAYER_DEFS[layer]
     if cfg["kind"] == "wms":
-        content = _fetch_wms(cfg["upstream"], cfg["layers"], bbox, width, height, srs)
+        content = _fetch_wms(cfg["upstream"], cfg["layers"], bbox, width, height, srs, cfg.get("cql_filter"))
     elif cfg["kind"] == "arcgis_export":
         content = _fetch_arcgis_export(cfg, bbox, width, height, srs)
     elif cfg["kind"] == "nlsc_wms":
