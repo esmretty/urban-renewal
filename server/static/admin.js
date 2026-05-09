@@ -1352,7 +1352,7 @@ let _schedulerTimer = null;
 // UI 編輯中的 draft（還沒套用的）。每欄位標記 "已套用 / 未套用"
 let _schedDraft = { interval_hr: 1, commands: [] };
 let _schedServer = { interval_hr: 1, commands: [] };   // server 當前真實值（套用對照）
-let _schedMeta = { allowed: [], maxCmds: 5, maxDistricts: 5, interSleep: 30, intervalOpts: [1,3,6,12,24], verifyIntervalOpts: [12,24,72,360], updatePricesIntervalOpts: [24,168,720] };
+let _schedMeta = { allowed: [], maxCmds: 5, maxDistricts: 5, interSleep: 30, intervalOpts: [1,3,6,12,24], verifyIntervalOpts: [12,24,72,360], updatePricesIntervalOpts: [24,168,720], gisOverlayIntervalOpts: [360,720,1440,4320], gisOverlayLayers: [] };
 let _lastVerifyAliveAt = null;
 
 async function loadSchedulerStatus() {
@@ -1369,6 +1369,8 @@ async function loadSchedulerStatus() {
       intervalOpts: s.allowed_interval_hr || [1, 3, 6, 12, 24],
       verifyIntervalOpts: s.allowed_verify_interval_hr || [12, 24, 72, 360],
       updatePricesIntervalOpts: s.allowed_update_prices_interval_hr || [24, 168, 720],
+      gisOverlayIntervalOpts: s.allowed_gis_overlay_interval_hr || [360, 720, 1440, 4320],
+      gisOverlayLayers: s.gis_overlay_layers || [],
     };
     _lastVerifyAliveAt = s.last_verify_alive_at || null;
     // 觸發 dashboard 警告檢查
@@ -1431,6 +1433,9 @@ function _isCmdAppliedNew(draft, server) {
   if (Number(draft.interval_hr || 0) !== Number(server.interval_hr || 0)) return false;
   if (dType === "verify_alive") return true;
   if (dType === "update_prices") return true;
+  if (dType === "gis_overlay_refresh") {
+    return JSON.stringify((draft.layers || []).slice().sort()) === JSON.stringify((server.layers || []).slice().sort());
+  }
   // scan 比對 districts / limit / sources
   return JSON.stringify((draft.districts||[]).slice().sort()) === JSON.stringify((server.districts || []).slice().sort())
       && Number(draft.limit) === Number(server.limit)
@@ -1446,6 +1451,7 @@ function renderScheduler(s) {
   _renderSchedulerByType(s, "scan", document.getElementById("scheduler-box-scan"));
   _renderSchedulerByType(s, "verify_alive", document.getElementById("scheduler-box-verify"));
   _renderSchedulerByType(s, "update_prices", document.getElementById("scheduler-box-update-prices"));
+  _renderSchedulerByType(s, "gis_overlay_refresh", document.getElementById("scheduler-box-gis-overlay"));
 }
 
 function _renderSchedulerByType(s, filterType, box) {
@@ -1456,6 +1462,7 @@ function _renderSchedulerByType(s, filterType, box) {
   if (filterType === "scan") enabled = (s.scan_enabled !== undefined ? s.scan_enabled : s.enabled);
   else if (filterType === "verify_alive") enabled = (s.verify_alive_enabled !== undefined ? s.verify_alive_enabled : s.enabled);
   else if (filterType === "update_prices") enabled = (s.update_prices_enabled !== undefined ? s.update_prices_enabled : s.enabled);
+  else if (filterType === "gis_overlay_refresh") enabled = (s.gis_overlay_refresh_enabled !== undefined ? s.gis_overlay_refresh_enabled : s.enabled);
   else enabled = s.enabled;
   const stateText = running ? "🟢 進行中"
                   : (enabled ? "🟦 待機中" : "⚪ 已停用");
@@ -1482,12 +1489,14 @@ function _renderSchedulerByType(s, filterType, box) {
     ? filteredCmds.map(({ cmd, origIdx }, dispIdx) => _renderCmdRow(cmd, origIdx, dispIdx + 1)).join("")
     : `<div style="color:#888; padding:8px; text-align:center;">尚無此類型命令</div>`;
 
-  // verify_alive / update_prices 限制 1 個 → 已有就不顯示「+ 新增」按鈕
-  const singletonTypes = new Set(["verify_alive", "update_prices"]);
+  // verify_alive / update_prices / gis_overlay_refresh 限制 1 個 → 已有就不顯示「+ 新增」按鈕
+  const singletonTypes = new Set(["verify_alive", "update_prices", "gis_overlay_refresh"]);
   const showAddBtn = !(singletonTypes.has(filterType) && filteredCmds.length >= 1);
   const addLabel = filterType === "scan" ? "+ 新增掃描命令"
                 : filterType === "verify_alive" ? "+ 新增偵測下架命令"
-                : "+ 新增更新單價命令";
+                : filterType === "update_prices" ? "+ 新增更新單價命令"
+                : filterType === "gis_overlay_refresh" ? "+ 新增更新圖層命令"
+                : "+ 新增命令";
   const addBtnHtml = showAddBtn
     ? `<div style="margin-top:8px;"><button onclick="schedAddCmd('${filterType}')" style="padding:4px 12px;">${addLabel}</button></div>`
     : "";
@@ -1577,9 +1586,7 @@ let _layersStatsCache = null;
 
 async function loadLayersTab() {
   const manualBox = document.getElementById("layers-manual-list");
-  const schedBox = document.getElementById("layers-scheduler-box");
   if (manualBox) manualBox.innerHTML = "載入中…";
-  if (schedBox) schedBox.innerHTML = "載入中…";
   try {
     const r = await authedFetch("/admin/gis_overlay/cache_stats");
     if (!r.ok) {
@@ -1589,18 +1596,12 @@ async function loadLayersTab() {
     const data = await r.json();
     _layersStatsCache = data;
     _renderLayersManual(data.layers || []);
-    _renderLayersScheduler(data.scheduler || {}, data.layers || [], data.next_run_at);
+    // scheduler 部分由既有 renderScheduler/loadSchedulerStatus 處理 (cmd type='gis_overlay_refresh')
+    // 觸發一次以確保切到本 tab 立即可見
+    if (typeof loadSchedulerStatus === "function") loadSchedulerStatus();
   } catch (e) {
     if (manualBox) manualBox.innerHTML = `<span style="color:#c0392b;">${esc(e.message)}</span>`;
   }
-}
-
-function _fmtDateTime(iso) {
-  if (!iso) return "—";
-  if (typeof iso === "string" && !iso.includes("T")) return iso;   // 「下個小時 (尚未執行過)」
-  try {
-    return new Date(iso).toLocaleString("zh-TW", { hour12: false });
-  } catch { return String(iso); }
 }
 
 function _fmtBytes(n) {
@@ -1685,78 +1686,8 @@ window.runLayersRefresh = async function () {
   }
 };
 
-function _renderLayersScheduler(sched, allLayers, nextRunAt) {
-  const box = document.getElementById("layers-scheduler-box");
-  if (!box) return;
-  const enabled = !!sched.enabled;
-  const interval = sched.interval_days || 30;
-  const selectedLayers = new Set(sched.layers || []);
-  const stateText = enabled ? "🟢 已啟用" : "⚪ 已停用";
-  const stateColor = enabled ? "#27ae60" : "#95a5a6";
-  const intervalOpts = [15, 30, 60, 180].map(d =>
-    `<option value="${d}"${d === interval ? " selected" : ""}>${d} 天</option>`
-  ).join("");
-  const layerRows = allLayers.map(l => `
-    <tr>
-      <td style="padding:3px 8px; border-bottom:1px solid #eee;">
-        <input type="checkbox" class="sched-layer-cb" data-layer="${esc(l.layer)}"${selectedLayers.has(l.layer) ? " checked" : ""}>
-      </td>
-      <td style="padding:3px 8px; border-bottom:1px solid #eee;">${esc(l.display_name)}</td>
-    </tr>`).join("");
-  box.innerHTML = `
-    <div style="margin-bottom:10px;">
-      <b style="color:${stateColor}">${stateText}</b>
-    </div>
-    <div style="font-size:12px; color:#666; margin-bottom:10px; line-height:1.7;">
-      上次執行：${_fmtDateTime(sched.last_run_at)}<br>
-      下次預計：${_fmtDateTime(nextRunAt)}
-    </div>
-    <div style="margin-bottom:10px;">
-      <label><input type="checkbox" id="sched-enabled-cb"${enabled ? " checked" : ""}> 啟用 scheduler</label>
-    </div>
-    <div style="margin-bottom:10px;">
-      <label>更新週期：<select id="sched-interval-select" style="padding:3px 8px;">${intervalOpts}</select></label>
-    </div>
-    <div style="margin-bottom:10px;">
-      <div style="font-size:12px; color:#555; margin-bottom:4px;">適用圖層：</div>
-      <table style="width:100%; border-collapse:collapse; font-size:12px;">
-        <thead>
-          <tr style="background:#f0e8d4;">
-            <th style="padding:4px 8px; text-align:left; width:40px;">勾選</th>
-            <th style="padding:4px 8px; text-align:left;">圖層</th>
-          </tr>
-        </thead>
-        <tbody>${layerRows}</tbody>
-      </table>
-    </div>
-    <button onclick="saveLayersScheduler()" style="padding:6px 14px; background:#16a085; color:#fff; border:none; border-radius:4px; cursor:pointer;">儲存</button>
-    <span id="sched-save-result" style="font-size:12px; margin-left:8px;"></span>
-  `;
-}
-
-window.saveLayersScheduler = async function () {
-  const enabled = document.getElementById("sched-enabled-cb").checked;
-  const intervalDays = parseInt(document.getElementById("sched-interval-select").value, 10);
-  const layers = Array.from(document.querySelectorAll(".sched-layer-cb:checked")).map(cb => cb.dataset.layer);
-  const resEl = document.getElementById("sched-save-result");
-  if (resEl) resEl.textContent = "儲存中…";
-  try {
-    const r = await authedFetch("/admin/gis_overlay/scheduler", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled, interval_days: intervalDays, layers }),
-    });
-    const data = await r.json();
-    if (!r.ok) {
-      if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(data.detail || "")}</span>`;
-      return;
-    }
-    if (resEl) resEl.innerHTML = `<span style="color:#27ae60;">✓ 已儲存</span>`;
-    setTimeout(loadLayersTab, 500);
-  } catch (e) {
-    if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(e.message)}</span>`;
-  }
-};
+// scheduler render 已整合到既有 renderScheduler / _renderSchedulerByType（cmd type='gis_overlay_refresh'）
+// 舊獨立 _renderLayersScheduler / saveLayersScheduler 已移除（dead code）
 
 window.runUpdatePricesNow = async function () {
   const statusEl = document.getElementById("update-prices-status");
@@ -1847,6 +1778,62 @@ function _renderCmdRow(cmd, i, displayNum) {
           </label>
           <button onclick="applySchedulerConfig()" class="sched-apply">套用</button>
         </div>
+        <div class="sched-cmd-footer">
+          ${nextDueStr}
+          <span class="sched-applied-detail">${appliedDetail}</span>
+        </div>
+      </div>`;
+  }
+
+  if (cmdType === "gis_overlay_refresh") {
+    // 更新圖層 cache 命令：interval (天) + 適用 layer 多選
+    const intervalOpts = (_schedMeta.gisOverlayIntervalOpts || [360, 720, 1440, 4320]).map(h => {
+      const sel = Number(cmd.interval_hr) === h ? "selected" : "";
+      const days = Math.round(h / 24);
+      return `<option value="${h}" ${sel}>${days} 天</option>`;
+    }).join("");
+    const layerSet = new Set(cmd.layers || []);
+    const layerRows = (_schedMeta.gisOverlayLayers || []).map(l => `
+      <tr>
+        <td style="padding:3px 6px; border-bottom:1px solid #eee; width:36px;">
+          <input type="checkbox" class="gisov-layer-cb-${i}" data-layer="${esc(l.layer)}"${layerSet.has(l.layer) ? " checked" : ""}
+            onchange="schedToggleGisLayer(${i}, '${esc(l.layer)}', this.checked)">
+        </td>
+        <td style="padding:3px 6px; border-bottom:1px solid #eee;">${esc(l.display_name || l.layer)}</td>
+      </tr>`).join("");
+    const layerCount = (cmd.layers || []).length;
+    const appliedDetail = (server && _isCmdAppliedNew(cmd, server))
+      ? `<span style="color:#27ae60; font-size:12px;">✓ 已套用：更新圖層 / 每 ${Math.round(Number(server.interval_hr || 720) / 24)} 天 / ${(server.layers || []).length} 個 layer</span>`
+      : `<span style="color:#c0392b; font-size:12px;">⚠ 未套用（按下套用才生效）</span>`;
+    return `
+      <div class="sched-cmd sched-cmd--verify" style="border-color:#8e44ad; background:#faf6fc;">
+        <div class="sched-cmd-head">
+          <b>命令 ${displayNum}</b>
+          <span class="sched-type-badge verify" style="background:#8e44ad;">更新圖層</span>
+          ${appliedBadge}
+          ${removeBtn}
+        </div>
+        <div class="sched-cmd-desc">清除指定圖層的 disk cache，下次 user 看自動重抓最新版。</div>
+        <div class="sched-cmd-controls">
+          <label>每
+            <select onchange="schedSetInterval(${i}, this.value, 720)">
+              ${intervalOpts}
+            </select>
+            跑一次
+          </label>
+          <span style="color:#888; font-size:12px; margin-left:8px;">適用 ${layerCount} 個 layer</span>
+          <button onclick="applySchedulerConfig()" class="sched-apply" style="background:#8e44ad;">套用</button>
+        </div>
+        <details style="margin-top:8px;">
+          <summary style="cursor:pointer; font-size:12px; color:#8e44ad;">▸ 適用圖層</summary>
+          <table style="width:100%; border-collapse:collapse; font-size:12px; margin-top:6px;">
+            <thead><tr style="background:#f0e8d4;">
+              <th style="padding:4px 6px; text-align:left; width:36px;">勾選</th>
+              <th style="padding:4px 6px; text-align:left;">圖層</th>
+            </tr></thead>
+            <tbody>${layerRows}</tbody>
+          </table>
+        </details>
         <div class="sched-cmd-footer">
           ${nextDueStr}
           <span class="sched-applied-detail">${appliedDetail}</span>
@@ -2073,6 +2060,15 @@ window.schedToggleDist = function (idx, d, on) {
   _touchApplyBtns();
 };
 
+window.schedToggleGisLayer = function (i, layerName, on) {
+  const cmd = _schedDraft.commands[i];
+  if (!cmd || cmd.type !== "gis_overlay_refresh") return;
+  const set = new Set(cmd.layers || []);
+  if (on) set.add(layerName); else set.delete(layerName);
+  cmd.layers = Array.from(set);
+  _touchApplyBtns();
+};
+
 window.schedAddCmd = function (type) {
   type = type || "scan";
   // 容量限制：scan = maxCmds 個；verify_alive / update_prices 各 1 個
@@ -2081,7 +2077,7 @@ window.schedAddCmd = function (type) {
     alert(`掃描命令數已達上限 ${_schedMeta.maxCmds}`);
     return;
   }
-  if ((type === "verify_alive" || type === "update_prices") && sameType >= 1) {
+  if ((type === "verify_alive" || type === "update_prices" || type === "gis_overlay_refresh") && sameType >= 1) {
     alert(`此類型最多只能有 1 個命令`);
     return;
   }
@@ -2089,6 +2085,8 @@ window.schedAddCmd = function (type) {
     _schedDraft.commands.push({ type: "verify_alive", interval_hr: 24 });
   } else if (type === "update_prices") {
     _schedDraft.commands.push({ type: "update_prices", interval_hr: 720 });
+  } else if (type === "gis_overlay_refresh") {
+    _schedDraft.commands.push({ type: "gis_overlay_refresh", interval_hr: 720, layers: [] });
   } else {
     // scan: 預設三個來源都勾（591 + 永慶 + 信義）
     _schedDraft.commands.push({

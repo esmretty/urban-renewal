@@ -440,78 +440,9 @@ def _disk_cache_clear(layer: str) -> int:
     return count
 
 
-# ── Scheduler config (settings/gis_overlay_scheduler) ─────────────────
-# Active 模式：cache file 永不過期；只有 admin 手動點「清除 cache」或 scheduler 時間到
-# 才執行 _disk_cache_clear (rmtree)，下次 user 看才重抓上游
-def _load_overlay_scheduler() -> dict:
-    """讀 Firestore settings/gis_overlay_scheduler；不存在回預設 (停用)。"""
-    default = {
-        "enabled": False,
-        "interval_days": 30,            # 15 / 30 / 60 / 180
-        "layers": [],                   # list of layer name (空 = 不影響任何 layer)
-        "last_run_at": None,            # ISO timestamp，scheduler 上次清 cache 完成時間
-    }
-    try:
-        from database.db import get_firestore
-        doc = get_firestore().collection("settings").document("gis_overlay_scheduler").get()
-        if doc.exists:
-            d = doc.to_dict() or {}
-            for k, v in default.items():
-                if k not in d: d[k] = v
-            return d
-    except Exception as e:
-        logger.debug(f"load gis_overlay_scheduler fail: {e}")
-    return default
-
-
-def _save_overlay_scheduler_field(field: str, value) -> None:
-    """更新 settings/gis_overlay_scheduler 單一欄位 (merge)。"""
-    try:
-        from database.db import get_firestore
-        get_firestore().collection("settings").document("gis_overlay_scheduler").set(
-            {field: value}, merge=True,
-        )
-    except Exception as e:
-        logger.warning(f"update gis_overlay_scheduler.{field} fail: {e}")
-
-
-async def _gis_overlay_scheduler_loop():
-    """Background runner — 每 1 hr check scheduler 設定，到時間了就 rmtree 指定 layer cache。
-    用戶選 active 模式：cache 永不 lazy expire，只有 scheduler 或手動才會清。"""
-    import asyncio as _asyncio
-    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
-    while True:
-        try:
-            await _asyncio.sleep(3600)   # 每 1 小時 check 一次 (interval_days 級別不需要更頻繁)
-        except _asyncio.CancelledError:
-            logger.info("[gis_overlay_scheduler] loop cancelled")
-            break
-        try:
-            cfg = _load_overlay_scheduler()
-            if not cfg.get("enabled"):
-                continue
-            layers = cfg.get("layers") or []
-            if not layers:
-                continue
-            interval_days = int(cfg.get("interval_days") or 30)
-            last_run = cfg.get("last_run_at")
-            now_utc = _dt.now(_tz.utc)
-            if last_run:
-                try:
-                    last_dt = _dt.fromisoformat(last_run.replace("Z", "+00:00"))
-                    if (now_utc - last_dt) < _td(days=interval_days):
-                        continue   # 還沒到下次 refresh 時間
-                except Exception as e:
-                    logger.debug(f"parse last_run_at fail (treat as never run): {e}")
-            # 執行 refresh
-            total_deleted = 0
-            for name in layers:
-                if name in _LAYER_DEFS:
-                    total_deleted += _disk_cache_clear(name)
-            _save_overlay_scheduler_field("last_run_at", now_utc.isoformat())
-            logger.info(f"[gis_overlay_scheduler] refresh 完成: {len(layers)} layers, 共刪除 {total_deleted} 個 file")
-        except Exception as e:
-            logger.exception(f"[gis_overlay_scheduler] loop error: {e}")
+# 註：gis_overlay_refresh scheduler 已整合進既有 settings/scheduler 系統 (跟更新預售屋單價同
+# 格式)，cmd type='gis_overlay_refresh'，由 api/app.py 的 _scheduled_scrape_loop 統一驅動。
+# 本 file 只保留 _disk_cache_clear helper 給 scheduler runner / 手動 admin endpoint 共用。
 
 
 def _fetch_ntpcurinfo_cadastral(cfg: dict, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
@@ -796,7 +727,8 @@ from api.auth import require_admin as _require_admin
 
 @router.get("/admin/gis_overlay/cache_stats")
 async def admin_cache_stats(admin: dict = _Depends(_require_admin)):
-    """每 layer 的 disk cache 統計 (中文名 / file 數 / total bytes / 最舊 cache mtime)。"""
+    """每 layer 的 disk cache 統計 (中文名 / file 數 / total bytes / 最舊 cache mtime)。
+    scheduler 部分由既有 /admin/scheduler/status 提供 (cmd type='gis_overlay_refresh')。"""
     out = []
     for name in _disk_cache_layers():
         cfg = _LAYER_DEFS[name]
@@ -808,20 +740,7 @@ async def admin_cache_stats(admin: dict = _Depends(_require_admin)):
             "total_bytes": stats["total_bytes"],
             "oldest_mtime": stats["oldest_mtime"],
         })
-    sched = _load_overlay_scheduler()
-    # 計算下次 scheduler 預期執行時間
-    next_run_at = None
-    if sched.get("enabled") and sched.get("layers"):
-        if sched.get("last_run_at"):
-            try:
-                from datetime import datetime as _dt, timezone as _tz, timedelta as _td
-                last_dt = _dt.fromisoformat(sched["last_run_at"].replace("Z", "+00:00"))
-                next_run_at = (last_dt + _td(days=int(sched["interval_days"]))).isoformat()
-            except Exception:
-                pass
-        else:
-            next_run_at = "下個小時 (尚未執行過)"
-    return {"layers": out, "scheduler": sched, "next_run_at": next_run_at}
+    return {"layers": out}
 
 
 from pydantic import BaseModel as _BaseModel
@@ -846,34 +765,5 @@ async def admin_refresh_layers(body: _RefreshReq, admin: dict = _Depends(_requir
     return {"results": out}
 
 
-class _SchedulerReq(_BaseModel):
-    enabled: bool
-    interval_days: int
-    layers: _List[str]
-
-
-_ALLOWED_INTERVAL_DAYS = {15, 30, 60, 180}
-
-
-@router.post("/admin/gis_overlay/scheduler")
-async def admin_set_scheduler(body: _SchedulerReq, admin: dict = _Depends(_require_admin)):
-    """更新 settings/gis_overlay_scheduler config。
-    啟用 + interval_days 立即影響所有 disk cache 的 TTL (lazy expiry，不需 background runner)。"""
-    if body.interval_days not in _ALLOWED_INTERVAL_DAYS:
-        raise HTTPException(400, f"interval_days 必須是 {sorted(_ALLOWED_INTERVAL_DAYS)} 之一")
-    valid = set(_disk_cache_layers())
-    invalid = [name for name in body.layers if name not in valid]
-    if invalid:
-        raise HTTPException(400, f"不存在的 layer: {invalid}")
-    try:
-        from database.db import get_firestore
-        # merge=True 保留既有 last_run_at；如果 admin 改設定 layers/interval 想立刻重算下次時間
-        # 可由 admin 額外觸發 manual refresh，那會更新 last_run_at
-        get_firestore().collection("settings").document("gis_overlay_scheduler").set({
-            "enabled": bool(body.enabled),
-            "interval_days": int(body.interval_days),
-            "layers": list(body.layers),
-        }, merge=True)
-    except Exception as e:
-        raise HTTPException(500, f"寫 settings 失敗: {e}")
-    return {"status": "ok", "config": _load_overlay_scheduler()}
+# 註：獨立 /admin/gis_overlay/scheduler endpoint 已移除。
+# scheduler 設定改透過既有 /admin/scheduler/config 統一處理 (cmd type='gis_overlay_refresh')。

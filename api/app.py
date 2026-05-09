@@ -814,8 +814,9 @@ async def _scheduled_scrape_loop():
             scan_en = bool(cfg.get("scan_enabled", legacy_en))
             verify_en = bool(cfg.get("verify_alive_enabled", legacy_en))
             update_prices_en = bool(cfg.get("update_prices_enabled", legacy_en))
-            if not (scan_en or verify_en or update_prices_en):
-                continue   # 三個 type 都關，沒事做
+            gis_overlay_en = bool(cfg.get("gis_overlay_refresh_enabled", legacy_en))
+            if not (scan_en or verify_en or update_prices_en or gis_overlay_en):
+                continue   # 全部 type 都關，沒事做
             if _scrape_running:
                 continue   # 上次還沒跑完，等下個 tick
             cmds = cfg.get("commands") or []
@@ -832,6 +833,7 @@ async def _scheduled_scrape_loop():
                 if cmd_type == "scan" and not scan_en: continue
                 if cmd_type == "verify_alive" and not verify_en: continue
                 if cmd_type == "update_prices" and not update_prices_en: continue
+                if cmd_type == "gis_overlay_refresh" and not gis_overlay_en: continue
                 interval_hr = int(cmd.get("interval_hr") or cfg.get("interval_hr") or 24)
                 state = _cmd_state_get(idx)
                 nxt = state.get("next_due_at")
@@ -897,6 +899,27 @@ async def _scheduled_scrape_loop():
                     last_run_at=now_tw_iso(),
                     last_status=_scheduler_last_status,
                     next_due_at=_next_interval_boundary(now_tw(), _u_interval).isoformat(),
+                )
+                continue
+
+            if cmd_type == "gis_overlay_refresh":
+                logger.info(f"[scheduler] 命令 {due_idx} 觸發：更新圖層 cache")
+                from api.gis_overlay import _disk_cache_clear
+                target_layers = list(due_cmd.get("layers") or [])
+                total_deleted = 0
+                for name in target_layers:
+                    try:
+                        total_deleted += _disk_cache_clear(name)
+                    except Exception as e:
+                        logger.warning(f"[scheduler] gis_overlay_refresh 清 {name} 失敗: {e}")
+                _scheduler_last_status = (
+                    f"更新圖層：{len(target_layers)} 個 layer 共刪除 {total_deleted} 個 cache file"
+                )
+                _g_interval = int(due_cmd.get("interval_hr") or 720)
+                _cmd_state_set(due_idx,
+                    last_run_at=now_tw_iso(),
+                    last_status=_scheduler_last_status,
+                    next_due_at=_next_interval_boundary(now_tw(), _g_interval).isoformat(),
                 )
                 continue
 
@@ -1034,19 +1057,15 @@ async def lifespan(app: FastAPI):
         logger.info("[scheduler] DISABLE_SCHEDULER=true，本次啟動不執行定時 batch（本機 debug 模式）")
         sched_task = None
         retry_task = None
-        gis_overlay_task = None
     else:
         sched_task = asyncio.create_task(_scheduled_scrape_loop())
         logger.info("[scheduler] 定時 batch loop 已啟動（設定全在 Firestore settings/scheduler）")
         retry_task = asyncio.create_task(_retry_queue_loop())
         logger.info("[retry-queue] 失敗重試 loop 已啟動（每 60 秒掃 due，10 分鐘後重抓）")
-        from api.gis_overlay import _gis_overlay_scheduler_loop
-        gis_overlay_task = asyncio.create_task(_gis_overlay_scheduler_loop())
-        logger.info("[gis_overlay] scheduler loop 已啟動（每小時 check settings/gis_overlay_scheduler）")
     try:
         yield
     finally:
-        for t in (sched_task, retry_task, gis_overlay_task):
+        for t in (sched_task, retry_task):
             if t:
                 t.cancel()
                 try: await t
@@ -1785,10 +1804,27 @@ async def admin_delete_property(property_id: str, admin: dict = Depends(require_
     return {"status": "ok", "deleted": property_id}
 
 
+def _gis_overlay_layers_for_admin() -> list:
+    from api.gis_overlay import _disk_cache_layers
+    return _disk_cache_layers()
+
+_LAYER_DEFS_DISPLAY: dict = {}   # populated on first call below
+
+
+def _ensure_layer_display_map() -> None:
+    """lazy init layer display name map (避免 import 順序問題)。"""
+    global _LAYER_DEFS_DISPLAY
+    if _LAYER_DEFS_DISPLAY:
+        return
+    from api.gis_overlay import _LAYER_DEFS as _ldef
+    _LAYER_DEFS_DISPLAY = {n: cfg.get("display_name", n) for n, cfg in _ldef.items()}
+
+
 @app.get("/admin/scheduler/status")
 async def scheduler_status(admin: dict = Depends(require_admin)):
     """回傳定時 batch 目前狀態 + 設定，給 admin UI 顯示。"""
     from config import TARGET_REGIONS
+    _ensure_layer_display_map()
     cfg = _load_scheduler_config()
     # 讀 per-cmd 狀態 + last_verify_alive_at
     state_doc = get_firestore().collection("settings").document("scheduler_state").get()
@@ -1807,6 +1843,7 @@ async def scheduler_status(admin: dict = Depends(require_admin)):
         "scan_enabled": bool(cfg.get("scan_enabled", legacy_en)),        # per-type
         "verify_alive_enabled": bool(cfg.get("verify_alive_enabled", legacy_en)),
         "update_prices_enabled": bool(cfg.get("update_prices_enabled", legacy_en)),
+        "gis_overlay_refresh_enabled": bool(cfg.get("gis_overlay_refresh_enabled", legacy_en)),
         "interval_hr": int(cfg.get("interval_hr") or 1),
         "commands": cmds_with_state,
         "last_run_at": _scheduler_last_run_at,
@@ -1820,6 +1857,11 @@ async def scheduler_status(admin: dict = Depends(require_admin)):
         "allowed_interval_hr": list(SCHEDULER_ALLOWED_INTERVAL_HR),
         "allowed_verify_interval_hr": list(SCHEDULER_VERIFY_INTERVAL_HR),
         "allowed_update_prices_interval_hr": list(SCHEDULER_UPDATE_PRICES_INTERVAL_HR),
+        "allowed_gis_overlay_interval_hr": list(SCHEDULER_GIS_OVERLAY_INTERVAL_HR),
+        "gis_overlay_layers": [
+            {"layer": n, "display_name": _LAYER_DEFS_DISPLAY.get(n, n)}
+            for n in _gis_overlay_layers_for_admin()
+        ],
         "max_commands": SCHEDULER_MAX_COMMANDS,
         "max_districts_per_command": SCHEDULER_MAX_DISTRICTS_PER_CMD,
         "inter_command_sleep_sec": SCHEDULER_INTER_COMMAND_SLEEP_SEC,
@@ -2282,12 +2324,15 @@ async def scheduler_toggle(body: SchedulerToggleReq, admin: dict = Depends(requi
         update["verify_alive_enabled"] = body.enabled
     elif t == "update_prices":
         update["update_prices_enabled"] = body.enabled
+    elif t == "gis_overlay_refresh":
+        update["gis_overlay_refresh_enabled"] = body.enabled
     else:
-        # legacy：三個都 toggle，並維持舊 enabled 欄位
+        # legacy：四個都 toggle，並維持舊 enabled 欄位
         update["enabled"] = body.enabled
         update["scan_enabled"] = body.enabled
         update["verify_alive_enabled"] = body.enabled
         update["update_prices_enabled"] = body.enabled
+        update["gis_overlay_refresh_enabled"] = body.enabled
     get_firestore().collection("settings").document("scheduler").set(update, merge=True)
     logger.warning("[scheduler] %s 設定 type=%s enabled=%s", admin.get("email"), t or "all", body.enabled)
     if body.enabled and _sched_wake_event is not None:
@@ -2296,7 +2341,8 @@ async def scheduler_toggle(body: SchedulerToggleReq, admin: dict = Depends(requi
 
 
 class CommandSpec(BaseModel):
-    # type: "scan" = 掃描新物件（既有），"verify_alive" = 偵測下架
+    # type: "scan" = 掃描新物件，"verify_alive" = 偵測下架, "update_prices" = 更新預售屋單價,
+    #       "gis_overlay_refresh" = 更新圖層 cache (清掉指定 layer disk cache)
     type: Optional[str] = "scan"
     interval_hr: Optional[int] = None   # per-command interval；None 表示用全域 default
 
@@ -2305,6 +2351,8 @@ class CommandSpec(BaseModel):
     limit: Optional[int] = None
     sources: Optional[List[str]] = None
     source: Optional[str] = None        # 舊欄位 backward compat
+    # 「更新圖層」用：
+    layers: Optional[List[str]] = None
 
 
 class SchedulerConfigReq(BaseModel):
@@ -2314,6 +2362,7 @@ class SchedulerConfigReq(BaseModel):
 
 SCHEDULER_VERIFY_INTERVAL_HR = (12, 24, 72, 360)   # 偵測下架可選的間隔
 SCHEDULER_UPDATE_PRICES_INTERVAL_HR = (24, 168, 720)   # 更新單價可選間隔（每天/週/月）
+SCHEDULER_GIS_OVERLAY_INTERVAL_HR = (360, 720, 1440, 4320)   # 更新圖層 cache：15/30/60/180 天
 
 
 @app.post("/admin/scheduler/config")
@@ -2321,7 +2370,7 @@ async def scheduler_set_config(body: SchedulerConfigReq, admin: dict = Depends(r
     """套用 admin UI 整份排程設定（commands list；每命令各自 interval）。"""
     from config import TARGET_REGIONS
     # 容量限制：scan 最多 SCHEDULER_MAX_COMMANDS 個、verify_alive 1 個、update_prices 1 個
-    type_counts = {"scan": 0, "verify_alive": 0, "update_prices": 0}
+    type_counts = {"scan": 0, "verify_alive": 0, "update_prices": 0, "gis_overlay_refresh": 0}
     for c in body.commands:
         t = (c.type or "scan").lower()
         if t in type_counts:
@@ -2332,13 +2381,18 @@ async def scheduler_set_config(body: SchedulerConfigReq, admin: dict = Depends(r
         raise HTTPException(400, "偵測下架命令最多 1 個")
     if type_counts["update_prices"] > 1:
         raise HTTPException(400, "更新預售屋單價命令最多 1 個")
+    if type_counts["gis_overlay_refresh"] > 1:
+        raise HTTPException(400, "更新圖層命令最多 1 個")
     allowed = {d for r in TARGET_REGIONS.values() for d in (r.get("districts") or {}).keys()}
     cleaned = []
     VALID_SOURCES = ("591", "yongqing", "sinyi")
+    # 圖層更新合法 layer 清單（從 gis_overlay 拿）
+    from api.gis_overlay import _disk_cache_layers
+    valid_overlay_layers = set(_disk_cache_layers())
     for idx, c in enumerate(body.commands):
         cmd_type = (c.type or "scan").lower()
-        if cmd_type not in ("scan", "verify_alive", "update_prices"):
-            raise HTTPException(400, f"命令 {idx+1}：type 必須是 scan / verify_alive / update_prices（收到 {c.type!r}）")
+        if cmd_type not in ("scan", "verify_alive", "update_prices", "gis_overlay_refresh"):
+            raise HTTPException(400, f"命令 {idx+1}：type 必須是 scan / verify_alive / update_prices / gis_overlay_refresh（收到 {c.type!r}）")
 
         if cmd_type == "scan":
             # 掃描新物件：要 districts + limit + sources
@@ -2392,6 +2446,23 @@ async def scheduler_set_config(body: SchedulerConfigReq, admin: dict = Depends(r
             cleaned.append({
                 "type": "update_prices",
                 "interval_hr": interval_hr,
+            })
+        elif cmd_type == "gis_overlay_refresh":
+            # 更新圖層 cache：要 interval_hr + layers list
+            interval_hr = int(c.interval_hr or 720)
+            if interval_hr not in SCHEDULER_GIS_OVERLAY_INTERVAL_HR:
+                raise HTTPException(
+                    400,
+                    f"命令 {idx+1}（更新圖層）：interval_hr 必須為 {list(SCHEDULER_GIS_OVERLAY_INTERVAL_HR)}",
+                )
+            layers = c.layers or []
+            invalid = [n for n in layers if n not in valid_overlay_layers]
+            if invalid:
+                raise HTTPException(400, f"命令 {idx+1}（更新圖層）：不存在的 layer {invalid}")
+            cleaned.append({
+                "type": "gis_overlay_refresh",
+                "interval_hr": interval_hr,
+                "layers": list(layers),
             })
         else:
             # verify_alive：只要 interval_hr
