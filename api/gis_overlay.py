@@ -344,8 +344,57 @@ def _get_ntpcurinfo_token() -> tuple[Optional[str], Optional[str]]:
     return None, None
 
 
+def _bbox_to_tile_xyz(bbox: str) -> Optional[tuple[int, int, int]]:
+    """從 web mercator bbox 反算 tile (z, y, x)。Leaflet 256x256 tile 跟 web mercator
+    tile 1:1 對應；只在 Leaflet 預設 tileSize=256 + WMS standard tile bbox 才精確。"""
+    import math
+    try:
+        parts = [float(v) for v in bbox.split(",")]
+        if len(parts) != 4: return None
+        xmin, ymin, xmax, ymax = parts
+    except ValueError:
+        return None
+    EARTH = 20037508.342789244
+    span = xmax - xmin
+    if span <= 0: return None
+    z = round(math.log2(2 * EARTH / span))
+    if z < 0 or z > 22: return None
+    n = 2 ** z
+    full = 2 * EARTH / n
+    x = round((xmin + EARTH) / full)
+    y = round((EARTH - ymax) / full)
+    if x < 0 or x >= n or y < 0 or y >= n:
+        return None
+    return (z, y, x)
+
+
+# Disk cache for NTPC cadastral — Plan B (lazy populate)
+# user 滑到哪 cache 哪，不主動 batch download，避免 NTPC 偵測 burst pattern。
+# 1 month 後熱區自然接近 100% cached，平日 NTPC 流量 = 平常 user browse 流量。
+import os as _os
+from pathlib import Path as _Path
+_CADASTRAL_CACHE_DIR = _Path(__file__).resolve().parent.parent / "data" / "cache" / "cadastral_ntpc"
+_CADASTRAL_CACHE_TTL = 30 * 24 * 3600   # 30 天
+
+
 def _fetch_ntpcurinfo_cadastral(cfg: dict, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
-    """打 NtpcURInfo 地籍圖 export — 個別地塊邊界 + 地號 polygon (新北市)。"""
+    """打 NtpcURInfo 地籍圖 export — 個別地塊邊界 + 地號 polygon (新北市)。
+    加 disk cache：tile (z,y,x) 有 cache 直接回，miss 才 fetch NTPC + 存 disk。"""
+    import time as _t
+    # tile xyz reverse calc → disk cache key
+    tile = _bbox_to_tile_xyz(bbox)
+    cache_path = None
+    if tile and width == 256 and height == 256:   # Leaflet 預設 256x256 才用 disk cache (其他 size 走 memory cache 即可)
+        z, y, x = tile
+        cache_path = _CADASTRAL_CACHE_DIR / f"{z}" / f"{y}" / f"{x}.png"
+        if cache_path.exists():
+            mtime = cache_path.stat().st_mtime
+            if (_t.time() - mtime) < _CADASTRAL_CACHE_TTL:
+                try:
+                    return cache_path.read_bytes()
+                except Exception as e:
+                    logger.debug(f"disk cache read fail (refetching): {e}")
+
     token, mapsrv = _get_ntpcurinfo_token()
     if not token or not mapsrv:
         return None
@@ -371,13 +420,19 @@ def _fetch_ntpcurinfo_cadastral(cfg: dict, bbox: str, width: int, height: int, s
             return None
         ct = r.headers.get("content-type", "")
         if "image" not in ct:
-            # token 過期 → invalidate cache 下次自動 refresh
             if "json" in ct:
                 logger.debug(f"NtpcURInfo cadastral 拒絕 (可能 token 過期): {r.text[:200]}")
-                _NTPCURINFO_CACHE["agstoken"] = None
+                _NTPCURINFO_CACHE["agstoken"] = None   # invalidate token, 下次 refresh
             return None
         if len(r.content) < 100:
             return None
+        # 寫 disk cache (best-effort，失敗不影響回傳)
+        if cache_path is not None:
+            try:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                cache_path.write_bytes(r.content)
+            except Exception as e:
+                logger.debug(f"disk cache write fail: {e}")
         return r.content
     except Exception as e:
         logger.warning(f"NtpcURInfo cadastral fetch 例外: {e}")

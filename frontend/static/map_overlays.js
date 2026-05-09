@@ -29,18 +29,18 @@
     building_floors: {
       label: '建物套繪圖',
       paneZ: 402,
-      backends: [{ name: 'building_floors_tpe', minZoom: 17 }],
-      hint: 'z=17+，僅台北市',
+      backends: [{ name: 'building_floors_tpe', minZoom: 18 }],
+      hint: 'z=18+，僅台北市',
     },
     cadastral: {
       label: '地籍圖',
       paneZ: 403,
       backends: [
-        { name: 'cadastral_lines_tpe', minZoom: 17 },     // 台北 GeoServer 詳細地籍線
-        { name: 'cadastral_numbers_tpe', minZoom: 17 },   // 台北 GeoServer 地號文字
-        { name: 'cadastral_full_ntpc', minZoom: 17 },     // 新北個別地塊+地號 (NTPC ArcGIS)
+        { name: 'cadastral_lines_tpe', minZoom: 18 },     // 台北 GeoServer 詳細地籍線
+        { name: 'cadastral_numbers_tpe', minZoom: 18 },   // 台北 GeoServer 地號文字
+        { name: 'cadastral_full_ntpc', minZoom: 18 },     // 新北個別地塊+地號 (NTPC ArcGIS)
       ],
-      hint: 'z=17+',
+      hint: 'z=18+',
     },
   };
 
