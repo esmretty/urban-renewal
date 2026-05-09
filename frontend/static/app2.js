@@ -1199,6 +1199,9 @@
     btn.classList.toggle('v2-drawer__fav--active', inW);
     const lbl = btn.querySelector('.v2-drawer__fav-label');
     if (lbl) lbl.textContent = inW ? '從最愛移除' : '加入最愛';
+    // 「在地圖上查看」按鈕：物件有座標才顯示
+    const mapBtn = $('#v2-drawer-map');
+    if (mapBtn) mapBtn.style.display = (p.latitude && p.longitude) ? '' : 'none';
     // 來源連結 (591/永慶/信義)：放在 fav button 旁，drawer header 上 (對齊 v1 modal header)
     const srcWrap = $('#v2-drawer-sources');
     if (srcWrap) {
@@ -1221,6 +1224,45 @@
     if (p) _updateFavBtn(p);
   }
 
+  // 「在地圖上查看」detail header 按鈕 → 切地圖模式 + center 物件位置 + z=18 + 自動勾分區/地籍/都更
+  async function viewOnMap() {
+    const id = state.selectedId;
+    if (!id) return;
+    const p = state.allProperties.find(x => (x.source_id || x.id) === id);
+    if (!p || !p.latitude || !p.longitude) {
+      toast('物件沒有座標，無法切到地圖模式', 'error');
+      return;
+    }
+    closeDetail();   // 關掉 drawer
+    // setViewMode 在 map_mode.js IIFE 內 attach 到 window.v2 (跨 module)
+    if (window.v2 && typeof window.v2.setViewMode === 'function') {
+      window.v2.setViewMode('map');
+    } else {
+      toast('地圖模式未啟用', 'error');
+      return;
+    }
+    // 等 map init 完成 + map_overlays.js 套用後再操作
+    setTimeout(() => {
+      const m = state._mapInst;
+      if (!m) return;
+      try {
+        m.setView([p.latitude, p.longitude], 18);
+      } catch (e) { console.warn('setView fail', e); }
+      // 自動勾「土地分區」+「地籍圖」+「都更圖層 group」(10 sub)
+      const cbZoning = document.querySelector('input[data-overlay="zoning"]');
+      const cbCadastral = document.querySelector('input[data-overlay="cadastral"]');
+      [cbZoning, cbCadastral].forEach(cb => {
+        if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change', { bubbles: true })); }
+      });
+      // 都更：勾「全選」(等同勾 10 個 sub)
+      const cbRenewalAll = document.querySelector('input[data-renewal-all]');
+      if (cbRenewalAll && !cbRenewalAll.checked) {
+        cbRenewalAll.checked = true;
+        cbRenewalAll.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }, 300);
+  }
+
   function closeDetail() {
     // 對齊 v1：關閉時若 ephemeral edit + 不在 watchlist → toast 提示沒儲存
     const id = state.selectedId;
@@ -1234,9 +1276,11 @@
     $('#v2-drawer').classList.remove('v2-open');
     $('#v2-drawer-backdrop').classList.remove('v2-open');
     state.selectedId = null;
-    // 收起 fav button + sources
+    // 收起 fav button + map button + sources
     const fav = $('#v2-drawer-fav');
     if (fav) fav.style.display = 'none';
+    const mapBtn = $('#v2-drawer-map');
+    if (mapBtn) mapBtn.style.display = 'none';
     const srcWrap = $('#v2-drawer-sources');
     if (srcWrap) { srcWrap.innerHTML = ''; srcWrap.style.display = 'none'; }
   }
@@ -3194,7 +3238,7 @@
   window.v2 = {
     switchView, toggleDistrict, applyFilters, applySort, runSearch,
     resetFilters, gotoPage, openSidebar, closeSidebar,
-    openDetail, closeDetail, toggleWatchlist, toggleDetailWatchlist, logout,
+    openDetail, closeDetail, toggleWatchlist, toggleDetailWatchlist, viewOnMap, logout,
     toggleAllFloors, onFloorChange,
     toggleAllInCity, toggleSortDir,
     triggerScrapeUrl, triggerManualAnalyze, populateManualDistricts,
