@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>個人地圖 — 地籍 + 物件追蹤</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  body { margin: 0; font-family: system-ui, -apple-system, "Microsoft JhengHei", sans-serif; }
+  #map { height: 100vh; width: 100vw; }
+  .info-popup { font-size: 13px; line-height: 1.6; min-width: 200px; }
+  .info-popup b { color: #c83a3a; font-size: 14px; }
+  .info-popup .note { color: #555; }
+  .zoom-indicator {
+    background: rgba(255, 255, 255, 0.9);
+    padding: 3px 8px;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+    font: 11px/1.4 monospace;
+    color: #333;
+  }
+  .leaflet-control-layers-list { font-size: 13px; }
+  .leaflet-control-layers-separator { margin: 6px 0; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ═════════════════════════════════════════════════════════════
+// 你的物件清單 — 自己改這個 array 即可
+// lat / lng 取得方法：
+//   Google Maps → 對該位置「右鍵」→ 點座標數字會 copy 到 clipboard
+//   或開瀏覽器 console 在這個地圖點擊地圖：map.on('click', e => console.log(e.latlng))
+// ═════════════════════════════════════════════════════════════
+const myProperties = [
+  // 範例 — 換成你的物件
+  { name: '範例A', lat: 25.0140, lng: 121.4670, note: '板橋火車站附近, 2023買, 估值+15%' },
+  { name: '範例B', lat: 25.0125, lng: 121.4655, note: '觀察中' },
+];
+
+// ═════════════════════════════════════════════════════════════
+// 地圖初始化
+// ═════════════════════════════════════════════════════════════
+const map = L.map('map', {
+  maxZoom: 20,
+  zoomControl: true,
+}).setView([25.014, 121.464], 17);   // 預設板橋火車站, z=17
+
+// ── 底圖選項（NLSC + OSM 三選一） ──────────────────────────
+const baseEmap = L.tileLayer(
+  'https://wmts.nlsc.gov.tw/wmts/EMAP/default/EPSG:3857/{z}/{y}/{x}',
+  { attribution: '© 國土測繪中心', maxZoom: 20, maxNativeZoom: 19 }
+);
+const baseEmap6 = L.tileLayer(
+  'https://wmts.nlsc.gov.tw/wmts/EMAP6/default/EPSG:3857/{z}/{y}/{x}',
+  { attribution: '© 國土測繪中心 (無等高線)', maxZoom: 20, maxNativeZoom: 19 }
+);
+const baseOsm = L.tileLayer(
+  'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  { attribution: '© OpenStreetMap', maxZoom: 20, maxNativeZoom: 19 }
+);
+const baseSat = L.tileLayer(
+  'https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/EPSG:3857/{z}/{y}/{x}',
+  { attribution: 'NLSC 正射影像', maxZoom: 20, maxNativeZoom: 19 }
+);
+baseEmap.addTo(map);   // 預設 NLSC EMAP
+
+// ── 疊圖選項（NLSC 公開層；個別地塊+地號 政府不對民間開放）──────
+//
+// 重要：LANDSECT 是「地段外圍圖（段籍圖）」— 一段含數百地號，**不是個別地塊**
+// 「個別地塊 + 地號」layer 限政府機關/學術單位/國營機構申請，民間付費走
+// 內政部地政司「地政電子資料流通服務網」每筆 ~1 NTD
+// ───────────────────────────────────────────────────────
+const overlayLandsect = L.tileLayer(
+  'https://wmts.nlsc.gov.tw/wmts/LANDSECT/default/EPSG:3857/{z}/{y}/{x}',
+  { opacity: 0.7, maxZoom: 20, maxNativeZoom: 19 }
+);
+const overlayLandPublic = L.tileLayer(
+  'https://wmts.nlsc.gov.tw/wmts/LAND_OPENDATA/default/EPSG:3857/{z}/{y}/{x}',
+  { opacity: 0.6, maxZoom: 20, maxNativeZoom: 19 }
+);
+const overlayBuildings = L.tileLayer(
+  'https://wmts.nlsc.gov.tw/wmts/BUILDX/default/EPSG:3857/{z}/{y}/{x}',
+  { opacity: 0.55, maxZoom: 20, maxNativeZoom: 19 }
+);
+const overlayUrbanPlan = L.tileLayer(
+  'https://wmts.nlsc.gov.tw/wmts/nURBAN1/default/EPSG:3857/{z}/{y}/{x}',
+  { opacity: 0.5, maxZoom: 20, maxNativeZoom: 19 }
+);
+
+overlayLandsect.addTo(map);   // 預設打開地籍段邊界
+
+// ── 圖層控制（右上） ─────────────────────────────────────
+L.control.layers(
+  {
+    'NLSC 通用電子地圖': baseEmap,
+    'NLSC 無等高線版': baseEmap6,
+    'NLSC 衛星正射': baseSat,
+    'OpenStreetMap': baseOsm,
+  },
+  {
+    '地籍段邊界 (LANDSECT)': overlayLandsect,
+    '公有土地地籍 (LAND_OPENDATA)': overlayLandPublic,
+    '建物外框 (BUILDX)': overlayBuildings,
+    '非都市使用分區 (nURBAN1)': overlayUrbanPlan,
+  },
+  { position: 'topright', collapsed: false }
+).addTo(map);
+
+// ── 左下 zoom 數字指示器 ──────────────────────────────────
+const zoomCtrl = L.control({ position: 'bottomleft' });
+zoomCtrl.onAdd = function () {
+  const el = L.DomUtil.create('div', 'zoom-indicator');
+  const update = () => { el.textContent = 'z=' + map.getZoom(); };
+  update();
+  map.on('zoomend', update);
+  return el;
+};
+zoomCtrl.addTo(map);
+
+// ── 點擊地圖 console 顯示座標（方便取座標填 myProperties） ────
+map.on('click', e => {
+  console.log(`座標：${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`);
+});
+
+// ── 物件 markers ─────────────────────────────────────
+myProperties.forEach(p => {
+  const popup = `
+    <div class="info-popup">
+      <b>${p.name}</b>
+      <div class="note">${p.note || ''}</div>
+      <div style="font-size:11px;color:#888;margin-top:4px;">
+        ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}
+      </div>
+    </div>`;
+  L.marker([p.lat, p.lng]).addTo(map).bindPopup(popup);
+});
+</script>
+</body>
+</html>

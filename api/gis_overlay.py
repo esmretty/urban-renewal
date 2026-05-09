@@ -69,11 +69,28 @@ _LAYER_DEFS: dict[str, dict] = {
     },
     # 台北市「已劃定」都市更新地區範圍 — 都發局 PlanTheme layer 0 (332 個 polygon)
     # attributes: PROJNUM (案號)、PLANDES (公告說明)、PLANDATE (公告日期)、PLANLEV
-    # 這是「政府已公告劃定」的都更地區；「審議/申請中個案」在 uro.gov.taipei 要另外 scrape
+    # 留著但 frontend 已不接 (用更完整的 redevelop_uro_tpe 取代，含審議中個案 + 整建住宅等 8 子類型)
     "renewal_planned_tpe": {
         "kind": "arcgis_export",
         "upstream": "https://www.historygis.udd.gov.taipei/arcgis/rest/services/UrbanPlan2/PlanTheme/MapServer/export",
         "layer_show": "0",
+    },
+    # 台北市都更審議 — zonegeo.udd.gov.taipei GeoServer Taipei:uro-redevelop-ALL-5
+    # 對齊 https://bim.udd.gov.taipei/UDDPlanMap/「都市更新審議」面板，含 8 個子類型疊圖：
+    #   layer=10 公劃更新地區(依都更條例)         紅色
+    #   layer=17 廢止89.91年公劃更新地區         深紅
+    #   layer=20 公告自劃單元(自劃事業權變計畫案件) 藍
+    #   layer=30 核准自劃單元                    橘
+    #   layer=40 都市計畫劃定更新地區
+    #   layer=42 (停止適用)107年公劃更新地區     黃
+    #   layer=44 高氯離子混凝土建築地區          褐
+    #   layer=48 迅行劃定更新地區                粉
+    # 點擊每個區塊 ID 在 https://gis.uro.taipei/showproj_uro.html?case_id=${ID} 看詳情
+    # 不加 cql_filter → GeoServer render 全部 8 子類型疊一起 (跟 UDDPlanMap 全勾的視覺一致)
+    "redevelop_uro_tpe": {
+        "kind": "wms",
+        "upstream": _TPE_WMS_URL,
+        "layers": "Taipei:uro-redevelop-ALL-5",
     },
     # NLSC 全國地籍段邊界 (LANDSECT) — 補新北地籍
     # 走 WMS (maps.nlsc.gov.tw/S_Maps/wms) 不是 WMTS：兩者是並存 OGC 標準不是升級關係。

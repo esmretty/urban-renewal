@@ -36,14 +36,13 @@
       label: '地籍圖',
       paneZ: 402,
       backends: [
-        // 主圖層：591 forward proxy (NLSC DMAPS 政府授權，雙北個別地塊+地號)
-        // 純 forward 不 cache；591 改設定時 tileerror handler 自動 silent skip
-        { name: 'cadastral_591', minZoom: 17 },
-        // 合法備援：台北 GeoServer 地籍 + 地號 (591 故障時 fallback 至少台北可看)
+        // 台北 GeoServer 地籍 + 地號 (合法 path，單台北詳細)
+        // 注意：cadastral_591 forward proxy 已 rollback (framework 盲點：591 license
+        // 來源未驗證；後端 layer def 留著供將來 verify 後可能重啟)
         { name: 'cadastral_lines_tpe', minZoom: 17 },
         { name: 'cadastral_numbers_tpe', minZoom: 17 },
       ],
-      hint: 'z=17+',
+      hint: 'z=17+，僅台北市',
     },
     building_floors: {
       label: '建物套繪圖',
@@ -54,10 +53,10 @@
       hint: 'z=17+，僅台北市',
     },
     renewal: {
-      label: '都更地區 (已劃定)',
+      label: '都更審議',
       paneZ: 404,
-      backends: ['renewal_planned_tpe'],
-      hint: '政府已公告劃定範圍；審議中個案下次補',
+      backends: ['redevelop_uro_tpe'],
+      hint: '僅台北市，含已劃定+審議中+核准自劃 8 子類型 (對齊 UDDPlanMap)',
     },
   };
 
