@@ -408,6 +408,76 @@ def _disk_cache_set(layer: str, z: int, y: int, x: int, content: bytes) -> None:
         logger.debug(f"disk cache write fail {p}: {e}")
 
 
+def _disk_cache_stats(layer: str) -> dict:
+    """回 layer 的 cache file 數 + total size (bytes) + oldest mtime。"""
+    base = _DISK_CACHE_BASE / layer
+    if not base.exists():
+        return {"file_count": 0, "total_bytes": 0, "oldest_mtime": None}
+    count, total, oldest = 0, 0, None
+    try:
+        for p in base.rglob("*.png"):
+            try:
+                st = p.stat()
+                count += 1
+                total += st.st_size
+                if oldest is None or st.st_mtime < oldest:
+                    oldest = st.st_mtime
+            except Exception:
+                continue
+    except Exception as e:
+        logger.debug(f"_disk_cache_stats fail: {e}")
+    return {"file_count": count, "total_bytes": total, "oldest_mtime": oldest}
+
+
+def _disk_cache_clear(layer: str) -> int:
+    """rmtree layer disk cache dir，回刪除 file 數量。"""
+    import shutil
+    base = _DISK_CACHE_BASE / layer
+    if not base.exists():
+        return 0
+    count = sum(1 for _ in base.rglob("*.png"))
+    try:
+        shutil.rmtree(base)
+    except Exception as e:
+        logger.warning(f"disk cache clear {layer} fail: {e}")
+        return 0
+    return count
+
+
+# ── Scheduler config (settings/gis_overlay_scheduler) ─────────────────
+# 啟用時，scheduler.interval_days override layer config 的 disk_cache_ttl_days
+# (lazy expiry — 不需要 background runner，TTL 改變即時生效)
+def _load_overlay_scheduler() -> dict:
+    """讀 Firestore settings/gis_overlay_scheduler；不存在回預設 (停用)。"""
+    default = {
+        "enabled": False,
+        "interval_days": 30,            # 15 / 30 / 60 / 180
+        "layers": [],                   # list of layer name (空 = 不影響任何 layer)
+    }
+    try:
+        from database.db import get_firestore
+        doc = get_firestore().collection("settings").document("gis_overlay_scheduler").get()
+        if doc.exists:
+            d = doc.to_dict() or {}
+            for k, v in default.items():
+                if k not in d: d[k] = v
+            return d
+    except Exception as e:
+        logger.debug(f"load gis_overlay_scheduler fail: {e}")
+    return default
+
+
+def _resolve_disk_ttl_days(layer: str, layer_default_ttl: int) -> int:
+    """看 scheduler config，啟用 + layer 在範圍 → 用 scheduler.interval_days；否則 layer 自己的。"""
+    cfg = _load_overlay_scheduler()
+    if cfg.get("enabled") and layer in (cfg.get("layers") or []):
+        try:
+            return int(cfg.get("interval_days") or layer_default_ttl)
+        except (TypeError, ValueError):
+            return layer_default_ttl
+    return layer_default_ttl
+
+
 def _fetch_ntpcurinfo_cadastral(cfg: dict, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
     """打 NtpcURInfo 地籍圖 export — 個別地塊邊界 + 地號 polygon (新北市)。
     Disk cache 由 endpoint 統一處理 (此 fn 純 fetch)。"""
@@ -633,10 +703,12 @@ async def gis_overlay(layer: str, request: Request) -> Response:
         if cached:
             return Response(content=cached, media_type="image/png", headers={"X-Cache": "HIT"})
 
-    # 2. disk cache (TTL 由 layer config "disk_cache_ttl_days" 指定，預設 30 天)
-    # 只對 Leaflet 預設 256×256 標準 tile request 才 cache (其他 size 是 ad-hoc)
+    # 2. disk cache (TTL 由 layer config + admin scheduler 共同決定)
+    #    scheduler 啟用 + layer 在範圍 → 用 scheduler.interval_days；否則 layer 自己的 disk_cache_ttl_days
+    # 只對 Leaflet 預設 256×256 標準 tile request 才 cache
     disk_cache_on = bool(cfg.get("disk_cache")) and width == 256 and height == 256
-    disk_ttl = cfg.get("disk_cache_ttl_days", _DISK_CACHE_DEFAULT_TTL_DAYS)
+    layer_default_ttl = cfg.get("disk_cache_ttl_days", _DISK_CACHE_DEFAULT_TTL_DAYS)
+    disk_ttl = _resolve_disk_ttl_days(layer, layer_default_ttl)
     tile_xyz = _bbox_to_tile_xyz(bbox) if disk_cache_on else None
     if disk_cache_on and tile_xyz:
         z, y, x = tile_xyz
@@ -676,3 +748,87 @@ async def gis_overlay(layer: str, request: Request) -> Response:
         media_type="image/png",
         headers={"Cache-Control": "no-store" if skip_cache else "max-age=600", "X-Cache": "BYPASS" if skip_cache else "MISS"},
     )
+
+
+# ── Admin endpoints (僅 admin 可存取) ─────────────────────────────────
+# 注意：此 file 沒 require_admin import，要從 api.auth 拿；放在 endpoint 上方
+def _disk_cache_layers() -> list[str]:
+    """列出所有有 disk_cache: True 設定的 layer name。"""
+    return [name for name, cfg in _LAYER_DEFS.items() if cfg.get("disk_cache")]
+
+
+from fastapi import Depends as _Depends
+from api.auth import require_admin as _require_admin
+
+
+@router.get("/admin/gis_overlay/cache_stats")
+async def admin_cache_stats(admin: dict = _Depends(_require_admin)):
+    """每 layer 的 disk cache 統計 (file 數 / total bytes / oldest mtime)。"""
+    out = []
+    for name in _disk_cache_layers():
+        cfg = _LAYER_DEFS[name]
+        layer_default_ttl = cfg.get("disk_cache_ttl_days", _DISK_CACHE_DEFAULT_TTL_DAYS)
+        effective_ttl = _resolve_disk_ttl_days(name, layer_default_ttl)
+        stats = _disk_cache_stats(name)
+        out.append({
+            "layer": name,
+            "file_count": stats["file_count"],
+            "total_bytes": stats["total_bytes"],
+            "oldest_mtime": stats["oldest_mtime"],
+            "default_ttl_days": layer_default_ttl,
+            "effective_ttl_days": effective_ttl,
+        })
+    return {"layers": out, "scheduler": _load_overlay_scheduler()}
+
+
+from pydantic import BaseModel as _BaseModel
+from typing import List as _List
+
+
+class _RefreshReq(_BaseModel):
+    layers: _List[str]
+
+
+@router.post("/admin/gis_overlay/refresh")
+async def admin_refresh_layers(body: _RefreshReq, admin: dict = _Depends(_require_admin)):
+    """手動清掉指定 layer 的 disk cache。下次 user 看時自動重抓 (Plan B 邏輯)。"""
+    valid = set(_disk_cache_layers())
+    out = []
+    for name in body.layers:
+        if name not in valid:
+            out.append({"layer": name, "deleted": 0, "error": "unknown layer"})
+            continue
+        deleted = _disk_cache_clear(name)
+        out.append({"layer": name, "deleted": deleted})
+    return {"results": out}
+
+
+class _SchedulerReq(_BaseModel):
+    enabled: bool
+    interval_days: int
+    layers: _List[str]
+
+
+_ALLOWED_INTERVAL_DAYS = {15, 30, 60, 180}
+
+
+@router.post("/admin/gis_overlay/scheduler")
+async def admin_set_scheduler(body: _SchedulerReq, admin: dict = _Depends(_require_admin)):
+    """更新 settings/gis_overlay_scheduler config。
+    啟用 + interval_days 立即影響所有 disk cache 的 TTL (lazy expiry，不需 background runner)。"""
+    if body.interval_days not in _ALLOWED_INTERVAL_DAYS:
+        raise HTTPException(400, f"interval_days 必須是 {sorted(_ALLOWED_INTERVAL_DAYS)} 之一")
+    valid = set(_disk_cache_layers())
+    invalid = [name for name in body.layers if name not in valid]
+    if invalid:
+        raise HTTPException(400, f"不存在的 layer: {invalid}")
+    try:
+        from database.db import get_firestore
+        get_firestore().collection("settings").document("gis_overlay_scheduler").set({
+            "enabled": bool(body.enabled),
+            "interval_days": int(body.interval_days),
+            "layers": list(body.layers),
+        })
+    except Exception as e:
+        raise HTTPException(500, f"寫 settings 失敗: {e}")
+    return {"status": "ok", "config": _load_overlay_scheduler()}

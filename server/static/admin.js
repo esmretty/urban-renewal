@@ -1569,6 +1569,163 @@ window.switchCmdTab = function (tab) {
   document.querySelectorAll(".cmd-pane").forEach(p => {
     p.classList.toggle("hidden", p.dataset.pane !== tab);
   });
+  if (tab === "update_layers") loadLayersTab();
+};
+
+// ── 更新圖層 tab ──────────────────────────────────────────────────
+let _layersStatsCache = null;
+
+async function loadLayersTab() {
+  const manualBox = document.getElementById("layers-manual-list");
+  const schedBox = document.getElementById("layers-scheduler-box");
+  if (manualBox) manualBox.innerHTML = "載入中…";
+  if (schedBox) schedBox.innerHTML = "載入中…";
+  try {
+    const r = await authedFetch("/admin/gis_overlay/cache_stats");
+    if (!r.ok) {
+      if (manualBox) manualBox.innerHTML = `<span style="color:#c0392b;">載入失敗 HTTP ${r.status}</span>`;
+      return;
+    }
+    const data = await r.json();
+    _layersStatsCache = data;
+    _renderLayersManual(data.layers || []);
+    _renderLayersScheduler(data.scheduler || {}, (data.layers || []).map(l => l.layer));
+  } catch (e) {
+    if (manualBox) manualBox.innerHTML = `<span style="color:#c0392b;">${esc(e.message)}</span>`;
+  }
+}
+
+function _fmtBytes(n) {
+  if (!n) return "0 B";
+  const u = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return n.toFixed(i ? 1 : 0) + " " + u[i];
+}
+
+function _fmtDaysAgo(mtime) {
+  if (!mtime) return "—";
+  const days = Math.floor((Date.now() / 1000 - mtime) / 86400);
+  return days <= 0 ? "今天" : `${days} 天前`;
+}
+
+function _renderLayersManual(layers) {
+  const box = document.getElementById("layers-manual-list");
+  if (!box) return;
+  if (!layers.length) {
+    box.innerHTML = "<i style='color:#888;'>沒有可 cache 的圖層</i>";
+    return;
+  }
+  box.innerHTML = layers.map(l => {
+    const ttlNote = l.effective_ttl_days !== l.default_ttl_days
+      ? `<span style="color:#c78a00;">TTL ${l.effective_ttl_days} 天 (scheduler 控制)</span>`
+      : `<span style="color:#888;">TTL ${l.default_ttl_days} 天</span>`;
+    return `<label style="display:block;">
+      <input type="checkbox" class="layer-cb" data-layer="${esc(l.layer)}">
+      <code style="font-size:12px;">${esc(l.layer)}</code>
+      <span style="color:#666; font-size:12px; margin-left:6px;">
+        ${l.file_count} files / ${_fmtBytes(l.total_bytes)} / 最舊 ${_fmtDaysAgo(l.oldest_mtime)}
+      </span>
+      <span style="font-size:11px; margin-left:6px;">${ttlNote}</span>
+    </label>`;
+  }).join("");
+}
+
+window.layersToggleAll = function (on) {
+  document.querySelectorAll(".layer-cb").forEach(cb => { cb.checked = !!on; });
+};
+
+window.runLayersRefresh = async function () {
+  const checked = Array.from(document.querySelectorAll(".layer-cb:checked")).map(cb => cb.dataset.layer);
+  const resultEl = document.getElementById("layers-refresh-result");
+  if (!checked.length) {
+    if (resultEl) resultEl.innerHTML = `<span style="color:#c78a00;">請先勾選至少一個圖層</span>`;
+    return;
+  }
+  if (!confirm(`清除以下 ${checked.length} 個圖層的 disk cache？\n\n${checked.join("\n")}\n\n下次 user 看時自動重抓最新版。`)) return;
+  if (resultEl) resultEl.textContent = "⏳ 清除中…";
+  try {
+    const r = await authedFetch("/admin/gis_overlay/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ layers: checked }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      if (resultEl) resultEl.innerHTML = `<span style="color:#c0392b;">失敗：${esc(data.detail || "")}</span>`;
+      return;
+    }
+    const total = (data.results || []).reduce((s, r) => s + (r.deleted || 0), 0);
+    const lines = (data.results || []).map(r =>
+      `<div>• ${esc(r.layer)}: 刪除 ${r.deleted} 個 file${r.error ? ` (${esc(r.error)})` : ""}</div>`
+    ).join("");
+    if (resultEl) resultEl.innerHTML = `<div style="color:#27ae60;">✓ 共刪除 ${total} 個 file</div>${lines}`;
+    // 重新載入 stats
+    setTimeout(loadLayersTab, 500);
+  } catch (e) {
+    if (resultEl) resultEl.innerHTML = `<span style="color:#c0392b;">${esc(e.message)}</span>`;
+  }
+};
+
+function _renderLayersScheduler(sched, allLayers) {
+  const box = document.getElementById("layers-scheduler-box");
+  if (!box) return;
+  const enabled = !!sched.enabled;
+  const interval = sched.interval_days || 30;
+  const selectedLayers = new Set(sched.layers || []);
+  const stateText = enabled ? "🟢 已啟用" : "⚪ 已停用";
+  const stateColor = enabled ? "#27ae60" : "#95a5a6";
+  const intervalOpts = [15, 30, 60, 180].map(d =>
+    `<option value="${d}"${d === interval ? " selected" : ""}>${d} 天</option>`
+  ).join("");
+  const layerCbs = allLayers.map(name =>
+    `<label style="display:block; font-size:12px; line-height:1.7;">
+      <input type="checkbox" class="sched-layer-cb" data-layer="${esc(name)}"${selectedLayers.has(name) ? " checked" : ""}>
+      <code>${esc(name)}</code>
+    </label>`
+  ).join("");
+  box.innerHTML = `
+    <div style="margin-bottom:10px;">
+      <b style="color:${stateColor}">${stateText}</b>
+      <span style="color:#666; font-size:12px; margin-left:6px;">啟用後 disk cache TTL 改用下方天數，不是 layer 內建值</span>
+    </div>
+    <div style="margin-bottom:10px;">
+      <label><input type="checkbox" id="sched-enabled-cb"${enabled ? " checked" : ""}> 啟用 scheduler</label>
+    </div>
+    <div style="margin-bottom:10px;">
+      <label>更新週期：<select id="sched-interval-select" style="padding:3px 8px;">${intervalOpts}</select></label>
+    </div>
+    <div style="margin-bottom:10px;">
+      <div style="font-size:12px; color:#555; margin-bottom:4px;">適用圖層：</div>
+      ${layerCbs}
+    </div>
+    <button onclick="saveLayersScheduler()" style="padding:6px 14px; background:#16a085; color:#fff; border:none; border-radius:4px; cursor:pointer;">儲存</button>
+    <span id="sched-save-result" style="font-size:12px; margin-left:8px;"></span>
+  `;
+}
+
+window.saveLayersScheduler = async function () {
+  const enabled = document.getElementById("sched-enabled-cb").checked;
+  const intervalDays = parseInt(document.getElementById("sched-interval-select").value, 10);
+  const layers = Array.from(document.querySelectorAll(".sched-layer-cb:checked")).map(cb => cb.dataset.layer);
+  const resEl = document.getElementById("sched-save-result");
+  if (resEl) resEl.textContent = "儲存中…";
+  try {
+    const r = await authedFetch("/admin/gis_overlay/scheduler", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled, interval_days: intervalDays, layers }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(data.detail || "")}</span>`;
+      return;
+    }
+    if (resEl) resEl.innerHTML = `<span style="color:#27ae60;">✓ 已儲存</span>`;
+    setTimeout(loadLayersTab, 500);
+  } catch (e) {
+    if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">✗ ${esc(e.message)}</span>`;
+  }
 };
 
 window.runUpdatePricesNow = async function () {

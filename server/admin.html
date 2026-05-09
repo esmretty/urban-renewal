@@ -82,6 +82,7 @@
           <button class="cmd-tab active" data-tab="batch" onclick="switchCmdTab('batch')">📥 Batch 抓資料</button>
           <button class="cmd-tab" data-tab="verify" onclick="switchCmdTab('verify')">🔍 偵測下架</button>
           <button class="cmd-tab" data-tab="update_prices" onclick="switchCmdTab('update_prices')">💰 更新預售屋單價</button>
+          <button class="cmd-tab" data-tab="update_layers" onclick="switchCmdTab('update_layers')">🗺️ 更新圖層</button>
           <button class="cmd-tab" data-tab="other" onclick="switchCmdTab('other')">🔧 其他</button>
         </div>
 
@@ -181,6 +182,32 @@
             <div class="cmd-pane-right">
               <h4>定時 scheduler</h4>
               <div id="scheduler-box-update-prices" style="font-size:14px; line-height:1.6;">載入中…</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: 更新圖層 -->
+        <div class="cmd-pane hidden" data-pane="update_layers">
+          <div class="cmd-pane-grid">
+            <div class="cmd-pane-left">
+              <h4>手動清除 cache</h4>
+              <p style="font-size:13px; color:#555; margin:0 0 10px;">
+                勾選圖層 → 立刻清掉 server 端 disk cache。下次 user 看時自動重抓最新版。
+              </p>
+              <div id="layers-manual-list" style="font-size:13px; line-height:1.8;">載入中…</div>
+              <div style="margin-top:10px;">
+                <button onclick="layersToggleAll(true)" style="padding:4px 10px; font-size:12px;">全選</button>
+                <button onclick="layersToggleAll(false)" style="padding:4px 10px; font-size:12px;">全不選</button>
+                <button id="btn-layers-refresh" onclick="runLayersRefresh()"
+                  style="padding:8px 18px; background:#c0392b; color:#fff; border:none; border-radius:4px; cursor:pointer; margin-left:10px;">
+                  🗑️ 清除選定圖層的 cache
+                </button>
+              </div>
+              <div id="layers-refresh-result" style="margin-top:12px; font-size:13px;"></div>
+            </div>
+            <div class="cmd-pane-right">
+              <h4>定時 scheduler</h4>
+              <div id="layers-scheduler-box" style="font-size:14px; line-height:1.6;">載入中…</div>
             </div>
           </div>
         </div>
