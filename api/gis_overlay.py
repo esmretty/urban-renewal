@@ -108,6 +108,11 @@ _LAYER_DEFS: dict[str, dict] = {
         "kind": "nlsc_wmts",
         "layer_id": "LAND_OPENDATA",
     },
+    # 新北市完整地籍圖 (個別地塊邊界 + 地號) — 透過 NtpcURInfo session 動態拿 token 後打 NTPC
+    # 自家 ArcGIS server (arcgis2.planning.ntpc.gov.tw NTPC_Urban/Land/MapServer)
+    "cadastral_full_ntpc": {
+        "kind": "ntpcurinfo_cadastral",
+    },
     # 591 maptiles DMAPS forward proxy — 個別地塊 + 地號 polygon (政府 NLSC 授權)
     # 詳見 _fetch_591_dmaps docstring：純 forward 不 cache 不重製；用戶 (個人投資者)
     # 已明示確認 591 ToS 灰色地帶範圍。591 改設定立即 fallback (前端 tileerror handler)。
@@ -269,6 +274,113 @@ def _fetch_591_dmaps(cfg: dict, bbox: str, width: int, height: int, srs: str) ->
         return r.content
     except Exception as e:
         logger.debug(f"591 DMAPS proxy 例外: {e}")
+        return None
+
+
+# ── NtpcURInfo cadastral chain ─────────────────────────────────────────
+# 新北市城鄉發展局 NtpcURInfo 系統的「地籍圖」layer (含個別地塊+地號)。
+# Service 在 arcgis2.planning.ntpc.gov.tw/server/rest/services/NTPC_Urban/Land/MapServer
+# 用 NTPC 自家 ArcGIS portal token 認證；token 從 NtpcURInfo session 動態拿，1-2hr expire。
+#
+# Chain：
+#   1. fetch https://urban.planning.ntpc.gov.tw/NtpcURInfo/ → 從 HTML hidden #hdToken 拿 session token
+#   2. POST ajax/datahandler.ashx { keyword: GetLayerList, timeStamp: hdToken, timeName: btoa("MapToken") }
+#      → 拿 layer config 含「地籍圖」item 的 MAPSRVURL + AGSTOKEN
+#   3. 用 AGSTOKEN 打 MAPSRVURL/export 拿 PNG image
+#
+# Token cache 約 1 小時 (NtpcURInfo session 通常活 30min-1hr，保守設 50 min refresh)
+_NTPCURINFO_CACHE: dict = {"agstoken": None, "fetched_at": 0.0, "mapsrvurl": None}
+_NTPCURINFO_TTL = 50 * 60  # 50 min
+
+
+def _refresh_ntpcurinfo_token() -> Optional[tuple[str, str]]:
+    """fetch NtpcURInfo 拿 fresh AGSTOKEN + MAPSRVURL，回 (token, url) 或 None。"""
+    import base64
+    import re as _re
+    try:
+        with httpx.Client(verify=False, timeout=15, headers={
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://urban.planning.ntpc.gov.tw/NtpcURInfo/",
+        }) as client:
+            r = client.get("https://urban.planning.ntpc.gov.tw/NtpcURInfo/")
+            m = _re.search(r'id="hdToken"[^>]*value="([^"]+)"', r.text)
+            if not m:
+                logger.warning("NtpcURInfo: 抓不到 #hdToken")
+                return None
+            hdtoken = m.group(1)
+            r2 = client.post(
+                "https://urban.planning.ntpc.gov.tw/NtpcURInfo/ajax/datahandler.ashx",
+                data={
+                    "keyword": "GetLayerList",
+                    "timeStamp": hdtoken,
+                    "timeName": base64.b64encode(b"MapToken").decode(),
+                },
+            )
+            j = r2.json()
+            if j.get("MSGCODE") != 200:
+                logger.warning(f"NtpcURInfo GetLayerList MSGCODE={j.get('MSGCODE')}")
+                return None
+            land = next((it for it in j.get("DATA", []) if it.get("LAYERNAME") == "地籍圖"), None)
+            if not land:
+                logger.warning("NtpcURInfo 沒找到「地籍圖」layer item")
+                return None
+            return land.get("AGSTOKEN", ""), land.get("MAPSRVURL", "")
+    except Exception as e:
+        logger.warning(f"NtpcURInfo refresh token 失敗: {e}")
+        return None
+
+
+def _get_ntpcurinfo_token() -> tuple[Optional[str], Optional[str]]:
+    """拿 cached AGSTOKEN + MAPSRVURL，過期就 refresh。"""
+    import time as _t
+    if _NTPCURINFO_CACHE["agstoken"] and (_t.time() - _NTPCURINFO_CACHE["fetched_at"]) < _NTPCURINFO_TTL:
+        return _NTPCURINFO_CACHE["agstoken"], _NTPCURINFO_CACHE["mapsrvurl"]
+    res = _refresh_ntpcurinfo_token()
+    if res:
+        _NTPCURINFO_CACHE["agstoken"] = res[0]
+        _NTPCURINFO_CACHE["mapsrvurl"] = res[1]
+        _NTPCURINFO_CACHE["fetched_at"] = _t.time()
+        return res
+    return None, None
+
+
+def _fetch_ntpcurinfo_cadastral(cfg: dict, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
+    """打 NtpcURInfo 地籍圖 export — 個別地塊邊界 + 地號 polygon (新北市)。"""
+    token, mapsrv = _get_ntpcurinfo_token()
+    if not token or not mapsrv:
+        return None
+    sr_num = srs.split(":")[-1] if ":" in srs else srs
+    try:
+        r = httpx.get(
+            mapsrv + "/export",
+            params={
+                "token": token,
+                "bbox": bbox,
+                "bboxSR": sr_num,
+                "imageSR": sr_num,
+                "size": f"{width},{height}",
+                "format": "png",
+                "transparent": "true",
+                "layers": "show:0",
+                "f": "image",
+            },
+            timeout=10,
+            verify=False,
+        )
+        if r.status_code != 200:
+            return None
+        ct = r.headers.get("content-type", "")
+        if "image" not in ct:
+            # token 過期 → invalidate cache 下次自動 refresh
+            if "json" in ct:
+                logger.debug(f"NtpcURInfo cadastral 拒絕 (可能 token 過期): {r.text[:200]}")
+                _NTPCURINFO_CACHE["agstoken"] = None
+            return None
+        if len(r.content) < 100:
+            return None
+        return r.content
+    except Exception as e:
+        logger.warning(f"NtpcURInfo cadastral fetch 例外: {e}")
         return None
 
 
@@ -466,6 +578,8 @@ async def gis_overlay(layer: str, request: Request) -> Response:
         content = _fetch_nlsc_wmts(cfg, bbox, width, height, srs)
     elif cfg["kind"] == "591_dmaps_proxy":
         content = _fetch_591_dmaps(cfg, bbox, width, height, srs)
+    elif cfg["kind"] == "ntpcurinfo_cadastral":
+        content = _fetch_ntpcurinfo_cadastral(cfg, bbox, width, height, srs)
     else:
         raise HTTPException(500, f"unknown kind: {cfg['kind']}")
 
