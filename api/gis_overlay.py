@@ -43,33 +43,31 @@ _TPE_WMS_URL = "https://zonegeo.udd.gov.taipei/geoserver/Taipei/wms"
 _LAYER_DEFS: dict[str, dict] = {
     # ── 台北市（GeoServer WMS forward） ─────────────────────────────────────
     "zoning_tpe": {
-        "kind": "wms",
-        "upstream": _TPE_WMS_URL,
-        # 主圖 + 文字（住三/商二）兩層 — text layer 不一定每個 zoom 都有，但 GeoServer 會自動處理
+        "kind": "wms", "upstream": _TPE_WMS_URL,
         "layers": "Taipei:ublock97-TWD97,Taipei:ublock97-TWD97-text",
         "disk_cache": True,
+        "display_name": "台北市 土地分區",
     },
     # 地籍拆兩個 backend：線任 zoom 顯示，地號文字只 z=18 或 19 才顯示 (前端 minZoom 控制)
     "cadastral_lines_tpe": {
-        "kind": "wms",
-        "upstream": _TPE_WMS_URL,
+        "kind": "wms", "upstream": _TPE_WMS_URL,
         "layers": "Taipei:LAND-ALL-TWD97",
         "disk_cache": True,
+        "display_name": "台北市 地籍線",
     },
     "cadastral_numbers_tpe": {
-        "kind": "wms",
-        "upstream": _TPE_WMS_URL,
+        "kind": "wms", "upstream": _TPE_WMS_URL,
         "layers": "Taipei:LAND-ALL-TWD97-TEXT",
         "disk_cache": True,
+        "display_name": "台北市 地號文字",
     },
-    # 台北建物樓層 — 都發局 GISDB layer 19 (建物_Build polygon)
-    # 此 service 公開無 token，但 layer 19 minScale=5000，zoom < ~17 不會顯示 polygon (政府 server scale-dependent)
-    # 純色塊 polygon，沒含「4R 5R T」label (那是 Build_NO/Build_STR attribute，要另用 query 拿，下階段補)
+    # 台北建物樓層 — 都發局 GISDB layer 19 (建物_Build polygon, 含 4R/5R/T label)
     "building_floors_tpe": {
         "kind": "arcgis_export",
         "upstream": "https://www.historygis.udd.gov.taipei/arcgis/rest/services/Urban/GISDB/MapServer/export",
-        "layer_show": "19",   # 用 layers=show:N 模式，不用 dynamicLayers (此 service 不支援 dynamicLayers)
+        "layer_show": "19",
         "disk_cache": True,
+        "display_name": "台北市 建物套繪圖",
     },
     # 台北市「已劃定」都市更新地區範圍 — 都發局 PlanTheme layer 0 (332 個 polygon)
     # attributes: PROJNUM (案號)、PLANDES (公告說明)、PLANDATE (公告日期)、PLANLEV
@@ -86,17 +84,17 @@ _LAYER_DEFS: dict[str, dict] = {
     # UDDPlanMap fillcolor。
     # 用戶 2026-05-09 移除：redev_revoked (廢止89.91年)、redev_107expired (107年停用)、
     # redev_taipei_view (臺北好好看 II) → 13 個降到 10 個
-    # 都更案隨時變動 (新申請/核准/廢止)，disk_cache TTL 設 15 天 (其他 layer 30 天)
-    "redev_pub_renew":     {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=10", "fill_color": "#FF0000", "disk_cache": True, "disk_cache_ttl_days": 15},
-    "redev_chloride":      {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=44", "fill_color": "#D0B17A", "disk_cache": True, "disk_cache_ttl_days": 15},
-    "redev_urgent":        {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=48", "fill_color": "#FFD0FF", "disk_cache": True, "disk_cache_ttl_days": 15},
-    "redev_self_announce": {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=20", "fill_color": "#0000FF", "disk_cache": True, "disk_cache_ttl_days": 15},
-    "redev_self_approved": {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=30", "fill_color": "#FF7F00", "disk_cache": True, "disk_cache_ttl_days": 15},
-    "redev_planned":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=40", "fill_color": "#FF00FF", "disk_cache": True, "disk_cache_ttl_days": 15},
-    "redev_invalid":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=50", "fill_color": "#00FFFF", "disk_cache": True, "disk_cache_ttl_days": 15},
-    "redev_pub_business":  {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=12", "fill_color": "#6495ED", "disk_cache": True, "disk_cache_ttl_days": 15},
-    "redev_115_revised":   {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:115PublicPlanREArea-5", "fill_color": "#FF9966", "disk_cache": True, "disk_cache_ttl_days": 15},
-    "redev_63y_building":  {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:63yAgoBud", "fill_color": "#1F4E79", "disk_cache": True, "disk_cache_ttl_days": 15},
+    # 都更案隨時變動 (新申請/核准/廢止) — disk cache 永不過期，靠 admin scheduler 或手動清
+    "redev_pub_renew":     {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=10", "fill_color": "#FF0000", "disk_cache": True, "display_name": "台北 都更/公劃更新地區"},
+    "redev_chloride":      {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=44", "fill_color": "#D0B17A", "disk_cache": True, "display_name": "台北 都更/高氯離子混凝土"},
+    "redev_urgent":        {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=48", "fill_color": "#FFD0FF", "disk_cache": True, "display_name": "台北 都更/迅行劃定"},
+    "redev_self_announce": {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=20", "fill_color": "#0000FF", "disk_cache": True, "display_name": "台北 都更/公告自劃"},
+    "redev_self_approved": {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=30", "fill_color": "#FF7F00", "disk_cache": True, "display_name": "台北 都更/核准自劃"},
+    "redev_planned":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=40", "fill_color": "#FF00FF", "disk_cache": True, "display_name": "台北 都更/都計劃定"},
+    "redev_invalid":       {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=50", "fill_color": "#00FFFF", "disk_cache": True, "display_name": "台北 都更/已失效或廢止"},
+    "redev_pub_business":  {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:uro-redevelop-ALL-5", "cql_filter": "layer=12", "fill_color": "#6495ED", "disk_cache": True, "display_name": "台北 都更/公劃內事業"},
+    "redev_115_revised":   {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:115PublicPlanREArea-5", "fill_color": "#FF9966", "disk_cache": True, "display_name": "台北 都更/115年修訂公劃"},
+    "redev_63y_building":  {"kind": "wms", "upstream": _TPE_WMS_URL, "layers": "Taipei:63yAgoBud", "fill_color": "#1F4E79", "disk_cache": True, "display_name": "台北 都更/63年以前建築物"},
     # NLSC 全國地籍段邊界 (LANDSECT) — 補新北地籍
     # 走 WMS (maps.nlsc.gov.tw/S_Maps/wms) 不是 WMTS：兩者是並存 OGC 標準不是升級關係。
     # WMS 可給任意 bbox + size 較有彈性 (前端日後可改 nonTiledLayer 抓視窗整圖)，
@@ -118,6 +116,7 @@ _LAYER_DEFS: dict[str, dict] = {
     "cadastral_full_ntpc": {
         "kind": "ntpcurinfo_cadastral",
         "disk_cache": True,
+        "display_name": "新北市 地籍圖（個別地塊+地號）",
     },
     # 591 maptiles DMAPS forward proxy — 個別地塊 + 地號 polygon (政府 NLSC 授權)
     # 詳見 _fetch_591_dmaps docstring：純 forward 不 cache 不重製；用戶 (個人投資者)
@@ -130,10 +129,10 @@ _LAYER_DEFS: dict[str, dict] = {
     "zoning_ntpc": {
         "kind": "arcgis_export",
         "upstream": "https://arcgis.planning.ntpc.gov.tw/server/rest/services/NTPC_Urban/LandUse_WMS/MapServer/export",
-        # ArcGIS dynamicLayers payload — 隱藏 labels 避免低 zoom 字塊
         "dynamic_layers": '[{"id":0,"source":{"type":"mapLayer","mapLayerId":0},"drawingInfo":{"showLabels":false}}]',
-        "needs_token": True,   # NTPC 要 token，台北 historygis 不用
+        "needs_token": True,
         "disk_cache": True,
+        "display_name": "新北市 土地分區",
     },
     # cadastral_ntpc 待 Phase A.5 確認新北 ArcGIS 有無對應地籍 layer
 }
@@ -382,17 +381,14 @@ def _bbox_to_tile_xyz(bbox: str) -> Optional[tuple[int, int, int]]:
 import os as _os
 from pathlib import Path as _Path
 _DISK_CACHE_BASE = _Path(__file__).resolve().parent.parent / "data" / "cache"
-_DISK_CACHE_DEFAULT_TTL_DAYS = 30
 
 
-def _disk_cache_get(layer: str, z: int, y: int, x: int, ttl_days: int = _DISK_CACHE_DEFAULT_TTL_DAYS) -> Optional[bytes]:
-    import time as _t
+def _disk_cache_get(layer: str, z: int, y: int, x: int) -> Optional[bytes]:
+    """讀 disk cache file。**沒有 TTL 過期** — file 永遠 valid 直到被手動或 scheduler 清掉。"""
     p = _DISK_CACHE_BASE / layer / f"{z}" / f"{y}" / f"{x}.png"
     if not p.exists():
         return None
     try:
-        if (_t.time() - p.stat().st_mtime) > ttl_days * 24 * 3600:
-            return None
         return p.read_bytes()
     except Exception as e:
         logger.debug(f"disk cache read fail {p}: {e}")
@@ -445,14 +441,15 @@ def _disk_cache_clear(layer: str) -> int:
 
 
 # ── Scheduler config (settings/gis_overlay_scheduler) ─────────────────
-# 啟用時，scheduler.interval_days override layer config 的 disk_cache_ttl_days
-# (lazy expiry — 不需要 background runner，TTL 改變即時生效)
+# Active 模式：cache file 永不過期；只有 admin 手動點「清除 cache」或 scheduler 時間到
+# 才執行 _disk_cache_clear (rmtree)，下次 user 看才重抓上游
 def _load_overlay_scheduler() -> dict:
     """讀 Firestore settings/gis_overlay_scheduler；不存在回預設 (停用)。"""
     default = {
         "enabled": False,
         "interval_days": 30,            # 15 / 30 / 60 / 180
         "layers": [],                   # list of layer name (空 = 不影響任何 layer)
+        "last_run_at": None,            # ISO timestamp，scheduler 上次清 cache 完成時間
     }
     try:
         from database.db import get_firestore
@@ -467,15 +464,54 @@ def _load_overlay_scheduler() -> dict:
     return default
 
 
-def _resolve_disk_ttl_days(layer: str, layer_default_ttl: int) -> int:
-    """看 scheduler config，啟用 + layer 在範圍 → 用 scheduler.interval_days；否則 layer 自己的。"""
-    cfg = _load_overlay_scheduler()
-    if cfg.get("enabled") and layer in (cfg.get("layers") or []):
+def _save_overlay_scheduler_field(field: str, value) -> None:
+    """更新 settings/gis_overlay_scheduler 單一欄位 (merge)。"""
+    try:
+        from database.db import get_firestore
+        get_firestore().collection("settings").document("gis_overlay_scheduler").set(
+            {field: value}, merge=True,
+        )
+    except Exception as e:
+        logger.warning(f"update gis_overlay_scheduler.{field} fail: {e}")
+
+
+async def _gis_overlay_scheduler_loop():
+    """Background runner — 每 1 hr check scheduler 設定，到時間了就 rmtree 指定 layer cache。
+    用戶選 active 模式：cache 永不 lazy expire，只有 scheduler 或手動才會清。"""
+    import asyncio as _asyncio
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    while True:
         try:
-            return int(cfg.get("interval_days") or layer_default_ttl)
-        except (TypeError, ValueError):
-            return layer_default_ttl
-    return layer_default_ttl
+            await _asyncio.sleep(3600)   # 每 1 小時 check 一次 (interval_days 級別不需要更頻繁)
+        except _asyncio.CancelledError:
+            logger.info("[gis_overlay_scheduler] loop cancelled")
+            break
+        try:
+            cfg = _load_overlay_scheduler()
+            if not cfg.get("enabled"):
+                continue
+            layers = cfg.get("layers") or []
+            if not layers:
+                continue
+            interval_days = int(cfg.get("interval_days") or 30)
+            last_run = cfg.get("last_run_at")
+            now_utc = _dt.now(_tz.utc)
+            if last_run:
+                try:
+                    last_dt = _dt.fromisoformat(last_run.replace("Z", "+00:00"))
+                    if (now_utc - last_dt) < _td(days=interval_days):
+                        continue   # 還沒到下次 refresh 時間
+                except Exception as e:
+                    logger.debug(f"parse last_run_at fail (treat as never run): {e}")
+            # 執行 refresh
+            total_deleted = 0
+            for name in layers:
+                if name in _LAYER_DEFS:
+                    total_deleted += _disk_cache_clear(name)
+            _save_overlay_scheduler_field("last_run_at", now_utc.isoformat())
+            logger.info(f"[gis_overlay_scheduler] refresh 完成: {len(layers)} layers, 共刪除 {total_deleted} 個 file")
+        except Exception as e:
+            logger.exception(f"[gis_overlay_scheduler] loop error: {e}")
 
 
 def _fetch_ntpcurinfo_cadastral(cfg: dict, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
@@ -703,16 +739,13 @@ async def gis_overlay(layer: str, request: Request) -> Response:
         if cached:
             return Response(content=cached, media_type="image/png", headers={"X-Cache": "HIT"})
 
-    # 2. disk cache (TTL 由 layer config + admin scheduler 共同決定)
-    #    scheduler 啟用 + layer 在範圍 → 用 scheduler.interval_days；否則 layer 自己的 disk_cache_ttl_days
+    # 2. disk cache — 永不過期。只有 admin 手動清 cache 或 scheduler 時間到才 rmtree
     # 只對 Leaflet 預設 256×256 標準 tile request 才 cache
     disk_cache_on = bool(cfg.get("disk_cache")) and width == 256 and height == 256
-    layer_default_ttl = cfg.get("disk_cache_ttl_days", _DISK_CACHE_DEFAULT_TTL_DAYS)
-    disk_ttl = _resolve_disk_ttl_days(layer, layer_default_ttl)
     tile_xyz = _bbox_to_tile_xyz(bbox) if disk_cache_on else None
     if disk_cache_on and tile_xyz:
         z, y, x = tile_xyz
-        disk_content = _disk_cache_get(layer, z, y, x, disk_ttl)
+        disk_content = _disk_cache_get(layer, z, y, x)
         if disk_content:
             # 順便回填 memory cache (下個 user 同 tile 也 hit memory)
             if not skip_cache:
@@ -763,22 +796,32 @@ from api.auth import require_admin as _require_admin
 
 @router.get("/admin/gis_overlay/cache_stats")
 async def admin_cache_stats(admin: dict = _Depends(_require_admin)):
-    """每 layer 的 disk cache 統計 (file 數 / total bytes / oldest mtime)。"""
+    """每 layer 的 disk cache 統計 (中文名 / file 數 / total bytes / 最舊 cache mtime)。"""
     out = []
     for name in _disk_cache_layers():
         cfg = _LAYER_DEFS[name]
-        layer_default_ttl = cfg.get("disk_cache_ttl_days", _DISK_CACHE_DEFAULT_TTL_DAYS)
-        effective_ttl = _resolve_disk_ttl_days(name, layer_default_ttl)
         stats = _disk_cache_stats(name)
         out.append({
             "layer": name,
+            "display_name": cfg.get("display_name", name),
             "file_count": stats["file_count"],
             "total_bytes": stats["total_bytes"],
             "oldest_mtime": stats["oldest_mtime"],
-            "default_ttl_days": layer_default_ttl,
-            "effective_ttl_days": effective_ttl,
         })
-    return {"layers": out, "scheduler": _load_overlay_scheduler()}
+    sched = _load_overlay_scheduler()
+    # 計算下次 scheduler 預期執行時間
+    next_run_at = None
+    if sched.get("enabled") and sched.get("layers"):
+        if sched.get("last_run_at"):
+            try:
+                from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+                last_dt = _dt.fromisoformat(sched["last_run_at"].replace("Z", "+00:00"))
+                next_run_at = (last_dt + _td(days=int(sched["interval_days"]))).isoformat()
+            except Exception:
+                pass
+        else:
+            next_run_at = "下個小時 (尚未執行過)"
+    return {"layers": out, "scheduler": sched, "next_run_at": next_run_at}
 
 
 from pydantic import BaseModel as _BaseModel
@@ -824,11 +867,13 @@ async def admin_set_scheduler(body: _SchedulerReq, admin: dict = _Depends(_requi
         raise HTTPException(400, f"不存在的 layer: {invalid}")
     try:
         from database.db import get_firestore
+        # merge=True 保留既有 last_run_at；如果 admin 改設定 layers/interval 想立刻重算下次時間
+        # 可由 admin 額外觸發 manual refresh，那會更新 last_run_at
         get_firestore().collection("settings").document("gis_overlay_scheduler").set({
             "enabled": bool(body.enabled),
             "interval_days": int(body.interval_days),
             "layers": list(body.layers),
-        })
+        }, merge=True)
     except Exception as e:
         raise HTTPException(500, f"寫 settings 失敗: {e}")
     return {"status": "ok", "config": _load_overlay_scheduler()}

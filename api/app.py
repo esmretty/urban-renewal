@@ -1034,15 +1034,19 @@ async def lifespan(app: FastAPI):
         logger.info("[scheduler] DISABLE_SCHEDULER=true，本次啟動不執行定時 batch（本機 debug 模式）")
         sched_task = None
         retry_task = None
+        gis_overlay_task = None
     else:
         sched_task = asyncio.create_task(_scheduled_scrape_loop())
         logger.info("[scheduler] 定時 batch loop 已啟動（設定全在 Firestore settings/scheduler）")
         retry_task = asyncio.create_task(_retry_queue_loop())
         logger.info("[retry-queue] 失敗重試 loop 已啟動（每 60 秒掃 due，10 分鐘後重抓）")
+        from api.gis_overlay import _gis_overlay_scheduler_loop
+        gis_overlay_task = asyncio.create_task(_gis_overlay_scheduler_loop())
+        logger.info("[gis_overlay] scheduler loop 已啟動（每小時 check settings/gis_overlay_scheduler）")
     try:
         yield
     finally:
-        for t in (sched_task, retry_task):
+        for t in (sched_task, retry_task, gis_overlay_task):
             if t:
                 t.cancel()
                 try: await t

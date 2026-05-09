@@ -1589,10 +1589,18 @@ async function loadLayersTab() {
     const data = await r.json();
     _layersStatsCache = data;
     _renderLayersManual(data.layers || []);
-    _renderLayersScheduler(data.scheduler || {}, (data.layers || []).map(l => l.layer));
+    _renderLayersScheduler(data.scheduler || {}, data.layers || [], data.next_run_at);
   } catch (e) {
     if (manualBox) manualBox.innerHTML = `<span style="color:#c0392b;">${esc(e.message)}</span>`;
   }
+}
+
+function _fmtDateTime(iso) {
+  if (!iso) return "—";
+  if (typeof iso === "string" && !iso.includes("T")) return iso;   // 「下個小時 (尚未執行過)」
+  try {
+    return new Date(iso).toLocaleString("zh-TW", { hour12: false });
+  } catch { return String(iso); }
 }
 
 function _fmtBytes(n) {
@@ -1616,19 +1624,29 @@ function _renderLayersManual(layers) {
     box.innerHTML = "<i style='color:#888;'>沒有可 cache 的圖層</i>";
     return;
   }
-  box.innerHTML = layers.map(l => {
-    const ttlNote = l.effective_ttl_days !== l.default_ttl_days
-      ? `<span style="color:#c78a00;">TTL ${l.effective_ttl_days} 天 (scheduler 控制)</span>`
-      : `<span style="color:#888;">TTL ${l.default_ttl_days} 天</span>`;
-    return `<label style="display:block;">
-      <input type="checkbox" class="layer-cb" data-layer="${esc(l.layer)}">
-      <code style="font-size:12px;">${esc(l.layer)}</code>
-      <span style="color:#666; font-size:12px; margin-left:6px;">
-        ${l.file_count} files / ${_fmtBytes(l.total_bytes)} / 最舊 ${_fmtDaysAgo(l.oldest_mtime)}
-      </span>
-      <span style="font-size:11px; margin-left:6px;">${ttlNote}</span>
-    </label>`;
-  }).join("");
+  const rows = layers.map(l => `
+    <tr>
+      <td style="padding:4px 8px; border-bottom:1px solid #eee;">
+        <input type="checkbox" class="layer-cb" data-layer="${esc(l.layer)}">
+      </td>
+      <td style="padding:4px 8px; border-bottom:1px solid #eee;">${esc(l.display_name)}</td>
+      <td style="padding:4px 8px; border-bottom:1px solid #eee; text-align:right;">${l.file_count}</td>
+      <td style="padding:4px 8px; border-bottom:1px solid #eee; text-align:right;">${_fmtBytes(l.total_bytes)}</td>
+      <td style="padding:4px 8px; border-bottom:1px solid #eee; color:#666;">${_fmtDaysAgo(l.oldest_mtime)}</td>
+    </tr>`).join("");
+  box.innerHTML = `
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead>
+        <tr style="background:#f0e8d4;">
+          <th style="padding:6px 8px; text-align:left; width:40px;">勾選</th>
+          <th style="padding:6px 8px; text-align:left;">圖層</th>
+          <th style="padding:6px 8px; text-align:right;">檔案數</th>
+          <th style="padding:6px 8px; text-align:right;">大小</th>
+          <th style="padding:6px 8px; text-align:left;">最舊 cache</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
 }
 
 window.layersToggleAll = function (on) {
@@ -1667,7 +1685,7 @@ window.runLayersRefresh = async function () {
   }
 };
 
-function _renderLayersScheduler(sched, allLayers) {
+function _renderLayersScheduler(sched, allLayers, nextRunAt) {
   const box = document.getElementById("layers-scheduler-box");
   if (!box) return;
   const enabled = !!sched.enabled;
@@ -1678,16 +1696,20 @@ function _renderLayersScheduler(sched, allLayers) {
   const intervalOpts = [15, 30, 60, 180].map(d =>
     `<option value="${d}"${d === interval ? " selected" : ""}>${d} 天</option>`
   ).join("");
-  const layerCbs = allLayers.map(name =>
-    `<label style="display:block; font-size:12px; line-height:1.7;">
-      <input type="checkbox" class="sched-layer-cb" data-layer="${esc(name)}"${selectedLayers.has(name) ? " checked" : ""}>
-      <code>${esc(name)}</code>
-    </label>`
-  ).join("");
+  const layerRows = allLayers.map(l => `
+    <tr>
+      <td style="padding:3px 8px; border-bottom:1px solid #eee;">
+        <input type="checkbox" class="sched-layer-cb" data-layer="${esc(l.layer)}"${selectedLayers.has(l.layer) ? " checked" : ""}>
+      </td>
+      <td style="padding:3px 8px; border-bottom:1px solid #eee;">${esc(l.display_name)}</td>
+    </tr>`).join("");
   box.innerHTML = `
     <div style="margin-bottom:10px;">
       <b style="color:${stateColor}">${stateText}</b>
-      <span style="color:#666; font-size:12px; margin-left:6px;">啟用後 disk cache TTL 改用下方天數，不是 layer 內建值</span>
+    </div>
+    <div style="font-size:12px; color:#666; margin-bottom:10px; line-height:1.7;">
+      上次執行：${_fmtDateTime(sched.last_run_at)}<br>
+      下次預計：${_fmtDateTime(nextRunAt)}
     </div>
     <div style="margin-bottom:10px;">
       <label><input type="checkbox" id="sched-enabled-cb"${enabled ? " checked" : ""}> 啟用 scheduler</label>
@@ -1697,7 +1719,15 @@ function _renderLayersScheduler(sched, allLayers) {
     </div>
     <div style="margin-bottom:10px;">
       <div style="font-size:12px; color:#555; margin-bottom:4px;">適用圖層：</div>
-      ${layerCbs}
+      <table style="width:100%; border-collapse:collapse; font-size:12px;">
+        <thead>
+          <tr style="background:#f0e8d4;">
+            <th style="padding:4px 8px; text-align:left; width:40px;">勾選</th>
+            <th style="padding:4px 8px; text-align:left;">圖層</th>
+          </tr>
+        </thead>
+        <tbody>${layerRows}</tbody>
+      </table>
     </div>
     <button onclick="saveLayersScheduler()" style="padding:6px 14px; background:#16a085; color:#fff; border:none; border-radius:4px; cursor:pointer;">儲存</button>
     <span id="sched-save-result" style="font-size:12px; margin-left:8px;"></span>
