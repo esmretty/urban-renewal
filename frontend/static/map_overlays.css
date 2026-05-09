@@ -73,6 +73,18 @@
   gap: 4px;
 }
 
+.v2-renewal-expand {
+  background: none;
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 1px 6px;
+  font-size: 11px;
+  color: #555;
+  line-height: 1;
+}
+.v2-renewal-expand:hover { background: rgba(0,0,0,0.05); }
+
 .v2-renewal-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

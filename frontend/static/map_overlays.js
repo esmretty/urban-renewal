@@ -133,10 +133,10 @@
     host.innerHTML = `
       <div class="v2-renewal-header">
         <span class="v2-overlays-label">都更圖層：</span>
-        <label class="v2-renewal-all"><input type="checkbox" data-renewal-all> 全選</label>
-        <span class="v2-overlays-note">僅台北市</span>
+        <label class="v2-renewal-all"><input type="checkbox" data-renewal-all> 台北市全選</label>
+        <button type="button" class="v2-renewal-expand" data-renewal-expanded="0" aria-label="展開細項">▾</button>
       </div>
-      <div class="v2-renewal-grid">${subItems}</div>`;
+      <div class="v2-renewal-grid" id="v2-renewal-grid" style="display:none;">${subItems}</div>`;
     host.addEventListener('change', (e) => {
       const t = e.target;
       if (!t) return;
@@ -144,6 +144,17 @@
         _toggleRenewalAll(t.checked);
       } else if (t.matches('input[data-renewal-sub]')) {
         _toggleRenewalSub(t.dataset.renewalSub, t.checked);
+      }
+    });
+    host.addEventListener('click', (e) => {
+      const t = e.target;
+      if (t && t.classList && t.classList.contains('v2-renewal-expand')) {
+        e.preventDefault();
+        const expanded = t.dataset.renewalExpanded === '1';
+        t.dataset.renewalExpanded = expanded ? '0' : '1';
+        t.textContent = expanded ? '▾' : '▴';
+        const grid = document.getElementById('v2-renewal-grid');
+        if (grid) grid.style.display = expanded ? 'none' : '';
       }
     });
   }
