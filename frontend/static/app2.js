@@ -1234,6 +1234,8 @@
       return;
     }
     closeDetail();   // 關掉 drawer
+    // 標記目標 id → map_mode.js renderMap 讀這個給對應 marker 加 focused class (放大+光暈)
+    state._focusedId = id;
     // setViewMode 在 map_mode.js IIFE 內 attach 到 window.v2 (跨 module)
     if (window.v2 && typeof window.v2.setViewMode === 'function') {
       window.v2.setViewMode('map');

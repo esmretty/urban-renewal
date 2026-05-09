@@ -199,6 +199,7 @@
     }
 
     const bounds = [];
+    const focusedId = st._focusedId;   // 從 detail page「在地圖上查看」帶過來的 id
     list.forEach(p => {
       const r = (typeof UrbanShared !== 'undefined' && UrbanShared.computeMultiples)
         ? UrbanShared.computeMultiples(p, prices[p.district]) : null;
@@ -210,8 +211,11 @@
         : mult >= 2.5 ? '#f59e0b'
         : '#94a3b8';
       const label = mult != null ? mult.toFixed(1) + 'x' : 'N/A';
+      const pid = p.source_id || p.id;
+      const isFocused = focusedId && pid === focusedId;
+      const cls = isFocused ? 'v2-map-marker v2-map-marker--focused' : 'v2-map-marker';
       const icon = L.divIcon({
-        html: `<div class="v2-map-marker" style="background:${color}">${label}</div>`,
+        html: `<div class="${cls}" style="background:${color}">${label}</div>`,
         className: '', iconSize: null, iconAnchor: [22, 14],
       });
       const mk = L.marker([p.latitude, p.longitude], { icon }).addTo(m);
@@ -230,6 +234,8 @@
       bounds.push([p.latitude, p.longitude]);
     });
     // user 要求：地圖永遠以大安公園為預設中心，不要 fitBounds 把所有物件包進視野
+    // focused marker 已被加 class 渲染光暈動畫；清掉 _focusedId 避免下次切回 map 還在 focus 上一個
+    st._focusedId = null;
   }
 
   // ── 切換 view mode ──

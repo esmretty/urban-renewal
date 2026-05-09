@@ -140,6 +140,35 @@
   line-height: 1.4;
 }
 
+/* 從 detail page「在地圖上查看」帶來的目標 marker：放大 + 光暈 pulse 動畫
+ * 容器層 transform:scale 透過 transform-origin:center 讓放大不偏移 anchor
+ * box-shadow 用 rgba(252, 165, 36, 0.7) 金黃色光暈 (跟 detail page 主色協調) */
+.v2-map-marker--focused {
+  transform: scale(1.5);
+  transform-origin: center center;
+  font-size: 13px;
+  padding: 3px 10px;
+  border-color: #fef3c7;
+  z-index: 1000;
+  position: relative;
+  animation: v2-marker-pulse 1.4s ease-out infinite;
+}
+
+@keyframes v2-marker-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(252, 165, 36, 0.85),
+                0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 18px rgba(252, 165, 36, 0),
+                0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(252, 165, 36, 0),
+                0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+}
+
 /* ── Leaflet tooltip 客製 (default 太醜) ── */
 .leaflet-tooltip {
   background: rgba(31, 41, 55, 0.95) !important;
