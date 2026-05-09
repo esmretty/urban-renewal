@@ -1828,16 +1828,16 @@ def _gis_overlay_layers_for_admin() -> list:
     from api.gis_overlay import _disk_cache_layers
     return _disk_cache_layers()
 
-_LAYER_DEFS_DISPLAY: dict = {}   # populated on first call below
+
+def _gis_overlay_layer_meta(name: str) -> dict:
+    """delegate 給 gis_overlay._layer_admin_meta (含 display_name + data_source + group)。"""
+    from api.gis_overlay import _layer_admin_meta
+    return _layer_admin_meta(name)
 
 
 def _ensure_layer_display_map() -> None:
-    """lazy init layer display name map (避免 import 順序問題)。"""
-    global _LAYER_DEFS_DISPLAY
-    if _LAYER_DEFS_DISPLAY:
-        return
-    from api.gis_overlay import _LAYER_DEFS as _ldef
-    _LAYER_DEFS_DISPLAY = {n: cfg.get("display_name", n) for n, cfg in _ldef.items()}
+    """deprecated — kept for compat; 改用 _gis_overlay_layer_meta。"""
+    pass
 
 
 @app.get("/admin/scheduler/status")
@@ -1878,10 +1878,7 @@ async def scheduler_status(admin: dict = Depends(require_admin)):
         "allowed_verify_interval_hr": list(SCHEDULER_VERIFY_INTERVAL_HR),
         "allowed_update_prices_interval_hr": list(SCHEDULER_UPDATE_PRICES_INTERVAL_HR),
         "allowed_gis_overlay_interval_hr": list(SCHEDULER_GIS_OVERLAY_INTERVAL_HR),
-        "gis_overlay_layers": [
-            {"layer": n, "display_name": _LAYER_DEFS_DISPLAY.get(n, n)}
-            for n in _gis_overlay_layers_for_admin()
-        ],
+        "gis_overlay_layers": [_gis_overlay_layer_meta(n) for n in _gis_overlay_layers_for_admin()],
         "max_commands": SCHEDULER_MAX_COMMANDS,
         "max_districts_per_command": SCHEDULER_MAX_DISTRICTS_PER_CMD,
         "inter_command_sleep_sec": SCHEDULER_INTER_COMMAND_SLEEP_SEC,

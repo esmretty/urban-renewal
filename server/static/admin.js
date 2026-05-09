@@ -1618,6 +1618,29 @@ function _fmtDaysAgo(mtime) {
   return days <= 0 ? "今天" : `${days} 天前`;
 }
 
+function _groupLayers(layers) {
+  // 把同 group_id 的 layer 聚合成 group object，無 group 的當 standalone
+  const groups = new Map();   // group_id → { label, items: [...] }
+  const standalone = [];
+  for (const l of layers) {
+    if (l.group_id) {
+      if (!groups.has(l.group_id)) groups.set(l.group_id, { label: l.group_label, items: [] });
+      groups.get(l.group_id).items.push(l);
+    } else {
+      standalone.push(l);
+    }
+  }
+  return { groups, standalone };
+}
+
+function _aggGroupStats(items) {
+  return {
+    file_count: items.reduce((s, x) => s + (x.file_count || 0), 0),
+    total_bytes: items.reduce((s, x) => s + (x.total_bytes || 0), 0),
+    oldest_mtime: items.reduce((m, x) => x.oldest_mtime && (m == null || x.oldest_mtime < m) ? x.oldest_mtime : m, null),
+  };
+}
+
 function _renderLayersManual(layers) {
   const box = document.getElementById("layers-manual-list");
   if (!box) return;
@@ -1625,16 +1648,56 @@ function _renderLayersManual(layers) {
     box.innerHTML = "<i style='color:#888;'>沒有可 cache 的圖層</i>";
     return;
   }
-  const rows = layers.map(l => `
-    <tr>
-      <td style="padding:4px 8px; border-bottom:1px solid #eee;">
-        <input type="checkbox" class="layer-cb" data-layer="${esc(l.layer)}">
-      </td>
-      <td style="padding:4px 8px; border-bottom:1px solid #eee;">${esc(l.display_name)}</td>
-      <td style="padding:4px 8px; border-bottom:1px solid #eee; text-align:right;">${l.file_count}</td>
-      <td style="padding:4px 8px; border-bottom:1px solid #eee; text-align:right;">${_fmtBytes(l.total_bytes)}</td>
-      <td style="padding:4px 8px; border-bottom:1px solid #eee; color:#666;">${_fmtDaysAgo(l.oldest_mtime)}</td>
-    </tr>`).join("");
+  const { groups, standalone } = _groupLayers(layers);
+  const rowsHtml = [];
+  // group rows (含 expand)
+  groups.forEach((g, gid) => {
+    const agg = _aggGroupStats(g.items);
+    const subItemNames = g.items.map(x => x.layer);
+    rowsHtml.push(`
+      <tr class="layer-group-row" data-group-id="${esc(gid)}">
+        <td style="padding:4px 8px; border-bottom:1px solid #eee;">
+          <input type="checkbox" class="layer-group-cb" data-group="${esc(gid)}" data-sub-layers='${esc(JSON.stringify(subItemNames))}'>
+        </td>
+        <td style="padding:4px 8px; border-bottom:1px solid #eee;">
+          <button class="layer-group-toggle" data-group="${esc(gid)}" style="background:none;border:none;cursor:pointer;font-size:13px;">▸</button>
+          <b>${esc(g.label)}</b>
+          <span style="color:#888;font-size:12px;margin-left:6px;">(${g.items.length} 個 sub-layer)</span>
+        </td>
+        <td style="padding:4px 8px; border-bottom:1px solid #eee; text-align:right;">${agg.file_count}</td>
+        <td style="padding:4px 8px; border-bottom:1px solid #eee; text-align:right;">${_fmtBytes(agg.total_bytes)}</td>
+        <td style="padding:4px 8px; border-bottom:1px solid #eee; color:#666;">${_fmtDaysAgo(agg.oldest_mtime)}</td>
+        <td style="padding:4px 8px; border-bottom:1px solid #eee; color:#888; font-size:12px;">—</td>
+      </tr>`);
+    // sub-rows (預設隱藏)
+    for (const l of g.items) {
+      rowsHtml.push(`
+        <tr class="layer-sub-row" data-group="${esc(gid)}" style="display:none;">
+          <td style="padding:3px 8px; border-bottom:1px solid #f5f0e3;">
+            <input type="checkbox" class="layer-cb" data-layer="${esc(l.layer)}" data-group="${esc(gid)}">
+          </td>
+          <td style="padding:3px 8px; border-bottom:1px solid #f5f0e3; padding-left:32px; color:#555; font-size:12px;">${esc(l.display_name)}</td>
+          <td style="padding:3px 8px; border-bottom:1px solid #f5f0e3; text-align:right; font-size:12px;">${l.file_count}</td>
+          <td style="padding:3px 8px; border-bottom:1px solid #f5f0e3; text-align:right; font-size:12px;">${_fmtBytes(l.total_bytes)}</td>
+          <td style="padding:3px 8px; border-bottom:1px solid #f5f0e3; color:#888; font-size:12px;">${_fmtDaysAgo(l.oldest_mtime)}</td>
+          <td style="padding:3px 8px; border-bottom:1px solid #f5f0e3; color:#888; font-size:12px;">${esc(l.data_source || "—")}</td>
+        </tr>`);
+    }
+  });
+  // standalone rows
+  for (const l of standalone) {
+    rowsHtml.push(`
+      <tr>
+        <td style="padding:4px 8px; border-bottom:1px solid #eee;">
+          <input type="checkbox" class="layer-cb" data-layer="${esc(l.layer)}">
+        </td>
+        <td style="padding:4px 8px; border-bottom:1px solid #eee;">${esc(l.display_name)}</td>
+        <td style="padding:4px 8px; border-bottom:1px solid #eee; text-align:right;">${l.file_count}</td>
+        <td style="padding:4px 8px; border-bottom:1px solid #eee; text-align:right;">${_fmtBytes(l.total_bytes)}</td>
+        <td style="padding:4px 8px; border-bottom:1px solid #eee; color:#666;">${_fmtDaysAgo(l.oldest_mtime)}</td>
+        <td style="padding:4px 8px; border-bottom:1px solid #eee; color:#666; font-size:12px;">${esc(l.data_source || "—")}</td>
+      </tr>`);
+  }
   box.innerHTML = `
     <table style="width:100%; border-collapse:collapse; font-size:13px;">
       <thead>
@@ -1644,10 +1707,44 @@ function _renderLayersManual(layers) {
           <th style="padding:6px 8px; text-align:right;">檔案數</th>
           <th style="padding:6px 8px; text-align:right;">大小</th>
           <th style="padding:6px 8px; text-align:left;">最舊 cache</th>
+          <th style="padding:6px 8px; text-align:left;">資料來源</th>
         </tr>
       </thead>
-      <tbody>${rows}</tbody>
+      <tbody>${rowsHtml.join("")}</tbody>
     </table>`;
+  // wire group expand toggle
+  box.querySelectorAll(".layer-group-toggle").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      const gid = btn.dataset.group;
+      const subRows = box.querySelectorAll(`tr.layer-sub-row[data-group="${gid}"]`);
+      const expanded = btn.textContent === "▾";
+      btn.textContent = expanded ? "▸" : "▾";
+      subRows.forEach(r => { r.style.display = expanded ? "none" : ""; });
+    });
+  });
+  // wire group checkbox → 勾/取消所有 sub
+  box.querySelectorAll(".layer-group-cb").forEach(gcb => {
+    gcb.addEventListener("change", () => {
+      const gid = gcb.dataset.group;
+      const subs = box.querySelectorAll(`tr.layer-sub-row[data-group="${gid}"] input.layer-cb`);
+      subs.forEach(cb => { cb.checked = gcb.checked; });
+    });
+  });
+  // sub checkbox change → sync group checkbox state
+  box.querySelectorAll("input.layer-cb[data-group]").forEach(cb => {
+    cb.addEventListener("change", () => {
+      const gid = cb.dataset.group;
+      const subs = box.querySelectorAll(`tr.layer-sub-row[data-group="${gid}"] input.layer-cb`);
+      const total = subs.length;
+      const checked = Array.from(subs).filter(s => s.checked).length;
+      const gcb = box.querySelector(`.layer-group-cb[data-group="${gid}"]`);
+      if (gcb) {
+        gcb.checked = checked === total;
+        gcb.indeterminate = checked > 0 && checked < total;
+      }
+    });
+  });
 }
 
 window.layersToggleAll = function (on) {
@@ -1782,21 +1879,71 @@ function _renderCmdRow(cmd, i, displayNum) {
   }
 
   if (cmdType === "gis_overlay_refresh") {
-    // 更新圖層 cache 命令：interval (天) + 適用 layer 多選
+    // 更新圖層 cache 命令：interval (天) + 適用 layer 多選 (含 group 摺疊)
     const intervalOpts = (_schedMeta.gisOverlayIntervalOpts || [360, 720, 1440, 4320]).map(h => {
       const sel = Number(cmd.interval_hr) === h ? "selected" : "";
       const days = Math.round(h / 24);
       return `<option value="${h}" ${sel}>${days} 天</option>`;
     }).join("");
     const layerSet = new Set(cmd.layers || []);
-    const layerRows = (_schedMeta.gisOverlayLayers || []).map(l => `
-      <tr>
-        <td style="padding:3px 6px; border-bottom:1px solid #eee; width:36px;">
-          <input type="checkbox" class="gisov-layer-cb-${i}" data-layer="${esc(l.layer)}"${layerSet.has(l.layer) ? " checked" : ""}
-            onchange="schedToggleGisLayer(${i}, '${esc(l.layer)}', this.checked)">
-        </td>
-        <td style="padding:3px 6px; border-bottom:1px solid #eee;">${esc(l.display_name || l.layer)}</td>
-      </tr>`).join("");
+    const allLayers = _schedMeta.gisOverlayLayers || [];
+    // 用 helper 同樣 group 概念
+    const grouped = _groupLayers(allLayers);
+    const rowsHtml = [];
+    grouped.groups.forEach((g, gid) => {
+      const subNames = g.items.map(x => x.layer);
+      const subChecked = subNames.filter(n => layerSet.has(n)).length;
+      const allOn = subChecked === subNames.length;
+      const someOn = subChecked > 0 && subChecked < subNames.length;
+      // group row：勾這個 = 勾全部 sub
+      rowsHtml.push(`
+        <tr data-sched-group="${esc(gid)}">
+          <td style="padding:3px 6px; border-bottom:1px solid #eee; width:36px;">
+            <input type="checkbox" class="sched-layer-group-cb"
+              data-cmd="${i}" data-group="${esc(gid)}"
+              data-sub-layers='${esc(JSON.stringify(subNames))}'
+              ${allOn ? "checked" : ""}>
+          </td>
+          <td style="padding:3px 6px; border-bottom:1px solid #eee;">
+            <button class="sched-group-toggle" data-cmd="${i}" data-group="${esc(gid)}"
+              style="background:none;border:none;cursor:pointer;font-size:12px;">▸</button>
+            <b>${esc(g.label)}</b>
+            <span style="color:#888;font-size:12px;margin-left:6px;">(${g.items.length} 個 sub-layer)</span>
+          </td>
+          <td style="padding:3px 6px; border-bottom:1px solid #eee; color:#888; font-size:12px;">—</td>
+        </tr>`);
+      // sub rows (default hidden)
+      for (const l of g.items) {
+        rowsHtml.push(`
+          <tr class="sched-sub-row" data-cmd="${i}" data-group="${esc(gid)}" style="display:none;">
+            <td style="padding:2px 6px; border-bottom:1px solid #f5f0e3; width:36px;">
+              <input type="checkbox" class="sched-layer-cb-${i} sched-sub-cb"
+                data-cmd="${i}" data-group="${esc(gid)}" data-layer="${esc(l.layer)}"
+                ${layerSet.has(l.layer) ? "checked" : ""}
+                onchange="schedToggleGisLayer(${i}, '${esc(l.layer)}', this.checked)">
+            </td>
+            <td style="padding:2px 6px; padding-left:32px; border-bottom:1px solid #f5f0e3; color:#555; font-size:12px;">${esc(l.display_name || l.layer)}</td>
+            <td style="padding:2px 6px; border-bottom:1px solid #f5f0e3; color:#888; font-size:12px;">${esc(l.data_source || "—")}</td>
+          </tr>`);
+      }
+      // group indeterminate state — render 後 wire (見下方)
+      if (someOn) {
+        rowsHtml.push(`<script>document.querySelector('.sched-layer-group-cb[data-cmd="${i}"][data-group="${gid}"]').indeterminate = true;</script>`);
+      }
+    });
+    for (const l of grouped.standalone) {
+      rowsHtml.push(`
+        <tr>
+          <td style="padding:3px 6px; border-bottom:1px solid #eee; width:36px;">
+            <input type="checkbox" class="sched-layer-cb-${i}"
+              data-cmd="${i}" data-layer="${esc(l.layer)}"
+              ${layerSet.has(l.layer) ? "checked" : ""}
+              onchange="schedToggleGisLayer(${i}, '${esc(l.layer)}', this.checked)">
+          </td>
+          <td style="padding:3px 6px; border-bottom:1px solid #eee;">${esc(l.display_name || l.layer)}</td>
+          <td style="padding:3px 6px; border-bottom:1px solid #eee; color:#888; font-size:12px;">${esc(l.data_source || "—")}</td>
+        </tr>`);
+    }
     const layerCount = (cmd.layers || []).length;
     const appliedDetail = (server && _isCmdAppliedNew(cmd, server))
       ? `<span style="color:#27ae60; font-size:12px;">✓ 已套用：更新圖層 / 每 ${Math.round(Number(server.interval_hr || 720) / 24)} 天 / ${(server.layers || []).length} 個 layer</span>`
@@ -1820,16 +1967,14 @@ function _renderCmdRow(cmd, i, displayNum) {
           <span style="color:#888; font-size:12px; margin-left:8px;">適用 ${layerCount} 個 layer</span>
           <button onclick="applySchedulerConfig()" class="sched-apply" style="background:#8e44ad;">套用</button>
         </div>
-        <details style="margin-top:8px;">
-          <summary style="cursor:pointer; font-size:12px; color:#8e44ad;">▸ 適用圖層</summary>
-          <table style="width:100%; border-collapse:collapse; font-size:12px; margin-top:6px;">
-            <thead><tr style="background:#f0e8d4;">
-              <th style="padding:4px 6px; text-align:left; width:36px;">勾選</th>
-              <th style="padding:4px 6px; text-align:left;">圖層</th>
-            </tr></thead>
-            <tbody>${layerRows}</tbody>
-          </table>
-        </details>
+        <table style="width:100%; border-collapse:collapse; font-size:12px; margin-top:8px;">
+          <thead><tr style="background:#f0e8d4;">
+            <th style="padding:4px 6px; text-align:left; width:36px;">勾選</th>
+            <th style="padding:4px 6px; text-align:left;">圖層</th>
+            <th style="padding:4px 6px; text-align:left;">資料來源</th>
+          </tr></thead>
+          <tbody>${rowsHtml.join("")}</tbody>
+        </table>
         <div class="sched-cmd-footer">
           ${nextDueStr}
           <span class="sched-applied-detail">${appliedDetail}</span>
@@ -2063,7 +2208,56 @@ window.schedToggleGisLayer = function (i, layerName, on) {
   if (on) set.add(layerName); else set.delete(layerName);
   cmd.layers = Array.from(set);
   _touchApplyBtns();
+  // sync 對應 group checkbox 狀態
+  const gcb = document.querySelector(`.sched-layer-group-cb[data-cmd="${i}"]`);
+  // 不知道 layer 屬哪 group，find 它
+  const subRow = document.querySelector(`input.sched-sub-cb[data-cmd="${i}"][data-layer="${layerName}"]`);
+  if (subRow) {
+    const gid = subRow.dataset.group;
+    const allSubs = document.querySelectorAll(`input.sched-sub-cb[data-cmd="${i}"][data-group="${gid}"]`);
+    const total = allSubs.length;
+    const checked = Array.from(allSubs).filter(c => c.checked).length;
+    const groupCb = document.querySelector(`.sched-layer-group-cb[data-cmd="${i}"][data-group="${gid}"]`);
+    if (groupCb) {
+      groupCb.checked = checked === total;
+      groupCb.indeterminate = checked > 0 && checked < total;
+    }
+  }
 };
+
+// scheduler group expand toggle + group checkbox change → 改 sub
+document.addEventListener("click", (ev) => {
+  const t = ev.target;
+  if (t && t.classList && t.classList.contains("sched-group-toggle")) {
+    ev.preventDefault();
+    const cmdIdx = t.dataset.cmd;
+    const gid = t.dataset.group;
+    const subRows = document.querySelectorAll(`tr.sched-sub-row[data-cmd="${cmdIdx}"][data-group="${gid}"]`);
+    const expanded = t.textContent === "▾";
+    t.textContent = expanded ? "▸" : "▾";
+    subRows.forEach(r => { r.style.display = expanded ? "none" : ""; });
+  }
+});
+
+document.addEventListener("change", (ev) => {
+  const t = ev.target;
+  if (t && t.classList && t.classList.contains("sched-layer-group-cb")) {
+    const cmdIdx = parseInt(t.dataset.cmd, 10);
+    let subNames = [];
+    try { subNames = JSON.parse(t.dataset.subLayers || "[]"); } catch { return; }
+    const cmd = _schedDraft.commands[cmdIdx];
+    if (!cmd || cmd.type !== "gis_overlay_refresh") return;
+    const set = new Set(cmd.layers || []);
+    if (t.checked) subNames.forEach(n => set.add(n));
+    else subNames.forEach(n => set.delete(n));
+    cmd.layers = Array.from(set);
+    // 同步 sub checkbox 視覺
+    const subs = document.querySelectorAll(`input.sched-sub-cb[data-cmd="${cmdIdx}"][data-group="${t.dataset.group}"]`);
+    subs.forEach(c => { c.checked = t.checked; });
+    t.indeterminate = false;
+    _touchApplyBtns();
+  }
+});
 
 window.schedAddCmd = function (type) {
   type = type || "scan";

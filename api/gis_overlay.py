@@ -721,6 +721,47 @@ def _disk_cache_layers() -> list[str]:
     return [name for name, cfg in _LAYER_DEFS.items() if cfg.get("disk_cache")]
 
 
+def _layer_data_source(name: str, cfg: dict) -> str:
+    """回傳 layer 的資料來源 (中文) 給 admin UI 顯示。"""
+    upstream = cfg.get("upstream", "") or ""
+    kind = cfg.get("kind", "")
+    if "zonegeo.udd.gov.taipei" in upstream:
+        return "台北市都發局 GeoServer"
+    if "historygis.udd.gov.taipei" in upstream:
+        return "台北市都發局 GISDB"
+    if "arcgis.planning.ntpc.gov.tw" in upstream:
+        return "新北市城鄉發展局 ArcGIS"
+    if kind == "ntpcurinfo_cadastral":
+        return "新北市城鄉發展局 NtpcURInfo"
+    if kind == "nlsc_wms":
+        return "國土測繪中心 WMS"
+    if kind == "nlsc_wmts":
+        return "國土測繪中心 WMTS"
+    if kind == "591_dmaps_proxy":
+        return "591 地圖 (forward proxy)"
+    return "—"
+
+
+def _layer_group(name: str, cfg: dict) -> tuple[str, str]:
+    """回傳 (group_id, group_label)；無 group 回 ('', '')。"""
+    if name.startswith("redev_"):
+        return ("taipei_renewal", "台北 都更圖層")
+    return ("", "")
+
+
+def _layer_admin_meta(name: str) -> dict:
+    """admin UI 用：layer name + display_name + data_source + group。"""
+    cfg = _LAYER_DEFS.get(name) or {}
+    g_id, g_label = _layer_group(name, cfg)
+    return {
+        "layer": name,
+        "display_name": cfg.get("display_name", name),
+        "data_source": _layer_data_source(name, cfg),
+        "group_id": g_id,
+        "group_label": g_label,
+    }
+
+
 from fastapi import Depends as _Depends
 from api.auth import require_admin as _require_admin
 
@@ -731,11 +772,10 @@ async def admin_cache_stats(admin: dict = _Depends(_require_admin)):
     scheduler 部分由既有 /admin/scheduler/status 提供 (cmd type='gis_overlay_refresh')。"""
     out = []
     for name in _disk_cache_layers():
-        cfg = _LAYER_DEFS[name]
+        meta = _layer_admin_meta(name)
         stats = _disk_cache_stats(name)
         out.append({
-            "layer": name,
-            "display_name": cfg.get("display_name", name),
+            **meta,
             "file_count": stats["file_count"],
             "total_bytes": stats["total_bytes"],
             "oldest_mtime": stats["oldest_mtime"],
