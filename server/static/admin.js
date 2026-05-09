@@ -1674,11 +1674,7 @@ window.runLayersRefresh = async function () {
       if (resultEl) resultEl.innerHTML = `<span style="color:#c0392b;">失敗：${esc(data.detail || "")}</span>`;
       return;
     }
-    const total = (data.results || []).reduce((s, r) => s + (r.deleted || 0), 0);
-    const lines = (data.results || []).map(r =>
-      `<div>• ${esc(r.layer)}: 刪除 ${r.deleted} 個 file${r.error ? ` (${esc(r.error)})` : ""}</div>`
-    ).join("");
-    if (resultEl) resultEl.innerHTML = `<div style="color:#27ae60;">✓ 共刪除 ${total} 個 file</div>${lines}`;
+    if (resultEl) resultEl.innerHTML = `<div style="color:#27ae60;">✓ ${esc(data.message || "已清除")}</div>`;
     // 重新載入 stats
     setTimeout(loadLayersTab, 500);
   } catch (e) {

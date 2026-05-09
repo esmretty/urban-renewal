@@ -753,16 +753,15 @@ class _RefreshReq(_BaseModel):
 
 @router.post("/admin/gis_overlay/refresh")
 async def admin_refresh_layers(body: _RefreshReq, admin: dict = _Depends(_require_admin)):
-    """手動清掉指定 layer 的 disk cache。下次 user 看時自動重抓 (Plan B 邏輯)。"""
+    """手動清掉指定 layer 的 disk cache。下次 user 看時自動重抓 (Plan B 邏輯)。
+    透過 _run_gis_overlay_refresh 走同一條 log path → 出現在 admin 執行紀錄。"""
     valid = set(_disk_cache_layers())
-    out = []
-    for name in body.layers:
-        if name not in valid:
-            out.append({"layer": name, "deleted": 0, "error": "unknown layer"})
-            continue
-        deleted = _disk_cache_clear(name)
-        out.append({"layer": name, "deleted": deleted})
-    return {"results": out}
+    invalid = [n for n in body.layers if n not in valid]
+    if invalid:
+        raise HTTPException(400, f"不存在的 layer: {invalid}")
+    from api.app import _run_gis_overlay_refresh
+    msg = await _run_gis_overlay_refresh(body.layers, trigger_label="gis_overlay_refresh_manual")
+    return {"status": "ok", "message": msg}
 
 
 # 註：獨立 /admin/gis_overlay/scheduler endpoint 已移除。

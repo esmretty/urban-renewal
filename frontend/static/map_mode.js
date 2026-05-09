@@ -247,6 +247,11 @@
     // 地圖模式不需要頁碼（地圖一次顯示所有 markers，沒有分頁概念）
     const pag = document.getElementById('v2-pagination');
     if (pag) pag.style.display = mode === 'map' ? 'none' : '';
+    // 地圖模式不需要排序 (排序是針對列表)；列表模式|地圖模式 toggle 位置不變因為 toggle 在 sort 之前
+    const sortSel = document.getElementById('v2-sort');
+    const sortDir = document.getElementById('v2-sort-dir');
+    if (sortSel) sortSel.style.display = mode === 'map' ? 'none' : '';
+    if (sortDir) sortDir.style.display = mode === 'map' ? 'none' : '';
     document.querySelectorAll('.v2-view-toggle__link').forEach(a =>
       a.classList.toggle('is-active', a.dataset.viewMode === mode));
     if (mode === 'map') {

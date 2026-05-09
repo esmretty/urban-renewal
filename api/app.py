@@ -535,6 +535,34 @@ def _cmd_state_set(cmd_idx: int, **kwargs):
         logger.warning(f"[scheduler] _cmd_state_set fail: {e}")
 
 
+async def _run_gis_overlay_refresh(target_layers: list, trigger_label: str) -> str:
+    """更新圖層 cache：清掉指定 layer disk cache。
+    用 batch_start/end action log 對齊 update_prices/scan 的 session 紀錄框架，
+    這樣會自動出現在「Admin 命令執行紀錄」表格裡。"""
+    from database.run_log import log_action
+    from api.gis_overlay import _disk_cache_clear
+    log_action(trigger_label, "batch_start",
+               message=f"開始更新圖層 cache（{len(target_layers)} 個 layer）",
+               details={"layers": target_layers})
+    total_deleted = 0
+    layer_results = []
+    try:
+        for name in target_layers:
+            try:
+                deleted = _disk_cache_clear(name)
+                total_deleted += deleted
+                layer_results.append({"layer": name, "deleted": deleted})
+            except Exception as e:
+                logger.warning(f"[gis_overlay_refresh] 清 {name} 失敗: {e}")
+                layer_results.append({"layer": name, "deleted": 0, "error": str(e)[:100]})
+    finally:
+        msg = f"更新圖層完成：{len(target_layers)} 個 layer 共刪除 {total_deleted} 個 cache file"
+        log_action(trigger_label, "batch_end",
+                   message=msg,
+                   details={"total_deleted": total_deleted, "layer_results": layer_results})
+    return msg
+
+
 async def _run_update_prices_command(trigger_label: str = "update_prices_scheduler") -> dict:
     """自動更新預售屋單價命令：下載最新 LVR CSV + 重算各區中位數寫 Firestore。
     log 詳細紀錄：舊 LVR 期次 / 新 LVR 期次 / 樣本筆數 / 各區單價變化。
@@ -904,17 +932,9 @@ async def _scheduled_scrape_loop():
 
             if cmd_type == "gis_overlay_refresh":
                 logger.info(f"[scheduler] 命令 {due_idx} 觸發：更新圖層 cache")
-                from api.gis_overlay import _disk_cache_clear
                 target_layers = list(due_cmd.get("layers") or [])
-                total_deleted = 0
-                for name in target_layers:
-                    try:
-                        total_deleted += _disk_cache_clear(name)
-                    except Exception as e:
-                        logger.warning(f"[scheduler] gis_overlay_refresh 清 {name} 失敗: {e}")
-                _scheduler_last_status = (
-                    f"更新圖層：{len(target_layers)} 個 layer 共刪除 {total_deleted} 個 cache file"
-                )
+                trigger_label = "gis_overlay_refresh_scheduler"
+                _scheduler_last_status = await _run_gis_overlay_refresh(target_layers, trigger_label)
                 _g_interval = int(due_cmd.get("interval_hr") or 720)
                 _cmd_state_set(due_idx,
                     last_run_at=now_tw_iso(),
