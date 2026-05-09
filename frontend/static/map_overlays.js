@@ -36,10 +36,12 @@
       label: '地籍圖',
       paneZ: 402,
       backends: [
-        { name: 'cadastral_lines_tpe', minZoom: 17 },       // 台北 GeoServer 地籍線
-        { name: 'cadastral_numbers_tpe', minZoom: 17 },     // 台北 GeoServer 地號文字
-        { name: 'cadastral_ntpc', minZoom: 17 },            // NLSC WMS LANDSECT 段邊界 (補新北)
-        { name: 'cadastral_public_ntpc', minZoom: 17 },     // NLSC WMS 公有土地地籍 (補新北公有地)
+        // 主圖層：591 forward proxy (NLSC DMAPS 政府授權，雙北個別地塊+地號)
+        // 純 forward 不 cache；591 改設定時 tileerror handler 自動 silent skip
+        { name: 'cadastral_591', minZoom: 17 },
+        // 合法備援：台北 GeoServer 地籍 + 地號 (591 故障時 fallback 至少台北可看)
+        { name: 'cadastral_lines_tpe', minZoom: 17 },
+        { name: 'cadastral_numbers_tpe', minZoom: 17 },
       ],
       hint: 'z=17+',
     },

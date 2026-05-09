@@ -91,6 +91,13 @@ _LAYER_DEFS: dict[str, dict] = {
         "kind": "nlsc_wmts",
         "layer_id": "LAND_OPENDATA",
     },
+    # 591 maptiles DMAPS forward proxy — 個別地塊 + 地號 polygon (政府 NLSC 授權)
+    # 詳見 _fetch_591_dmaps docstring：純 forward 不 cache 不重製；用戶 (個人投資者)
+    # 已明示確認 591 ToS 灰色地帶範圍。591 改設定立即 fallback (前端 tileerror handler)。
+    "cadastral_591": {
+        "kind": "591_dmaps_proxy",
+        "layer_id": "DMAPS",
+    },
     # ── 新北市（ArcGIS REST export，需要 token） ────────────────────────────
     "zoning_ntpc": {
         "kind": "arcgis_export",
@@ -173,6 +180,69 @@ def _fetch_wms(upstream: str, layer_names: str, bbox: str, width: int, height: i
         return r.content
     except Exception as e:
         logger.warning(f"WMS upstream 例外: {e}")
+        return None
+
+
+def _fetch_591_dmaps(cfg: dict, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
+    """591 maptiles forward proxy — DMAPS (政府 NLSC 授權的個別地塊 + 地號 polygon 圖)。
+
+    背景：NLSC DMAPS layer 限政府/學術機關申請，不對民間公開 (公開 GetCapabilities
+    沒列、直接打回 0 bytes)。591 跟 NLSC 有商業授權，把 DMAPS tile mirror 在
+    AWS CloudFront CDN (maptiles.591.com.tw)，用戶看 land.591.com.tw/map 的「地籍
+    查詢」即用此 source。CORS Access-Control-Allow-Origin: *、無 referer 檢查、無
+    token —— **技術上**對外開放。
+
+    使用界限（**用戶為個人投資者使用，已明示確認風險範圍**）：
+      - 純 forward proxy，**不 cache 不重製**——每次 user 請求才即時走 591，
+        從 591 server 端流量分佈跟「user 自己開瀏覽器 browse 591 land.map」幾乎相同
+      - 不 bulk download / pre-warm cache（這條線堅持不做，違反著作權重製）
+      - 591 改設定（加 referer check / token / IP block）→ 立即 fallback 到 NLSC
+        LANDSECT（前端 tileerror handler 自動降級），不長期 depend on
+      - 流量小：個人投資 + 少數白名單用戶，不會在 591 server 觸發異常偵測
+
+    替代方案（合法但 cost / 範圍受限）：
+      a) NLSC 申請：限政府機關/學術單位/國營機構，個人投資者申不到
+      b) 內政部地政司「地政電子資料流通服務網」每筆 ~1 NTD，自己付費 + cache
+      c) 維持 NLSC LANDSECT 段邊界 + 公有地（無個別地塊+地號，新北體驗差）
+    """
+    try:
+        import math
+        parts = [float(v) for v in bbox.split(",")]
+        if len(parts) != 4:
+            return None
+        xmin, ymin, xmax, ymax = parts
+        EARTH_HALF = 20037508.342789244
+        tile_span = xmax - xmin
+        if tile_span <= 0:
+            return None
+        z = round(math.log2(2 * EARTH_HALF / tile_span))
+        if z < 0 or z > 22:
+            return None
+        n = 2 ** z
+        full_span = 2 * EARTH_HALF / n
+        x = round((xmin + EARTH_HALF) / full_span)
+        y = round((EARTH_HALF - ymax) / full_span)
+        if x < 0 or x >= n or y < 0 or y >= n:
+            return None
+
+        layer_id = cfg.get("layer_id", "DMAPS")
+        url = f"https://maptiles.591.com.tw/S_Maps/wmts/{layer_id}/default/GoogleMapsCompatible/{z}/{y}/{x}"
+        # 帶誠實的 referer 表明流量來源 (不偽裝成 591 內部，591 想抓就抓得到)
+        r = httpx.get(url, timeout=10, verify=False, headers={
+            "Referer": "https://taipei.retty-ai.com/",
+            "User-Agent": "Mozilla/5.0 (urban-renewal personal research)",
+        })
+        if r.status_code != 200:
+            return None
+        ct = r.headers.get("content-type", "")
+        if "image" not in ct or "gif" in ct:
+            # 591 拒絕時通常回 image/gif size=0
+            return None
+        if len(r.content) < 100:
+            return None
+        return r.content
+    except Exception as e:
+        logger.debug(f"591 DMAPS proxy 例外: {e}")
         return None
 
 
@@ -351,10 +421,13 @@ async def gis_overlay(layer: str, request: Request) -> Response:
         raise HTTPException(400, "bbox 必須是 W,S,E,N (4 個 number)")
 
     # cache key — bbox 浮點數差幾 m 視為同 key 太麻煩，直接用原字串做 key
+    # 591 forward proxy 故意不 cache：純 forward (非重製)，每次 user 請求才走 591
+    skip_cache = _LAYER_DEFS[layer]["kind"] == "591_dmaps_proxy"
     cache_key = (layer, bbox, width, height, srs)
-    cached = _cache_get(cache_key)
-    if cached:
-        return Response(content=cached, media_type="image/png", headers={"X-Cache": "HIT"})
+    if not skip_cache:
+        cached = _cache_get(cache_key)
+        if cached:
+            return Response(content=cached, media_type="image/png", headers={"X-Cache": "HIT"})
 
     cfg = _LAYER_DEFS[layer]
     if cfg["kind"] == "wms":
@@ -365,6 +438,8 @@ async def gis_overlay(layer: str, request: Request) -> Response:
         content = _fetch_nlsc_wms(cfg, bbox, width, height, srs)
     elif cfg["kind"] == "nlsc_wmts":
         content = _fetch_nlsc_wmts(cfg, bbox, width, height, srs)
+    elif cfg["kind"] == "591_dmaps_proxy":
+        content = _fetch_591_dmaps(cfg, bbox, width, height, srs)
     else:
         raise HTTPException(500, f"unknown kind: {cfg['kind']}")
 
@@ -372,9 +447,10 @@ async def gis_overlay(layer: str, request: Request) -> Response:
         # 上游失敗 → 回透明 1×1，前端 layer 不會 break；status 504 給前端可選擇靜默或顯示警告
         return Response(content=_TRANSPARENT_1X1_PNG, media_type="image/png", status_code=504, headers={"X-Cache": "MISS-FAIL"})
 
-    _cache_set(cache_key, content)
+    if not skip_cache:
+        _cache_set(cache_key, content)
     return Response(
         content=content,
         media_type="image/png",
-        headers={"Cache-Control": "max-age=600", "X-Cache": "MISS"},
+        headers={"Cache-Control": "no-store" if skip_cache else "max-age=600", "X-Cache": "BYPASS" if skip_cache else "MISS"},
     )
