@@ -47,17 +47,20 @@ _LAYER_DEFS: dict[str, dict] = {
         "upstream": _TPE_WMS_URL,
         # 主圖 + 文字（住三/商二）兩層 — text layer 不一定每個 zoom 都有，但 GeoServer 會自動處理
         "layers": "Taipei:ublock97-TWD97,Taipei:ublock97-TWD97-text",
+        "disk_cache": True,
     },
     # 地籍拆兩個 backend：線任 zoom 顯示，地號文字只 z=18 或 19 才顯示 (前端 minZoom 控制)
     "cadastral_lines_tpe": {
         "kind": "wms",
         "upstream": _TPE_WMS_URL,
         "layers": "Taipei:LAND-ALL-TWD97",
+        "disk_cache": True,
     },
     "cadastral_numbers_tpe": {
         "kind": "wms",
         "upstream": _TPE_WMS_URL,
         "layers": "Taipei:LAND-ALL-TWD97-TEXT",
+        "disk_cache": True,
     },
     # 台北建物樓層 — 都發局 GISDB layer 19 (建物_Build polygon)
     # 此 service 公開無 token，但 layer 19 minScale=5000，zoom < ~17 不會顯示 polygon (政府 server scale-dependent)
@@ -66,6 +69,7 @@ _LAYER_DEFS: dict[str, dict] = {
         "kind": "arcgis_export",
         "upstream": "https://www.historygis.udd.gov.taipei/arcgis/rest/services/Urban/GISDB/MapServer/export",
         "layer_show": "19",   # 用 layers=show:N 模式，不用 dynamicLayers (此 service 不支援 dynamicLayers)
+        "disk_cache": True,
     },
     # 台北市「已劃定」都市更新地區範圍 — 都發局 PlanTheme layer 0 (332 個 polygon)
     # attributes: PROJNUM (案號)、PLANDES (公告說明)、PLANDATE (公告日期)、PLANLEV
@@ -112,6 +116,7 @@ _LAYER_DEFS: dict[str, dict] = {
     # 自家 ArcGIS server (arcgis2.planning.ntpc.gov.tw NTPC_Urban/Land/MapServer)
     "cadastral_full_ntpc": {
         "kind": "ntpcurinfo_cadastral",
+        "disk_cache": True,
     },
     # 591 maptiles DMAPS forward proxy — 個別地塊 + 地號 polygon (政府 NLSC 授權)
     # 詳見 _fetch_591_dmaps docstring：純 forward 不 cache 不重製；用戶 (個人投資者)
@@ -127,6 +132,7 @@ _LAYER_DEFS: dict[str, dict] = {
         # ArcGIS dynamicLayers payload — 隱藏 labels 避免低 zoom 字塊
         "dynamic_layers": '[{"id":0,"source":{"type":"mapLayer","mapLayerId":0},"drawingInfo":{"showLabels":false}}]',
         "needs_token": True,   # NTPC 要 token，台北 historygis 不用
+        "disk_cache": True,
     },
     # cadastral_ntpc 待 Phase A.5 確認新北 ArcGIS 有無對應地籍 layer
 }
@@ -368,33 +374,42 @@ def _bbox_to_tile_xyz(bbox: str) -> Optional[tuple[int, int, int]]:
     return (z, y, x)
 
 
-# Disk cache for NTPC cadastral — Plan B (lazy populate)
-# user 滑到哪 cache 哪，不主動 batch download，避免 NTPC 偵測 burst pattern。
-# 1 month 後熱區自然接近 100% cached，平日 NTPC 流量 = 平常 user browse 流量。
+# Disk cache 通用機制 — Plan B (lazy populate)
+# user 滑到哪 cache 哪，不主動 batch download，避免上游 server 偵測 burst pattern。
+# 1 month 後熱區自然接近 100% cached，平日上游流量 = 平常 user browse 流量。
+# 啟用方式：layer config 加 "disk_cache": True
 import os as _os
 from pathlib import Path as _Path
-_CADASTRAL_CACHE_DIR = _Path(__file__).resolve().parent.parent / "data" / "cache" / "cadastral_ntpc"
-_CADASTRAL_CACHE_TTL = 30 * 24 * 3600   # 30 天
+_DISK_CACHE_BASE = _Path(__file__).resolve().parent.parent / "data" / "cache"
+_DISK_CACHE_TTL = 30 * 24 * 3600   # 30 天
+
+
+def _disk_cache_get(layer: str, z: int, y: int, x: int) -> Optional[bytes]:
+    import time as _t
+    p = _DISK_CACHE_BASE / layer / f"{z}" / f"{y}" / f"{x}.png"
+    if not p.exists():
+        return None
+    try:
+        if (_t.time() - p.stat().st_mtime) > _DISK_CACHE_TTL:
+            return None
+        return p.read_bytes()
+    except Exception as e:
+        logger.debug(f"disk cache read fail {p}: {e}")
+        return None
+
+
+def _disk_cache_set(layer: str, z: int, y: int, x: int, content: bytes) -> None:
+    p = _DISK_CACHE_BASE / layer / f"{z}" / f"{y}" / f"{x}.png"
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(content)
+    except Exception as e:
+        logger.debug(f"disk cache write fail {p}: {e}")
 
 
 def _fetch_ntpcurinfo_cadastral(cfg: dict, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
     """打 NtpcURInfo 地籍圖 export — 個別地塊邊界 + 地號 polygon (新北市)。
-    加 disk cache：tile (z,y,x) 有 cache 直接回，miss 才 fetch NTPC + 存 disk。"""
-    import time as _t
-    # tile xyz reverse calc → disk cache key
-    tile = _bbox_to_tile_xyz(bbox)
-    cache_path = None
-    if tile and width == 256 and height == 256:   # Leaflet 預設 256x256 才用 disk cache (其他 size 走 memory cache 即可)
-        z, y, x = tile
-        cache_path = _CADASTRAL_CACHE_DIR / f"{z}" / f"{y}" / f"{x}.png"
-        if cache_path.exists():
-            mtime = cache_path.stat().st_mtime
-            if (_t.time() - mtime) < _CADASTRAL_CACHE_TTL:
-                try:
-                    return cache_path.read_bytes()
-                except Exception as e:
-                    logger.debug(f"disk cache read fail (refetching): {e}")
-
+    Disk cache 由 endpoint 統一處理 (此 fn 純 fetch)。"""
     token, mapsrv = _get_ntpcurinfo_token()
     if not token or not mapsrv:
         return None
@@ -426,13 +441,6 @@ def _fetch_ntpcurinfo_cadastral(cfg: dict, bbox: str, width: int, height: int, s
             return None
         if len(r.content) < 100:
             return None
-        # 寫 disk cache (best-effort，失敗不影響回傳)
-        if cache_path is not None:
-            try:
-                cache_path.parent.mkdir(parents=True, exist_ok=True)
-                cache_path.write_bytes(r.content)
-            except Exception as e:
-                logger.debug(f"disk cache write fail: {e}")
         return r.content
     except Exception as e:
         logger.warning(f"NtpcURInfo cadastral fetch 例外: {e}")
@@ -613,16 +621,29 @@ async def gis_overlay(layer: str, request: Request) -> Response:
     if not bbox or len(bbox.split(",")) != 4:
         raise HTTPException(400, "bbox 必須是 W,S,E,N (4 個 number)")
 
-    # cache key — bbox 浮點數差幾 m 視為同 key 太麻煩，直接用原字串做 key
+    cfg = _LAYER_DEFS[layer]
     # 591 forward proxy 故意不 cache：純 forward (非重製)，每次 user 請求才走 591
-    skip_cache = _LAYER_DEFS[layer]["kind"] == "591_dmaps_proxy"
+    skip_cache = cfg["kind"] == "591_dmaps_proxy"
     cache_key = (layer, bbox, width, height, srs)
+
+    # 1. memory cache (10 min TTL，所有 layer 共用)
     if not skip_cache:
         cached = _cache_get(cache_key)
         if cached:
             return Response(content=cached, media_type="image/png", headers={"X-Cache": "HIT"})
 
-    cfg = _LAYER_DEFS[layer]
+    # 2. disk cache (30 天 TTL，opt-in by layer config "disk_cache": True)
+    # 只對 Leaflet 預設 256×256 標準 tile request 才 cache (其他 size 是 ad-hoc)
+    disk_cache_on = bool(cfg.get("disk_cache")) and width == 256 and height == 256
+    tile_xyz = _bbox_to_tile_xyz(bbox) if disk_cache_on else None
+    if disk_cache_on and tile_xyz:
+        z, y, x = tile_xyz
+        disk_content = _disk_cache_get(layer, z, y, x)
+        if disk_content:
+            # 順便回填 memory cache (下個 user 同 tile 也 hit memory)
+            if not skip_cache:
+                _cache_set(cache_key, disk_content)
+            return Response(content=disk_content, media_type="image/png", headers={"X-Cache": "DISK-HIT", "Cache-Control": "max-age=600"})
     if cfg["kind"] == "wms":
         content = _fetch_wms(cfg["upstream"], cfg["layers"], bbox, width, height, srs, cfg.get("cql_filter"))
     elif cfg["kind"] == "arcgis_export":
@@ -644,6 +665,10 @@ async def gis_overlay(layer: str, request: Request) -> Response:
 
     if not skip_cache:
         _cache_set(cache_key, content)
+    # 寫 disk cache (Plan B lazy populate)
+    if disk_cache_on and tile_xyz:
+        z, y, x = tile_xyz
+        _disk_cache_set(layer, z, y, x, content)
     return Response(
         content=content,
         media_type="image/png",
