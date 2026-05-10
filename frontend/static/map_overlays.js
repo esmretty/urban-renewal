@@ -268,6 +268,9 @@
   // ════════════════════════════════════════════════════════════
   // 共用 helper：build L.tileLayer.wms instance
   // ════════════════════════════════════════════════════════════
+  // 全域版本號 — 換 SLD / 圖層 style 時 bump，新 URL → bust browser 90 天 cache
+  // 對應 backend _disk_cache_variant 的概念：cfg 變動就要讓 browser 也走新 URL
+  const TILE_VERSION = 2;
   function _makeWmsLayer(backend, paneName, extraClassName) {
     const name = typeof backend === 'string' ? backend : backend.name;
     const minZoom = (typeof backend === 'object' && backend.minZoom) ? backend.minZoom : undefined;
@@ -278,6 +281,7 @@
       opacity: OPACITY,
       pane: paneName,
       maxZoom: 22,
+      _v: TILE_VERSION,   // L.tileLayer.wms 自動把所有 opts 加進 query string → ?_v=2
     };
     if (minZoom != null) opts.minZoom = minZoom;
     if (extraClassName) opts.className = extraClassName;   // 給 SVG filter colorize 用
