@@ -2408,8 +2408,12 @@ window.toggleScheduler = async function (on, type) {
 };
 
 function renderStats(s) {
+  // 「中央物件總數」對齊前台 user 看到的 max (archived/error/非啟用區 排除)；hover 看 raw
+  const totalTitle = (s.total_properties_raw != null && s.total_properties_raw !== s.total_properties)
+    ? `前台可見 (raw DB ${s.total_properties_raw}，封存/錯誤/非啟用區/user_url 已扣除)`
+    : "";
   const cards = [
-    { num: s.total_properties, lbl: "中央物件總數" },
+    { num: s.total_properties, lbl: "中央物件總數", title: totalTitle },
     { num: s.analysis_done, lbl: "已分析" },
     { num: s.analysis_error, lbl: "分析錯誤" },
     { num: s.foreclosure_count, lbl: "法拍屋" },
@@ -2417,7 +2421,7 @@ function renderStats(s) {
     { num: s.total_users, lbl: "用戶數" },
   ];
   document.getElementById("stats-box").innerHTML = cards.map(c =>
-    `<div class="stat-card"><div class="stat-num">${c.num ?? "—"}</div><div class="stat-lbl">${c.lbl}</div></div>`
+    `<div class="stat-card"${c.title ? ` title="${esc(c.title)}"` : ''}><div class="stat-num">${c.num ?? "—"}</div><div class="stat-lbl">${c.lbl}</div></div>`
   ).join("");
   renderRegionSourceMatrix(s);
 }

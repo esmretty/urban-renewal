@@ -1489,12 +1489,25 @@ async def admin_page():
 @app.get("/admin/stats")
 async def admin_stats(admin: dict = Depends(require_admin)):
     """admin 資料總覽：物件總數 / 已分析 / 錯誤 / 用戶數，
-    + 各 (source, city, district) 計數矩陣（一個 doc 多 source 會在多家都計入一次）。"""
+    + 各 (source, city, district) 計數矩陣（一個 doc 多 source 會在多家都計入一次）。
+
+    「中央物件總數」對齊前台 applyFilters 後 user 看到的 max — 排除：
+      - archived / analysis_error / analysis_in_progress / deleted
+      - source_origin=user_url (用戶貼 URL 私有物件)
+      - district 不在前台啟用區 (台北 5 / 新北 4)
+    其他欄位 (archived_count / analysis_error 等) 保留 raw DB count 給 admin 除錯用。
+    """
     from database.models import canonical_source_name
     from config import TARGET_REGIONS
+    # 對齊前台 V1_DISTRICTS.enabled (app2.js:36) — admin 計數也看得到完整覆蓋
+    _FRONTEND_ENABLED_DISTRICTS = {
+        "大安區", "信義區", "中山區", "中正區", "文山區",
+        "新店區", "永和區", "中和區", "板橋區",
+    }
     col = get_col()
     docs = list(col.get())
-    total = len(docs)
+    total = 0   # 前台可見的 (跟 applyFilters 一致)
+    total_raw = len(docs)   # raw DB count (給 admin 除錯參考)
     done = err = archived = fc = 0
     # 計數矩陣：matrix[city][district][source] = count
     # source ∈ {"591", "yongqing", "sinyi", "manual", "其他"}
@@ -1513,6 +1526,16 @@ async def admin_stats(admin: dict = Depends(require_admin)):
             fc += 1
         city = (data.get("city") or "").strip()
         district = (data.get("district") or "").strip()
+        # 前台可見 count：跟 app2.js applyFilters 同邏輯
+        # !deleted && !analysis_error && !analysis_in_progress && archived !== true
+        # + district 在啟用區 + 不是 user_url 私有物件
+        if (not data.get("deleted")
+            and not data.get("analysis_error")
+            and not data.get("analysis_in_progress")
+            and not data.get("archived")
+            and data.get("source_origin") != "user_url"
+            and district in _FRONTEND_ENABLED_DISTRICTS):
+            total += 1
         if not (city and district):
             continue
         sources = data.get("sources") or []
@@ -1546,7 +1569,8 @@ async def admin_stats(admin: dict = Depends(require_admin)):
         if city not in {r["city"] for r in region_order}:
             region_order.append({"city": city, "districts": list(matrix[city].keys())})
     return {
-        "total_properties": total,
+        "total_properties": total,          # 前台可見 (對齊 applyFilters)
+        "total_properties_raw": total_raw,  # raw DB count (含封存/錯誤/非啟用區/user_url)
         "analysis_done": done,
         "analysis_error": err,
         "archived_count": archived,
