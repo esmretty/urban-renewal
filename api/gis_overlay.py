@@ -482,9 +482,30 @@ from pathlib import Path as _Path
 _DISK_CACHE_BASE = _Path(__file__).resolve().parent.parent / "data" / "cache"
 
 
-def _disk_cache_get(layer: str, z: int, y: int, x: int) -> Optional[bytes]:
-    """讀 disk cache file。**沒有 TTL 過期** — file 永遠 valid 直到被手動或 scheduler 清掉。"""
-    p = _DISK_CACHE_BASE / layer / f"{z}" / f"{y}" / f"{x}.png"
+def _disk_cache_variant(cfg: dict) -> str:
+    """layer config 變動 (SLD / cql_filter) 自動產生新 cache path 後綴，避免換 style
+    後舊 tile 還在 serve。'' = 沒任何 variant 影響 → 用 base path 跟之前完全相容。"""
+    import hashlib
+    sld = cfg.get("sld_body") or ""
+    cql = cfg.get("cql_filter") or ""
+    if not sld and not cql:
+        return ""
+    h = hashlib.md5((sld + "|" + cql).encode("utf-8")).hexdigest()[:8]
+    return f"v_{h}"
+
+
+def _disk_cache_path(layer: str, cfg: dict, z: int, y: int, x: int):
+    variant = _disk_cache_variant(cfg)
+    base = _DISK_CACHE_BASE / layer
+    if variant:
+        base = base / variant
+    return base / f"{z}" / f"{y}" / f"{x}.png"
+
+
+def _disk_cache_get(layer: str, cfg: dict, z: int, y: int, x: int) -> Optional[bytes]:
+    """讀 disk cache file。**沒有 TTL 過期** — file 永遠 valid 直到被手動或 scheduler 清掉。
+    cfg-driven variant：SLD/cql_filter 變動 → 自動切到新 cache path，舊的 orphan 留著。"""
+    p = _disk_cache_path(layer, cfg, z, y, x)
     if not p.exists():
         return None
     try:
@@ -494,8 +515,8 @@ def _disk_cache_get(layer: str, z: int, y: int, x: int) -> Optional[bytes]:
         return None
 
 
-def _disk_cache_set(layer: str, z: int, y: int, x: int, content: bytes) -> None:
-    p = _DISK_CACHE_BASE / layer / f"{z}" / f"{y}" / f"{x}.png"
+def _disk_cache_set(layer: str, cfg: dict, z: int, y: int, x: int, content: bytes) -> None:
+    p = _disk_cache_path(layer, cfg, z, y, x)
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(content)
@@ -1074,7 +1095,8 @@ async def gis_overlay(layer: str, request: Request) -> Response:
     cfg = _LAYER_DEFS[layer]
     # skip_cache：都更圖層 (動態變動) + 591 forward proxy (不 cache 重製) 都不該 cache
     skip_cache = cfg["kind"] == "591_dmaps_proxy" or bool(cfg.get("skip_cache"))
-    cache_key = (layer, bbox, width, height, srs)
+    # cache_key 含 SLD/cql variant — config 變動時 key 自動跟著換，避免吃舊 cache
+    cache_key = (layer, _disk_cache_variant(cfg), bbox, width, height, srs)
     # 瀏覽器 / CDN cache 期限 — 跟 server-side disk cache (永不過期，靠 admin/scheduler 清) 不同概念
     # 控制 user 第 N 次造訪同 tile 時瀏覽器自己 cache 不再 round-trip 到 server
     browser_ttl = _browser_cache_ttl(layer, cfg)
@@ -1092,7 +1114,7 @@ async def gis_overlay(layer: str, request: Request) -> Response:
     tile_xyz = _bbox_to_tile_xyz(bbox) if disk_cache_on else None
     if disk_cache_on and tile_xyz:
         z, y, x = tile_xyz
-        disk_content = _disk_cache_get(layer, z, y, x)
+        disk_content = _disk_cache_get(layer, cfg, z, y, x)
         if disk_content:
             # 順便回填 memory cache (下個 user 同 tile 也 hit memory)
             if not skip_cache:
@@ -1125,7 +1147,7 @@ async def gis_overlay(layer: str, request: Request) -> Response:
     # 寫 disk cache (Plan B lazy populate)
     if disk_cache_on and tile_xyz:
         z, y, x = tile_xyz
-        _disk_cache_set(layer, z, y, x, content)
+        _disk_cache_set(layer, cfg, z, y, x, content)
     return Response(
         content=content,
         media_type="image/png",
