@@ -3489,24 +3489,10 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
 
 /* (slider rules 已搬到上方 PC + mobile 共用區塊) */
 
-/* === detail page 都更案件 (放在「其他資訊」col 上方) ==================== */
-.v2-d-other-block {
-  margin-bottom: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #ece7d7;
-}
-.v2-d-other-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-.v2-d-other-label {
-  font-weight: 600;
-  color: #5b4c2e;
-  font-size: 13px;
-}
+/* === detail page 都更案件 (放在「其他資訊」col 第一格 .v2-ai-sec) ====== */
+/* 套用 .v2-ai-sec 黃底 title + body 樣式，body 內加重新查詢按鈕 + case 清單 */
 .v2-d-redev-refresh {
+  float: right;
   font-size: 11px;
   padding: 2px 8px;
   border: 1px solid #c7b890;
@@ -3515,17 +3501,18 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   border-radius: 3px;
   cursor: pointer;
   line-height: 1.4;
+  margin-left: 8px;
 }
 .v2-d-redev-refresh:hover { background: #f5ecd0; }
 .v2-d-redev-refresh:disabled { opacity: 0.6; cursor: wait; }
-.v2-d-other-body {
-  font-size: 12px;
+.v2-d-redev-list {
+  font-size: 13px;
+  line-height: 1.5;
 }
 .v2-d-redev-row {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  line-height: 1.5;
 }
 .v2-d-redev-row + .v2-d-redev-row { margin-top: 2px; }
 .v2-d-redev-label {
@@ -3533,6 +3520,7 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   color: #6b7280;
   white-space: nowrap;
 }
+.v2-d-redev-label::after { content: "："; }
 .v2-d-redev-detail {
   flex: 1 1 auto;
   color: #374151;
@@ -3578,6 +3566,16 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   color: #64748b;
   font-size: 11px;
   font-weight: 400;
+}
+/* 同學校多筆註釋合併 chip：→ 箭頭 hover (title attr 顯示全部註釋) */
+.v2-d-school-tag--multi {
+  cursor: help;
+}
+.v2-d-school-arrow {
+  margin-left: 4px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 /* 觸控裝置不沿用 :hover (避免 tap 後 hover sticky 把選中字蓋黑)；

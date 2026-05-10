@@ -59,22 +59,10 @@
 
 .v2-renewal-header {
   display: flex;
-  gap: 16px;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  margin-bottom: 0;
-}
-
-/* 城市 section：全選 + ▾(N) + 摺疊 grid 三件，垂直排 */
-.v2-renewal-city-section {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px 8px;
+  gap: 12px;
   align-items: center;
-}
-.v2-renewal-city-section .v2-renewal-grid {
-  flex-basis: 100%;
-  margin-top: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
 }
 
 .v2-renewal-all {

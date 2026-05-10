@@ -139,8 +139,18 @@
     const host = document.getElementById('v2-map-renewal-toolbar');
     if (!host || host.dataset.rendered === '1') return;
     host.dataset.rendered = '1';
-    // 每城市一個獨立 dropdown：[全選 checkbox + ▾(N) toggle + 個別 grid]
-    const sections = RENEWAL_CITIES.map(c => {
+    // 橫列：「都更圖層：☐台北全選 ▾(10) ☐新北全選 ▾(4)」
+    // 兩個 ▾ 共用一個 grid container — mutually exclusive (點 A 把 B 收起來)。
+    const allChecks = RENEWAL_CITIES.map(c => {
+      const subs = RENEWAL_SUBS.filter(s => s.city === c.city);
+      return `<label class="v2-renewal-all">` +
+        `<input type="checkbox" data-renewal-all="${c.tag}"> ${c.label}全選` +
+        `</label>` +
+        `<button type="button" class="v2-renewal-expand" data-renewal-expand-tag="${c.tag}"
+                aria-label="${c.label}展開細項">▾(${subs.length})</button>`;
+    }).join('');
+    // 各城市獨立 grid，預設 display:none，由 ▾ click handler 控制 (mutual exclusive)
+    const grids = RENEWAL_CITIES.map(c => {
       const subs = RENEWAL_SUBS.filter(s => s.city === c.city);
       const subItems = subs.map(s =>
         `<label class="v2-renewal-sub" data-sub-id="${s.id}" data-sub-city="${s.city}">` +
@@ -149,20 +159,14 @@
           `<span class="v2-renewal-text">${s.label}</span>` +
         `</label>`
       ).join('');
-      return `<div class="v2-renewal-city-section" data-city-tag="${c.tag}">
-        <label class="v2-renewal-all">
-          <input type="checkbox" data-renewal-all="${c.tag}"> ${c.label}全選
-        </label>
-        <button type="button" class="v2-renewal-expand" data-renewal-expand-tag="${c.tag}"
-                data-renewal-expanded="0" aria-label="${c.label}展開細項">▾(${subs.length})</button>
-        <div class="v2-renewal-grid" id="v2-renewal-grid-${c.tag}" style="display:none;">${subItems}</div>
-      </div>`;
+      return `<div class="v2-renewal-grid" id="v2-renewal-grid-${c.tag}" data-city-tag="${c.tag}" style="display:none;">${subItems}</div>`;
     }).join('');
     host.innerHTML = `
       <div class="v2-renewal-header">
         <span class="v2-overlays-label">都更圖層：</span>
-        ${sections}
-      </div>`;
+        ${allChecks}
+      </div>
+      ${grids}`;
     host.addEventListener('change', (e) => {
       const t = e.target;
       if (!t) return;
@@ -176,20 +180,30 @@
     });
     host.addEventListener('click', (e) => {
       const t = e.target;
-      if (t && t.classList && t.classList.contains('v2-renewal-expand')) {
-        e.preventDefault();
-        const tag = t.dataset.renewalExpandTag;
-        if (!tag) return;
-        const expanded = t.dataset.renewalExpanded === '1';
-        t.dataset.renewalExpanded = expanded ? '0' : '1';
-        const subCount = RENEWAL_SUBS.filter(s => {
-          const cfg = RENEWAL_CITIES.find(c => c.tag === tag);
-          return cfg && s.city === cfg.city;
-        }).length;
-        t.textContent = (expanded ? '▾' : '▴') + `(${subCount})`;
-        const grid = document.getElementById('v2-renewal-grid-' + tag);
-        if (grid) grid.style.display = expanded ? 'none' : '';
-      }
+      if (!t || !t.classList || !t.classList.contains('v2-renewal-expand')) return;
+      e.preventDefault();
+      const tag = t.dataset.renewalExpandTag;
+      if (!tag) return;
+      // mutual exclusive：點任一 ▾ → 其他 grid 全部收起，自己 toggle
+      const targetGrid = document.getElementById('v2-renewal-grid-' + tag);
+      const wasOpen = targetGrid && targetGrid.style.display !== 'none';
+      // 全部收起 + 重置箭頭文字
+      RENEWAL_CITIES.forEach(c => {
+        const g = document.getElementById('v2-renewal-grid-' + c.tag);
+        if (g) g.style.display = 'none';
+        const btn = host.querySelector(`button[data-renewal-expand-tag="${c.tag}"]`);
+        const cnt = RENEWAL_SUBS.filter(s => s.city === c.city).length;
+        if (btn) btn.textContent = `▾(${cnt})`;
+      });
+      // 點同一個已開的 → 已收起，結束 (toggle off 行為)
+      if (wasOpen) return;
+      // 否則展開 target
+      if (targetGrid) targetGrid.style.display = '';
+      const cnt = RENEWAL_SUBS.filter(s => {
+        const cfg = RENEWAL_CITIES.find(c => c.tag === tag);
+        return cfg && s.city === cfg.city;
+      }).length;
+      t.textContent = `▴(${cnt})`;
     });
   }
 

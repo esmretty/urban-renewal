@@ -1149,15 +1149,46 @@
     if (!host) return;
     // detail row 結構：[學校] (類型 — 鄰級切割)，跨區時前綴「X區跨區/」
     // 例：實踐國小(基本 — 14–17鄰)、松山國小(松山區跨區/自由 — 1～4鄰)
-    function _detailChip(d, queryDistrict) {
+    function _metaText(d, queryDistrict) {
       const cross = d.school_district && d.school_district !== queryDistrict
-        ? esc(d.school_district) + '跨區/' : '';
-      const zone = d.zone_type ? esc(d.zone_type) : '';
-      const nb = d.neighborhoods_raw ? ' — ' + esc(d.neighborhoods_raw) : '';
-      const meta = (cross || zone || nb)
-        ? `<span class="v2-d-school-meta">(${cross}${zone}${nb})</span>`
-        : '';
-      return `<span class="v2-d-school-tag">${esc(d.school)}${meta}</span>`;
+        ? d.school_district + '跨區/' : '';
+      const zone = d.zone_type || '';
+      const nb = d.neighborhoods_raw ? ' — ' + d.neighborhoods_raw : '';
+      return cross + zone + nb;
+    }
+    function _detailChip(d, queryDistrict) {
+      const meta = _metaText(d, queryDistrict);
+      return `<span class="v2-d-school-tag">${esc(d.school)}${meta ? `<span class="v2-d-school-meta">(${esc(meta)})</span>` : ''}</span>`;
+    }
+    // 同一學校多筆 row (不同 zone_type / neighborhoods) → 合併成 1 chip + → 箭頭，
+    // hover 顯示所有註釋 (避免 chip 列重複學校名擠成一片)
+    function _multiNoteChip(school, items, queryDistrict) {
+      const notes = items.map(d => _metaText(d, queryDistrict)).filter(Boolean);
+      const tooltip = notes.length ? notes.join('\n') : '';
+      return `<span class="v2-d-school-tag v2-d-school-tag--multi" title="${esc(tooltip)}">` +
+        `${esc(school)}<span class="v2-d-school-arrow" aria-label="${esc(tooltip)}">→</span>` +
+        `</span>`;
+    }
+    // 群組 by school 名 → 1 筆 = 一般 chip；2+ 筆 = multi-note chip
+    function _groupAndRender(items, queryDistrict) {
+      const grouped = new Map();
+      for (const d of items) {
+        const key = d.school || '';
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(d);
+      }
+      // 排序：基本 > 自由；同類型按校名 — group 內第一筆的 zone_type 當代表
+      const arr = Array.from(grouped.entries());
+      arr.sort(([sA, lA], [sB, lB]) => {
+        const za = (lA[0]?.zone_type === '基本') ? 0 : (lA[0]?.zone_type === '自由' ? 1 : 2);
+        const zb = (lB[0]?.zone_type === '基本') ? 0 : (lB[0]?.zone_type === '自由' ? 1 : 2);
+        if (za !== zb) return za - zb;
+        return String(sA).localeCompare(String(sB), 'zh-Hant');
+      });
+      return arr.map(([school, list]) => {
+        if (list.length === 1) return _detailChip(list[0], queryDistrict);
+        return _multiNoteChip(school, list, queryDistrict);
+      }).join(' ');
     }
     const renderRow = (kind, items, queryDistrict) => {
       const rows = host.querySelectorAll('.v2-d-school-row');
@@ -1171,18 +1202,13 @@
       }
       // items 可能是 [string] (backward) 或 [detail row]
       if (typeof items[0] === 'string') {
-        list.innerHTML = _sortSchoolNames(items).map(s =>
+        // 純字串清單 (舊 schema) — 去重 + 排序
+        const uniq = Array.from(new Set(items));
+        list.innerHTML = _sortSchoolNames(uniq).map(s =>
           `<span class="v2-d-school-tag">${esc(s)}</span>`
         ).join(' ');
       } else {
-        // 排序：基本 > 自由；同類型按校名
-        const sorted = items.slice().sort((a, b) => {
-          const za = (a.zone_type === '基本') ? 0 : (a.zone_type === '自由' ? 1 : 2);
-          const zb = (b.zone_type === '基本') ? 0 : (b.zone_type === '自由' ? 1 : 2);
-          if (za !== zb) return za - zb;
-          return String(a.school || '').localeCompare(String(b.school || ''), 'zh-Hant');
-        });
-        list.innerHTML = sorted.map(d => _detailChip(d, queryDistrict)).join(' ');
+        list.innerHTML = _groupAndRender(items, queryDistrict);
       }
     };
     if (!lat || !lng) {
@@ -1306,6 +1332,24 @@
     if (srcWrap) { srcWrap.innerHTML = ''; srcWrap.style.display = 'none'; }
   }
 
+  // 都更案件 body HTML — 給 detailHTML 跟 refreshRedevCases 共用
+  // 結構配 .v2-ai-sec__body container，群組 by sub_type_label，每組一行：「label: 案號 1, 案號 2…」
+  function renderRedevCasesBody(p) {
+    if (!Array.isArray(p.redev_cases)) return '<span class="v2-d-hint">尚未查詢</span>';
+    if (p.redev_cases.length === 0) return '<span class="v2-d-hint">無套疊都更案件</span>';
+    const byType = {};
+    p.redev_cases.forEach(c => {
+      const k = c.sub_type_label || c.sub_type || '其他';
+      (byType[k] = byType[k] || []).push(c);
+    });
+    return Object.entries(byType).map(([label, items]) => {
+      const ids = items.map(it => esc(it.case_id || '')).filter(Boolean).join(', ');
+      const applicants = items.map(it => esc(it.applicant || '')).filter(Boolean);
+      const detail = ids || (applicants.length ? applicants.join('、') : `${items.length} 案`);
+      return `<div class="v2-d-redev-row"><span class="v2-d-redev-label">${esc(label)}</span><span class="v2-d-redev-detail">${detail}</span></div>`;
+    }).join('');
+  }
+
   function detailHTML(p, prices) {
     const id = p.source_id || p.id || '';
     const priceWan = p.price_ntd ? Math.round(p.price_ntd / 10000) : null;
@@ -1426,22 +1470,7 @@
 
     // 都更案件 (位置上套疊到的) — auto-enrich 拿到的 redev_cases
     // 雙北才會有；無資料 → 顯示「—」；空 list → 顯示「無」(代表查過但該位置沒套疊)
-    const redevCasesHTML = (() => {
-      if (!Array.isArray(p.redev_cases)) return '<span class="v2-d-hint">—</span>';
-      if (p.redev_cases.length === 0) return '<span class="v2-d-hint">無套疊都更案件</span>';
-      // 同 sub_type 群組顯示
-      const byType = {};
-      p.redev_cases.forEach(c => {
-        const k = c.sub_type_label || c.sub_type || '其他';
-        (byType[k] = byType[k] || []).push(c);
-      });
-      return Object.entries(byType).map(([label, items]) => {
-        const ids = items.map(it => esc(it.case_id || '')).filter(Boolean).join(', ');
-        const applicants = items.map(it => esc(it.applicant || '')).filter(Boolean);
-        const detail = ids || (applicants.length ? applicants.join('、') : `${items.length} 案`);
-        return `<div class="v2-d-redev-row"><span class="v2-d-redev-label">${esc(label)}</span> <span class="v2-d-redev-detail">${detail}</span></div>`;
-      }).join('');
-    })();
+    const redevCasesBodyHTML = renderRedevCasesBody(p);
 
     return `
       <!-- Row 1: 物件資訊 (左 7) | 圖片 (右 5) — 對齊 v1 col-md-7 + col-md-5 -->
@@ -1491,16 +1520,18 @@
         </div>
         <div class="v2-d-col v2-d-col--5">
           <h6 class="v2-d-h">其他資訊</h6>
-          <div class="v2-d-other-block">
-            <div class="v2-d-other-head">
-              <span class="v2-d-other-label">都更案件</span>
-              <button type="button" class="v2-d-redev-refresh"
-                      onclick="event.stopPropagation(); v2.refreshRedevCases('${esc(id)}', this)"
-                      title="重新查詢該位置上的都更案件">重新查詢</button>
+          <div class="v2-d-ai-text">
+            <div class="v2-ai-sec v2-ai-sec--redev">
+              <div class="v2-ai-sec__title">都更案件</div>
+              <div class="v2-ai-sec__body">
+                <button type="button" class="v2-d-redev-refresh"
+                        onclick="event.stopPropagation(); v2.refreshRedevCases('${esc(id)}', this)"
+                        title="重新查詢該位置上的都更案件">重新查詢</button>
+                <div class="v2-d-redev-list" id="v2-d-redev-${esc(id)}">${redevCasesBodyHTML}</div>
+              </div>
             </div>
-            <div class="v2-d-other-body" id="v2-d-redev-${esc(id)}">${redevCasesHTML}</div>
+            ${renderAiText(aiText || '', p, prices)}
           </div>
-          <div class="v2-d-ai-text">${renderAiText(aiText || '', p, prices)}</div>
         </div>
       </div>
 
@@ -3269,7 +3300,8 @@
   }
 
   // detail page「都更案件」重新查詢按鈕：打 /api/properties/{id}/refresh_redev_cases
-  // 成功 → 把該物件 redev_cases 寫回 state.allProperties + 重 render detail body
+  // 只更新 redev 那一塊 div，不重 render 整個 detail body (避免學區 / 試算等其他 async
+  // 區塊被打回「載入中…」placeholder 但沒人重新 trigger fetch)
   async function refreshRedevCases(id, btn) {
     if (!id) return;
     if (btn) { btn.disabled = true; btn.textContent = '查詢中…'; }
@@ -3287,17 +3319,14 @@
       // 寫回 state
       const p = state.allProperties.find(x => (x.source_id || x.id) === id);
       if (p) p.redev_cases = cases;
-      // 重 render detail (只重 render 都更案件那塊就好，避免閃整個 detail)
-      if (state.selectedId === id) {
-        await _renderDetailFromCurrent();
-      }
+      // in-place update 對應 div (只重 render 都更那塊；學區/試算/AI 等其他 async 區塊不動)
+      const listEl = document.getElementById(`v2-d-redev-${id}`);
+      if (listEl) listEl.innerHTML = renderRedevCasesBody(p);
       toast(`查到 ${cases.length} 筆都更案件`, 'info');
     } catch (e) {
       console.error('refreshRedevCases', e);
       toast(`重新查詢失敗：${e.message || e}`, 'error');
     } finally {
-      // _renderDetailFromCurrent 已重 render → 新 button 接管，舊 btn 已 detach。
-      // 若沒重 render (例如 selectedId 已換) 才需要還原 btn 狀態
       if (btn && document.contains(btn)) {
         btn.disabled = false;
         btn.textContent = '重新查詢';
