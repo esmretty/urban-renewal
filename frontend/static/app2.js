@@ -1324,52 +1324,36 @@
     if (srcWrap) { srcWrap.innerHTML = ''; srcWrap.style.display = 'none'; }
   }
 
-  // 都更案件 body HTML — 給 detailHTML 跟 refreshRedevCases 共用
-  // 群組 by sub_type_label，每組分行顯示每筆 case：「申請人 — 摘要 (#案號 ↗)」
-  // - 摘要：server 串好的 user-friendly 字串 (新北：地址/補助項目/段地號 等；台北目前無 detail API → 空)
-  // - 案號 ↗：台北 R/P prefix case 連到 gis.uro.taipei/showproj_uro.html (新版都更地理資訊)；
-  //   115_revised / 63y_building / 新北 沒對應公開 deep-link → 純文字案號不帶連結
+  // 都更案件 body HTML — DB 只存「有壓到/沒壓到」+ case_id (內容會變不存 DB)
+  // UI：每個 sub_type 顯示成 chip「都更事業 (1件) 了解細節 ↗」
+  //     點「了解細節」→ popup 即時 fetch detail 顯示。
   function _redevCaseDetailUrl(c) {
     const cid = (c.case_id || '').toString();
     if (!cid) return null;
-    // 台北：R/P prefix → gis.uro.taipei
     if (/^[RP]\d/i.test(cid)) {
       return `https://gis.uro.taipei/showproj_uro.html?case_id=${encodeURIComponent(cid)}`;
     }
-    // 新北 case_id 是純整數，目前沒找到 NtpcURInfo 個別案件 deep-link → 不提供 URL
     return null;
   }
   function renderRedevCasesBody(p) {
     if (!Array.isArray(p.redev_cases)) return '<span class="v2-d-hint">尚未查詢</span>';
     if (p.redev_cases.length === 0) return '<span class="v2-d-hint">無套疊都更案件</span>';
+    const id = p.source_id || p.id || '';
     const byType = {};
     p.redev_cases.forEach(c => {
-      const k = c.sub_type_label || c.sub_type || '其他';
-      (byType[k] = byType[k] || []).push(c);
+      const k = c.sub_type || '其他';
+      if (!byType[k]) byType[k] = { label: c.sub_type_label || k, items: [] };
+      byType[k].items.push(c);
     });
-    return Object.entries(byType).map(([label, items]) => {
-      const itemsHTML = items.map(it => {
-        const applicant = it.applicant || '';
-        const summary = it.summary || '';
-        const cid = it.case_id ? String(it.case_id) : '';
-        const url = _redevCaseDetailUrl(it);
-        const headParts = [];
-        if (applicant) headParts.push(esc(applicant));
-        if (summary) headParts.push(esc(summary));
-        const headStr = headParts.join(' — ');
-        const caseTag = cid
-          ? (url
-              ? `<a class="v2-d-redev-caseid v2-d-redev-caseid--link" href="${esc(url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">#${esc(cid)} ↗</a>`
-              : `<span class="v2-d-redev-caseid">#${esc(cid)}</span>`)
-          : '';
-        const body = headStr || (cid ? '' : '—');
-        return `<div class="v2-d-redev-item">${body}${body && caseTag ? ' ' : ''}${caseTag}</div>`;
-      }).join('');
-      return `<div class="v2-d-redev-group">` +
-        `<div class="v2-d-redev-label">${esc(label)}</div>` +
-        `<div class="v2-d-redev-items">${itemsHTML}</div>` +
-        `</div>`;
-    }).join('');
+    return Object.entries(byType).map(([sub, info]) =>
+      `<div class="v2-d-redev-chip" data-sub-type="${esc(sub)}">` +
+        `<span class="v2-d-redev-chip-label">${esc(info.label)}</span>` +
+        `<span class="v2-d-redev-chip-count">(${info.items.length}件)</span>` +
+        `<button type="button" class="v2-d-road-show v2-d-redev-detail-btn"` +
+                ` onclick="event.stopPropagation(); v2.showRedevDetailPopup('${esc(id)}','${esc(sub)}', this)"` +
+                ` title="即時查詢此圖層內的都更案件詳情">了解細節 ↗</button>` +
+      `</div>`
+    ).join('');
   }
 
   function detailHTML(p, prices) {
@@ -1544,11 +1528,8 @@
           <h6 class="v2-d-h">其他資訊</h6>
           <div class="v2-d-ai-text">
             <div class="v2-ai-sec v2-ai-sec--redev">
-              <div class="v2-ai-sec__title">都更案件</div>
+              <div class="v2-ai-sec__title">都更圖層</div>
               <div class="v2-ai-sec__body">
-                <button type="button" class="v2-d-road-show v2-d-redev-refresh"
-                        onclick="event.stopPropagation(); v2.refreshRedevCases('${esc(id)}', this)"
-                        title="重新查詢該位置上的都更案件">重新查詢 ↗</button>
                 <div class="v2-d-redev-list" id="v2-d-redev-${esc(id)}">${redevCasesBodyHTML}</div>
               </div>
             </div>
@@ -3358,39 +3339,81 @@
     applyFilters();
   }
 
-  // detail page「都更案件」重新查詢按鈕：打 /api/properties/{id}/refresh_redev_cases
-  // 只更新 redev 那一塊 div，不重 render 整個 detail body (避免學區 / 試算等其他 async
-  // 區塊被打回「載入中…」placeholder 但沒人重新 trigger fetch)
-  async function refreshRedevCases(id, btn) {
+  // detail page chip「了解細節 ↗」→ 打 /api/properties/{id}/refresh_redev_cases
+  // 即時抓最新案件詳情 (含 server-side 串好的 summary)，render 進浮動 popup
+  // (DB 也會被同步更新；下次 detail 開啟時 chip 顯示 N 件數可能微調，無 user 影響)
+  let _redevPopupTimer = null;
+  async function showRedevDetailPopup(id, subType, anchor) {
     if (!id) return;
-    if (btn) { btn.disabled = true; btn.textContent = '查詢中…'; }
+    let pop = document.getElementById('v2-redev-popup');
+    if (!pop) {
+      pop = document.createElement('div');
+      pop.id = 'v2-redev-popup';
+      pop.className = 'v2-redev-popup';
+      pop.addEventListener('mouseenter', () => clearTimeout(_redevPopupTimer));
+      pop.addEventListener('mouseleave', hideRedevDetailPopup);
+      document.body.appendChild(pop);
+    }
+    clearTimeout(_redevPopupTimer);
+    pop.innerHTML = '<div class="v2-redev-popup__loading">查詢中…</div>';
+    pop.style.display = 'block';
+    _positionRedevPopup(pop, anchor);
+
     try {
-      const r = await fetch(`/api/properties/${encodeURIComponent(id)}/refresh_redev_cases`, {
-        method: 'POST',
-      });
+      const r = await fetch(`/api/properties/${encodeURIComponent(id)}/refresh_redev_cases`, { method: 'POST' });
       if (!r.ok) {
-        const txt = await r.text();
-        toast(`重新查詢失敗：${txt}`, 'error');
+        pop.innerHTML = `<div class="v2-redev-popup__loading" style="color:#dc2626;">查詢失敗</div>`;
         return;
       }
       const data = await r.json();
-      const cases = Array.isArray(data.redev_cases) ? data.redev_cases : [];
-      // 寫回 state
+      const all = Array.isArray(data.redev_cases) ? data.redev_cases : [];
+      // 同步寫回 state，下次 render 也用新資料
       const p = state.allProperties.find(x => (x.source_id || x.id) === id);
-      if (p) p.redev_cases = cases;
-      // in-place update 對應 div (只重 render 都更那塊；學區/試算/AI 等其他 async 區塊不動)
-      const listEl = document.getElementById(`v2-d-redev-${id}`);
-      if (listEl) listEl.innerHTML = renderRedevCasesBody(p);
-      toast(`查到 ${cases.length} 筆都更案件`, 'info');
-    } catch (e) {
-      console.error('refreshRedevCases', e);
-      toast(`重新查詢失敗：${e.message || e}`, 'error');
-    } finally {
-      if (btn && document.contains(btn)) {
-        btn.disabled = false;
-        btn.textContent = '重新查詢';
+      if (p) p.redev_cases = all;
+      // 過濾出 user 點的 sub_type
+      const items = all.filter(c => c.sub_type === subType);
+      if (items.length === 0) {
+        pop.innerHTML = `<div class="v2-redev-popup__title">${esc(subType)}</div>` +
+          `<div class="v2-redev-popup__empty">該圖層目前無套疊案件 (位置可能變動)</div>`;
+        _positionRedevPopup(pop, anchor);
+        return;
       }
+      const subLabel = items[0].sub_type_label || subType;
+      const itemsHTML = items.map(it => {
+        const cid = it.case_id ? String(it.case_id) : '';
+        const url = _redevCaseDetailUrl(it);
+        const heads = [];
+        if (it.applicant) heads.push(esc(it.applicant));
+        if (it.summary) heads.push(esc(it.summary));
+        const head = heads.join(' — ') || '(無詳細資料)';
+        const caseTag = cid
+          ? (url
+              ? `<a class="v2-redev-popup__caseid v2-redev-popup__caseid--link" href="${esc(url)}" target="_blank" rel="noopener">#${esc(cid)} ↗</a>`
+              : `<span class="v2-redev-popup__caseid">#${esc(cid)}</span>`)
+          : '';
+        return `<div class="v2-redev-popup__row">${head} ${caseTag}</div>`;
+      }).join('');
+      pop.innerHTML = `<div class="v2-redev-popup__title">${esc(subLabel)} <span class="v2-redev-popup__count">(${items.length}件)</span></div>${itemsHTML}`;
+      _positionRedevPopup(pop, anchor);
+    } catch (e) {
+      pop.innerHTML = `<div class="v2-redev-popup__loading" style="color:#dc2626;">查詢失敗：${esc(String(e.message || e))}</div>`;
     }
+  }
+  function _positionRedevPopup(pop, anchor) {
+    if (!anchor) return;
+    const r = anchor.getBoundingClientRect();
+    pop.style.display = 'block';
+    const pr = pop.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    const top = (spaceBelow > pr.height + 12) ? r.bottom + 6 : Math.max(8, r.top - pr.height - 6);
+    pop.style.top = top + 'px';
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pr.width - 8)) + 'px';
+  }
+  function hideRedevDetailPopup() {
+    _redevPopupTimer = setTimeout(() => {
+      const pop = document.getElementById('v2-redev-popup');
+      if (pop) pop.style.display = 'none';
+    }, 400);
   }
 
   // 強制重整（給 iOS 桌面 PWA 用）— 清 caches API + 加時間戳 → 不會吃到舊版
@@ -3424,7 +3447,7 @@
     // 給 map_mode.js (獨立檔) 用：state、helpers，map_mode.js 透過 window.v2 取
     state, getDistrictPrices, _saveFilters,
     openRoadOverlay, scanRoadWidth, deleteRow,
-    refreshRedevCases,
+    showRedevDetailPopup, hideRedevDetailPopup,
     hardReload,
     startVoiceRoad,
     startVoiceSchool,
