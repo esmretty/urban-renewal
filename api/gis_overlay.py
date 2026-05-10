@@ -49,9 +49,23 @@ _LAYER_DEFS: dict[str, dict] = {
         "display_name": "台北市 土地分區",
     },
     # 地籍拆兩個 backend：線任 zoom 顯示，地號文字只 z=18 或 19 才顯示 (前端 minZoom 控制)
+    # SLD_BODY 把 server default 粗灰線換成 0.4px 黑細線 (對齊新北 NtpcURInfo 視覺)
+    # 注意：Taipei GeoServer 只認 stroke override，fill / TextSymbolizer 都被吞掉
     "cadastral_lines_tpe": {
         "kind": "wms", "upstream": _TPE_WMS_URL,
         "layers": "Taipei:LAND-ALL-TWD97",
+        "sld_body": (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc">'
+            '<NamedLayer><Name>Taipei:LAND-ALL-TWD97</Name>'
+            '<UserStyle><FeatureTypeStyle><Rule>'
+            '<PolygonSymbolizer><Stroke>'
+            '<CssParameter name="stroke">#000000</CssParameter>'
+            '<CssParameter name="stroke-width">0.4</CssParameter>'
+            '</Stroke></PolygonSymbolizer>'
+            '</Rule></FeatureTypeStyle></UserStyle>'
+            '</NamedLayer></StyledLayerDescriptor>'
+        ),
         "disk_cache": True,
         "display_name": "台北市 地籍線",
     },
@@ -203,13 +217,15 @@ def _get_ntpc_token() -> str:
 
 
 # ── 上游 dispatch ──────────────────────────────────────────────────────────
-def _fetch_wms(upstream: str, layer_names: str, bbox: str, width: int, height: int, srs: str, cql_filter: Optional[str] = None) -> Optional[bytes]:
+def _fetch_wms(upstream: str, layer_names: str, bbox: str, width: int, height: int, srs: str,
+               cql_filter: Optional[str] = None, sld_body: Optional[str] = None) -> Optional[bytes]:
     """直接 forward WMS GetMap 到 GeoServer。
     cql_filter: GeoServer CQL filter（用來在同一個 layer 下篩 sub-set，例如 'layer=10'）
+    sld_body: 自訂 SLD XML 字串 (override server-side default styling)。
 
-    注意：zonegeo.udd.gov.taipei GeoServer **不接受 SLD_BODY 或 user-supplied STYLES**，
-    layer 預設 SLD render 是 grayscale (170,170,170 + 0,0,0 outline)。要彩色對齊
-    UDDPlanMap 必須在前端用 SVG filter colorize tile image (見 map_overlays.css)。
+    注意：zonegeo.udd.gov.taipei GeoServer 對 SLD_BODY 有限制 — 只認 stroke override，
+    fill / TextSymbolizer 都被吞掉 (實測 v6/v7 fail)。redev layer 因此走前端 SVG filter
+    colorize；地籍線改用 SLD_BODY 把預設粗灰線換成 0.4px 黑細線對齊新北視覺。
     """
     params = {
         "service": "WMS",
@@ -226,6 +242,8 @@ def _fetch_wms(upstream: str, layer_names: str, bbox: str, width: int, height: i
     }
     if cql_filter:
         params["cql_filter"] = cql_filter
+    if sld_body:
+        params["SLD_BODY"] = sld_body
     try:
         r = httpx.get(
             upstream,
@@ -1081,7 +1099,8 @@ async def gis_overlay(layer: str, request: Request) -> Response:
                 _cache_set(cache_key, disk_content)
             return Response(content=disk_content, media_type="image/png", headers={"X-Cache": "DISK-HIT", "Cache-Control": cc_header})
     if cfg["kind"] == "wms":
-        content = _fetch_wms(cfg["upstream"], cfg["layers"], bbox, width, height, srs, cfg.get("cql_filter"))
+        content = _fetch_wms(cfg["upstream"], cfg["layers"], bbox, width, height, srs,
+                             cfg.get("cql_filter"), cfg.get("sld_body"))
     elif cfg["kind"] == "arcgis_export":
         content = _fetch_arcgis_export(cfg, bbox, width, height, srs)
     elif cfg["kind"] == "nlsc_wms":
