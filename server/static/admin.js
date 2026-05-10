@@ -364,8 +364,57 @@ window.loadLineStatus = async function () {
     if (typeof loadLineTemplate === "function") loadLineTemplate();
     // 載入 webhook 收到的 IDs
     if (typeof loadLineRecentEvents === "function") loadLineRecentEvents();
+    // 載入 secret fingerprint (對比 LINE Console)
+    if (typeof loadLineSecretFingerprint === "function") loadLineSecretFingerprint();
   } catch (e) {
     box.innerHTML = `<span style="color:#c0392b;">載入失敗：${esc(e.message)}</span>`;
+  }
+};
+
+// ── LINE Channel Secret 管理 ───────────────────────
+window.loadLineSecretFingerprint = async function () {
+  const box = document.getElementById("line-secret-fingerprint-box");
+  if (!box) return;
+  try {
+    const r = await authedFetch("/admin/line/secret_fingerprint");
+    const data = r.ok ? await r.json() : { set: false };
+    if (!data.set) {
+      box.innerHTML = `<span style="color:#c0392b;">✗ Channel secret 未設定</span>`;
+      return;
+    }
+    box.innerHTML = `<span style="color:#27ae60;">✓ 已設定</span>
+      <span style="color:#666;"> | 來源：${esc(data.source || "?")} | 長度：${data.length} 字 | sha256[:12]=<code>${esc(data.fingerprint)}</code></span>
+      <span style="color:#888; font-size:11px;"> （fingerprint 用來比對；LINE Console 那串複製進來算 sha256 前 12 字應該一樣）</span>`;
+  } catch (e) {
+    box.innerHTML = `<span style="color:#c0392b;">載入失敗：${esc(e.message)}</span>`;
+  }
+};
+
+window.saveLineSecret = async function () {
+  const inp = document.getElementById("line-secret-input");
+  const resEl = document.getElementById("line-secret-result");
+  const v = (inp.value || "").trim();
+  if (!v || v.length < 16) {
+    if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">太短 (LINE 一般 32 字)</span>`;
+    return;
+  }
+  try {
+    const r = await authedFetch("/admin/line/secret", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channel_secret: v }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">儲存失敗：${esc(data.detail || r.status)}</span>`;
+      return;
+    }
+    if (resEl) resEl.innerHTML = `<span style="color:#27ae60;">✓ 已儲存 (${data.length} 字)。請回 LINE Console 按 Verify 應該過。</span>`;
+    inp.value = "";
+    loadLineSecretFingerprint();
+    loadLineStatus();
+  } catch (e) {
+    if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">${esc(e.message)}</span>`;
   }
 };
 

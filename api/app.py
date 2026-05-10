@@ -1981,7 +1981,7 @@ async def admin_line_status(admin: dict = Depends(require_admin)):
     """LINE 通知設定狀態：token / user_id 是否設定 + 倍數門檻 + 最近通知統計。"""
     import os as _os
     token = _os.getenv("LINE_CHANNEL_TOKEN", "").strip()
-    secret = _os.getenv("LINE_CHANNEL_SECRET", "").strip()
+    secret = _get_line_channel_secret()   # Firestore > env
     user_id_env = _os.getenv("LINE_USER_ID", "").strip()
     target_id_db = ""   # 從 Firestore 讀的 (admin UI 設的，優先序高於 env)
     # 讀門檻（預設 2.8）+ 不可觸發旗標（admin 勾選，預設全勾）
@@ -2053,18 +2053,35 @@ _VALID_TRIGGER_SCENARIOS = {"危老", "都更", "防災都更"}
 
 
 # ─── LINE Webhook 接收：監聽 group/user/room 事件，存最近 20 筆給 admin UI 選 target ───
+def _get_line_channel_secret() -> str:
+    """讀 LINE Channel Secret (用於 webhook HMAC 驗證)。
+    優先序：Firestore settings/line_config.channel_secret > env LINE_CHANNEL_SECRET。
+    走 Firestore 是因為 user 沒辦法 SSH 改 .env，從 admin UI 直接貼 secret 存進 DB 最方便。"""
+    try:
+        from database.db import get_firestore as _gf
+        cfg = _gf().collection("settings").document("line_config").get()
+        if cfg.exists:
+            v = (cfg.to_dict() or {}).get("channel_secret", "")
+            if v:
+                return v.strip()
+    except Exception:
+        pass
+    import os as _os
+    return _os.getenv("LINE_CHANNEL_SECRET", "").strip()
+
+
 @app.post("/api/line/webhook")
 async def line_webhook(request: Request):
     """LINE Messaging API Webhook 接收端。
     主要用途：bot 被邀進群組 / 群組裡有訊息時，記下 source.groupId 給 admin UI 顯示，
     讓 admin 可以一鍵把 group_id 設為通知目標 (不必 SSH 改 .env)。
 
-    安全：HMAC-SHA256 驗證 X-Line-Signature header (用 LINE_CHANNEL_SECRET)。
+    安全：HMAC-SHA256 驗證 X-Line-Signature header (用 channel secret)。
     驗證失敗 → 401。LINE 期望 200 回應，否則會 retry。"""
-    import os as _os, hmac as _hmac, hashlib as _hashlib, base64 as _b64
-    secret = _os.getenv("LINE_CHANNEL_SECRET", "").strip()
+    import hmac as _hmac, hashlib as _hashlib, base64 as _b64
+    secret = _get_line_channel_secret()
     if not secret:
-        logger.warning("LINE webhook 收到請求但 LINE_CHANNEL_SECRET 未設定")
+        logger.warning("LINE webhook 收到請求但 channel secret 未設定 (Firestore + env 都沒有)")
         # 仍回 200 避免 LINE 重試干擾 (尚未啟用此功能)
         return {"status": "secret_not_configured"}
     body_bytes = await request.body()
@@ -2147,14 +2164,44 @@ async def admin_line_recent_events(admin: dict = Depends(require_admin)):
 
 @app.get("/admin/line/secret_fingerprint")
 async def admin_line_secret_fingerprint(admin: dict = Depends(require_admin)):
-    """回 LINE_CHANNEL_SECRET 的 sha256 fingerprint (前 12 字)，
-    給 admin 對比 LINE Console 的 Channel secret 有沒有抄錯 (不洩漏完整值)。"""
-    import os as _os, hashlib as _hashlib
-    s = _os.getenv("LINE_CHANNEL_SECRET", "").strip()
+    """回 LINE channel secret 的 sha256 fingerprint (前 12 字)，
+    給 admin 對比 LINE Console 的 Channel secret 有沒有抄錯 (不洩漏完整值)。
+    讀取優先序同 webhook：Firestore > env。"""
+    import hashlib as _hashlib
+    s = _get_line_channel_secret()
     if not s:
-        return {"set": False, "fingerprint": "", "length": 0}
+        return {"set": False, "fingerprint": "", "length": 0, "source": "未設定"}
     fp = _hashlib.sha256(s.encode("utf-8")).hexdigest()[:12]
-    return {"set": True, "fingerprint": fp, "length": len(s)}
+    # 判斷來源 (debug 用)
+    src = "env LINE_CHANNEL_SECRET"
+    try:
+        from database.db import get_firestore as _gf
+        cfg = _gf().collection("settings").document("line_config").get()
+        if cfg.exists and (cfg.to_dict() or {}).get("channel_secret"):
+            src = "Firestore (admin UI 設定)"
+    except Exception:
+        pass
+    return {"set": True, "fingerprint": fp, "length": len(s), "source": src}
+
+
+class LineSecretReq(BaseModel):
+    channel_secret: str   # LINE Console > Basic settings > Channel secret 那串
+
+
+@app.post("/admin/line/secret")
+async def admin_set_line_secret(body: LineSecretReq, admin: dict = Depends(require_admin)):
+    """Admin 把 LINE Channel Secret 寫進 Firestore settings/line_config.channel_secret。
+    這樣不用 SSH 改 .env 也能讓 webhook HMAC 驗證 work。"""
+    sec = (body.channel_secret or "").strip()
+    if not sec or len(sec) < 16:
+        raise HTTPException(400, "channel_secret 太短 (LINE 一般 32 字)")
+    get_firestore().collection("settings").document("line_config").set({
+        "channel_secret": sec,
+        "channel_secret_updated_at": now_tw_iso(),
+        "channel_secret_updated_by_email": admin.get("email") or "",
+    }, merge=True)
+    logger.warning(f"[admin] {admin.get('email')} 設 LINE channel_secret (len={len(sec)})")
+    return {"status": "ok", "length": len(sec)}
 
 
 @app.post("/admin/line/threshold")

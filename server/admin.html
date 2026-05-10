@@ -367,9 +367,25 @@
         </div>
       </section>
 
+      <!-- panel A1.5：Channel Secret (admin UI 直接貼，不用 SSH) -->
+      <section class="panel">
+        <h2>② Channel Secret (Webhook 簽章用)</h2>
+        <p style="font-size:12px; color:#666; margin:0 0 10px;">
+          LINE Developers Console → Basic settings → 最下面「Channel secret」那串（不是 token），
+          貼進來儲存即可。**儲存後立即生效，不用重啟**。優先序：admin UI 設的 &gt; .env LINE_CHANNEL_SECRET。
+        </p>
+        <div id="line-secret-fingerprint-box" style="font-size:13px; padding:8px 10px; background:#f7f3ea; border-radius:4px; margin-bottom:10px;">載入中…</div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <input id="line-secret-input" type="password" placeholder="貼上 Channel secret (32 字)"
+                 style="flex:1; padding:6px 10px; font-size:13px; font-family:Consolas,monospace; border:1px solid #c8b97a; border-radius:4px;">
+          <button onclick="saveLineSecret()" style="padding:6px 16px; background:#c78a00; color:#fff; border:none; border-radius:4px; cursor:pointer;">儲存</button>
+          <span id="line-secret-result" style="font-size:13px;"></span>
+        </div>
+      </section>
+
       <!-- panel A2：Webhook 收到的 ID 列表 + 一鍵設為通知目標 -->
       <section class="panel">
-        <h2>② Webhook 收到的 ID（選一個設為通知目標）</h2>
+        <h2>③ Webhook 收到的 ID（選一個設為通知目標）</h2>
         <p style="font-size:12px; color:#666; margin:0 0 10px;">
           建 LINE 群組 → 邀 bot 進去 → 群組裡發任意訊息 → webhook 觸發後 ID 會出現在下方。
           按「設為通知目標」後立即生效，不需重啟。
