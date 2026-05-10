@@ -2962,12 +2962,25 @@
         <div style="font-size:11px; color:#666;">${safe(sub)}</div>
       </button>`;
     }).join('');
+    // 「都不是」按鈕：物件未在 LVR (e.g. 1F 沒交易過、LVR 都是 3F/4F)，user 不該被迫選一筆
+    // → use_source='user'：bld/land 用 user 輸入、跳過 LVR 比對、其他 (year_completed/total_floors) 仍從 LVR 補
+    const noneBtn = `<button type="button" class="v2-cap__cand-btn" data-amb="__none__"
+        style="text-align:left; line-height:1.4; background:#fffbe6; border-color:#f0c14b;">
+      <div style="font-weight:600;">都不是 — 我的物件不在這幾戶裡</div>
+      <div style="font-size:11px; color:#666;">用我輸入的建坪/地坪，跳過實登比對 (適合：1F 從沒賣過、LVR 都是別樓層)</div>
+    </button>`;
     el.className = 'v2-cap__msg v2-cap__msg--error';
     el.innerHTML = `<div style="margin-bottom:6px;">${safe(msg)}</div>` +
-      `<div class="v2-cap__cand-list" style="flex-direction:column; align-items:stretch;">${btns}</div>`;
+      `<div class="v2-cap__cand-list" style="flex-direction:column; align-items:stretch;">${btns}${noneBtn}</div>`;
     el.querySelectorAll('button[data-amb]').forEach(b => {
       b.addEventListener('click', () => {
-        const idx = +b.getAttribute('data-amb');
+        const key = b.getAttribute('data-amb');
+        if (key === '__none__') {
+          // 不改 form bld/land，直接 use_source='user' 重送
+          triggerManualAnalyze('user');
+          return;
+        }
+        const idx = +key;
         const c = candidates[idx];
         if (!c) return;
         // 把候選戶的 bld/land 填回 form 後 use_source=auto 重送 → 後端 SQL 篩唯一
