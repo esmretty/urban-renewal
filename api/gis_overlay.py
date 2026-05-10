@@ -1008,6 +1008,21 @@ def _fetch_arcgis_export(cfg: dict, bbox: str, width: int, height: int, srs: str
         return None
 
 
+def _browser_cache_ttl(layer: str, cfg: dict) -> int:
+    """瀏覽器 / CDN cache 期限 (seconds)。0 = no-store。
+    Server disk cache 永不過期；瀏覽器 cache 由這個 TTL 控制 user 端 round-trip 頻率。
+      stable layers (zoning / cadastral / building 多年不變): 1 週
+      redev layers (case 狀態會變但同 polygon 內容低頻): 1 天
+      591 / skip_cache: 0
+    對應「第二次抓同位置」的 UX：第一次 fetch 後存進瀏覽器 cache，下次 panning 回同
+    tile 直接 0ms 拿，不再打 server。"""
+    if cfg["kind"] == "591_dmaps_proxy" or cfg.get("skip_cache"):
+        return 0
+    if layer.startswith("redev_"):
+        return 86400        # 1 day — case 狀態變動但 polygon 範圍變動 < daily
+    return 604800           # 7 days — zoning / cadastral / building 多年不變
+
+
 # ── Endpoint ───────────────────────────────────────────────────────────────
 @router.get("/api/gis_overlay/{layer}")
 async def gis_overlay(layer: str, request: Request) -> Response:
@@ -1039,12 +1054,16 @@ async def gis_overlay(layer: str, request: Request) -> Response:
     # skip_cache：都更圖層 (動態變動) + 591 forward proxy (不 cache 重製) 都不該 cache
     skip_cache = cfg["kind"] == "591_dmaps_proxy" or bool(cfg.get("skip_cache"))
     cache_key = (layer, bbox, width, height, srs)
+    # 瀏覽器 / CDN cache 期限 — 跟 server-side disk cache (永不過期，靠 admin/scheduler 清) 不同概念
+    # 控制 user 第 N 次造訪同 tile 時瀏覽器自己 cache 不再 round-trip 到 server
+    browser_ttl = _browser_cache_ttl(layer, cfg)
+    cc_header = "no-store" if browser_ttl <= 0 else f"public, max-age={browser_ttl}"
 
     # 1. memory cache (10 min TTL，所有 layer 共用)
     if not skip_cache:
         cached = _cache_get(cache_key)
         if cached:
-            return Response(content=cached, media_type="image/png", headers={"X-Cache": "HIT"})
+            return Response(content=cached, media_type="image/png", headers={"X-Cache": "HIT", "Cache-Control": cc_header})
 
     # 2. disk cache — 永不過期。只有 admin 手動清 cache 或 scheduler 時間到才 rmtree
     # 只對 Leaflet 預設 256×256 標準 tile request 才 cache
@@ -1057,7 +1076,7 @@ async def gis_overlay(layer: str, request: Request) -> Response:
             # 順便回填 memory cache (下個 user 同 tile 也 hit memory)
             if not skip_cache:
                 _cache_set(cache_key, disk_content)
-            return Response(content=disk_content, media_type="image/png", headers={"X-Cache": "DISK-HIT", "Cache-Control": "max-age=600"})
+            return Response(content=disk_content, media_type="image/png", headers={"X-Cache": "DISK-HIT", "Cache-Control": cc_header})
     if cfg["kind"] == "wms":
         content = _fetch_wms(cfg["upstream"], cfg["layers"], bbox, width, height, srs, cfg.get("cql_filter"))
     elif cfg["kind"] == "arcgis_export":
@@ -1075,7 +1094,9 @@ async def gis_overlay(layer: str, request: Request) -> Response:
 
     if not content:
         # 上游失敗 → 回透明 1×1，前端 layer 不會 break；status 504 給前端可選擇靜默或顯示警告
-        return Response(content=_TRANSPARENT_1X1_PNG, media_type="image/png", status_code=504, headers={"X-Cache": "MISS-FAIL"})
+        # no-store：fail 可能是短暫 server 異常，不該被 browser/CDN cache 起來導致長期看不到 tile
+        return Response(content=_TRANSPARENT_1X1_PNG, media_type="image/png", status_code=504,
+                        headers={"X-Cache": "MISS-FAIL", "Cache-Control": "no-store"})
 
     if not skip_cache:
         _cache_set(cache_key, content)
@@ -1086,7 +1107,7 @@ async def gis_overlay(layer: str, request: Request) -> Response:
     return Response(
         content=content,
         media_type="image/png",
-        headers={"Cache-Control": "no-store" if skip_cache else "max-age=600", "X-Cache": "BYPASS" if skip_cache else "MISS"},
+        headers={"Cache-Control": cc_header, "X-Cache": "BYPASS" if skip_cache else "MISS"},
     )
 
 
