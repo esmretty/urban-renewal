@@ -2800,7 +2800,7 @@
     }
   }
 
-  async function triggerManualAnalyze() {
+  async function triggerManualAnalyze(useSource) {
     const city = $('#v2-manual-city')?.value || '';
     const district = $('#v2-manual-district')?.value || '';
     const address = ($('#v2-manual-address')?.value || '').trim();
@@ -2833,7 +2833,7 @@
           building_area_ping: isNaN(bld) ? null : bld,
           land_area_ping: isNaN(land) ? null : land,
           price_wan: isNaN(price) ? null : price,
-          use_source: 'auto',
+          use_source: useSource || 'auto',
         }),
       });
       const data = await r.json();
@@ -2864,8 +2864,18 @@
         }
         _removePendingPlaceholder(pid);
         applyFilters();
+      } else if (data.status === 'ambiguous_unit') {
+        // 後端回 candidates: [{building_area_ping, land_area_ping, total_floors, year_completed,
+        //                       n_transactions, latest_txn_date, latest_price_total}, ...]
+        // → 顯示候選清單按鈕：點了把 bld/land 填回 form 重送 (use_source=auto，後端 SQL 篩到唯一戶)
+        const cands = Array.isArray(data.candidates) ? data.candidates : [];
+        _renderManualAmbiguousUnits('v2-cap-manual-msg', errMsg(data) || '此地址有多戶，請選一戶', cands);
+        _removePendingPlaceholder(pid);
+        applyFilters();
       } else if (data.status === 'lvr_mismatch') {
-        setCapMsg('v2-cap-manual-msg', 'error', errMsg(data) || '實價登錄資料對不到');
+        // 後端回 user_input + lvr_record，給用戶 2 個按鈕選哪份資料 (use_source=lvr/user)
+        _renderManualLvrMismatch('v2-cap-manual-msg', errMsg(data) || '實價登錄資料對不到',
+                                  data.user_input || {}, data.lvr_record || {});
         _removePendingPlaceholder(pid);
         applyFilters();
       } else if (data.status === 'error') {
@@ -2916,6 +2926,78 @@
           if (addrEl && c.address) addrEl.value = c.address;
           triggerManualAnalyze();
         }, 50);
+      });
+    });
+  }
+
+  // ambiguous_unit 的 UI：列出該地址在 LVR 的多筆候選戶，點按鈕把 bld/land 填回 form 重送
+  function _renderManualAmbiguousUnits(slotId, msg, candidates) {
+    const el = document.getElementById(slotId);
+    if (!el) return;
+    const safe = (s) => String(s || '').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+    const _rocToYmd = (roc) => {
+      if (!roc || String(roc).length < 7) return roc || '—';
+      const s = String(roc);
+      const y = parseInt(s.slice(0, -4)) + 1911;
+      return `${y}-${s.slice(-4, -2)}-${s.slice(-2)}`;
+    };
+    if (!candidates.length) {
+      el.className = 'v2-cap__msg v2-cap__msg--error';
+      el.innerHTML = `<div>${safe(msg)}</div>`;
+      return;
+    }
+    const btns = candidates.map((c, i) => {
+      const txn = _rocToYmd(c.latest_txn_date);
+      const price = c.latest_price_total
+        ? `${Math.round(c.latest_price_total / 10000).toLocaleString('zh-TW')} 萬` : '—';
+      const tf = c.total_floors != null ? `${c.total_floors}F 棟` : '樓層未知';
+      const yc = c.year_completed ? `${c.year_completed} 年完工` : '屋齡未知';
+      const head = `建坪 ${c.building_area_ping ?? '—'} / 地坪 ${c.land_area_ping ?? '—'}`;
+      const sub = `${tf} · ${yc} · 共 ${c.n_transactions} 筆 · 最近 ${txn} ${price}`;
+      return `<button type="button" class="v2-cap__cand-btn" data-amb="${i}" style="text-align:left; line-height:1.4;">
+        <div style="font-weight:600;">${safe(head)}</div>
+        <div style="font-size:11px; color:#666;">${safe(sub)}</div>
+      </button>`;
+    }).join('');
+    el.className = 'v2-cap__msg v2-cap__msg--error';
+    el.innerHTML = `<div style="margin-bottom:6px;">${safe(msg)}</div>` +
+      `<div class="v2-cap__cand-list" style="flex-direction:column; align-items:stretch;">${btns}</div>`;
+    el.querySelectorAll('button[data-amb]').forEach(b => {
+      b.addEventListener('click', () => {
+        const idx = +b.getAttribute('data-amb');
+        const c = candidates[idx];
+        if (!c) return;
+        // 把候選戶的 bld/land 填回 form 後 use_source=auto 重送 → 後端 SQL 篩唯一
+        if (c.building_area_ping != null) {
+          const e = $('#v2-manual-bld'); if (e) e.value = c.building_area_ping;
+        }
+        if (c.land_area_ping != null) {
+          const e = $('#v2-manual-land'); if (e) e.value = c.land_area_ping;
+        }
+        triggerManualAnalyze();
+      });
+    });
+  }
+
+  // lvr_mismatch 的 UI：使用者輸入跟 LVR 對不到，2 個按鈕選用哪邊資料
+  function _renderManualLvrMismatch(slotId, msg, userInput, lvrRecord) {
+    const el = document.getElementById(slotId);
+    if (!el) return;
+    const safe = (s) => String(s || '').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+    const u = userInput || {};
+    const l = lvrRecord || {};
+    const userLabel = `用我輸入的：建坪 ${u.building_area_ping ?? '—'} / 地坪 ${u.land_area_ping ?? '—'}`;
+    const lvrTxn = l.txn_date ? ` (${l.txn_date})` : '';
+    const lvrLabel = `用實登資料：建坪 ${l.area_ping ?? '—'} / 地坪 ${l.land_ping ?? '—'}${lvrTxn}`;
+    el.className = 'v2-cap__msg v2-cap__msg--error';
+    el.innerHTML = `<div style="margin-bottom:6px;">${safe(msg)}</div>` +
+      `<div class="v2-cap__cand-list">` +
+        `<button type="button" class="v2-cap__cand-btn" data-lvr-pick="lvr">${safe(lvrLabel)}</button>` +
+        `<button type="button" class="v2-cap__cand-btn" data-lvr-pick="user">${safe(userLabel)}</button>` +
+      `</div>`;
+    el.querySelectorAll('button[data-lvr-pick]').forEach(b => {
+      b.addEventListener('click', () => {
+        triggerManualAnalyze(b.getAttribute('data-lvr-pick'));   // 'lvr' 或 'user'
       });
     });
   }
