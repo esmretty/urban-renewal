@@ -2145,6 +2145,18 @@ async def admin_line_recent_events(admin: dict = Depends(require_admin)):
     return {"events": events}
 
 
+@app.get("/admin/line/secret_fingerprint")
+async def admin_line_secret_fingerprint(admin: dict = Depends(require_admin)):
+    """回 LINE_CHANNEL_SECRET 的 sha256 fingerprint (前 12 字)，
+    給 admin 對比 LINE Console 的 Channel secret 有沒有抄錯 (不洩漏完整值)。"""
+    import os as _os, hashlib as _hashlib
+    s = _os.getenv("LINE_CHANNEL_SECRET", "").strip()
+    if not s:
+        return {"set": False, "fingerprint": "", "length": 0}
+    fp = _hashlib.sha256(s.encode("utf-8")).hexdigest()[:12]
+    return {"set": True, "fingerprint": fp, "length": len(s)}
+
+
 @app.post("/admin/line/threshold")
 async def admin_set_line_threshold(body: LineThresholdReq, admin: dict = Depends(require_admin)):
     """Admin 設定 LINE 通知觸發倍數門檻 + 比對的情境（危老/都更/防災都更）。"""

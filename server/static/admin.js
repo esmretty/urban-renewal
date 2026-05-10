@@ -316,7 +316,12 @@ window.loadLineStatus = async function () {
         ${s.token_set ? '<span style="color:#27ae60">✓</span>' : '<span style="color:#c0392b">未設</span>'}
       </div>
       <div>
-        User ID：<code>${esc(s.user_id_preview)}</code>
+        Channel Secret (webhook 簽章用)：
+        ${s.secret_set ? '<span style="color:#27ae60">✓ 已設定</span>' : '<span style="color:#c0392b">✗ 未設定 (.env LINE_CHANNEL_SECRET)</span>'}
+      </div>
+      <div>
+        推播目標：<code>${esc(s.user_id_preview)}</code>
+        <span style="color:#666; font-size:11px;">(類型：${esc(s.target_type)} / 來源：${esc(s.target_id_source)})</span>
         ${s.user_id_set ? '<span style="color:#27ae60">✓</span>' : '<span style="color:#c0392b">未設</span>'}
       </div>
       <div style="margin-top:6px; color:#666; font-size:12px;">
@@ -357,8 +362,69 @@ window.loadLineStatus = async function () {
     if (typeof loadLineNotificationsPage === "function") loadLineNotificationsPage(0);
     // 載入訊息模板
     if (typeof loadLineTemplate === "function") loadLineTemplate();
+    // 載入 webhook 收到的 IDs
+    if (typeof loadLineRecentEvents === "function") loadLineRecentEvents();
   } catch (e) {
     box.innerHTML = `<span style="color:#c0392b;">載入失敗：${esc(e.message)}</span>`;
+  }
+};
+
+// ── webhook 收到的 ID 列表 ─────────────────────────
+window.loadLineRecentEvents = async function () {
+  const box = document.getElementById("line-recent-events-box");
+  if (!box) return;
+  try {
+    const r = await authedFetch("/admin/line/recent_events");
+    const data = r.ok ? await r.json() : { events: [] };
+    const events = data.events || [];
+    if (events.length === 0) {
+      box.innerHTML = `<div style="color:#888; padding:8px;">尚無 webhook 事件。請建群組 + 邀 bot + 發訊息觸發。</div>`;
+      return;
+    }
+    const typeLabel = { user: "個人 (U)", group: "群組 (C)", room: "多人聊天室 (R)" };
+    const fmt = (iso) => iso ? new Date(iso).toLocaleString("zh-TW", {hour12: false}) : "—";
+    box.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead><tr style="background:#f7f3ea;">
+        <th style="padding:6px 8px; text-align:left; border-bottom:2px solid #d4cba0;">類型</th>
+        <th style="padding:6px 8px; text-align:left; border-bottom:2px solid #d4cba0;">ID</th>
+        <th style="padding:6px 8px; text-align:left; border-bottom:2px solid #d4cba0;">事件</th>
+        <th style="padding:6px 8px; text-align:left; border-bottom:2px solid #d4cba0;">時間</th>
+        <th style="padding:6px 8px; border-bottom:2px solid #d4cba0;"></th>
+      </tr></thead>
+      <tbody>${events.map(e => `<tr style="border-bottom:1px solid #ece7d7;">
+        <td style="padding:6px 8px;">${esc(typeLabel[e.type] || e.type || "?")}</td>
+        <td style="padding:6px 8px; font-family:Consolas,monospace; font-size:12px;">${esc(e.id || "")}</td>
+        <td style="padding:6px 8px; color:#666; font-size:12px;">${esc(e.event_type || "")}</td>
+        <td style="padding:6px 8px; color:#666; font-size:12px;">${esc(fmt(e.at))}</td>
+        <td style="padding:6px 8px; text-align:right;">
+          <button onclick="setLineTarget('${esc(e.id || "")}')" style="padding:4px 10px; background:#c78a00; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:12px;">設為通知目標</button>
+        </td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+  } catch (e) {
+    box.innerHTML = `<span style="color:#c0392b;">載入失敗：${esc(e.message)}</span>`;
+  }
+};
+
+window.setLineTarget = async function (target_id) {
+  if (!target_id) return;
+  if (!confirm(`確定把推播目標改成「${target_id.slice(0,6)}...${target_id.slice(-4)}」？\n生效後所有觸發 LINE 通知都推到這個 ID。`)) return;
+  const resEl = document.getElementById("line-target-result");
+  try {
+    const r = await authedFetch("/admin/line/target", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_id }),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">設定失敗：${esc(data.detail || r.status)}</span>`;
+      return;
+    }
+    if (resEl) resEl.innerHTML = `<span style="color:#27ae60;">✓ 已設為通知目標。下次推播自動生效。</span>`;
+    loadLineStatus();   // 重新整理 status panel 顯示新 target
+  } catch (e) {
+    if (resEl) resEl.innerHTML = `<span style="color:#c0392b;">${esc(e.message)}</span>`;
   }
 };
 

@@ -354,8 +354,8 @@
           物件分析後，若 都更/危老/防災都更 任一試算情境的獲利倍數達門檻 → 自動 push LINE。
         </p>
         <p style="font-size:12px; color:#c78a00; margin:0 0 12px; padding:8px 10px; background:#fdf6e0; border-left:3px solid #c78a00; border-radius:3px;">
-          設定方式：在 VM 的 <code>~/urban-renewal/.env</code> 加
-          <code>LINE_CHANNEL_TOKEN=xxx</code> 和 <code>LINE_USER_ID=Uxxx</code>，restart service。
+          推播目標 ID（U 個人 / C 群組 / R 多人聊天室）由下方「② Webhook 收到的 ID」一鍵設定，
+          無需 SSH。token / secret 仍由 VM <code>.env</code> 控制。
         </p>
         <div id="line-status-box" style="font-size:13px; padding: 10px 12px; background:#f7f3ea; border-radius:4px; margin-bottom: 12px;">載入中…</div>
         <div style="display:flex; gap:10px; align-items:center;">
@@ -364,6 +364,20 @@
           </button>
           <button onclick="loadLineStatus()" style="padding:8px 14px;">重新整理</button>
           <span id="line-test-result" style="font-size:13px;"></span>
+        </div>
+      </section>
+
+      <!-- panel A2：Webhook 收到的 ID 列表 + 一鍵設為通知目標 -->
+      <section class="panel">
+        <h2>② Webhook 收到的 ID（選一個設為通知目標）</h2>
+        <p style="font-size:12px; color:#666; margin:0 0 10px;">
+          建 LINE 群組 → 邀 bot 進去 → 群組裡發任意訊息 → webhook 觸發後 ID 會出現在下方。
+          按「設為通知目標」後立即生效，不需重啟。
+        </p>
+        <div id="line-recent-events-box" style="font-size:13px;">載入中…</div>
+        <div style="margin-top:10px;">
+          <button onclick="loadLineRecentEvents()" style="padding:6px 14px;">🔄 重新整理</button>
+          <span id="line-target-result" style="font-size:13px; margin-left:10px;"></span>
         </div>
       </section>
 
