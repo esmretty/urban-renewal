@@ -54,14 +54,14 @@ _LAYER_DEFS: dict[str, dict] = {
     "cadastral_lines_tpe": {
         "kind": "wms", "upstream": _TPE_WMS_URL,
         "layers": "Taipei:LAND-ALL-TWD97",
-        "format_options": "dpi:60",   # default 90 → 60 線變細約 1/3
+        "format_options": "dpi:45",   # default 90 → 45 線變細一半
         "disk_cache": True,
         "display_name": "台北市 地籍線",
     },
     "cadastral_numbers_tpe": {
         "kind": "wms", "upstream": _TPE_WMS_URL,
         "layers": "Taipei:LAND-ALL-TWD97-TEXT",
-        "format_options": "dpi:60",   # default 90 → 60 字體變小約 1/3 (45 太小、60 適中)
+        "format_options": "dpi:50",   # default 90 → 50 字體縮小但比 dpi:45 略大
         "disk_cache": True,
         "display_name": "台北市 地號文字",
     },
