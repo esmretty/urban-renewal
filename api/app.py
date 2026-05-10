@@ -2079,9 +2079,17 @@ async def line_webhook(request: Request):
     安全：HMAC-SHA256 驗證 X-Line-Signature header (用 channel secret)。
     驗證失敗 → 401。LINE 期望 200 回應，否則會 retry。"""
     import hmac as _hmac, hashlib as _hashlib, base64 as _b64
+    # Diagnostic: 寫每次 hit 到 Firestore (給 admin UI 看 server 有沒有被打到)
+    def _record_hit(result: str, **extra):
+        try:
+            data = {"at": now_tw_iso(), "result": result, **extra}
+            get_firestore().collection("settings").document("line_webhook_diag").set(data, merge=False)
+        except Exception:
+            pass
     secret = _get_line_channel_secret()
     if not secret:
         logger.warning("LINE webhook 收到請求但 channel secret 未設定 (Firestore + env 都沒有)")
+        _record_hit("secret_not_configured", user_agent=request.headers.get("user-agent", "")[:80])
         # 仍回 200 避免 LINE 重試干擾 (尚未啟用此功能)
         return {"status": "secret_not_configured"}
     body_bytes = await request.body()
@@ -2091,25 +2099,27 @@ async def line_webhook(request: Request):
     ).decode("utf-8")
     if not _hmac.compare_digest(sig_header, expected_sig):
         # 寫 diag 進 Firestore 給 admin UI 看（不洩漏 secret，只 fingerprint）
-        try:
-            import hashlib as _hl
-            sec_fp = _hl.sha256(secret.encode("utf-8")).hexdigest()[:12]
-            body_preview = body_bytes[:60].decode("utf-8", errors="replace")
-            get_firestore().collection("settings").document("line_webhook_diag").set({
-                "at": now_tw_iso(),
-                "result": "signature_mismatch",
-                "received_sig_prefix": sig_header[:20] + "..." if sig_header else "(empty)",
-                "expected_sig_prefix": expected_sig[:20] + "...",
-                "secret_fingerprint_used": sec_fp,
-                "secret_len": len(secret),
-                "body_len": len(body_bytes),
-                "body_preview_60": body_preview,
-                "user_agent": request.headers.get("user-agent", "")[:80],
-            }, merge=False)
-        except Exception:
-            pass
+        sec_fp = _hashlib.sha256(secret.encode("utf-8")).hexdigest()[:12]
+        body_preview = body_bytes[:60].decode("utf-8", errors="replace")
+        _record_hit(
+            "signature_mismatch",
+            received_sig_prefix=(sig_header[:20] + "...") if sig_header else "(empty)",
+            expected_sig_prefix=expected_sig[:20] + "...",
+            secret_fingerprint_used=sec_fp,
+            secret_len=len(secret),
+            body_len=len(body_bytes),
+            body_preview_60=body_preview,
+            user_agent=request.headers.get("user-agent", "")[:80],
+        )
         logger.warning(f"LINE webhook signature mismatch: got={sig_header[:20]}... expected={expected_sig[:20]}... body_len={len(body_bytes)}")
         raise HTTPException(401, "signature mismatch")
+    # 簽章 OK — 記錄 success hit 給 admin UI 看「webhook 真的有打到 + sig 對」
+    _record_hit(
+        "signature_ok",
+        body_len=len(body_bytes),
+        body_preview_60=body_bytes[:60].decode("utf-8", errors="replace"),
+        user_agent=request.headers.get("user-agent", "")[:80],
+    )
     try:
         import json as _json
         payload = _json.loads(body_bytes.decode("utf-8") or "{}")

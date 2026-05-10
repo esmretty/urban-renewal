@@ -398,9 +398,24 @@ window.loadLineWebhookDiag = async function () {
     const r = await authedFetch("/admin/line/webhook_diag");
     const d = await r.json();
     if (!d.has_diag) {
-      box.innerHTML = `<span style="color:#888;">尚無 webhook 失敗紀錄 (代表沒 401 過，或 LINE Verify 還沒按)</span>`;
+      box.innerHTML = `<span style="color:#888;">server 從沒收到過 webhook 請求 (LINE 沒有把 verify 打到我們)</span>`;
       return;
     }
+    if (d.result === "signature_ok") {
+      box.innerHTML = `<div style="background:#f0fff4; border:1px solid #9fdfa4; border-radius:4px; padding:10px;">
+        <div style="font-weight:600; color:#16a34a;">✓ 最近一次 webhook 收到且簽章驗證通過 (${esc(d.at || "?")})</div>
+        <div style="margin-top:4px; font-size:11px; color:#666;">body_len=${d.body_len}; body 前 60 字: <code>${esc(d.body_preview_60 || "")}</code></div>
+      </div>`;
+      return;
+    }
+    if (d.result === "secret_not_configured") {
+      box.innerHTML = `<div style="background:#fff5f0; border:1px solid #f6c89f; border-radius:4px; padding:10px;">
+        <div style="font-weight:600; color:#c0392b;">⚠ webhook 收到但 secret 沒讀到 (${esc(d.at || "?")})</div>
+        <div style="margin-top:4px; font-size:11px; color:#666;">UA: ${esc(d.user_agent || "")}</div>
+      </div>`;
+      return;
+    }
+    // signature_mismatch
     box.innerHTML = `<div style="background:#fff5f0; border:1px solid #f6c89f; border-radius:4px; padding:10px;">
       <div style="font-weight:600; color:#c0392b;">⚠ 最近一次 webhook 簽章驗證失敗 (${esc(d.at || "?")}) </div>
       <table style="margin-top:6px; font-family:Consolas,monospace; font-size:11px; border-collapse:collapse;">
