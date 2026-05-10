@@ -2771,6 +2771,9 @@
         setCapMsg('v2-cap-scrape-msg', 'success', '處理完成，已加入最愛');
         inp.value = '';
         _removePendingPlaceholder(pid);
+        // invalidate 兩 view cache，避免 user 切到另一 tab 看不到新物件
+        state.exploreLoaded = false;
+        state.watchlistLoaded = false;
         await loadProperties();
       } else if (data.status === 'busy') {
         setCapMsg('v2-cap-scrape-msg', 'error', '佇列繁忙：' + (data.message || ''));
@@ -3029,10 +3032,14 @@
   // 輪詢 manual analyze 完成 (5/10/15/20/30/45/60 秒重抓，看到新物件就停)
   async function _pollManualAnalysisDone(pid, msgSlot) {
     const intervals = [5000, 5000, 5000, 5000, 10000, 15000, 15000];   // total ~60s
-    const before = new Set((state.allProperties || []).filter(p => !p._pending_analysis).map(p => p.source_id || p.id));
+    // 用「現在所有 cache (explore + watchlist)」當 baseline，避免 view 一變就誤判已存在
+    const beforeIds = new Set();
+    (state.exploreItems || []).forEach(p => beforeIds.add(p.source_id || p.id));
+    (state.watchlistItems || []).forEach(p => beforeIds.add(p.source_id || p.id));
     for (const wait of intervals) {
       await new Promise(r => setTimeout(r, wait));
       try {
+        // 用 central_search 偵測 — central 比 watchlist 子集合反應更快、權限更直接
         const params = new URLSearchParams();
         params.set('districts', Object.values(V1_DISTRICTS).flatMap(c => c.enabled).join(','));
         params.set('slim', 'true');
@@ -3040,18 +3047,24 @@
         const r = await fetch('/api/central_search?' + params.toString());
         const data = await r.json();
         const items = data.items || [];
-        const newItem = items.find(it => !before.has(it.source_id || it.id));
+        const newItem = items.find(it => !beforeIds.has(it.source_id || it.id));
         if (newItem) {
-          state.exploreItems = items;
-          state.allProperties = items;
+          // 偵測到新物件 → invalidate 兩個 view cache，呼叫 loadProperties() 用「當前 view」重抓
+          // (探索 tab 用 central_search、最愛 tab 用 /api/properties，各自正確)。
+          // 不再硬塞 explore items 進 state.allProperties — 之前那樣會讓最愛 tab 看到 explore 資料 +
+          // 切回最愛 tab 用 cache 看不到新物件，要 F5 才更新。
+          state.exploreLoaded = false;
+          state.watchlistLoaded = false;
           _removePendingPlaceholder(pid);
-          applyFilters();
+          await loadProperties();
           setCapMsg(msgSlot, 'success', '分析完成，已加入最愛');
           return;
         }
       } catch (e) { /* keep polling */ }
     }
-    // timeout
+    // timeout — 同樣 invalidate cache 讓下次切 view 自動重抓
+    state.exploreLoaded = false;
+    state.watchlistLoaded = false;
     _removePendingPlaceholder(pid);
     applyFilters();
     setCapMsg(msgSlot, 'error', '分析超時（>60 秒），請稍後手動重新整理或重抓');
