@@ -1981,7 +1981,9 @@ async def admin_line_status(admin: dict = Depends(require_admin)):
     """LINE 通知設定狀態：token / user_id 是否設定 + 倍數門檻 + 最近通知統計。"""
     import os as _os
     token = _os.getenv("LINE_CHANNEL_TOKEN", "").strip()
-    user_id = _os.getenv("LINE_USER_ID", "").strip()
+    secret = _os.getenv("LINE_CHANNEL_SECRET", "").strip()
+    user_id_env = _os.getenv("LINE_USER_ID", "").strip()
+    target_id_db = ""   # 從 Firestore 讀的 (admin UI 設的，優先序高於 env)
     # 讀門檻（預設 2.8）+ 不可觸發旗標（admin 勾選，預設全勾）
     threshold = 2.8
     skip_flags = {
@@ -1999,6 +2001,7 @@ async def admin_line_status(admin: dict = Depends(require_admin)):
             cfg_data = cfg.to_dict() or {}
             threshold = float(cfg_data.get("threshold_multiple", 2.8))
             trigger_scenario = cfg_data.get("trigger_scenario") or "都更"
+            target_id_db = (cfg_data.get("target_id") or "").strip()
             for k in skip_flags:
                 if k in cfg_data:
                     skip_flags[k] = bool(cfg_data.get(k))
@@ -2016,12 +2019,21 @@ async def admin_line_status(admin: dict = Depends(require_admin)):
             last_notified = max(d.to_dict().get("line_notified_at", "") for d in docs)
     except Exception as e:
         logger.warning(f"line status query: {e}")
+    # effective target = DB target_id (admin UI 設的) 優先；fallback env LINE_USER_ID
+    effective_target = target_id_db or user_id_env
+    target_type = "個人 (U)" if effective_target.startswith("U") else \
+                  "群組 (C)" if effective_target.startswith("C") else \
+                  "多人聊天室 (R)" if effective_target.startswith("R") else \
+                  "未設定" if not effective_target else "未知"
     return {
-        "configured": bool(token and user_id),
+        "configured": bool(token and effective_target),
         "token_set": bool(token),
         "token_preview": (token[:6] + "..." + token[-4:]) if len(token) > 10 else "(empty)",
-        "user_id_set": bool(user_id),
-        "user_id_preview": (user_id[:6] + "...") if len(user_id) > 7 else "(empty)",
+        "secret_set": bool(secret),
+        "user_id_set": bool(effective_target),
+        "user_id_preview": (effective_target[:6] + "..." + effective_target[-3:]) if len(effective_target) > 10 else "(empty)",
+        "target_id_source": "Firestore (admin UI)" if target_id_db else ("env LINE_USER_ID" if user_id_env else "未設定"),
+        "target_type": target_type,
         "threshold_multiple": threshold,
         "trigger_scenario": trigger_scenario,
         "skip_flags": skip_flags,
@@ -2038,6 +2050,99 @@ class LineThresholdReq(BaseModel):
 
 
 _VALID_TRIGGER_SCENARIOS = {"危老", "都更", "防災都更"}
+
+
+# ─── LINE Webhook 接收：監聽 group/user/room 事件，存最近 20 筆給 admin UI 選 target ───
+@app.post("/api/line/webhook")
+async def line_webhook(request: Request):
+    """LINE Messaging API Webhook 接收端。
+    主要用途：bot 被邀進群組 / 群組裡有訊息時，記下 source.groupId 給 admin UI 顯示，
+    讓 admin 可以一鍵把 group_id 設為通知目標 (不必 SSH 改 .env)。
+
+    安全：HMAC-SHA256 驗證 X-Line-Signature header (用 LINE_CHANNEL_SECRET)。
+    驗證失敗 → 401。LINE 期望 200 回應，否則會 retry。"""
+    import os as _os, hmac as _hmac, hashlib as _hashlib, base64 as _b64
+    secret = _os.getenv("LINE_CHANNEL_SECRET", "").strip()
+    if not secret:
+        logger.warning("LINE webhook 收到請求但 LINE_CHANNEL_SECRET 未設定")
+        # 仍回 200 避免 LINE 重試干擾 (尚未啟用此功能)
+        return {"status": "secret_not_configured"}
+    body_bytes = await request.body()
+    sig_header = request.headers.get("x-line-signature", "")
+    expected_sig = _b64.b64encode(
+        _hmac.new(secret.encode("utf-8"), body_bytes, _hashlib.sha256).digest()
+    ).decode("utf-8")
+    if not _hmac.compare_digest(sig_header, expected_sig):
+        logger.warning(f"LINE webhook signature mismatch: got={sig_header[:20]}... expected={expected_sig[:20]}...")
+        raise HTTPException(401, "signature mismatch")
+    try:
+        import json as _json
+        payload = _json.loads(body_bytes.decode("utf-8") or "{}")
+    except Exception as e:
+        logger.warning(f"LINE webhook payload parse fail: {e}")
+        return {"status": "bad_payload"}
+    events = payload.get("events") or []
+    # 收集 unique source IDs (type + id) 給 admin UI 選用
+    seen = []
+    for ev in events:
+        src = ev.get("source") or {}
+        s_type = src.get("type") or ""    # 'user' / 'group' / 'room'
+        s_id = src.get("groupId") or src.get("roomId") or src.get("userId") or ""
+        if not s_id:
+            continue
+        seen.append({
+            "type": s_type, "id": s_id, "event_type": ev.get("type") or "",
+            "at": now_tw_iso(),
+        })
+    if seen:
+        try:
+            from google.cloud.firestore_v1 import ArrayUnion
+            ref = get_firestore().collection("settings").document("line_recent_events")
+            doc = ref.get()
+            existing = (doc.to_dict() or {}).get("events", []) if doc.exists else []
+            # 用 (type, id) dedup；新事件 prepend 最前；保留最近 20 筆
+            keys_seen = {(e["type"], e["id"]) for e in seen}
+            kept = [e for e in existing if (e.get("type"), e.get("id")) not in keys_seen]
+            merged = seen + kept
+            ref.set({"events": merged[:20], "updated_at": now_tw_iso()}, merge=True)
+            for e in seen:
+                logger.info(f"[line webhook] {e['event_type']} from {e['type']} {e['id']}")
+        except Exception as e:
+            logger.exception(f"line webhook write fail: {e}")
+    return {"status": "ok", "received": len(events)}
+
+
+class LineTargetReq(BaseModel):
+    target_id: str   # "U..." / "C..." / "R..." LINE 任一類型 ID
+
+
+@app.post("/admin/line/target")
+async def admin_set_line_target(body: LineTargetReq, admin: dict = Depends(require_admin)):
+    """Admin 設定 LINE 推播目標 ID (寫進 Firestore settings/line_config.target_id)。
+    push_line() 會優先讀這個值，沒有才 fallback env LINE_USER_ID。完全不用 SSH/restart。"""
+    tid = (body.target_id or "").strip()
+    if not tid or len(tid) < 5:
+        raise HTTPException(400, "target_id 太短")
+    if not tid[0].upper() in ("U", "C", "R"):
+        raise HTTPException(400, "target_id 必須以 U (個人) / C (群組) / R (多人聊天室) 開頭")
+    get_firestore().collection("settings").document("line_config").set({
+        "target_id": tid,
+        "target_updated_at": now_tw_iso(),
+        "target_updated_by_email": admin.get("email") or "",
+    }, merge=True)
+    logger.warning(f"[admin] {admin.get('email')} 設 LINE target_id={tid[:8]}...{tid[-4:]}")
+    return {"status": "ok", "target_id": tid}
+
+
+@app.get("/admin/line/recent_events")
+async def admin_line_recent_events(admin: dict = Depends(require_admin)):
+    """回最近 20 筆 webhook 收到的 source IDs，admin UI 顯示讓使用者選為 target。"""
+    try:
+        doc = get_firestore().collection("settings").document("line_recent_events").get()
+        events = (doc.to_dict() or {}).get("events", []) if doc.exists else []
+    except Exception:
+        events = []
+    return {"events": events}
 
 
 @app.post("/admin/line/threshold")

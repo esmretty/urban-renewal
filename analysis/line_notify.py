@@ -52,13 +52,27 @@ def _shorten_url(long_url: str) -> str:
     return long_url
 
 
+def _get_line_target_from_db() -> str:
+    """從 Firestore settings/line_config.target_id 拿推播目標 ID (U / C / R 開頭都行)。
+    沒設定回 ''。讓 admin UI 不用 SSH/restart 就能改 target。"""
+    try:
+        from database.db import get_firestore
+        cfg = get_firestore().collection("settings").document("line_config").get()
+        if cfg.exists:
+            return (cfg.to_dict() or {}).get("target_id", "") or ""
+    except Exception as e:
+        logger.debug(f"_get_line_target_from_db 失敗: {e}")
+    return ""
+
+
 def push_line(message: str, user_id: Optional[str] = None) -> bool:
-    """推播一則文字訊息到指定 LINE user。
+    """推播一則文字訊息到指定 LINE target (user / group / room ID 都接受)。
+    target 來源優先序：傳入 user_id > Firestore settings/line_config.target_id > env LINE_USER_ID
     回傳 True 表示送出成功，False 表示 silent skip 或失敗。"""
     token = os.getenv("LINE_CHANNEL_TOKEN", "").strip()
-    target = (user_id or os.getenv("LINE_USER_ID", "")).strip()
+    target = (user_id or _get_line_target_from_db() or os.getenv("LINE_USER_ID", "")).strip()
     if not token or not target:
-        logger.debug("LINE 未設定 (LINE_CHANNEL_TOKEN / LINE_USER_ID)，skip")
+        logger.debug("LINE 未設定 (LINE_CHANNEL_TOKEN / target_id / LINE_USER_ID)，skip")
         return False
     try:
         import httpx
