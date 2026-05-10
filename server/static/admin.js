@@ -428,7 +428,7 @@ window.loadLineWebhookDiag = async function () {
       </table>
       <div style="margin-top:8px; font-size:11px; color:#666;">
         判斷：sig 對不上代表「server 用的 secret」≠「LINE 簽章用的 secret」。
-        secret fingerprint 應該等於上面 panel ② 顯示的 sha256[:12]。如果一樣 → secret 對，但 body 可能被中介軟體改了 (極少見)。
+        secret fingerprint 應該等於上面 Channel Secret 區塊顯示的 sha256[:12]。如果一樣 → secret 對，但 body 可能被中介軟體改了 (極少見)。
         如果 body_preview 不像 LINE 標準的 <code>{"destination":...,"events":[...]}</code> → 可能不是 LINE 真的打的。
       </div>
     </div>`;
