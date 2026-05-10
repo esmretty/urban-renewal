@@ -2219,6 +2219,13 @@ select.v2-d-input { text-align: left; }
   padding-bottom: 4px;
   border-bottom: 1px solid var(--c-border);
 }
+/* 射箭準心 hover popup — 跟 LVR popup 同樣式但小 */
+.v2-redev-target-popup {
+  max-width: 240px;
+  font-size: 12px;
+  color: #1f2937;
+}
+.v2-redev-target-popup .v2-lvr-popup__title { color: #dc2626; }
 
 .v2-d-actions {
   display: flex;

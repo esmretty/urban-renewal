@@ -676,8 +676,8 @@
     const hasRedev = Array.isArray(p.redev_cases) && p.redev_cases.length > 0;
     const addrClass = hasRedev ? 'v2-card__addr v2-card__addr--redev' : 'v2-card__addr';
     const redevTargetIcon = hasRedev
-      ? `<svg class="v2-card__redev-target" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="所在位置有貓膩，點進內頁觀看">
-            <title>所在位置有貓膩，點進內頁觀看</title>
+      ? `<svg class="v2-card__redev-target" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="所在位置有貓膩，點進內頁觀看"
+            onmouseenter="v2.showRedevTargetPopup(event)" onmouseleave="v2.hideRedevTargetPopup()" onclick="event.stopPropagation()">
             <circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/>
             <line x1="22" y1="2" x2="13" y2="11"/>
             <path d="M 21.5 2.5 L 18.5 3.5 M 21.5 2.5 L 20.5 5.5"/>
@@ -2165,6 +2165,34 @@
     }, 200);
   }
 
+  // ── 射箭準心 icon hover popup — 跟 LVR popup 同 pattern，純文字提示 ──
+  let _redevTargetPopupTimer = null;
+  function showRedevTargetPopup(event) {
+    let pop = document.getElementById('v2-redev-target-popup');
+    if (!pop) {
+      pop = document.createElement('div');
+      pop.id = 'v2-redev-target-popup';
+      pop.className = 'v2-lvr-popup v2-redev-target-popup';
+      pop.addEventListener('mouseenter', () => clearTimeout(_redevTargetPopupTimer));
+      pop.addEventListener('mouseleave', hideRedevTargetPopup);
+      pop.innerHTML = `<div class="v2-lvr-popup__title">⊕ 都更套疊提示</div>
+        <div style="padding:4px 0; line-height:1.6;">所在位置有貓膩，點進內頁觀看</div>`;
+      document.body.appendChild(pop);
+    }
+    clearTimeout(_redevTargetPopupTimer);
+    pop.style.display = 'block';
+    const rect = event.currentTarget.getBoundingClientRect();
+    const popRect = pop.getBoundingClientRect();
+    pop.style.top = (rect.bottom + 6) + 'px';
+    pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - popRect.width - 8)) + 'px';
+  }
+  function hideRedevTargetPopup() {
+    _redevTargetPopupTimer = setTimeout(() => {
+      const pop = document.getElementById('v2-redev-target-popup');
+      if (pop) pop.style.display = 'none';
+    }, 200);
+  }
+
   // ── 學區 chip hover popup — 顯示完整註釋 (基本/自由/鄰級/跨區) ──
   let _schoolPopupTimer = null;
   function showSchoolPopup(event, el) {
@@ -3454,6 +3482,7 @@
     switchGridCity,
     showLvrPopup, hideLvrPopup,
     showSchoolPopup, hideSchoolPopup,
+    showRedevTargetPopup, hideRedevTargetPopup,
     saveOverride, saveInferredChoice, setZonePing,
     // 給 map_mode.js (獨立檔) 用：state、helpers，map_mode.js 透過 window.v2 取
     state, getDistrictPrices, _saveFilters,
