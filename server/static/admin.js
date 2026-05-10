@@ -2412,17 +2412,22 @@ function renderStats(s) {
   const totalTitle = (s.total_properties_raw != null && s.total_properties_raw !== s.total_properties)
     ? `前台可見 (raw DB ${s.total_properties_raw}，封存/錯誤/非啟用區/user_url 已扣除)`
     : "";
+  // 順序：中央物件總數 (放大紅) → 已封存 → 已分析 (錯誤數紅字同格) → 法拍屋 → 用戶數
+  const errSub = (s.analysis_error && s.analysis_error > 0)
+    ? `<span class="stat-num__err">+${s.analysis_error} 錯</span>` : "";
   const cards = [
-    { num: s.total_properties, lbl: "中央物件總數", title: totalTitle },
-    { num: s.analysis_done, lbl: "已分析" },
-    { num: s.analysis_error, lbl: "分析錯誤" },
-    { num: s.foreclosure_count, lbl: "法拍屋" },
+    { num: s.total_properties, lbl: "中央物件總數", title: totalTitle, modCls: "stat-card--hero" },
     { num: s.archived_count, lbl: "已封存" },
+    { num: s.analysis_done, lbl: "已分析", subHtml: errSub },
+    { num: s.foreclosure_count, lbl: "法拍屋" },
     { num: s.total_users, lbl: "用戶數" },
   ];
-  document.getElementById("stats-box").innerHTML = cards.map(c =>
-    `<div class="stat-card"${c.title ? ` title="${esc(c.title)}"` : ''}><div class="stat-num">${c.num ?? "—"}</div><div class="stat-lbl">${c.lbl}</div></div>`
-  ).join("");
+  document.getElementById("stats-box").innerHTML = cards.map(c => {
+    const cls = "stat-card" + (c.modCls ? " " + c.modCls : "");
+    const titleAttr = c.title ? ` title="${esc(c.title)}"` : "";
+    const sub = c.subHtml || "";
+    return `<div class="${cls}"${titleAttr}><div class="stat-num">${c.num ?? "—"}${sub}</div><div class="stat-lbl">${c.lbl}</div></div>`;
+  }).join("");
   renderRegionSourceMatrix(s);
 }
 
