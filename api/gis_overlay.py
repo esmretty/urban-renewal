@@ -1010,17 +1010,20 @@ def _fetch_arcgis_export(cfg: dict, bbox: str, width: int, height: int, srs: str
 
 def _browser_cache_ttl(layer: str, cfg: dict) -> int:
     """瀏覽器 / CDN cache 期限 (seconds)。0 = no-store。
-    Server disk cache 永不過期；瀏覽器 cache 由這個 TTL 控制 user 端 round-trip 頻率。
-      stable layers (zoning / cadastral / building 多年不變): 1 週
-      redev layers (case 狀態會變但同 polygon 內容低頻): 1 天
-      591 / skip_cache: 0
-    對應「第二次抓同位置」的 UX：第一次 fetch 後存進瀏覽器 cache，下次 panning 回同
-    tile 直接 0ms 拿，不再打 server。"""
+    對齊 admin scheduler 設定的 refresh 週期 (settings/scheduler，預設 15-180 天)：
+    server disk cache 已經是永不過期 + 由 scheduler/admin 手動清，瀏覽器 cache 跟著拉長。
+      stable layers (zoning / cadastral / building 多年不變): 90 天
+      redev layers (case polygon 偶爾異動，scheduler 預設 15-30 天清):      30 天
+      591 / skip_cache:                                                     0 = no-store
+    user 開 v2 地圖第一次 fetch tile 之後，幾乎所有 panning / 重訪 都直接從瀏覽器 cache
+    秒拿，不再 round-trip server (50-150ms × N tiles)。
+    admin 手動清 cache 後，user 端要等 browser cache 自然 expire 才會看到新版 tile —
+    這個 trade-off 接受 (跟 scheduler 週期同數量級)。"""
     if cfg["kind"] == "591_dmaps_proxy" or cfg.get("skip_cache"):
         return 0
     if layer.startswith("redev_"):
-        return 86400        # 1 day — case 狀態變動但 polygon 範圍變動 < daily
-    return 604800           # 7 days — zoning / cadastral / building 多年不變
+        return 30 * 86400      # 30 days
+    return 90 * 86400          # 90 days
 
 
 # ── Endpoint ───────────────────────────────────────────────────────────────
