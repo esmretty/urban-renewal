@@ -3043,33 +3043,33 @@
   }
 
   // 輪詢 manual analyze 完成 (5/10/15/20/30/45/60 秒重抓，看到新物件就停)
+  // 注意：manual analyze 結果寫進 users/{uid}/manual/{src_id} 子集合 (不進中央 properties)，
+  // 所以 polling 必須用 /api/properties (它會 join watchlist + manual)，而非 central_search。
   async function _pollManualAnalysisDone(pid, msgSlot) {
     const intervals = [5000, 5000, 5000, 5000, 10000, 15000, 15000];   // total ~60s
-    // 用「現在所有 cache (explore + watchlist)」當 baseline，避免 view 一變就誤判已存在
+    // baseline：當前 watchlistItems (含 manual subcollection 已存在的)
     const beforeIds = new Set();
-    (state.exploreItems || []).forEach(p => beforeIds.add(p.source_id || p.id));
     (state.watchlistItems || []).forEach(p => beforeIds.add(p.source_id || p.id));
     for (const wait of intervals) {
       await new Promise(r => setTimeout(r, wait));
       try {
-        // 用 central_search 偵測 — central 比 watchlist 子集合反應更快、權限更直接
-        const params = new URLSearchParams();
-        params.set('districts', Object.values(V1_DISTRICTS).flatMap(c => c.enabled).join(','));
-        params.set('slim', 'true');
-        params.set('limit', '50000');
-        const r = await fetch('/api/central_search?' + params.toString());
+        const r = await fetch('/api/properties?limit=500&slim=true');
         const data = await r.json();
         const items = data.items || [];
-        const newItem = items.find(it => !beforeIds.has(it.source_id || it.id));
+        // 找到新物件 + 分析完成 (analysis_in_progress 翻成 false 或不存在)
+        // backend 先寫 placeholder (analysis_in_progress=true) → 跑完 pipeline → 翻 false。
+        // 只看「存在」會在 5s 就 false-positive 拿到 placeholder，user 看到「分析完成」但卡片資料殘缺。
+        const newItem = items.find(it => {
+          const sid = it.source_id || it.id;
+          if (beforeIds.has(sid)) return false;
+          return !it.analysis_in_progress;   // false / undefined 都算 done
+        });
         if (newItem) {
-          // 偵測到新物件 → invalidate 兩個 view cache，呼叫 loadProperties() 用「當前 view」重抓
-          // (探索 tab 用 central_search、最愛 tab 用 /api/properties，各自正確)。
-          // 不再硬塞 explore items 進 state.allProperties — 之前那樣會讓最愛 tab 看到 explore 資料 +
-          // 切回最愛 tab 用 cache 看不到新物件，要 F5 才更新。
+          // 偵測到新物件 → invalidate 兩個 view cache 讓下次切 view 自動 fresh fetch
           state.exploreLoaded = false;
           state.watchlistLoaded = false;
           _removePendingPlaceholder(pid);
-          await loadProperties();
+          await loadProperties();   // 用當前 view 重抓
           setCapMsg(msgSlot, 'success', '分析完成，已加入最愛');
           return;
         }
