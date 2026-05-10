@@ -676,7 +676,8 @@
     const hasRedev = Array.isArray(p.redev_cases) && p.redev_cases.length > 0;
     const addrClass = hasRedev ? 'v2-card__addr v2-card__addr--redev' : 'v2-card__addr';
     const redevTargetIcon = hasRedev
-      ? `<svg class="v2-card__redev-target" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="套疊都更圖層">
+      ? `<svg class="v2-card__redev-target" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="所在位置有貓膩，點進內頁觀看">
+            <title>所在位置有貓膩，點進內頁觀看</title>
             <circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/>
             <line x1="22" y1="2" x2="13" y2="11"/>
             <path d="M 21.5 2.5 L 18.5 3.5 M 21.5 2.5 L 20.5 5.5"/>
