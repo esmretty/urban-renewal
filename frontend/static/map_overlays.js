@@ -64,11 +64,12 @@
     { id: 'urgent',        city: '台北市', label: '迅行劃定',                  color: '#FFD0FF', backend: 'redev_urgent' },
     { id: 'pub_business',  city: '台北市', label: '公劃內事業(權變)',           color: '#6495ED', backend: 'redev_pub_business' },
     { id: 'invalid',       city: '台北市', label: '已失效/廢止',                color: '#00FFFF', backend: 'redev_invalid' },
-    // 新北 (4)
-    { id: 'ntpc_ama',    city: '新北市', label: '都市更新事業計畫案', color: '#FF7F00', backend: 'redev_ntpc_ama' },
-    { id: 'ntpc_easy',   city: '新北市', label: '簡易都更',           color: '#0066CC', backend: 'redev_ntpc_easy' },
-    { id: 'ntpc_danger', city: '新北市', label: '危老重建',           color: '#FF0000', backend: 'redev_ntpc_danger' },
-    { id: 'ntpc_amdm',   city: '新北市', label: '防災案件',           color: '#9933CC', backend: 'redev_ntpc_amdm' },
+    // 新北 (5)
+    { id: 'ntpc_ama',     city: '新北市', label: '都市更新事業計畫案', color: '#FF7F00', backend: 'redev_ntpc_ama' },
+    { id: 'ntpc_easy',    city: '新北市', label: '簡易都更',           color: '#0066CC', backend: 'redev_ntpc_easy' },
+    { id: 'ntpc_danger',  city: '新北市', label: '危老重建',           color: '#FF0000', backend: 'redev_ntpc_danger' },
+    { id: 'ntpc_amdm',    city: '新北市', label: '防災案件',           color: '#9933CC', backend: 'redev_ntpc_amdm' },
+    { id: 'ntpc_rzoning', city: '新北市', label: '劃定更新地區',       color: '#008080', backend: 'redev_ntpc_rzoning' },
   ];
 
   // city → 全選 checkbox 的 data-renewal-all 值 (區分兩個全選 checkbox)

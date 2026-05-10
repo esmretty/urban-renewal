@@ -377,6 +377,7 @@
             <label class="v2-toggle"><input type="checkbox" data-redev-filter="easy" onchange="v2.applySort()"><span>簡易都更</span></label>
             <label class="v2-toggle"><input type="checkbox" data-redev-filter="danger" onchange="v2.applySort()"><span>危老重建</span></label>
             <label class="v2-toggle"><input type="checkbox" data-redev-filter="amdm" onchange="v2.applySort()"><span>防災案件</span></label>
+            <label class="v2-toggle"><input type="checkbox" data-redev-filter="rzoning" onchange="v2.applySort()"><span>劃定更新地區</span></label>
           </div>
         </div>
       </div>
@@ -491,6 +492,7 @@
           <filter id="redev-flt-ntpc_easy"><feFlood flood-color="#0066CC"/><feComposite in2="SourceAlpha" operator="in"/></filter>
           <filter id="redev-flt-ntpc_danger"><feFlood flood-color="#FF0000"/><feComposite in2="SourceAlpha" operator="in"/></filter>
           <filter id="redev-flt-ntpc_amdm"><feFlood flood-color="#9933CC"/><feComposite in2="SourceAlpha" operator="in"/></filter>
+          <filter id="redev-flt-ntpc_rzoning"><feFlood flood-color="#008080"/><feComposite in2="SourceAlpha" operator="in"/></filter>
         </defs>
       </svg>
       <div id="v2-map" class="v2-map"></div>

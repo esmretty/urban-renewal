@@ -40,7 +40,7 @@ import api.gis_overlay as g
 
 # 雙北我們關注的區
 TPE_DISTRICTS = ['中正區','大同區','中山區','松山區','大安區','萬華區','信義區','內湖區','南港區','文山區']
-NTPC_DISTRICTS = ['板橋區','新莊區','新店區','中和區','永和區']
+NTPC_DISTRICTS = ['板橋區','新店區','中和區','永和區']  # DB 內無新莊物件，省 5 個 API call
 
 # 台北 sub_type → WFS layer 對應 (uro-redevelop-ALL-5 layer 屬性 / 獨立 typeName)
 TPE_REDEV_LAYER_MAP = {
@@ -57,10 +57,11 @@ TPE_REDEV_LAYER_MAP = {
 # 新北 sub_type → CasebyDist keyword 對應 (對齊 map tile 底層 ArcGIS table)
 NTPC_QUERY_TYPES = [
     # (sub_type, by_dist_kw, label, id_field)
-    ("ama",    "GetUnitsCasebyDist",     "都市更新事業計畫案", "UN01"),
-    ("easy",   "GetEasyUrbanCasebyDist", "簡易都更",           "ID"),
-    ("danger", "GetDangerCasebyDist",    "危老重建",           "ID"),
-    ("amdm",   "GetSGACasebyDist",       "防災案件",           "ID"),
+    ("ama",     "GetUnitsCasebyDist",        "都市更新事業計畫案", "UN01"),
+    ("easy",    "GetEasyUrbanCasebyDist",    "簡易都更",           "ID"),
+    ("danger",  "GetDangerCasebyDist",       "危老重建",           "ID"),
+    ("amdm",    "GetSGACasebyDist",          "防災案件",           "ID"),
+    ("rzoning", "GetRZoningUAreaCasebyDist", "劃定更新地區",       "ID"),
 ]
 
 

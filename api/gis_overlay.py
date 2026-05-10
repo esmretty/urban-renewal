@@ -142,6 +142,11 @@ _LAYER_DEFS: dict[str, dict] = {
         "fill_color": "#9933CC", "disk_cache": True,
         "display_name": "新北 都更/防災案件",
     },
+    "redev_ntpc_rzoning": {
+        "kind": "ntpcurinfo_layer", "ntpc_layer_name": "劃定更新地區",
+        "fill_color": "#008080", "disk_cache": True,
+        "display_name": "新北 都更/劃定更新地區",
+    },
     # 591 maptiles DMAPS forward proxy — 個別地塊 + 地號 polygon (政府 NLSC 授權)
     # 詳見 _fetch_591_dmaps docstring：純 forward 不 cache 不重製；用戶 (個人投資者)
     # 已明示確認 591 ToS 灰色地帶範圍。591 改設定立即 fallback (前端 tileerror handler)。
@@ -575,10 +580,11 @@ def _fetch_ntpcurinfo_layer(cfg: dict, bbox: str, width: int, height: int, srs: 
 # detail_keyword 為空字串 → ByXY 已含足夠資料 (Units 走這條，欄位 UN01/UN02/Schedule 都在 ByXY 回應內)
 _RENEWAL_QUERY_TYPES = [
     # (sub_type_id, by_xy_keyword, detail_keyword, display_label)
-    ("ama",    "GetUnitsCaseByXY",     "",                       "都市更新事業計畫案"),
-    ("easy",   "GetEasyUrbanCaseByXY", "GetEasyUrbanCaseDetail", "簡易都更"),
-    ("danger", "GetDangerCaseByXY",    "GetDangerCaseDetail",    "危老重建"),
-    ("amdm",   "GetSGACaseByXY",       "GetSGACaseDetail",       "防災案件"),
+    ("ama",     "GetUnitsCaseByXY",         "",                       "都市更新事業計畫案"),
+    ("easy",    "GetEasyUrbanCaseByXY",     "GetEasyUrbanCaseDetail", "簡易都更"),
+    ("danger",  "GetDangerCaseByXY",        "GetDangerCaseDetail",    "危老重建"),
+    ("amdm",    "GetSGACaseByXY",           "GetSGACaseDetail",       "防災案件"),
+    ("rzoning", "GetRZoningUAreaCaseByXY",  "",                       "劃定更新地區"),
 ]
 
 
@@ -636,6 +642,9 @@ def _build_ntpc_case_summary(sub_type: str, detail: dict) -> str:
         parts = []
         if stage_name: parts.append(stage_name)
         return " | ".join(parts)
+    if sub_type == "rzoning":
+        # 劃定更新地區：ByXY/ByDist 直接回 CaseName (例「劃定新北市板橋區公館段1986地號1筆土地更新地區」)
+        return _g("CaseName")
     return ""
 
 
