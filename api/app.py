@@ -2090,7 +2090,25 @@ async def line_webhook(request: Request):
         _hmac.new(secret.encode("utf-8"), body_bytes, _hashlib.sha256).digest()
     ).decode("utf-8")
     if not _hmac.compare_digest(sig_header, expected_sig):
-        logger.warning(f"LINE webhook signature mismatch: got={sig_header[:20]}... expected={expected_sig[:20]}...")
+        # 寫 diag 進 Firestore 給 admin UI 看（不洩漏 secret，只 fingerprint）
+        try:
+            import hashlib as _hl
+            sec_fp = _hl.sha256(secret.encode("utf-8")).hexdigest()[:12]
+            body_preview = body_bytes[:60].decode("utf-8", errors="replace")
+            get_firestore().collection("settings").document("line_webhook_diag").set({
+                "at": now_tw_iso(),
+                "result": "signature_mismatch",
+                "received_sig_prefix": sig_header[:20] + "..." if sig_header else "(empty)",
+                "expected_sig_prefix": expected_sig[:20] + "...",
+                "secret_fingerprint_used": sec_fp,
+                "secret_len": len(secret),
+                "body_len": len(body_bytes),
+                "body_preview_60": body_preview,
+                "user_agent": request.headers.get("user-agent", "")[:80],
+            }, merge=False)
+        except Exception:
+            pass
+        logger.warning(f"LINE webhook signature mismatch: got={sig_header[:20]}... expected={expected_sig[:20]}... body_len={len(body_bytes)}")
         raise HTTPException(401, "signature mismatch")
     try:
         import json as _json
@@ -2160,6 +2178,21 @@ async def admin_line_recent_events(admin: dict = Depends(require_admin)):
     except Exception:
         events = []
     return {"events": events}
+
+
+@app.get("/admin/line/webhook_diag")
+async def admin_line_webhook_diag(admin: dict = Depends(require_admin)):
+    """回最近一次 webhook 簽章驗證失敗的診斷資訊 (secret/body 各自 fingerprint)。
+    admin UI 用來判斷：是 secret 抄錯、body 被中介軟體改了、還是 LINE 那邊送的 sig 不對。"""
+    try:
+        doc = get_firestore().collection("settings").document("line_webhook_diag").get()
+        if not doc.exists:
+            return {"has_diag": False}
+        d = doc.to_dict() or {}
+        d["has_diag"] = True
+        return d
+    except Exception as e:
+        return {"has_diag": False, "error": str(e)}
 
 
 @app.get("/admin/line/secret_fingerprint")

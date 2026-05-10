@@ -390,6 +390,38 @@ window.loadLineSecretFingerprint = async function () {
   }
 };
 
+window.loadLineWebhookDiag = async function () {
+  const box = document.getElementById("line-webhook-diag-box");
+  if (!box) return;
+  box.innerHTML = `<span style="color:#888;">查詢中…</span>`;
+  try {
+    const r = await authedFetch("/admin/line/webhook_diag");
+    const d = await r.json();
+    if (!d.has_diag) {
+      box.innerHTML = `<span style="color:#888;">尚無 webhook 失敗紀錄 (代表沒 401 過，或 LINE Verify 還沒按)</span>`;
+      return;
+    }
+    box.innerHTML = `<div style="background:#fff5f0; border:1px solid #f6c89f; border-radius:4px; padding:10px;">
+      <div style="font-weight:600; color:#c0392b;">⚠ 最近一次 webhook 簽章驗證失敗 (${esc(d.at || "?")}) </div>
+      <table style="margin-top:6px; font-family:Consolas,monospace; font-size:11px; border-collapse:collapse;">
+        <tr><td style="padding:2px 8px; color:#666;">收到 sig 前 20 字</td><td><code>${esc(d.received_sig_prefix || "")}</code></td></tr>
+        <tr><td style="padding:2px 8px; color:#666;">server 算出 sig 前 20 字</td><td><code>${esc(d.expected_sig_prefix || "")}</code></td></tr>
+        <tr><td style="padding:2px 8px; color:#666;">當下 secret fingerprint</td><td><code>${esc(d.secret_fingerprint_used || "")}</code> (len=${d.secret_len})</td></tr>
+        <tr><td style="padding:2px 8px; color:#666;">body 長度</td><td>${d.body_len} bytes</td></tr>
+        <tr><td style="padding:2px 8px; color:#666;">body 前 60 字</td><td style="word-break:break-all;"><code>${esc(d.body_preview_60 || "")}</code></td></tr>
+        <tr><td style="padding:2px 8px; color:#666;">User-Agent</td><td style="font-size:10px;">${esc(d.user_agent || "")}</td></tr>
+      </table>
+      <div style="margin-top:8px; font-size:11px; color:#666;">
+        判斷：sig 對不上代表「server 用的 secret」≠「LINE 簽章用的 secret」。
+        secret fingerprint 應該等於上面 panel ② 顯示的 sha256[:12]。如果一樣 → secret 對，但 body 可能被中介軟體改了 (極少見)。
+        如果 body_preview 不像 LINE 標準的 <code>{"destination":...,"events":[...]}</code> → 可能不是 LINE 真的打的。
+      </div>
+    </div>`;
+  } catch (e) {
+    box.innerHTML = `<span style="color:#c0392b;">查詢失敗：${esc(e.message)}</span>`;
+  }
+};
+
 window.saveLineSecret = async function () {
   const inp = document.getElementById("line-secret-input");
   const resEl = document.getElementById("line-secret-result");
