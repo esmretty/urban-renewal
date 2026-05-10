@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>都更神探R · v2</title>
+  <!-- 頁籤 icon (favicon) — 用 logo.png；瀏覽器自己縮 -->
+  <link rel="icon" type="image/png" href="/static/logo.png" />
+  <link rel="apple-touch-icon" href="/static/logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- 預連線 Firebase auth API origin（SDK 已自打包同源，但 token 驗證仍打 Google） -->
@@ -28,8 +31,13 @@
     #v2-bootstrap-loader.v2-bootstrap-loader--hide { opacity: 0; visibility: hidden; pointer-events: none; }
     .v2-bootstrap-loader__panel { display: flex; flex-direction: column; align-items: center; gap: 18px; }
     .v2-bootstrap-loader__logo {
-      width: 80px; height: 80px; border-radius: 50%;
+      /* 方形 padding 容器，logo 自身原比例 contain 不被切到 */
+      width: 96px; height: 96px;
+      padding: 8px;
+      background: #fff;
+      border-radius: 12px;
       box-shadow: 0 4px 20px rgba(199,138,0,0.18);
+      object-fit: contain;
       animation: v2lp 1.6s ease-in-out infinite;
     }
     @keyframes v2lp { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.05);opacity:.92} }
