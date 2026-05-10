@@ -49,32 +49,19 @@ _LAYER_DEFS: dict[str, dict] = {
         "display_name": "台北市 土地分區",
     },
     # 地籍拆兩個 backend：線任 zoom 顯示，地號文字只 z=18 或 19 才顯示 (前端 minZoom 控制)
-    # SLD_BODY 把 server default 粗灰線換成 0.4px 黑細線 (對齊新北 NtpcURInfo 視覺)
-    # 注意：Taipei GeoServer 只認 stroke override，fill / TextSymbolizer 都被吞掉
+    # 用 format_options=dpi:60 (default 90) 同時縮線寬 + 縮字體 → 跟新北 NtpcURInfo 視覺接近
+    # 注意：Taipei GeoServer 對 SLD_BODY / TextSymbolizer 全吞掉，只有 dpi 是有效的 styling 開關
     "cadastral_lines_tpe": {
         "kind": "wms", "upstream": _TPE_WMS_URL,
         "layers": "Taipei:LAND-ALL-TWD97",
-        "sld_body": (
-            '<?xml version="1.0" encoding="UTF-8"?>'
-            '<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc">'
-            '<NamedLayer><Name>Taipei:LAND-ALL-TWD97</Name>'
-            '<UserStyle><FeatureTypeStyle><Rule>'
-            '<PolygonSymbolizer><Stroke>'
-            '<CssParameter name="stroke">#000000</CssParameter>'
-            '<CssParameter name="stroke-width">0.4</CssParameter>'
-            '</Stroke></PolygonSymbolizer>'
-            '</Rule></FeatureTypeStyle></UserStyle>'
-            '</NamedLayer></StyledLayerDescriptor>'
-        ),
+        "format_options": "dpi:60",   # default 90 → 60 線變細約 1/3
         "disk_cache": True,
         "display_name": "台北市 地籍線",
     },
     "cadastral_numbers_tpe": {
         "kind": "wms", "upstream": _TPE_WMS_URL,
         "layers": "Taipei:LAND-ALL-TWD97-TEXT",
-        # dpi=45 (default 90) → server-side font 縮成一半 → 跟新北 NTPC 視覺一致 (細小、不擠成一團)
-        # SLD font-family/size 在這個 server 被吞掉，dpi 是唯一可調的字體 size 開關
-        "format_options": "dpi:45",
+        "format_options": "dpi:60",   # default 90 → 60 字體變小約 1/3 (45 太小、60 適中)
         "disk_cache": True,
         "display_name": "台北市 地號文字",
     },
