@@ -52,6 +52,8 @@ _PUBLIC_PATHS = {
     "/api/maintenance_status",   # 維護頁 polling 用，公開不需 auth
     "/api/busy_state",           # deploy.sh pre-check 用，無個資
     "/api/version",              # 版本號（commit short SHA），admin UI 對版用，無敏感資訊
+    "/api/line/webhook",         # LINE Messaging API webhook 接收端 — LINE platform 不帶 Firebase token，
+                                 # 改用 endpoint 內 HMAC-SHA256 簽章驗證 (LINE_CHANNEL_SECRET) 取代 Firebase auth
     "/admin.html",            # admin 也走自己的登入頁
 }
 _PUBLIC_PREFIXES = (
