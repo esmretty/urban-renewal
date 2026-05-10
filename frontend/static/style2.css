@@ -921,6 +921,22 @@ a { color: inherit; text-decoration: none; }
   text-overflow: ellipsis;
   line-height: 1.2;
 }
+/* 物件地址套疊到任一都更圖層 → 紅字 + 射箭準心 icon */
+.v2-card__addr--redev {
+  color: #dc2626;
+}
+.v2-card__redev-target {
+  display: inline-block;
+  vertical-align: -1px;
+  margin-left: 4px;
+  color: #dc2626;
+}
+/* 已讀卡片：紅字 + icon 變淡 (對齊既有 v2-card--read 行為，
+   既有 .v2-card--read .v2-card__addr 用 !important 蓋灰色，需用 !important 蓋回) */
+.v2-card.v2-card--read .v2-card__addr--redev,
+.v2-card.v2-card--read .v2-card__addr--redev .v2-card__redev-target {
+  color: #f29292 !important;
+}
 .v2-card__district {
   font-size: 14px;
   color: var(--c-text-muted);

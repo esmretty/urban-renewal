@@ -672,6 +672,14 @@
     }
     const archivedClass = p.archived ? 'v2-card--archived' : '';
     const readClass = isRead(id) ? 'v2-card--read' : '';
+    // 套疊到任一都更圖層 → 地址紅色 + 射箭準心 icon (已讀狀態紅色變淡 by CSS)
+    const hasRedev = Array.isArray(p.redev_cases) && p.redev_cases.length > 0;
+    const addrClass = hasRedev ? 'v2-card__addr v2-card__addr--redev' : 'v2-card__addr';
+    const redevTargetIcon = hasRedev
+      ? `<svg class="v2-card__redev-target" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-label="套疊都更圖層">
+            <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+          </svg>`
+      : '';
     // 高倍數紅框 (≥3.5x) — mult 上面已算
     const hotClass = (mult != null && mult >= 3.5) ? 'v2-card--hot' : '';
     // 城市色彩區別（左側色條）
@@ -724,8 +732,8 @@
         ${isNewObject ? `<div class="v2-card__corner-new" title="新進物件 (24 小時內第一次抓進 DB)：${esc(newTitle)}">N</div>` : ''}
         <div class="v2-card__line1">
           <span class="v2-card__type">${typeIcon(p.building_type)}</span>
-          <span class="v2-card__addr">
-            <span class="v2-card__district">${esc(p.district || '')}</span><span class="v2-card__sep" aria-hidden="true"></span>${esc(addr)}
+          <span class="${addrClass}">
+            <span class="v2-card__district">${esc(p.district || '')}</span><span class="v2-card__sep" aria-hidden="true"></span>${esc(addr)}${redevTargetIcon}
           </span>
           <span class="v2-card__price-block">
             <span class="v2-card__price">${priceWan ? fmt0(priceWan) : '—'}<small>萬</small></span>
