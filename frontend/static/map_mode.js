@@ -258,11 +258,9 @@
     const sortDir = document.getElementById('v2-sort-dir');
     if (sortSel) sortSel.style.display = mode === 'map' ? 'none' : '';
     if (sortDir) sortDir.style.display = mode === 'map' ? 'none' : '';
-    // 地圖模式不需要城市切換 (mobile-only top tabs：地圖一次秀雙北 markers)；
-    // mobile CSS .v2-grid-toggle { display: flex !important } 蓋過 inline style → 改用 class
-    // (對應 CSS 規則 .v2-grid-toggle--hidden { display: none !important })
+    // 地圖模式：城市切換器保留可見但 disable (灰掉、不可點)；切回 list 自動恢復
     const gridToggle = document.getElementById('v2-grid-toggle');
-    if (gridToggle) gridToggle.classList.toggle('v2-grid-toggle--hidden', mode === 'map');
+    if (gridToggle) gridToggle.classList.toggle('v2-grid-toggle--disabled', mode === 'map');
     document.querySelectorAll('.v2-view-toggle__link').forEach(a =>
       a.classList.toggle('is-active', a.dataset.viewMode === mode));
     if (mode === 'map') {
