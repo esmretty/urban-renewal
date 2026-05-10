@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from database.db import get_firestore
-from api.gis_overlay import query_tpe_renewal_cases, query_ntpc_renewal_cases
+from api.gis_overlay import query_tpe_renewal_cases, query_ntpc_renewal_cases, make_ntpc_query_client
 
 
 def main():
@@ -26,7 +26,10 @@ def main():
     ap.add_argument("--limit", type=int, default=0, help="0=全部")
     ap.add_argument("--only-missing", action="store_true", help="已有 redev_cases 的跳過")
     ap.add_argument("--cities", default="台北市,新北市", help="comma-separated city list")
+    ap.add_argument("--ntpc-only", action="store_true", help="只跑新北 (台北已 backfill 過，且 NTPC 之前 cookie bug 全 0)")
     args = ap.parse_args()
+    if args.ntpc_only:
+        args.cities = "新北市"
 
     cities = set([c.strip() for c in args.cities.split(",") if c.strip()])
     db = get_firestore()
@@ -54,31 +57,37 @@ def main():
     total_cases = 0
     t0 = time.time()
 
-    for i, (pid, data) in enumerate(docs, 1):
-        city = data["city"]
-        lat = data["latitude"]
-        lng = data["longitude"]
-        try:
-            if city == "台北市":
-                cases = query_tpe_renewal_cases(lat, lng)
-            elif city == "新北市":
-                cases = query_ntpc_renewal_cases(lat, lng)
-            else:
-                counts["skipped"] += 1
-                continue
-            counts[city] += 1
-            if cases:
-                enriched_with_cases += 1
-                total_cases += len(cases)
-            if not args.dry_run:
-                col.document(pid).update({"redev_cases": cases})
-            if i % 50 == 0 or i == len(docs):
-                rate = i / max(1.0, (time.time() - t0))
-                eta_s = (len(docs) - i) / max(0.001, rate)
-                print(f"  [{i}/{len(docs)}] city={city} cases={len(cases)} | rate={rate:.1f}/s ETA={eta_s:.0f}s")
-        except Exception as e:
-            counts["errors"] += 1
-            print(f"  ! {pid} ({city}) err: {e}")
+    # 重用 NTPC httpx.Client：第一次 connection setup ~3s，後續 ~0.03s。
+    # 不重用的話 715 筆 NTPC 跑 ~50min，重用後 ~5min
+    ntpc_client = make_ntpc_query_client()
+    try:
+        for i, (pid, data) in enumerate(docs, 1):
+            city = data["city"]
+            lat = data["latitude"]
+            lng = data["longitude"]
+            try:
+                if city == "台北市":
+                    cases = query_tpe_renewal_cases(lat, lng)
+                elif city == "新北市":
+                    cases = query_ntpc_renewal_cases(lat, lng, client=ntpc_client)
+                else:
+                    counts["skipped"] += 1
+                    continue
+                counts[city] += 1
+                if cases:
+                    enriched_with_cases += 1
+                    total_cases += len(cases)
+                if not args.dry_run:
+                    col.document(pid).update({"redev_cases": cases})
+                if i % 25 == 0 or i == len(docs):
+                    rate = i / max(1.0, (time.time() - t0))
+                    eta_s = (len(docs) - i) / max(0.001, rate)
+                    print(f"  [{i}/{len(docs)}] city={city} cases={len(cases)} | rate={rate:.1f}/s ETA={eta_s:.0f}s", flush=True)
+            except Exception as e:
+                counts["errors"] += 1
+                print(f"  ! {pid} ({city}) err: {e}", flush=True)
+    finally:
+        ntpc_client.close()
 
     print()
     print(f"=== 完成 ===")

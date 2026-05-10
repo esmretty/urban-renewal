@@ -750,12 +750,16 @@ def query_tpe_renewal_cases(lat: float, lng: float) -> list[dict]:
     return cases
 
 
-def query_ntpc_renewal_cases(lat: float, lng: float, with_detail: bool = True) -> list[dict]:
+def query_ntpc_renewal_cases(lat: float, lng: float, with_detail: bool = True,
+                              client: Optional[httpx.Client] = None) -> list[dict]:
     """給定 WGS84 lat/lng → 回新北市 4 種都更案件 (套疊到該位置的) 清單。
     只 query 新北市範圍內座標；非新北 / lat/lng 缺 → 回 []。
 
     with_detail=True (default) → 每筆 case 額外打 GetXxxCaseDetail 取詳細欄位，
     寫進 case['summary'] (server-side 串好的 user-friendly 摘要)。
+    client (optional) → 外部傳入的 long-lived httpx.Client (給 backfill 用)；
+    沒傳就在這 fn 內部開 with-block (NTPC 第一次 connection setup ~3s，後續 ~0.03s — backfill
+    跑 700+ 筆就要重用 client)。
     每筆 case 結構：{sub_type, sub_type_label, case_id, applicant, summary}"""
     if lat is None or lng is None:
         return []
@@ -765,60 +769,84 @@ def query_ntpc_renewal_cases(lat: float, lng: float, with_detail: bool = True) -
     except Exception as e:
         logger.debug(f"query_ntpc_renewal_cases coord 換算失敗: {e}")
         return []
-    # TWD97 新北範圍粗略 bbox (含 25 區，留 buffer)
     if not (260000 <= x <= 360000 and 2730000 <= y <= 2810000):
         return []
     import base64
     hdtoken = _get_ntpcurinfo_hdtoken()
     if not hdtoken:
         return []
-    cookies = _get_ntpcurinfo_cookies()  # session cookies 必須帶 (見 _NTPCURINFO_CACHE 註解)
-    cases: list[dict] = []
+    cookies = _get_ntpcurinfo_cookies()
     timeName = base64.b64encode(b"MapToken").decode()
     base = "https://urban.planning.ntpc.gov.tw/NtpcURInfo/ajax/UrbanRenewalQuery.ashx"
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _by_xy_one(cli, kw):
+        try:
+            r = cli.post(base, data={
+                "keyword": kw, "X": str(round(x)), "Y": str(round(y)),
+                "timeStamp": hdtoken, "timeName": timeName,
+            })
+            if r.status_code != 200:
+                return None
+            j = r.json()
+            if j.get("MSGCODE") != 200:
+                return None
+            md = j.get("MAINDATA")
+            return md if isinstance(md, list) else None
+        except Exception as e:
+            logger.debug(f"query_ntpc_renewal_cases {kw} 失敗: {e}")
+            return None
+
+    def _do(cli):
+        cases: list[dict] = []
+        with ThreadPoolExecutor(max_workers=4) as exe:
+            futures = [
+                (sub_id, by_xy_kw, detail_kw, label,
+                 exe.submit(_by_xy_one, cli, by_xy_kw))
+                for sub_id, by_xy_kw, detail_kw, label in _RENEWAL_QUERY_TYPES
+            ]
+            for sub_id, by_xy_kw, detail_kw, label, fut in futures:
+                md = fut.result()
+                if not md:
+                    continue
+                for item in md:
+                    case_id = item.get("ID")
+                    case = {
+                        "sub_type": sub_id,
+                        "sub_type_label": label,
+                        "case_id": case_id,
+                        "applicant": item.get("ApplyPeople") or "",
+                        "summary": "",
+                    }
+                    if with_detail and case_id:
+                        detail = _fetch_ntpc_case_detail(cli, hdtoken, timeName, detail_kw, case_id)
+                        if detail:
+                            case["summary"] = _build_ntpc_case_summary(sub_id, detail)
+                    cases.append(case)
+        return cases
+
     try:
+        if client is not None:
+            return _do(client)
         with httpx.Client(verify=False, timeout=8, cookies=cookies, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://urban.planning.ntpc.gov.tw/NtpcURInfo/",
-        }) as client:
-            for sub_id, by_xy_kw, detail_kw, label in _RENEWAL_QUERY_TYPES:
-                try:
-                    r = client.post(base, data={
-                        "keyword": by_xy_kw,
-                        "X": str(round(x)),
-                        "Y": str(round(y)),
-                        "timeStamp": hdtoken,
-                        "timeName": timeName,
-                    })
-                    if r.status_code != 200:
-                        continue
-                    j = r.json()
-                    if j.get("MSGCODE") != 200:
-                        continue
-                    md = j.get("MAINDATA")
-                    if not isinstance(md, list):
-                        continue
-                    for item in md:
-                        case_id = item.get("ID")
-                        case = {
-                            "sub_type": sub_id,
-                            "sub_type_label": label,
-                            "case_id": case_id,
-                            "applicant": item.get("ApplyPeople") or "",
-                            "summary": "",
-                        }
-                        if with_detail and case_id:
-                            detail = _fetch_ntpc_case_detail(client, hdtoken, timeName, detail_kw, case_id)
-                            if detail:
-                                case["summary"] = _build_ntpc_case_summary(sub_id, detail)
-                        cases.append(case)
-                except Exception as e:
-                    logger.debug(f"query_ntpc_renewal_cases {by_xy_kw} 失敗: {e}")
-                    continue
+        }) as cli:
+            return _do(cli)
     except Exception as e:
         logger.warning(f"query_ntpc_renewal_cases httpx client 失敗: {e}")
         return []
-    return cases
+
+
+def make_ntpc_query_client() -> httpx.Client:
+    """給 backfill 用 — 開一個長期 httpx.Client 帶好 cookies + headers，可重複呼叫
+    query_ntpc_renewal_cases(lat, lng, client=...) 共用。"""
+    cookies = _get_ntpcurinfo_cookies()
+    return httpx.Client(verify=False, timeout=12, cookies=cookies, headers={
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://urban.planning.ntpc.gov.tw/NtpcURInfo/",
+    })
 
 
 def _fetch_nlsc_wms(cfg: dict, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
