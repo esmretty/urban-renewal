@@ -568,18 +568,23 @@ def _fetch_ntpcurinfo_layer(cfg: dict, bbox: str, width: int, height: int, srs: 
 # 回傳「該位置上所有套疊到的都更案件清單」(ID + ApplyPeople + shp)。
 # 我們在物件分析 pipeline 裡呼叫一次，把 4 種類型結果合併存進 doc_data["redev_cases"]。
 # 每筆 case 拿到 ID 後再打 GetXxxCaseDetail 取詳細欄位，server-side 串成 summary 字串。
+# 重要：sub_type 的 ByXY keyword 必須對齊 map tile 底層 ArcGIS table，否則 filter / map
+# 看到的是兩套不同資料：
+#   layer 20 都市更新事業計畫案 → UNITSGEOMETRY → GetUnitsCaseByXY (不是 GetAMACaseByXY 整建維護諮詢)
+#   layer 27 防災案件 → Self_Governance_Articles_Geometry → GetSGACaseByXY (不是 GetAMDMCaseByXY 整維案)
+# detail_keyword 為空字串 → ByXY 已含足夠資料 (Units 走這條，欄位 UN01/UN02/Schedule 都在 ByXY 回應內)
 _RENEWAL_QUERY_TYPES = [
     # (sub_type_id, by_xy_keyword, detail_keyword, display_label)
-    ("ama",    "GetAMACaseByXY",       "GetAMACaseDetail",       "都市更新事業計畫案"),
+    ("ama",    "GetUnitsCaseByXY",     "",                       "都市更新事業計畫案"),
     ("easy",   "GetEasyUrbanCaseByXY", "GetEasyUrbanCaseDetail", "簡易都更"),
     ("danger", "GetDangerCaseByXY",    "GetDangerCaseDetail",    "危老重建"),
-    ("amdm",   "GetAMDMCaseByXY",      "GetAMDMCaseDetail",      "防災案件"),
+    ("amdm",   "GetSGACaseByXY",       "GetSGACaseDetail",       "防災案件"),
 ]
 
 
 def _build_ntpc_case_summary(sub_type: str, detail: dict) -> str:
-    """server-side 把 detail dict 串成 user-friendly summary 字串。
-    各 sub_type 欄位不同 — 挑出最有用的幾個：地址/段地號 + 類型/結果。"""
+    """server-side 把 detail dict (or Units ByXY item) 串成 user-friendly summary。
+    各 sub_type 欄位不同 — 挑出最有用的幾個：案名 / 狀態 / 段地號 / 改建規模。"""
     if not detail:
         return ""
     def _g(k):
@@ -588,18 +593,19 @@ def _build_ntpc_case_summary(sub_type: str, detail: dict) -> str:
             return ""
         return str(v).strip()
     if sub_type == "ama":
-        # 申請地址 | 補助項目 (評估結果)
-        addr = _g("ApplyAddr")
-        subsidy = _g("ApplySubsidy")
-        result = _g("AssessResult")
+        # Units (UNITSGEOMETRY)：ByXY 直接回 UN02 (案名) + Schedule (狀態) + UN320 (階段)
+        name = _g("UN02")
+        schedule = _g("Schedule")
+        stage = _g("UN320")
         parts = []
-        if addr: parts.append(addr)
-        if subsidy or result:
-            tag = subsidy + (f"（{result}）" if result else "")
-            parts.append(tag)
+        if name: parts.append(name)
+        sub = []
+        if schedule: sub.append(schedule)
+        if stage: sub.append(f"階段 {stage}")
+        if sub: parts.append(" / ".join(sub))
         return " | ".join(parts)
     if sub_type == "danger":
-        # 危老：拿 LandNo + 改建前/後規模
+        # 危老 detail：LandNo + 改建前/後規模
         landno = _g("LandNo")
         before = " ".join(filter(None, [_g("BeforeFloor") and _g("BeforeFloor") + "F",
                                         _g("BeforeConstruction"),
@@ -614,7 +620,7 @@ def _build_ntpc_case_summary(sub_type: str, detail: dict) -> str:
         elif after: parts.append(f"改建 {after}")
         return " | ".join(parts)
     if sub_type == "easy":
-        # 簡易都更：基地面積 + 容積獎勵 + 設計廠商
+        # 簡易都更 detail：基地面積 + 容積獎勵 + 設計廠商
         area = _g("Area")
         vr = _g("VolumeReward")
         vendor = _g("DesignVendor")
@@ -624,18 +630,11 @@ def _build_ntpc_case_summary(sub_type: str, detail: dict) -> str:
         if vendor: parts.append(vendor)
         return " | ".join(parts)
     if sub_type == "amdm":
-        # 防災：段地號 + 類型 樓層 構造 | 申請類別
-        seclandno = _g("SectLandNo")
-        btype = _g("BuildingType")
-        bfl = _g("BuildingFloor")
-        bcons = _g("BuildingConstruction")
-        method = _g("ApplyMethod")
-        consent = _g("ConsentRatio")
+        # SGA detail (防災)：ProcessingStage 是合併「段地號 + 案類型」的長字串，當 case_name
+        # 用；改建/原規模欄位 (NBuildingNo/OBuildingNo 等) 多為 null，只列有值的
+        stage_name = _g("ProcessingStage")
         parts = []
-        if seclandno: parts.append(seclandno)
-        bldparts = list(filter(None, [btype, bfl and bfl + "F", bcons]))
-        if bldparts: parts.append(" ".join(bldparts))
-        if method: parts.append(f"申請 {method}" + (f"（同意 {consent}%）" if consent else ""))
+        if stage_name: parts.append(stage_name)
         return " | ".join(parts)
     return ""
 
@@ -811,7 +810,8 @@ def query_ntpc_renewal_cases(lat: float, lng: float, with_detail: bool = True,
                 if not md:
                     continue
                 for item in md:
-                    case_id = item.get("ID")
+                    # Units (ama) case_id 在 UN01 欄位、無 ApplyPeople；其他 sub_type 用 ID + ApplyPeople
+                    case_id = item.get("UN01") if sub_id == "ama" else item.get("ID")
                     case = {
                         "sub_type": sub_id,
                         "sub_type_label": label,
@@ -819,7 +819,10 @@ def query_ntpc_renewal_cases(lat: float, lng: float, with_detail: bool = True,
                         "applicant": item.get("ApplyPeople") or "",
                         "summary": "",
                     }
-                    if with_detail and case_id:
+                    # detail_kw 空字串代表 ByXY 已含足夠資料 (Units)；直接用 item 當 detail 算 summary
+                    if not detail_kw:
+                        case["summary"] = _build_ntpc_case_summary(sub_id, item)
+                    elif with_detail and case_id:
                         detail = _fetch_ntpc_case_detail(cli, hdtoken, timeName, detail_kw, case_id)
                         if detail:
                             case["summary"] = _build_ntpc_case_summary(sub_id, detail)
