@@ -101,8 +101,7 @@
       minLand: $('#v2-land-min')?.value || '',
       sortBy: $('#v2-sort')?.value || 'list_rank',
       sortDir: state.sortDir,
-      minMultOn: $('#v2-min-mult-on')?.checked || false,
-      minMultVal: $('#v2-min-mult-val')?.value || '3.0',
+      minMultVal: $('#v2-min-mult-val')?.value || '0',
       hideF5: $('#v2-hide-floors5plus')?.checked || false,
       hideRem: $('#v2-hide-remote')?.checked || false,
       hideUns: $('#v2-hide-unsuitable')?.checked || false,
@@ -204,7 +203,6 @@
     if (typeof obj.minMultVal === 'string' || typeof obj.minMultVal === 'number') {
       const el = $('#v2-min-mult-val'); if (el) el.value = obj.minMultVal;
     }
-    setChk('v2-min-mult-on', obj.minMultOn);
     setChk('v2-hide-floors5plus', obj.hideF5);
     setChk('v2-hide-remote', obj.hideRem);
     setChk('v2-hide-unsuitable', obj.hideUns);
@@ -896,10 +894,10 @@
     }
 
     // min-mult filter (跟 sidebar 同階；最愛 tab 也不套，因為 input 在 sidebar)
+    // 數字 0 = 不過濾(全顯示)；> 0 才套 filter
     if (state.view === 'explore') {
-      const minMultOn = $('#v2-min-mult-on')?.checked;
       const minMultVal = parseFloat($('#v2-min-mult-val')?.value);
-      if (minMultOn && !isNaN(minMultVal) && minMultVal > 0) {
+      if (!isNaN(minMultVal) && minMultVal > 0) {
         list = list.filter(p => {
           const m = rowMultiple(p, prices);
           return m != null && m >= minMultVal;
@@ -1147,8 +1145,8 @@
     const lng = p.source_longitude ?? p.longitude;
     const host = document.getElementById(`v2-d-school-${id}`);
     if (!host) return;
-    // detail row 結構：[學校] (類型 — 鄰級切割)，跨區時前綴「X區跨區/」
-    // 例：實踐國小(基本 — 14–17鄰)、松山國小(松山區跨區/自由 — 1～4鄰)
+    // 全部學校 chip 都顯示「校名 →」並用 hover popup 顯示完整註釋 (基本 / 自由 / 鄰級 / 跨區)
+    // hover popup 走 v2.showSchoolPopup / hideSchoolPopup (跟 LVR popup 同 pattern)
     function _metaText(d, queryDistrict) {
       const cross = d.school_district && d.school_district !== queryDistrict
         ? d.school_district + '跨區/' : '';
@@ -1156,20 +1154,8 @@
       const nb = d.neighborhoods_raw ? ' — ' + d.neighborhoods_raw : '';
       return cross + zone + nb;
     }
-    function _detailChip(d, queryDistrict) {
-      const meta = _metaText(d, queryDistrict);
-      return `<span class="v2-d-school-tag">${esc(d.school)}${meta ? `<span class="v2-d-school-meta">(${esc(meta)})</span>` : ''}</span>`;
-    }
-    // 同一學校多筆 row (不同 zone_type / neighborhoods) → 合併成 1 chip + → 箭頭，
-    // hover 顯示所有註釋 (避免 chip 列重複學校名擠成一片)
-    function _multiNoteChip(school, items, queryDistrict) {
-      const notes = items.map(d => _metaText(d, queryDistrict)).filter(Boolean);
-      const tooltip = notes.length ? notes.join('\n') : '';
-      return `<span class="v2-d-school-tag v2-d-school-tag--multi" title="${esc(tooltip)}">` +
-        `${esc(school)}<span class="v2-d-school-arrow" aria-label="${esc(tooltip)}">→</span>` +
-        `</span>`;
-    }
-    // 群組 by school 名 → 1 筆 = 一般 chip；2+ 筆 = multi-note chip
+    // 群組 by school 名，每組一個 chip。chip 把所有 note 用 \n 分隔串成 data-notes attr，
+    // hover 走 JS popup (title attr 在 mobile / 觸控不可靠且無 styling)
     function _groupAndRender(items, queryDistrict) {
       const grouped = new Map();
       for (const d of items) {
@@ -1177,7 +1163,6 @@
         if (!grouped.has(key)) grouped.set(key, []);
         grouped.get(key).push(d);
       }
-      // 排序：基本 > 自由；同類型按校名 — group 內第一筆的 zone_type 當代表
       const arr = Array.from(grouped.entries());
       arr.sort(([sA, lA], [sB, lB]) => {
         const za = (lA[0]?.zone_type === '基本') ? 0 : (lA[0]?.zone_type === '自由' ? 1 : 2);
@@ -1186,8 +1171,15 @@
         return String(sA).localeCompare(String(sB), 'zh-Hant');
       });
       return arr.map(([school, list]) => {
-        if (list.length === 1) return _detailChip(list[0], queryDistrict);
-        return _multiNoteChip(school, list, queryDistrict);
+        const notes = list.map(d => _metaText(d, queryDistrict)).filter(Boolean);
+        const notesAttr = encodeURIComponent(JSON.stringify(notes));
+        return `<span class="v2-d-school-tag v2-d-school-tag--hover"` +
+          ` data-school="${esc(school)}"` +
+          ` data-notes="${notesAttr}"` +
+          ` onmouseenter="v2.showSchoolPopup(event, this)"` +
+          ` onmouseleave="v2.hideSchoolPopup()">` +
+          `${esc(school)}<span class="v2-d-school-arrow">→</span>` +
+        `</span>`;
       }).join(' ');
     }
     const renderRow = (kind, items, queryDistrict) => {
@@ -1333,7 +1325,20 @@
   }
 
   // 都更案件 body HTML — 給 detailHTML 跟 refreshRedevCases 共用
-  // 結構配 .v2-ai-sec__body container，群組 by sub_type_label，每組一行：「label: 案號 1, 案號 2…」
+  // 群組 by sub_type_label，每組分行顯示每筆 case：「申請人 — 摘要 (#案號 ↗)」
+  // - 摘要：server 串好的 user-friendly 字串 (新北：地址/補助項目/段地號 等；台北目前無 detail API → 空)
+  // - 案號 ↗：台北 R/P prefix case 連到 gis.uro.taipei/showproj_uro.html (新版都更地理資訊)；
+  //   115_revised / 63y_building / 新北 沒對應公開 deep-link → 純文字案號不帶連結
+  function _redevCaseDetailUrl(c) {
+    const cid = (c.case_id || '').toString();
+    if (!cid) return null;
+    // 台北：R/P prefix → gis.uro.taipei
+    if (/^[RP]\d/i.test(cid)) {
+      return `https://gis.uro.taipei/showproj_uro.html?case_id=${encodeURIComponent(cid)}`;
+    }
+    // 新北 case_id 是純整數，目前沒找到 NtpcURInfo 個別案件 deep-link → 不提供 URL
+    return null;
+  }
   function renderRedevCasesBody(p) {
     if (!Array.isArray(p.redev_cases)) return '<span class="v2-d-hint">尚未查詢</span>';
     if (p.redev_cases.length === 0) return '<span class="v2-d-hint">無套疊都更案件</span>';
@@ -1343,10 +1348,27 @@
       (byType[k] = byType[k] || []).push(c);
     });
     return Object.entries(byType).map(([label, items]) => {
-      const ids = items.map(it => esc(it.case_id || '')).filter(Boolean).join(', ');
-      const applicants = items.map(it => esc(it.applicant || '')).filter(Boolean);
-      const detail = ids || (applicants.length ? applicants.join('、') : `${items.length} 案`);
-      return `<div class="v2-d-redev-row"><span class="v2-d-redev-label">${esc(label)}</span><span class="v2-d-redev-detail">${detail}</span></div>`;
+      const itemsHTML = items.map(it => {
+        const applicant = it.applicant || '';
+        const summary = it.summary || '';
+        const cid = it.case_id ? String(it.case_id) : '';
+        const url = _redevCaseDetailUrl(it);
+        const headParts = [];
+        if (applicant) headParts.push(esc(applicant));
+        if (summary) headParts.push(esc(summary));
+        const headStr = headParts.join(' — ');
+        const caseTag = cid
+          ? (url
+              ? `<a class="v2-d-redev-caseid v2-d-redev-caseid--link" href="${esc(url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">#${esc(cid)} ↗</a>`
+              : `<span class="v2-d-redev-caseid">#${esc(cid)}</span>`)
+          : '';
+        const body = headStr || (cid ? '' : '—');
+        return `<div class="v2-d-redev-item">${body}${body && caseTag ? ' ' : ''}${caseTag}</div>`;
+      }).join('');
+      return `<div class="v2-d-redev-group">` +
+        `<div class="v2-d-redev-label">${esc(label)}</div>` +
+        `<div class="v2-d-redev-items">${itemsHTML}</div>` +
+        `</div>`;
     }).join('');
   }
 
@@ -1524,9 +1546,9 @@
             <div class="v2-ai-sec v2-ai-sec--redev">
               <div class="v2-ai-sec__title">都更案件</div>
               <div class="v2-ai-sec__body">
-                <button type="button" class="v2-d-redev-refresh"
+                <button type="button" class="v2-d-road-show v2-d-redev-refresh"
                         onclick="event.stopPropagation(); v2.refreshRedevCases('${esc(id)}', this)"
-                        title="重新查詢該位置上的都更案件">重新查詢</button>
+                        title="重新查詢該位置上的都更案件">重新查詢 ↗</button>
                 <div class="v2-d-redev-list" id="v2-d-redev-${esc(id)}">${redevCasesBodyHTML}</div>
               </div>
             </div>
@@ -2147,6 +2169,44 @@
   function hideLvrPopup() {
     _lvrPopupTimer = setTimeout(() => {
       const pop = document.getElementById('v2-lvr-popup');
+      if (pop) pop.style.display = 'none';
+    }, 200);
+  }
+
+  // ── 學區 chip hover popup — 顯示完整註釋 (基本/自由/鄰級/跨區) ──
+  let _schoolPopupTimer = null;
+  function showSchoolPopup(event, el) {
+    const school = el.dataset.school || '';
+    let notes = [];
+    try { notes = JSON.parse(decodeURIComponent(el.dataset.notes || '%5B%5D')); } catch (_e) {}
+    let pop = document.getElementById('v2-school-popup');
+    if (!pop) {
+      pop = document.createElement('div');
+      pop.id = 'v2-school-popup';
+      pop.className = 'v2-school-popup';
+      pop.addEventListener('mouseenter', () => clearTimeout(_schoolPopupTimer));
+      pop.addEventListener('mouseleave', hideSchoolPopup);
+      document.body.appendChild(pop);
+    }
+    clearTimeout(_schoolPopupTimer);
+    const body = notes.length
+      ? notes.map(n => `<div class="v2-school-popup__row">${esc(n)}</div>`).join('')
+      : '<div class="v2-school-popup__row" style="color:#888;">（無註釋）</div>';
+    pop.innerHTML = `<div class="v2-school-popup__title">${esc(school)}</div>${body}`;
+    const rect = el.getBoundingClientRect();
+    pop.style.display = 'block';
+    // measure 後決定靠下 / 靠上
+    const popRect = pop.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = (spaceBelow > popRect.height + 12 || rect.top < popRect.height + 12)
+      ? rect.bottom + 6
+      : rect.top - popRect.height - 6;
+    pop.style.top = top + 'px';
+    pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - popRect.width - 8)) + 'px';
+  }
+  function hideSchoolPopup() {
+    _schoolPopupTimer = setTimeout(() => {
+      const pop = document.getElementById('v2-school-popup');
       if (pop) pop.style.display = 'none';
     }, 200);
   }
@@ -2918,8 +2978,7 @@
     $('#v2-bld-price-max').value = 300;
     $('#v2-land-price-max').value = 600;
     $('#v2-land-min').value = 0;
-    $('#v2-min-mult-on') && ($('#v2-min-mult-on').checked = false);
-    $('#v2-min-mult-val') && ($('#v2-min-mult-val').value = 3.0);
+    $('#v2-min-mult-val') && ($('#v2-min-mult-val').value = 0);
     $('#v2-hide-floors5plus').checked = false;
     $('#v2-hide-remote').checked = true;
     $('#v2-hide-unsuitable').checked = true;
@@ -3360,6 +3419,7 @@
     triggerScrapeUrl, triggerManualAnalyze, populateManualDistricts,
     switchGridCity,
     showLvrPopup, hideLvrPopup,
+    showSchoolPopup, hideSchoolPopup,
     saveOverride, saveInferredChoice, setZonePing,
     // 給 map_mode.js (獨立檔) 用：state、helpers，map_mode.js 透過 window.v2 取
     state, getDistrictPrices, _saveFilters,

@@ -319,7 +319,9 @@ def _fetch_591_dmaps(cfg: dict, bbox: str, width: int, height: int, srs: str) ->
 #
 # 整個 layer list 一起 refresh + cache (一次 datahandler call 換到所有 layer 的 token)。
 # Token cache 約 50 min (NtpcURInfo session 通常活 30min-1hr，保守設 50 min refresh)。
-_NTPCURINFO_CACHE: dict = {"by_name": {}, "fetched_at": 0.0, "hdtoken": None}
+# cookies 必須持續：UrbanRenewalQuery.ashx 用 hdToken 配合 ASP.NET_SessionId / TS010f2491
+# session cookie 一起檢驗，缺 cookie → MSGCODE 300「參數檢驗失敗」
+_NTPCURINFO_CACHE: dict = {"by_name": {}, "fetched_at": 0.0, "hdtoken": None, "cookies": {}}
 _NTPCURINFO_TTL = 50 * 60  # 50 min
 
 
@@ -368,6 +370,12 @@ def _refresh_ntpcurinfo_layers() -> bool:
             _NTPCURINFO_CACHE["by_name"] = by_name
             _NTPCURINFO_CACHE["hdtoken"] = hdtoken
             _NTPCURINFO_CACHE["fetched_at"] = _t.time()
+            # 把 client 的 session cookies 保留下來給 UrbanRenewalQuery.ashx 用
+            # (server 用 ASP.NET_SessionId + TS01xxxx 驗證 hdToken；缺 cookie → MSGCODE 300)
+            try:
+                _NTPCURINFO_CACHE["cookies"] = dict(client.cookies)
+            except Exception:
+                _NTPCURINFO_CACHE["cookies"] = {}
             return True
     except Exception as e:
         logger.warning(f"NtpcURInfo refresh layer list 失敗: {e}")
@@ -404,6 +412,18 @@ def _invalidate_ntpcurinfo_token() -> None:
     _NTPCURINFO_CACHE["fetched_at"] = 0.0
     _NTPCURINFO_CACHE["hdtoken"] = None
     _NTPCURINFO_CACHE["by_name"] = {}
+    _NTPCURINFO_CACHE["cookies"] = {}
+
+
+def _get_ntpcurinfo_cookies() -> dict:
+    """拿 cached session cookies (給 UrbanRenewalQuery.ashx 用)；過期就 refresh。"""
+    import time as _t
+    cache = _NTPCURINFO_CACHE
+    if cache["cookies"] and (_t.time() - cache["fetched_at"]) < _NTPCURINFO_TTL:
+        return cache["cookies"]
+    if _refresh_ntpcurinfo_layers():
+        return cache["cookies"] or {}
+    return {}
 
 
 def _bbox_to_tile_xyz(bbox: str) -> Optional[tuple[int, int, int]]:
@@ -547,13 +567,106 @@ def _fetch_ntpcurinfo_layer(cfg: dict, bbox: str, width: int, height: int, srs: 
 # NtpcURInfo /ajax/UrbanRenewalQuery.ashx 提供 4 種 GetXxxCaseByXY，給定 TWD97 座標
 # 回傳「該位置上所有套疊到的都更案件清單」(ID + ApplyPeople + shp)。
 # 我們在物件分析 pipeline 裡呼叫一次，把 4 種類型結果合併存進 doc_data["redev_cases"]。
+# 每筆 case 拿到 ID 後再打 GetXxxCaseDetail 取詳細欄位，server-side 串成 summary 字串。
 _RENEWAL_QUERY_TYPES = [
-    # (sub_type_id, keyword, display_label)
-    ("ama",    "GetAMACaseByXY",       "都市更新事業計畫案"),
-    ("easy",   "GetEasyUrbanCaseByXY", "簡易都更"),
-    ("danger", "GetDangerCaseByXY",    "危老重建"),
-    ("amdm",   "GetAMDMCaseByXY",      "防災案件"),
+    # (sub_type_id, by_xy_keyword, detail_keyword, display_label)
+    ("ama",    "GetAMACaseByXY",       "GetAMACaseDetail",       "都市更新事業計畫案"),
+    ("easy",   "GetEasyUrbanCaseByXY", "GetEasyUrbanCaseDetail", "簡易都更"),
+    ("danger", "GetDangerCaseByXY",    "GetDangerCaseDetail",    "危老重建"),
+    ("amdm",   "GetAMDMCaseByXY",      "GetAMDMCaseDetail",      "防災案件"),
 ]
+
+
+def _build_ntpc_case_summary(sub_type: str, detail: dict) -> str:
+    """server-side 把 detail dict 串成 user-friendly summary 字串。
+    各 sub_type 欄位不同 — 挑出最有用的幾個：地址/段地號 + 類型/結果。"""
+    if not detail:
+        return ""
+    def _g(k):
+        v = detail.get(k)
+        if v is None or str(v).strip().lower() in ("none", ""):
+            return ""
+        return str(v).strip()
+    if sub_type == "ama":
+        # 申請地址 | 補助項目 (評估結果)
+        addr = _g("ApplyAddr")
+        subsidy = _g("ApplySubsidy")
+        result = _g("AssessResult")
+        parts = []
+        if addr: parts.append(addr)
+        if subsidy or result:
+            tag = subsidy + (f"（{result}）" if result else "")
+            parts.append(tag)
+        return " | ".join(parts)
+    if sub_type == "danger":
+        # 危老：拿 LandNo + 改建前/後規模
+        landno = _g("LandNo")
+        before = " ".join(filter(None, [_g("BeforeFloor") and _g("BeforeFloor") + "F",
+                                        _g("BeforeConstruction"),
+                                        _g("BeforeHousehold") and _g("BeforeHousehold") + "戶"]))
+        after = " ".join(filter(None, [_g("AfterFloor") and _g("AfterFloor") + "F",
+                                       _g("AfterConstruction"),
+                                       _g("AfterHousehold") and _g("AfterHousehold") + "戶"]))
+        parts = []
+        if landno: parts.append(landno)
+        if before and after: parts.append(f"原 {before} → 改建 {after}")
+        elif before: parts.append(f"原 {before}")
+        elif after: parts.append(f"改建 {after}")
+        return " | ".join(parts)
+    if sub_type == "easy":
+        # 簡易都更：基地面積 + 容積獎勵 + 設計廠商
+        area = _g("Area")
+        vr = _g("VolumeReward")
+        vendor = _g("DesignVendor")
+        parts = []
+        if area: parts.append(f"基地 {area} ㎡")
+        if vr: parts.append(f"容積獎勵 {vr}%")
+        if vendor: parts.append(vendor)
+        return " | ".join(parts)
+    if sub_type == "amdm":
+        # 防災：段地號 + 類型 樓層 構造 | 申請類別
+        seclandno = _g("SectLandNo")
+        btype = _g("BuildingType")
+        bfl = _g("BuildingFloor")
+        bcons = _g("BuildingConstruction")
+        method = _g("ApplyMethod")
+        consent = _g("ConsentRatio")
+        parts = []
+        if seclandno: parts.append(seclandno)
+        bldparts = list(filter(None, [btype, bfl and bfl + "F", bcons]))
+        if bldparts: parts.append(" ".join(bldparts))
+        if method: parts.append(f"申請 {method}" + (f"（同意 {consent}%）" if consent else ""))
+        return " | ".join(parts)
+    return ""
+
+
+def _fetch_ntpc_case_detail(client: httpx.Client, hdtoken: str, time_name: str,
+                            detail_kw: str, case_id) -> Optional[dict]:
+    """打 GetXxxCaseDetail 拿單一案件詳細資料 dict (or None)。"""
+    try:
+        r = client.post(
+            "https://urban.planning.ntpc.gov.tw/NtpcURInfo/ajax/UrbanRenewalQuery.ashx",
+            data={
+                "keyword": detail_kw,
+                "caseID": case_id,
+                "timeStamp": hdtoken,
+                "timeName": time_name,
+            },
+        )
+        if r.status_code != 200:
+            return None
+        j = r.json()
+        if j.get("MSGCODE") != 200:
+            return None
+        md = j.get("MAINDATA")
+        if isinstance(md, list) and md:
+            return md[0]
+        if isinstance(md, dict):
+            return md
+        return None
+    except Exception as e:
+        logger.debug(f"_fetch_ntpc_case_detail {detail_kw}/{case_id} 失敗: {e}")
+        return None
 
 
 # ── 台北 都更案件 by 座標 (auto-enrich 用) ────────────────────────────
@@ -626,6 +739,7 @@ def query_tpe_renewal_cases(lat: float, lng: float) -> list[dict]:
                         "sub_type_label": sub_label,
                         "case_id": props.get("ID") or props.get("NO") or "",
                         "applicant": "",
+                        "summary": "",  # 台北 GeoServer 沒對應 detail API；保留欄位 shape 一致
                     })
             except Exception as e:
                 logger.debug(f"query_tpe_renewal_cases {type_name} 失敗: {e}")
@@ -636,10 +750,13 @@ def query_tpe_renewal_cases(lat: float, lng: float) -> list[dict]:
     return cases
 
 
-def query_ntpc_renewal_cases(lat: float, lng: float) -> list[dict]:
+def query_ntpc_renewal_cases(lat: float, lng: float, with_detail: bool = True) -> list[dict]:
     """給定 WGS84 lat/lng → 回新北市 4 種都更案件 (套疊到該位置的) 清單。
     只 query 新北市範圍內座標；非新北 / lat/lng 缺 → 回 []。
-    Each item: {sub_type, sub_type_label, case_id, applicant}。"""
+
+    with_detail=True (default) → 每筆 case 額外打 GetXxxCaseDetail 取詳細欄位，
+    寫進 case['summary'] (server-side 串好的 user-friendly 摘要)。
+    每筆 case 結構：{sub_type, sub_type_label, case_id, applicant, summary}"""
     if lat is None or lng is None:
         return []
     try:
@@ -655,18 +772,19 @@ def query_ntpc_renewal_cases(lat: float, lng: float) -> list[dict]:
     hdtoken = _get_ntpcurinfo_hdtoken()
     if not hdtoken:
         return []
+    cookies = _get_ntpcurinfo_cookies()  # session cookies 必須帶 (見 _NTPCURINFO_CACHE 註解)
     cases: list[dict] = []
     timeName = base64.b64encode(b"MapToken").decode()
     base = "https://urban.planning.ntpc.gov.tw/NtpcURInfo/ajax/UrbanRenewalQuery.ashx"
     try:
-        with httpx.Client(verify=False, timeout=8, headers={
+        with httpx.Client(verify=False, timeout=8, cookies=cookies, headers={
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://urban.planning.ntpc.gov.tw/NtpcURInfo/",
         }) as client:
-            for sub_id, keyword, label in _RENEWAL_QUERY_TYPES:
+            for sub_id, by_xy_kw, detail_kw, label in _RENEWAL_QUERY_TYPES:
                 try:
                     r = client.post(base, data={
-                        "keyword": keyword,
+                        "keyword": by_xy_kw,
                         "X": str(round(x)),
                         "Y": str(round(y)),
                         "timeStamp": hdtoken,
@@ -681,14 +799,21 @@ def query_ntpc_renewal_cases(lat: float, lng: float) -> list[dict]:
                     if not isinstance(md, list):
                         continue
                     for item in md:
-                        cases.append({
+                        case_id = item.get("ID")
+                        case = {
                             "sub_type": sub_id,
                             "sub_type_label": label,
-                            "case_id": item.get("ID"),
+                            "case_id": case_id,
                             "applicant": item.get("ApplyPeople") or "",
-                        })
+                            "summary": "",
+                        }
+                        if with_detail and case_id:
+                            detail = _fetch_ntpc_case_detail(client, hdtoken, timeName, detail_kw, case_id)
+                            if detail:
+                                case["summary"] = _build_ntpc_case_summary(sub_id, detail)
+                        cases.append(case)
                 except Exception as e:
-                    logger.debug(f"query_ntpc_renewal_cases {keyword} 失敗: {e}")
+                    logger.debug(f"query_ntpc_renewal_cases {by_xy_kw} 失敗: {e}")
                     continue
     except Exception as e:
         logger.warning(f"query_ntpc_renewal_cases httpx client 失敗: {e}")

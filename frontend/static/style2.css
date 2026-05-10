@@ -484,6 +484,31 @@ a { color: inherit; text-decoration: none; }
   white-space: nowrap;
 }
 
+/* 篩選都更案件 — 左台北 / 右新北 兩欄 */
+.v2-redev-filter-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+}
+.v2-redev-filter-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.v2-redev-filter-col__title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b5a2a;
+  margin-bottom: 2px;
+  border-bottom: 1px solid #d8cdb6;
+  padding-bottom: 2px;
+}
+.v2-redev-filter-col .v2-toggle {
+  font-size: 11px;
+  padding: 0;
+  white-space: nowrap;
+}
+
 /* Floor「全部」master chip */
 .v2-chip--all {
   border-color: var(--c-accent-light);
@@ -3490,41 +3515,48 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
 /* (slider rules 已搬到上方 PC + mobile 共用區塊) */
 
 /* === detail page 都更案件 (放在「其他資訊」col 第一格 .v2-ai-sec) ====== */
-/* 套用 .v2-ai-sec 黃底 title + body 樣式，body 內加重新查詢按鈕 + case 清單 */
+/* 重新查詢按鈕用既有 .v2-d-road-show class (跟「地籍圖 ↗」同款藍底)，
+   .v2-d-redev-refresh modifier 加 float:right + margin 自我定位 */
 .v2-d-redev-refresh {
   float: right;
-  font-size: 11px;
-  padding: 2px 8px;
-  border: 1px solid #c7b890;
-  background: #fdfaf2;
-  color: #5b4c2e;
-  border-radius: 3px;
-  cursor: pointer;
-  line-height: 1.4;
   margin-left: 8px;
+  margin-bottom: 4px;
 }
-.v2-d-redev-refresh:hover { background: #f5ecd0; }
 .v2-d-redev-refresh:disabled { opacity: 0.6; cursor: wait; }
 .v2-d-redev-list {
   font-size: 13px;
   line-height: 1.5;
 }
-.v2-d-redev-row {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-.v2-d-redev-row + .v2-d-redev-row { margin-top: 2px; }
+.v2-d-redev-group + .v2-d-redev-group { margin-top: 6px; }
 .v2-d-redev-label {
-  flex: 0 0 auto;
-  color: #6b7280;
-  white-space: nowrap;
+  font-weight: 600;
+  color: #5b4c2e;
+  font-size: 12px;
 }
-.v2-d-redev-label::after { content: "："; }
-.v2-d-redev-detail {
-  flex: 1 1 auto;
+.v2-d-redev-items {
+  margin-top: 2px;
+  padding-left: 8px;
+}
+.v2-d-redev-item {
   color: #374151;
+  font-size: 12px;
+  line-height: 1.5;
   word-break: break-all;
+}
+.v2-d-redev-item + .v2-d-redev-item { margin-top: 2px; }
+.v2-d-redev-caseid {
+  color: #94a3b8;
+  font-size: 11px;
+  margin-left: 4px;
+}
+.v2-d-redev-caseid--link {
+  color: #1a56a0;
+  text-decoration: none;
+  border-bottom: 1px dashed #c7ddf2;
+}
+.v2-d-redev-caseid--link:hover {
+  color: #0b3a7a;
+  border-bottom-color: #1a56a0;
 }
 
 /* === detail page 學區欄位 ============================================ */
@@ -3567,8 +3599,8 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   font-size: 11px;
   font-weight: 400;
 }
-/* 同學校多筆註釋合併 chip：→ 箭頭 hover (title attr 顯示全部註釋) */
-.v2-d-school-tag--multi {
+/* 學校 chip hover 樣式 — 全部 chip 都 hover popup (含「基本」「共同」等簡單註釋也只在 popup 顯示) */
+.v2-d-school-tag--hover {
   cursor: help;
 }
 .v2-d-school-arrow {
@@ -3576,6 +3608,32 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   color: #64748b;
   font-size: 11px;
   font-weight: 700;
+}
+/* 學校 hover popup — 跟 v2-lvr-popup 同 pattern */
+.v2-school-popup {
+  position: fixed;
+  z-index: 10000;
+  display: none;
+  background: #fff;
+  border: 1px solid #c7ddf2;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #1f2937;
+  max-width: 360px;
+  min-width: 140px;
+}
+.v2-school-popup__title {
+  font-weight: 700;
+  color: #2563eb;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 3px;
+}
+.v2-school-popup__row {
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
 /* 觸控裝置不沿用 :hover (避免 tap 後 hover sticky 把選中字蓋黑)；
