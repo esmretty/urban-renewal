@@ -259,9 +259,10 @@
     if (sortSel) sortSel.style.display = mode === 'map' ? 'none' : '';
     if (sortDir) sortDir.style.display = mode === 'map' ? 'none' : '';
     // 地圖模式不需要城市切換 (mobile-only top tabs：地圖一次秀雙北 markers)；
-    // 切到 map 時隱藏整條 v2-grid-toggle，切回 list 由 CSS @media 還原
+    // mobile CSS .v2-grid-toggle { display: flex !important } 蓋過 inline style → 改用 class
+    // (對應 CSS 規則 .v2-grid-toggle--hidden { display: none !important })
     const gridToggle = document.getElementById('v2-grid-toggle');
-    if (gridToggle) gridToggle.style.display = mode === 'map' ? 'none' : '';
+    if (gridToggle) gridToggle.classList.toggle('v2-grid-toggle--hidden', mode === 'map');
     document.querySelectorAll('.v2-view-toggle__link').forEach(a =>
       a.classList.toggle('is-active', a.dataset.viewMode === mode));
     if (mode === 'map') {

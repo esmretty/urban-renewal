@@ -3260,8 +3260,10 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
     padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px)) !important;
   }
   .v2-only-mobile { display: inline-flex !important; }
-  /* mobile city tab switcher 顯示 */
+  /* mobile city tab switcher 顯示；地圖模式加 --hidden 蓋掉 (要 !important 因為 base
+     rule 也有 !important) */
   .v2-grid-toggle { display: flex !important; }
+  .v2-grid-toggle.v2-grid-toggle--hidden { display: none !important; }
   /* grid 變單欄；依 data-active-city 顯示對應 city col */
   .v2-grid {
     grid-template-columns: 1fr;
