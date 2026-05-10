@@ -270,7 +270,7 @@
   // ════════════════════════════════════════════════════════════
   // 全域版本號 — 換 SLD / 圖層 style 時 bump，新 URL → bust browser 90 天 cache
   // 對應 backend _disk_cache_variant 的概念：cfg 變動就要讓 browser 也走新 URL
-  const TILE_VERSION = 2;
+  const TILE_VERSION = 3;
   function _makeWmsLayer(backend, paneName, extraClassName) {
     const name = typeof backend === 'string' ? backend : backend.name;
     const minZoom = (typeof backend === 'object' && backend.minZoom) ? backend.minZoom : undefined;

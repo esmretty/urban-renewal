@@ -258,6 +258,10 @@
     const sortDir = document.getElementById('v2-sort-dir');
     if (sortSel) sortSel.style.display = mode === 'map' ? 'none' : '';
     if (sortDir) sortDir.style.display = mode === 'map' ? 'none' : '';
+    // 地圖模式不需要城市切換 (mobile-only top tabs：地圖一次秀雙北 markers)；
+    // 切到 map 時隱藏整條 v2-grid-toggle，切回 list 由 CSS @media 還原
+    const gridToggle = document.getElementById('v2-grid-toggle');
+    if (gridToggle) gridToggle.style.display = mode === 'map' ? 'none' : '';
     document.querySelectorAll('.v2-view-toggle__link').forEach(a =>
       a.classList.toggle('is-active', a.dataset.viewMode === mode));
     if (mode === 'map') {

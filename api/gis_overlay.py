@@ -72,6 +72,9 @@ _LAYER_DEFS: dict[str, dict] = {
     "cadastral_numbers_tpe": {
         "kind": "wms", "upstream": _TPE_WMS_URL,
         "layers": "Taipei:LAND-ALL-TWD97-TEXT",
+        # dpi=45 (default 90) → server-side font 縮成一半 → 跟新北 NTPC 視覺一致 (細小、不擠成一團)
+        # SLD font-family/size 在這個 server 被吞掉，dpi 是唯一可調的字體 size 開關
+        "format_options": "dpi:45",
         "disk_cache": True,
         "display_name": "台北市 地號文字",
     },
@@ -218,7 +221,8 @@ def _get_ntpc_token() -> str:
 
 # ── 上游 dispatch ──────────────────────────────────────────────────────────
 def _fetch_wms(upstream: str, layer_names: str, bbox: str, width: int, height: int, srs: str,
-               cql_filter: Optional[str] = None, sld_body: Optional[str] = None) -> Optional[bytes]:
+               cql_filter: Optional[str] = None, sld_body: Optional[str] = None,
+               format_options: Optional[str] = None) -> Optional[bytes]:
     """直接 forward WMS GetMap 到 GeoServer。
     cql_filter: GeoServer CQL filter（用來在同一個 layer 下篩 sub-set，例如 'layer=10'）
     sld_body: 自訂 SLD XML 字串 (override server-side default styling)。
@@ -244,6 +248,8 @@ def _fetch_wms(upstream: str, layer_names: str, bbox: str, width: int, height: i
         params["cql_filter"] = cql_filter
     if sld_body:
         params["SLD_BODY"] = sld_body
+    if format_options:
+        params["format_options"] = format_options
     try:
         r = httpx.get(
             upstream,
@@ -483,14 +489,15 @@ _DISK_CACHE_BASE = _Path(__file__).resolve().parent.parent / "data" / "cache"
 
 
 def _disk_cache_variant(cfg: dict) -> str:
-    """layer config 變動 (SLD / cql_filter) 自動產生新 cache path 後綴，避免換 style
-    後舊 tile 還在 serve。'' = 沒任何 variant 影響 → 用 base path 跟之前完全相容。"""
+    """layer config 變動 (SLD / cql_filter / format_options) 自動產生新 cache path 後綴，
+    避免換 style 後舊 tile 還在 serve。'' = 沒任何 variant 影響 → 用 base path 跟之前完全相容。"""
     import hashlib
     sld = cfg.get("sld_body") or ""
     cql = cfg.get("cql_filter") or ""
-    if not sld and not cql:
+    fo = cfg.get("format_options") or ""
+    if not sld and not cql and not fo:
         return ""
-    h = hashlib.md5((sld + "|" + cql).encode("utf-8")).hexdigest()[:8]
+    h = hashlib.md5((sld + "|" + cql + "|" + fo).encode("utf-8")).hexdigest()[:8]
     return f"v_{h}"
 
 
@@ -1122,7 +1129,7 @@ async def gis_overlay(layer: str, request: Request) -> Response:
             return Response(content=disk_content, media_type="image/png", headers={"X-Cache": "DISK-HIT", "Cache-Control": cc_header})
     if cfg["kind"] == "wms":
         content = _fetch_wms(cfg["upstream"], cfg["layers"], bbox, width, height, srs,
-                             cfg.get("cql_filter"), cfg.get("sld_body"))
+                             cfg.get("cql_filter"), cfg.get("sld_body"), cfg.get("format_options"))
     elif cfg["kind"] == "arcgis_export":
         content = _fetch_arcgis_export(cfg, bbox, width, height, srs)
     elif cfg["kind"] == "nlsc_wms":
