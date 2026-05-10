@@ -1270,6 +1270,12 @@ def analyze_single_property(
         _skip_remote = _skip_unsuitable = _skip_foreclosure = _skip_floors_5plus = _skip_basement = True
         _road_blacklist = []
     _skip_reasons = []
+    # User-initiated 物件 (manual analyze / 用戶貼 URL) 不該觸發 LINE 通知 — 用戶自己已經知道這物件，
+    # LINE 通知是給「scheduler 發現新物件」用的 push，主動查詢結果應走前端 UI 即時看
+    _src = (item.get("source") or "").strip()
+    _src_origin = (item.get("source_origin") or doc_data.get("source_origin") or "").strip()
+    if _src == "manual" or _src_origin == "user_url":
+        _skip_reasons.append(f"user_initiated:{_src or _src_origin}")
     if _skip_remote and doc_data.get("is_remote_area"):
         _skip_reasons.append("remote_area")
     if _skip_unsuitable and doc_data.get("unsuitable_for_renewal"):
