@@ -114,9 +114,33 @@ _LAYER_DEFS: dict[str, dict] = {
     # 新北市完整地籍圖 (個別地塊邊界 + 地號) — 透過 NtpcURInfo session 動態拿 token 後打 NTPC
     # 自家 ArcGIS server (arcgis2.planning.ntpc.gov.tw NTPC_Urban/Land/MapServer)
     "cadastral_full_ntpc": {
-        "kind": "ntpcurinfo_cadastral",
+        "kind": "ntpcurinfo_layer",
+        "ntpc_layer_name": "地籍圖",
         "disk_cache": True,
         "display_name": "新北市 地籍圖（個別地塊+地號）",
+    },
+    # 新北市都更圖層 — 全部走 NtpcURInfo NTPC_MyGis/NTPC_SI/MapServer，
+    # 各 sub-layer 同 service 不同 layer ID (LAYERIDS)。
+    # 都更案隨時變動 (新申請/核准/廢止) — disk cache 永不過期，靠 admin scheduler 或手動清。
+    "redev_ntpc_ama": {
+        "kind": "ntpcurinfo_layer", "ntpc_layer_name": "都市更新事業計畫案",
+        "fill_color": "#FF7F00", "disk_cache": True,
+        "display_name": "新北 都更/都市更新事業計畫案",
+    },
+    "redev_ntpc_easy": {
+        "kind": "ntpcurinfo_layer", "ntpc_layer_name": "簡易都更",
+        "fill_color": "#0066CC", "disk_cache": True,
+        "display_name": "新北 都更/簡易都更",
+    },
+    "redev_ntpc_danger": {
+        "kind": "ntpcurinfo_layer", "ntpc_layer_name": "危老重建",
+        "fill_color": "#FF0000", "disk_cache": True,
+        "display_name": "新北 都更/危老重建",
+    },
+    "redev_ntpc_amdm": {
+        "kind": "ntpcurinfo_layer", "ntpc_layer_name": "防災案件",
+        "fill_color": "#9933CC", "disk_cache": True,
+        "display_name": "新北 都更/防災案件",
     },
     # 591 maptiles DMAPS forward proxy — 個別地塊 + 地號 polygon (政府 NLSC 授權)
     # 詳見 _fetch_591_dmaps docstring：純 forward 不 cache 不重製；用戶 (個人投資者)
@@ -283,26 +307,28 @@ def _fetch_591_dmaps(cfg: dict, bbox: str, width: int, height: int, srs: str) ->
         return None
 
 
-# ── NtpcURInfo cadastral chain ─────────────────────────────────────────
-# 新北市城鄉發展局 NtpcURInfo 系統的「地籍圖」layer (含個別地塊+地號)。
-# Service 在 arcgis2.planning.ntpc.gov.tw/server/rest/services/NTPC_Urban/Land/MapServer
-# 用 NTPC 自家 ArcGIS portal token 認證；token 從 NtpcURInfo session 動態拿，1-2hr expire。
+# ── NtpcURInfo session chain ───────────────────────────────────────────
+# 新北市 NtpcURInfo 系統的多個 dynamic layer 都走同一條 chain，但每個 layer 有自己的
+# AGSTOKEN + MAPSRVURL + LAYERIDS。
 #
 # Chain：
 #   1. fetch https://urban.planning.ntpc.gov.tw/NtpcURInfo/ → 從 HTML hidden #hdToken 拿 session token
 #   2. POST ajax/datahandler.ashx { keyword: GetLayerList, timeStamp: hdToken, timeName: btoa("MapToken") }
-#      → 拿 layer config 含「地籍圖」item 的 MAPSRVURL + AGSTOKEN
-#   3. 用 AGSTOKEN 打 MAPSRVURL/export 拿 PNG image
+#      → 一次拿全部 layer config (含 LAYERNAME / MAPSRVURL / AGSTOKEN / LAYERIDS)
+#   3. 用 AGSTOKEN 打 MAPSRVURL/export?layers=show:LAYERIDS 拿 PNG image
 #
-# Token cache 約 1 小時 (NtpcURInfo session 通常活 30min-1hr，保守設 50 min refresh)
-_NTPCURINFO_CACHE: dict = {"agstoken": None, "fetched_at": 0.0, "mapsrvurl": None}
+# 整個 layer list 一起 refresh + cache (一次 datahandler call 換到所有 layer 的 token)。
+# Token cache 約 50 min (NtpcURInfo session 通常活 30min-1hr，保守設 50 min refresh)。
+_NTPCURINFO_CACHE: dict = {"by_name": {}, "fetched_at": 0.0, "hdtoken": None}
 _NTPCURINFO_TTL = 50 * 60  # 50 min
 
 
-def _refresh_ntpcurinfo_token() -> Optional[tuple[str, str]]:
-    """fetch NtpcURInfo 拿 fresh AGSTOKEN + MAPSRVURL，回 (token, url) 或 None。"""
+def _refresh_ntpcurinfo_layers() -> bool:
+    """重新打 NtpcURInfo / datahandler.ashx GetLayerList，把全部 layer config (含
+    AGSTOKEN/MAPSRVURL/LAYERIDS) 寫進 _NTPCURINFO_CACHE['by_name']。回 True/False。"""
     import base64
     import re as _re
+    import time as _t
     try:
         with httpx.Client(verify=False, timeout=15, headers={
             "User-Agent": "Mozilla/5.0",
@@ -312,7 +338,7 @@ def _refresh_ntpcurinfo_token() -> Optional[tuple[str, str]]:
             m = _re.search(r'id="hdToken"[^>]*value="([^"]+)"', r.text)
             if not m:
                 logger.warning("NtpcURInfo: 抓不到 #hdToken")
-                return None
+                return False
             hdtoken = m.group(1)
             r2 = client.post(
                 "https://urban.planning.ntpc.gov.tw/NtpcURInfo/ajax/datahandler.ashx",
@@ -325,29 +351,59 @@ def _refresh_ntpcurinfo_token() -> Optional[tuple[str, str]]:
             j = r2.json()
             if j.get("MSGCODE") != 200:
                 logger.warning(f"NtpcURInfo GetLayerList MSGCODE={j.get('MSGCODE')}")
-                return None
-            land = next((it for it in j.get("DATA", []) if it.get("LAYERNAME") == "地籍圖"), None)
-            if not land:
-                logger.warning("NtpcURInfo 沒找到「地籍圖」layer item")
-                return None
-            return land.get("AGSTOKEN", ""), land.get("MAPSRVURL", "")
+                return False
+            by_name: dict[str, dict] = {}
+            for it in j.get("DATA", []) or []:
+                name = it.get("LAYERNAME") or ""
+                if not name:
+                    continue
+                by_name[name] = {
+                    "agstoken": it.get("AGSTOKEN") or "",
+                    "mapsrvurl": it.get("MAPSRVURL") or "",
+                    "layerids": (it.get("LAYERIDS") or "").strip() or "0",
+                }
+            if not by_name:
+                logger.warning("NtpcURInfo GetLayerList: 0 layers")
+                return False
+            _NTPCURINFO_CACHE["by_name"] = by_name
+            _NTPCURINFO_CACHE["hdtoken"] = hdtoken
+            _NTPCURINFO_CACHE["fetched_at"] = _t.time()
+            return True
     except Exception as e:
-        logger.warning(f"NtpcURInfo refresh token 失敗: {e}")
-        return None
+        logger.warning(f"NtpcURInfo refresh layer list 失敗: {e}")
+        return False
 
 
-def _get_ntpcurinfo_token() -> tuple[Optional[str], Optional[str]]:
-    """拿 cached AGSTOKEN + MAPSRVURL，過期就 refresh。"""
+def _get_ntpcurinfo_layer_meta(layer_name: str) -> Optional[dict]:
+    """拿指定 LAYERNAME (中文，例如「地籍圖」「都市更新事業計畫案」) 的 dict
+    {agstoken, mapsrvurl, layerids}；過期就 refresh。"""
     import time as _t
-    if _NTPCURINFO_CACHE["agstoken"] and (_t.time() - _NTPCURINFO_CACHE["fetched_at"]) < _NTPCURINFO_TTL:
-        return _NTPCURINFO_CACHE["agstoken"], _NTPCURINFO_CACHE["mapsrvurl"]
-    res = _refresh_ntpcurinfo_token()
-    if res:
-        _NTPCURINFO_CACHE["agstoken"] = res[0]
-        _NTPCURINFO_CACHE["mapsrvurl"] = res[1]
-        _NTPCURINFO_CACHE["fetched_at"] = _t.time()
-        return res
-    return None, None
+    cache = _NTPCURINFO_CACHE
+    fresh = cache["by_name"] and (_t.time() - cache["fetched_at"]) < _NTPCURINFO_TTL
+    if not fresh:
+        if not _refresh_ntpcurinfo_layers():
+            return None
+    return cache["by_name"].get(layer_name)
+
+
+def _get_ntpcurinfo_hdtoken() -> Optional[str]:
+    """拿 NtpcURInfo session 的 hdToken (給 UrbanRenewalQuery / InterfaceNtpcService 用)。
+    跟 layer list 共用同一條 refresh，所以呼叫 _get_ntpcurinfo_layer_meta 任一 layer
+    的 side effect 會把 hdtoken 也帶回來；這 fn 只是顯式接口。"""
+    import time as _t
+    cache = _NTPCURINFO_CACHE
+    if cache["hdtoken"] and (_t.time() - cache["fetched_at"]) < _NTPCURINFO_TTL:
+        return cache["hdtoken"]
+    if _refresh_ntpcurinfo_layers():
+        return cache["hdtoken"]
+    return None
+
+
+def _invalidate_ntpcurinfo_token() -> None:
+    """token 被 server 拒絕時 (export 回 401/json) 強制下次 refresh。"""
+    _NTPCURINFO_CACHE["fetched_at"] = 0.0
+    _NTPCURINFO_CACHE["hdtoken"] = None
+    _NTPCURINFO_CACHE["by_name"] = {}
 
 
 def _bbox_to_tile_xyz(bbox: str) -> Optional[tuple[int, int, int]]:
@@ -445,25 +501,27 @@ def _disk_cache_clear(layer: str) -> int:
 # 本 file 只保留 _disk_cache_clear helper 給 scheduler runner / 手動 admin endpoint 共用。
 
 
-def _fetch_ntpcurinfo_cadastral(cfg: dict, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
-    """打 NtpcURInfo 地籍圖 export — 個別地塊邊界 + 地號 polygon (新北市)。
+def _fetch_ntpcurinfo_layer(cfg: dict, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
+    """打任一 NtpcURInfo dynamic layer 的 export endpoint (cfg['ntpc_layer_name'] = 中文 LAYERNAME)。
     Disk cache 由 endpoint 統一處理 (此 fn 純 fetch)。"""
-    token, mapsrv = _get_ntpcurinfo_token()
-    if not token or not mapsrv:
+    layer_name = cfg.get("ntpc_layer_name") or ""
+    meta = _get_ntpcurinfo_layer_meta(layer_name)
+    if not meta or not meta.get("agstoken") or not meta.get("mapsrvurl"):
+        logger.debug(f"NtpcURInfo layer meta 抓不到: {layer_name}")
         return None
     sr_num = srs.split(":")[-1] if ":" in srs else srs
     try:
         r = httpx.get(
-            mapsrv + "/export",
+            meta["mapsrvurl"] + "/export",
             params={
-                "token": token,
+                "token": meta["agstoken"],
                 "bbox": bbox,
                 "bboxSR": sr_num,
                 "imageSR": sr_num,
                 "size": f"{width},{height}",
                 "format": "png",
                 "transparent": "true",
-                "layers": "show:0",
+                "layers": "show:" + meta["layerids"],
                 "f": "image",
             },
             timeout=10,
@@ -474,15 +532,168 @@ def _fetch_ntpcurinfo_cadastral(cfg: dict, bbox: str, width: int, height: int, s
         ct = r.headers.get("content-type", "")
         if "image" not in ct:
             if "json" in ct:
-                logger.debug(f"NtpcURInfo cadastral 拒絕 (可能 token 過期): {r.text[:200]}")
-                _NTPCURINFO_CACHE["agstoken"] = None   # invalidate token, 下次 refresh
+                logger.debug(f"NtpcURInfo {layer_name} 拒絕 (可能 token 過期): {r.text[:200]}")
+                _invalidate_ntpcurinfo_token()
             return None
         if len(r.content) < 100:
             return None
         return r.content
     except Exception as e:
-        logger.warning(f"NtpcURInfo cadastral fetch 例外: {e}")
+        logger.warning(f"NtpcURInfo {layer_name} fetch 例外: {e}")
         return None
+
+
+# ── 新北 都更案件 by 座標 (auto-enrich 用) ────────────────────────────
+# NtpcURInfo /ajax/UrbanRenewalQuery.ashx 提供 4 種 GetXxxCaseByXY，給定 TWD97 座標
+# 回傳「該位置上所有套疊到的都更案件清單」(ID + ApplyPeople + shp)。
+# 我們在物件分析 pipeline 裡呼叫一次，把 4 種類型結果合併存進 doc_data["redev_cases"]。
+_RENEWAL_QUERY_TYPES = [
+    # (sub_type_id, keyword, display_label)
+    ("ama",    "GetAMACaseByXY",       "都市更新事業計畫案"),
+    ("easy",   "GetEasyUrbanCaseByXY", "簡易都更"),
+    ("danger", "GetDangerCaseByXY",    "危老重建"),
+    ("amdm",   "GetAMDMCaseByXY",      "防災案件"),
+]
+
+
+# ── 台北 都更案件 by 座標 (auto-enrich 用) ────────────────────────────
+# 走 zonegeo.udd.gov.taipei GeoServer WFS GetFeature + INTERSECTS(the_geom, POINT(X Y))，
+# 同 endpoint 一次拿所有 sub-type (用 properties.layer 分流)。
+# layer 對應 sub_type：10=pub_renew / 12=pub_business / 20=self_announce / 30=self_approved
+#                       40=planned / 44=chloride / 48=urgent / 50=invalid
+# 另兩個獨立 WFS layer：Taipei:115PublicPlanREArea-5 / Taipei:63yAgoBud
+_TPE_REDEV_LAYER_MAP = {
+    "10": ("pub_renew",     "公劃更新地區"),
+    "12": ("pub_business",  "公劃內事業"),
+    "20": ("self_announce", "公告自劃"),
+    "30": ("self_approved", "核准自劃"),
+    "40": ("planned",       "都計劃定"),
+    "44": ("chloride",      "高氯離子混凝土"),
+    "48": ("urgent",        "迅行劃定"),
+    "50": ("invalid",       "已失效或廢止"),
+}
+_TPE_WFS_URL = "https://zonegeo.udd.gov.taipei/geoserver/Taipei/wfs"
+
+
+def query_tpe_renewal_cases(lat: float, lng: float) -> list[dict]:
+    """給定 WGS84 lat/lng → 回台北市 都更案件 (套疊到該位置的) 清單。
+    走 GeoServer WFS GetFeature INTERSECTS。3 個 typeName 都查 (uro-redevelop-ALL-5 +
+    115PublicPlanREArea-5 + 63yAgoBud)。失敗 / 非台北 → []。"""
+    if lat is None or lng is None:
+        return []
+    try:
+        from analysis.gov_gis import wgs84_to_twd97 as _to_twd97
+        x, y = _to_twd97(float(lat), float(lng))
+    except Exception as e:
+        logger.debug(f"query_tpe_renewal_cases coord 換算失敗: {e}")
+        return []
+    # TWD97 台北範圍粗略 bbox
+    if not (295000 <= x <= 320000 and 2762000 <= y <= 2790000):
+        return []
+    cases: list[dict] = []
+    point_filter = f"INTERSECTS(the_geom, POINT({round(x)} {round(y)}))"
+    queries = [
+        ("Taipei:uro-redevelop-ALL-5", "ALL_5"),
+        ("Taipei:115PublicPlanREArea-5", "115_revised"),
+        ("Taipei:63yAgoBud", "63y_building"),
+    ]
+    try:
+        for type_name, kind in queries:
+            try:
+                r = httpx.get(_TPE_WFS_URL, params={
+                    "service": "WFS", "version": "2.0.0", "request": "GetFeature",
+                    "typeNames": type_name,
+                    "outputFormat": "application/json",
+                    "cql_filter": point_filter,
+                }, timeout=8, verify=False)
+                if r.status_code != 200:
+                    continue
+                j = r.json()
+                for feat in j.get("features", []) or []:
+                    props = feat.get("properties") or {}
+                    if kind == "ALL_5":
+                        layer_id = str(props.get("layer") or "")
+                        sub = _TPE_REDEV_LAYER_MAP.get(layer_id)
+                        if not sub:
+                            continue
+                        sub_id, sub_label = sub
+                    elif kind == "115_revised":
+                        sub_id, sub_label = "115_revised", "115年修訂公劃"
+                    else:
+                        sub_id, sub_label = "63y_building", "63年以前建築物"
+                    cases.append({
+                        "sub_type": sub_id,
+                        "sub_type_label": sub_label,
+                        "case_id": props.get("ID") or props.get("NO") or "",
+                        "applicant": "",
+                    })
+            except Exception as e:
+                logger.debug(f"query_tpe_renewal_cases {type_name} 失敗: {e}")
+                continue
+    except Exception as e:
+        logger.warning(f"query_tpe_renewal_cases httpx 失敗: {e}")
+        return []
+    return cases
+
+
+def query_ntpc_renewal_cases(lat: float, lng: float) -> list[dict]:
+    """給定 WGS84 lat/lng → 回新北市 4 種都更案件 (套疊到該位置的) 清單。
+    只 query 新北市範圍內座標；非新北 / lat/lng 缺 → 回 []。
+    Each item: {sub_type, sub_type_label, case_id, applicant}。"""
+    if lat is None or lng is None:
+        return []
+    try:
+        from analysis.gov_gis import wgs84_to_twd97 as _to_twd97
+        x, y = _to_twd97(float(lat), float(lng))
+    except Exception as e:
+        logger.debug(f"query_ntpc_renewal_cases coord 換算失敗: {e}")
+        return []
+    # TWD97 新北範圍粗略 bbox (含 25 區，留 buffer)
+    if not (260000 <= x <= 360000 and 2730000 <= y <= 2810000):
+        return []
+    import base64
+    hdtoken = _get_ntpcurinfo_hdtoken()
+    if not hdtoken:
+        return []
+    cases: list[dict] = []
+    timeName = base64.b64encode(b"MapToken").decode()
+    base = "https://urban.planning.ntpc.gov.tw/NtpcURInfo/ajax/UrbanRenewalQuery.ashx"
+    try:
+        with httpx.Client(verify=False, timeout=8, headers={
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://urban.planning.ntpc.gov.tw/NtpcURInfo/",
+        }) as client:
+            for sub_id, keyword, label in _RENEWAL_QUERY_TYPES:
+                try:
+                    r = client.post(base, data={
+                        "keyword": keyword,
+                        "X": str(round(x)),
+                        "Y": str(round(y)),
+                        "timeStamp": hdtoken,
+                        "timeName": timeName,
+                    })
+                    if r.status_code != 200:
+                        continue
+                    j = r.json()
+                    if j.get("MSGCODE") != 200:
+                        continue
+                    md = j.get("MAINDATA")
+                    if not isinstance(md, list):
+                        continue
+                    for item in md:
+                        cases.append({
+                            "sub_type": sub_id,
+                            "sub_type_label": label,
+                            "case_id": item.get("ID"),
+                            "applicant": item.get("ApplyPeople") or "",
+                        })
+                except Exception as e:
+                    logger.debug(f"query_ntpc_renewal_cases {keyword} 失敗: {e}")
+                    continue
+    except Exception as e:
+        logger.warning(f"query_ntpc_renewal_cases httpx client 失敗: {e}")
+        return []
+    return cases
 
 
 def _fetch_nlsc_wms(cfg: dict, bbox: str, width: int, height: int, srs: str) -> Optional[bytes]:
@@ -692,8 +903,8 @@ async def gis_overlay(layer: str, request: Request) -> Response:
         content = _fetch_nlsc_wmts(cfg, bbox, width, height, srs)
     elif cfg["kind"] == "591_dmaps_proxy":
         content = _fetch_591_dmaps(cfg, bbox, width, height, srs)
-    elif cfg["kind"] == "ntpcurinfo_cadastral":
-        content = _fetch_ntpcurinfo_cadastral(cfg, bbox, width, height, srs)
+    elif cfg["kind"] == "ntpcurinfo_layer":
+        content = _fetch_ntpcurinfo_layer(cfg, bbox, width, height, srs)
     else:
         raise HTTPException(500, f"unknown kind: {cfg['kind']}")
 
@@ -731,7 +942,7 @@ def _layer_data_source(name: str, cfg: dict) -> str:
         return "台北市都發局 GISDB"
     if "arcgis.planning.ntpc.gov.tw" in upstream:
         return "新北市城鄉發展局 ArcGIS"
-    if kind == "ntpcurinfo_cadastral":
+    if kind == "ntpcurinfo_layer":
         return "新北市城鄉發展局 NtpcURInfo"
     if kind == "nlsc_wms":
         return "國土測繪中心 WMS"
@@ -744,6 +955,8 @@ def _layer_data_source(name: str, cfg: dict) -> str:
 
 def _layer_group(name: str, cfg: dict) -> tuple[str, str]:
     """回傳 (group_id, group_label)；無 group 回 ('', '')。"""
+    if name.startswith("redev_ntpc_"):
+        return ("ntpc_renewal", "新北 都更圖層")
     if name.startswith("redev_"):
         return ("taipei_renewal", "台北 都更圖層")
     return ("", "")

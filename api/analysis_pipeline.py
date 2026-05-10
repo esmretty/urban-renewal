@@ -728,6 +728,28 @@ def analyze_single_property(
     from analysis.geocoder import is_remote_area_new_taipei
     doc_data["is_remote_area"] = is_remote_area_new_taipei(lat, lng, district)
 
+    # 雙北物件：auto-enrich 都更案件
+    #   台北 → GeoServer WFS GetFeature INTERSECTS 點查 (8 個 sub-type 同 typeName 用 layer 分)
+    #   新北 → NtpcURInfo /UrbanRenewalQuery.ashx 4 種 GetXxxCaseByXY
+    # 失敗 / 非雙北 → 空 list；DB doc 永遠帶 redev_cases 欄位（前端 filter 看 length）。
+    # CLAUDE.md 8 號規則：這欄位是「事實 (該位置有哪些案件)」非動態計算結果，存 DB OK。
+    if lat and lng:
+        try:
+            _step("查都更案件...")
+            if city == "台北市":
+                from api.gis_overlay import query_tpe_renewal_cases
+                doc_data["redev_cases"] = query_tpe_renewal_cases(lat, lng)
+            elif city == "新北市":
+                from api.gis_overlay import query_ntpc_renewal_cases
+                doc_data["redev_cases"] = query_ntpc_renewal_cases(lat, lng)
+            else:
+                doc_data["redev_cases"] = []
+        except Exception as e:
+            logger.exception(f"[{src_id}] redev_cases enrich 失敗: {e}")
+            doc_data["redev_cases"] = []
+    else:
+        doc_data["redev_cases"] = []
+
     if is_fc:
         doc_data["is_foreclosure"] = True
         doc_data["foreclosure_reasons"] = fc_reasons

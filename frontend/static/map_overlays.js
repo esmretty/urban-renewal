@@ -44,21 +44,37 @@
     },
   };
 
-  // ── 都更圖層 (renewal group) — 對齊 UDDPlanMap Layer_Redevelop.json ────
-  // sub-layer 全部走 GeoServer Taipei:uro-redevelop-ALL-5 + cql_filter (除 115/63y)
+  // ── 都更圖層 (renewal group) — 雙北分兩 city section ────
+  // 台北：GeoServer Taipei:uro-redevelop-ALL-5 + cql_filter (10 個 sub-layer)
+  // 新北：NTPC NtpcURInfo 動態 ArcGIS layer (4 個 sub-layer)
   // 全部共用 pane v2-overlay-renewal (zIndex 404)
+  // SVG filter 把 upstream tile alpha 對應的 polygon 區域 flood 成我們指定的 fill_color
+  // (台北 server 是 grayscale；新北 server 是 default 綠色 — feComposite operator='in'
+  //  只看 SourceAlpha 不看 RGB，所以即便 source 已染色也會被覆蓋成 fill_color)
   const RENEWAL_PANE_Z = 404;
   const RENEWAL_SUBS = [
-    { id: 'pub_renew',     label: '公劃更新地區(依都更條例)',    color: '#FF0000', backend: 'redev_pub_renew' },
-    { id: 'self_announce', label: '公告自劃(事業權變)',         color: '#0000FF', backend: 'redev_self_announce' },
-    { id: 'self_approved', label: '核准自劃(事業權變)',         color: '#FF7F00', backend: 'redev_self_approved' },
-    { id: 'planned',       label: '都計劃定更新地區',           color: '#FF00FF', backend: 'redev_planned' },
-    { id: '115_revised',   label: '115年修訂公劃',             color: '#FF9966', backend: 'redev_115_revised' },
-    { id: 'chloride',      label: '高氯離子混凝土',             color: '#D0B17A', backend: 'redev_chloride' },
-    { id: '63y_building',  label: '63年以前建築物',             color: '#1F4E79', backend: 'redev_63y_building' },
-    { id: 'urgent',        label: '迅行劃定',                  color: '#FFD0FF', backend: 'redev_urgent' },
-    { id: 'pub_business',  label: '公劃內事業(權變)',           color: '#6495ED', backend: 'redev_pub_business' },
-    { id: 'invalid',       label: '已失效/廢止',                color: '#00FFFF', backend: 'redev_invalid' },
+    // 台北 (10)
+    { id: 'pub_renew',     city: '台北市', label: '公劃更新地區(依都更條例)',    color: '#FF0000', backend: 'redev_pub_renew' },
+    { id: 'self_announce', city: '台北市', label: '公告自劃(事業權變)',         color: '#0000FF', backend: 'redev_self_announce' },
+    { id: 'self_approved', city: '台北市', label: '核准自劃(事業權變)',         color: '#FF7F00', backend: 'redev_self_approved' },
+    { id: 'planned',       city: '台北市', label: '都計劃定更新地區',           color: '#FF00FF', backend: 'redev_planned' },
+    { id: '115_revised',   city: '台北市', label: '115年修訂公劃',             color: '#FF9966', backend: 'redev_115_revised' },
+    { id: 'chloride',      city: '台北市', label: '高氯離子混凝土',             color: '#D0B17A', backend: 'redev_chloride' },
+    { id: '63y_building',  city: '台北市', label: '63年以前建築物',             color: '#1F4E79', backend: 'redev_63y_building' },
+    { id: 'urgent',        city: '台北市', label: '迅行劃定',                  color: '#FFD0FF', backend: 'redev_urgent' },
+    { id: 'pub_business',  city: '台北市', label: '公劃內事業(權變)',           color: '#6495ED', backend: 'redev_pub_business' },
+    { id: 'invalid',       city: '台北市', label: '已失效/廢止',                color: '#00FFFF', backend: 'redev_invalid' },
+    // 新北 (4)
+    { id: 'ntpc_ama',    city: '新北市', label: '都市更新事業計畫案', color: '#FF7F00', backend: 'redev_ntpc_ama' },
+    { id: 'ntpc_easy',   city: '新北市', label: '簡易都更',           color: '#0066CC', backend: 'redev_ntpc_easy' },
+    { id: 'ntpc_danger', city: '新北市', label: '危老重建',           color: '#FF0000', backend: 'redev_ntpc_danger' },
+    { id: 'ntpc_amdm',   city: '新北市', label: '防災案件',           color: '#9933CC', backend: 'redev_ntpc_amdm' },
+  ];
+
+  // city → 全選 checkbox 的 data-renewal-all 值 (區分兩個全選 checkbox)
+  const RENEWAL_CITIES = [
+    { tag: 'tpe',  label: '台北市', city: '台北市' },
+    { tag: 'ntpc', label: '新北市', city: '新北市' },
   ];
 
   const OPACITY = 0.5;
@@ -123,8 +139,11 @@
     const host = document.getElementById('v2-map-renewal-toolbar');
     if (!host || host.dataset.rendered === '1') return;
     host.dataset.rendered = '1';
+    const allChecks = RENEWAL_CITIES.map(c =>
+      `<label class="v2-renewal-all"><input type="checkbox" data-renewal-all="${c.tag}"> ${c.label}全選</label>`
+    ).join('');
     const subItems = RENEWAL_SUBS.map(s =>
-      `<label class="v2-renewal-sub" data-sub-id="${s.id}">` +
+      `<label class="v2-renewal-sub" data-sub-id="${s.id}" data-sub-city="${s.city}">` +
         `<input type="checkbox" data-renewal-sub="${s.id}">` +
         `<span class="v2-renewal-dot" style="background:${s.color}"></span>` +
         `<span class="v2-renewal-text">${s.label}</span>` +
@@ -133,7 +152,7 @@
     host.innerHTML = `
       <div class="v2-renewal-header">
         <span class="v2-overlays-label">都更圖層：</span>
-        <label class="v2-renewal-all"><input type="checkbox" data-renewal-all> 台北市全選</label>
+        ${allChecks}
         <button type="button" class="v2-renewal-expand" data-renewal-expanded="0" aria-label="展開細項">▾</button>
       </div>
       <div class="v2-renewal-grid" id="v2-renewal-grid" style="display:none;">${subItems}</div>`;
@@ -141,7 +160,9 @@
       const t = e.target;
       if (!t) return;
       if (t.matches('input[data-renewal-all]')) {
-        _toggleRenewalAll(t.checked);
+        const tag = t.dataset.renewalAll;
+        const cityCfg = RENEWAL_CITIES.find(c => c.tag === tag);
+        if (cityCfg) _toggleRenewalAll(cityCfg.city, t.checked);
       } else if (t.matches('input[data-renewal-sub]')) {
         _toggleRenewalSub(t.dataset.renewalSub, t.checked);
       }
@@ -170,13 +191,14 @@
     return 'v2-overlay-renewal';
   }
 
-  // 「全選」: 勾起 / 取消所有 sub-checkbox + 觸發各自 toggle (彩色 SLD 必須 per-layer 帶 fill_color，
-  // 不能再用單一 redev_all 覆蓋全部)
-  function _toggleRenewalAll(on) {
-    document.querySelectorAll('input[data-renewal-sub]').forEach(cb => {
-      if (cb.checked !== on) {
+  // 「全選」: 勾起 / 取消單一城市的所有 sub-checkbox (台北/新北 各自獨立全選)
+  function _toggleRenewalAll(city, on) {
+    RENEWAL_SUBS.forEach(s => {
+      if (s.city !== city) return;
+      const cb = document.querySelector(`input[data-renewal-sub="${s.id}"]`);
+      if (cb && cb.checked !== on) {
         cb.checked = on;
-        _toggleRenewalSub(cb.dataset.renewalSub, on);
+        _toggleRenewalSub(s.id, on);
       }
     });
   }
@@ -204,12 +226,15 @@
         delete _state.renewal.layerSubs[subId];
       }
     }
-    // sync 「全選」checkbox：所有 sub 都 checked → 勾起；任一 unchecked → 取消
-    const allCheckbox = document.querySelector('input[data-renewal-all]');
-    if (allCheckbox) {
-      const allOn = RENEWAL_SUBS.every(s => _state.renewal.subs[s.id]);
-      allCheckbox.checked = allOn;
-    }
+    // sync 各城市「全選」checkbox：該城市所有 sub 都 checked → 勾起；任一 unchecked → 取消
+    RENEWAL_CITIES.forEach(c => {
+      const allCheckbox = document.querySelector(`input[data-renewal-all="${c.tag}"]`);
+      if (!allCheckbox) return;
+      const cityAllOn = RENEWAL_SUBS
+        .filter(s => s.city === c.city)
+        .every(s => _state.renewal.subs[s.id]);
+      allCheckbox.checked = cityAllOn;
+    });
   }
 
   // ════════════════════════════════════════════════════════════

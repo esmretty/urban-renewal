@@ -614,6 +614,7 @@ PREFER_NEW_FIELDS = {
     "is_remote_area",
     "unsuitable_for_renewal", "unsuitable_reason",
     "is_basement",
+    "redev_cases",
 }
 CONFLICT_TRACK_FIELDS = {
     "building_age", "building_area_ping", "land_area_ping",

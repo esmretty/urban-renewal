@@ -3489,6 +3489,26 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
 
 /* (slider rules 已搬到上方 PC + mobile 共用區塊) */
 
+/* === detail page 套疊都更案件欄位 ===================================== */
+.v2-d-redev-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.v2-d-redev-row + .v2-d-redev-row { margin-top: 2px; }
+.v2-d-redev-label {
+  flex: 0 0 auto;
+  color: #6b7280;
+  white-space: nowrap;
+}
+.v2-d-redev-detail {
+  flex: 1 1 auto;
+  color: #374151;
+  word-break: break-all;
+}
+
 /* === detail page 學區欄位 ============================================ */
 .v2-d-school { display: flex; flex-direction: column; gap: 6px; }
 /* row 不換行：「國小 / 國中」label + pill list 永遠同 row（list 內 pill 可 wrap） */

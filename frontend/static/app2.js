@@ -108,6 +108,7 @@
       hideUns: $('#v2-hide-unsuitable')?.checked || false,
       hideBas: $('#v2-hide-basement')?.checked || false,
       hideFc: $('#v2-hide-foreclosure')?.checked || false,
+      redevPicks: $$('input[data-redev-filter]').filter(c => c.checked).map(c => c.dataset.redevFilter),
       viewMode: state.viewMode,         // 'list' | 'map' — 持久化用戶選擇
     };
   }
@@ -209,6 +210,10 @@
     setChk('v2-hide-unsuitable', obj.hideUns);
     setChk('v2-hide-basement', obj.hideBas);
     setChk('v2-hide-foreclosure', obj.hideFc);
+    if (Array.isArray(obj.redevPicks)) {
+      const set = new Set(obj.redevPicks);
+      $$('input[data-redev-filter]').forEach(c => { c.checked = set.has(c.dataset.redevFilter); });
+    }
     // 地區：寫進 state.districtPicks (chip render 之後才能 reflect)
     if (Array.isArray(obj.dists) && obj.dists.length > 0) {
       state.districtPicks.clear();
@@ -969,16 +974,18 @@
         return intPicks.includes(String(f));
       });
     }
-    // bld / land single price
+    // bld / land single price — 沒抓到資料 (price/area 任一缺) 視為 0 並被擋掉
+    // (用戶希望：filter 開啟時即使拉到 max，缺資料的物件也不該出現)
+    // 「不限」拉桿到頂 (>= UNLIMITED_VAL) → 視為關閉，不套此 filter
     const bldMax = Number($('#v2-bld-price-max')?.value);
-    if (bldMax > 0) {
-      list = list.filter(p => !p.price_ntd || !p.building_area_ping
-        || (p.price_ntd / 10000 / p.building_area_ping) < bldMax);
+    if (bldMax > 0 && bldMax < UNLIMITED_VAL) {
+      list = list.filter(p => p.price_ntd && p.building_area_ping
+        && (p.price_ntd / 10000 / p.building_area_ping) < bldMax);
     }
     const landMax = Number($('#v2-land-price-max')?.value);
-    if (landMax > 0) {
-      list = list.filter(p => !p.price_ntd || !p.land_area_ping
-        || (p.price_ntd / 10000 / p.land_area_ping) < landMax);
+    if (landMax > 0 && landMax < UNLIMITED_VAL) {
+      list = list.filter(p => p.price_ntd && p.land_area_ping
+        && (p.price_ntd / 10000 / p.land_area_ping) < landMax);
     }
     const landMin = Number($('#v2-land-min')?.value) || 0;
     if (landMin > 0) {
@@ -992,6 +999,17 @@
     if ($('#v2-hide-unsuitable')?.checked) list = list.filter(p => !p.unsuitable_for_renewal);
     if ($('#v2-hide-basement')?.checked) list = list.filter(p => !p.is_basement);
     if ($('#v2-hide-foreclosure')?.checked) list = list.filter(p => !p.is_foreclosure);
+
+    // 篩選都更案件：勾任一 sub-type → 物件 redev_cases 含對應 sub_type 才保留 (OR-style)
+    const redevPicks = $$('input[data-redev-filter]').filter(c => c.checked).map(c => c.dataset.redevFilter);
+    if (redevPicks.length > 0) {
+      const picks = new Set(redevPicks);
+      list = list.filter(p => {
+        const cases = Array.isArray(p.redev_cases) ? p.redev_cases : null;
+        if (!cases || cases.length === 0) return false;
+        return cases.some(c => picks.has(c.sub_type));
+      });
+    }
     return list;
   }
 
@@ -1250,14 +1268,15 @@
       try {
         m.setView([p.latitude, p.longitude], 18);
       } catch (e) { console.warn('setView fail', e); }
-      // 自動勾「土地分區」+「地籍圖」+「都更圖層 group」(10 sub)
+      // 自動勾「土地分區」+「地籍圖」+「都更圖層 group」(該物件所在城市的全部 sub)
       const cbZoning = document.querySelector('input[data-overlay="zoning"]');
       const cbCadastral = document.querySelector('input[data-overlay="cadastral"]');
       [cbZoning, cbCadastral].forEach(cb => {
         if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change', { bubbles: true })); }
       });
-      // 都更：勾「全選」(等同勾 10 個 sub)
-      const cbRenewalAll = document.querySelector('input[data-renewal-all]');
+      // 都更：根據物件 city 選對應全選 (台北→tpe / 新北→ntpc)
+      const cityTag = p.city === '新北市' ? 'ntpc' : 'tpe';
+      const cbRenewalAll = document.querySelector(`input[data-renewal-all="${cityTag}"]`);
       if (cbRenewalAll && !cbRenewalAll.checked) {
         cbRenewalAll.checked = true;
         cbRenewalAll.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1405,6 +1424,25 @@
       ? _resist.map(c => `<span class="v2-rchip ${c.cls}">${c.label}</span>`).join(' ')
       : '<span class="v2-d-hint">—</span>';
 
+    // 都更案件 (位置上套疊到的) — auto-enrich 拿到的 redev_cases
+    // 雙北才會有；無資料 → 顯示「—」；空 list → 顯示「無」(代表查過但該位置沒套疊)
+    const redevCasesHTML = (() => {
+      if (!Array.isArray(p.redev_cases)) return '<span class="v2-d-hint">—</span>';
+      if (p.redev_cases.length === 0) return '<span class="v2-d-hint">無套疊都更案件</span>';
+      // 同 sub_type 群組顯示
+      const byType = {};
+      p.redev_cases.forEach(c => {
+        const k = c.sub_type_label || c.sub_type || '其他';
+        (byType[k] = byType[k] || []).push(c);
+      });
+      return Object.entries(byType).map(([label, items]) => {
+        const ids = items.map(it => esc(it.case_id || '')).filter(Boolean).join(', ');
+        const applicants = items.map(it => esc(it.applicant || '')).filter(Boolean);
+        const detail = ids || (applicants.length ? applicants.join('、') : `${items.length} 案`);
+        return `<div class="v2-d-redev-row"><span class="v2-d-redev-label">${esc(label)}</span> <span class="v2-d-redev-detail">${detail}</span></div>`;
+      }).join('');
+    })();
+
     return `
       <!-- Row 1: 物件資訊 (左 7) | 圖片 (右 5) — 對齊 v1 col-md-7 + col-md-5 -->
       <div class="v2-d-row">
@@ -1436,6 +1474,7 @@
                   <div class="v2-d-school-row"><span class="v2-d-school-list">載入中…</span></div>
                   <div class="v2-d-school-row"><span class="v2-d-school-list">載入中…</span></div>
                 </div></td></tr>
+                <tr><td>套疊都更案件</td><td>${redevCasesHTML}</td></tr>
               </table>
             </div>
           </div>
@@ -2847,6 +2886,7 @@
     $('#v2-hide-unsuitable').checked = true;
     $('#v2-hide-basement').checked = false;
     $('#v2-hide-foreclosure').checked = false;
+    $$('input[data-redev-filter]').forEach(c => { c.checked = false; });
     $$('.v2-filter-btype:not(:disabled)').forEach(c => { c.checked = c.value === '公寓'; });
     // floor chips：B + 1-5 全勾
     $$('#v2-floor-chips input[data-floor]').forEach(c => { c.checked = true; });

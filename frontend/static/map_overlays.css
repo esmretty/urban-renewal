@@ -133,3 +133,7 @@
 .redev-color-urgent         img.leaflet-tile { filter: url(#redev-flt-urgent); }
 .redev-color-pub_business   img.leaflet-tile { filter: url(#redev-flt-pub_business); }
 .redev-color-invalid        img.leaflet-tile { filter: url(#redev-flt-invalid); }
+.redev-color-ntpc_ama       img.leaflet-tile { filter: url(#redev-flt-ntpc_ama); }
+.redev-color-ntpc_easy      img.leaflet-tile { filter: url(#redev-flt-ntpc_easy); }
+.redev-color-ntpc_danger    img.leaflet-tile { filter: url(#redev-flt-ntpc_danger); }
+.redev-color-ntpc_amdm      img.leaflet-tile { filter: url(#redev-flt-ntpc_amdm); }
