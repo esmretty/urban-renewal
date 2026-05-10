@@ -1474,7 +1474,6 @@
                   <div class="v2-d-school-row"><span class="v2-d-school-list">載入中…</span></div>
                   <div class="v2-d-school-row"><span class="v2-d-school-list">載入中…</span></div>
                 </div></td></tr>
-                <tr><td>套疊都更案件</td><td>${redevCasesHTML}</td></tr>
               </table>
             </div>
           </div>
@@ -1492,6 +1491,15 @@
         </div>
         <div class="v2-d-col v2-d-col--5">
           <h6 class="v2-d-h">其他資訊</h6>
+          <div class="v2-d-other-block">
+            <div class="v2-d-other-head">
+              <span class="v2-d-other-label">都更案件</span>
+              <button type="button" class="v2-d-redev-refresh"
+                      onclick="event.stopPropagation(); v2.refreshRedevCases('${esc(id)}', this)"
+                      title="重新查詢該位置上的都更案件">重新查詢</button>
+            </div>
+            <div class="v2-d-other-body" id="v2-d-redev-${esc(id)}">${redevCasesHTML}</div>
+          </div>
           <div class="v2-d-ai-text">${renderAiText(aiText || '', p, prices)}</div>
         </div>
       </div>
@@ -3260,6 +3268,43 @@
     applyFilters();
   }
 
+  // detail page「都更案件」重新查詢按鈕：打 /api/properties/{id}/refresh_redev_cases
+  // 成功 → 把該物件 redev_cases 寫回 state.allProperties + 重 render detail body
+  async function refreshRedevCases(id, btn) {
+    if (!id) return;
+    if (btn) { btn.disabled = true; btn.textContent = '查詢中…'; }
+    try {
+      const r = await fetch(`/api/properties/${encodeURIComponent(id)}/refresh_redev_cases`, {
+        method: 'POST',
+      });
+      if (!r.ok) {
+        const txt = await r.text();
+        toast(`重新查詢失敗：${txt}`, 'error');
+        return;
+      }
+      const data = await r.json();
+      const cases = Array.isArray(data.redev_cases) ? data.redev_cases : [];
+      // 寫回 state
+      const p = state.allProperties.find(x => (x.source_id || x.id) === id);
+      if (p) p.redev_cases = cases;
+      // 重 render detail (只重 render 都更案件那塊就好，避免閃整個 detail)
+      if (state.selectedId === id) {
+        await _renderDetailFromCurrent();
+      }
+      toast(`查到 ${cases.length} 筆都更案件`, 'info');
+    } catch (e) {
+      console.error('refreshRedevCases', e);
+      toast(`重新查詢失敗：${e.message || e}`, 'error');
+    } finally {
+      // _renderDetailFromCurrent 已重 render → 新 button 接管，舊 btn 已 detach。
+      // 若沒重 render (例如 selectedId 已換) 才需要還原 btn 狀態
+      if (btn && document.contains(btn)) {
+        btn.disabled = false;
+        btn.textContent = '重新查詢';
+      }
+    }
+  }
+
   // 強制重整（給 iOS 桌面 PWA 用）— 清 caches API + 加時間戳 → 不會吃到舊版
   async function hardReload() {
     try {
@@ -3290,6 +3335,7 @@
     // 給 map_mode.js (獨立檔) 用：state、helpers，map_mode.js 透過 window.v2 取
     state, getDistrictPrices, _saveFilters,
     openRoadOverlay, scanRoadWidth, deleteRow,
+    refreshRedevCases,
     hardReload,
     startVoiceRoad,
     startVoiceSchool,

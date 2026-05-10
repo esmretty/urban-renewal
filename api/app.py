@@ -5547,6 +5547,38 @@ async def reanalyze_recommendation(property_id: str):
     return await asyncio.to_thread(_do)
 
 
+@app.post("/api/properties/{property_id:path}/refresh_redev_cases")
+async def refresh_redev_cases_endpoint(property_id: str, user: dict = Depends(get_current_user)):
+    """重新查詢該物件位置上的都更案件 (auto-enrich 單欄位 refresh)。
+    輕量 — 不重跑 Vision / Claude / zoning lookup，只打 NtpcURInfo / Taipei GeoServer 一次。
+    回傳更新後的 redev_cases list。"""
+    col = get_col()
+    doc = col.document(property_id).get()
+    if not doc.exists:
+        raise HTTPException(404, "物件不存在")
+    p = doc.to_dict() or {}
+    lat = p.get("latitude")
+    lng = p.get("longitude")
+    city = p.get("city")
+    if not lat or not lng:
+        raise HTTPException(400, "物件缺座標，無法查詢都更案件")
+
+    def _do():
+        from api.gis_overlay import query_tpe_renewal_cases, query_ntpc_renewal_cases
+        if city == "台北市":
+            cases = query_tpe_renewal_cases(lat, lng)
+        elif city == "新北市":
+            cases = query_ntpc_renewal_cases(lat, lng)
+        else:
+            cases = []
+        col.document(property_id).update({"redev_cases": cases})
+        return cases
+
+    cases = await asyncio.to_thread(_do)
+    invalidate_query_cache()
+    return {"status": "ok", "redev_cases": cases}
+
+
 @app.post("/api/properties/{property_id:path}/zoning_ratios")
 async def set_zoning_ratios(property_id: str, body: dict, user: dict = Depends(get_current_user)):
     """使用者手動設定多分區的坪數比例（個人覆寫）。"""

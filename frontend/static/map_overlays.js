@@ -139,23 +139,30 @@
     const host = document.getElementById('v2-map-renewal-toolbar');
     if (!host || host.dataset.rendered === '1') return;
     host.dataset.rendered = '1';
-    const allChecks = RENEWAL_CITIES.map(c =>
-      `<label class="v2-renewal-all"><input type="checkbox" data-renewal-all="${c.tag}"> ${c.label}全選</label>`
-    ).join('');
-    const subItems = RENEWAL_SUBS.map(s =>
-      `<label class="v2-renewal-sub" data-sub-id="${s.id}" data-sub-city="${s.city}">` +
-        `<input type="checkbox" data-renewal-sub="${s.id}">` +
-        `<span class="v2-renewal-dot" style="background:${s.color}"></span>` +
-        `<span class="v2-renewal-text">${s.label}</span>` +
-      `</label>`
-    ).join('');
+    // 每城市一個獨立 dropdown：[全選 checkbox + ▾(N) toggle + 個別 grid]
+    const sections = RENEWAL_CITIES.map(c => {
+      const subs = RENEWAL_SUBS.filter(s => s.city === c.city);
+      const subItems = subs.map(s =>
+        `<label class="v2-renewal-sub" data-sub-id="${s.id}" data-sub-city="${s.city}">` +
+          `<input type="checkbox" data-renewal-sub="${s.id}">` +
+          `<span class="v2-renewal-dot" style="background:${s.color}"></span>` +
+          `<span class="v2-renewal-text">${s.label}</span>` +
+        `</label>`
+      ).join('');
+      return `<div class="v2-renewal-city-section" data-city-tag="${c.tag}">
+        <label class="v2-renewal-all">
+          <input type="checkbox" data-renewal-all="${c.tag}"> ${c.label}全選
+        </label>
+        <button type="button" class="v2-renewal-expand" data-renewal-expand-tag="${c.tag}"
+                data-renewal-expanded="0" aria-label="${c.label}展開細項">▾(${subs.length})</button>
+        <div class="v2-renewal-grid" id="v2-renewal-grid-${c.tag}" style="display:none;">${subItems}</div>
+      </div>`;
+    }).join('');
     host.innerHTML = `
       <div class="v2-renewal-header">
         <span class="v2-overlays-label">都更圖層：</span>
-        ${allChecks}
-        <button type="button" class="v2-renewal-expand" data-renewal-expanded="0" aria-label="展開細項">▾</button>
-      </div>
-      <div class="v2-renewal-grid" id="v2-renewal-grid" style="display:none;">${subItems}</div>`;
+        ${sections}
+      </div>`;
     host.addEventListener('change', (e) => {
       const t = e.target;
       if (!t) return;
@@ -171,10 +178,16 @@
       const t = e.target;
       if (t && t.classList && t.classList.contains('v2-renewal-expand')) {
         e.preventDefault();
+        const tag = t.dataset.renewalExpandTag;
+        if (!tag) return;
         const expanded = t.dataset.renewalExpanded === '1';
         t.dataset.renewalExpanded = expanded ? '0' : '1';
-        t.textContent = expanded ? '▾' : '▴';
-        const grid = document.getElementById('v2-renewal-grid');
+        const subCount = RENEWAL_SUBS.filter(s => {
+          const cfg = RENEWAL_CITIES.find(c => c.tag === tag);
+          return cfg && s.city === cfg.city;
+        }).length;
+        t.textContent = (expanded ? '▾' : '▴') + `(${subCount})`;
+        const grid = document.getElementById('v2-renewal-grid-' + tag);
         if (grid) grid.style.display = expanded ? 'none' : '';
       }
     });
