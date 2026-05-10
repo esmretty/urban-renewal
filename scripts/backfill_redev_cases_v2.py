@@ -38,9 +38,22 @@ from analysis.gov_gis import wgs84_to_twd97
 import api.gis_overlay as g
 
 
-# 雙北我們關注的區
+# 5 個 NTPC sub_type 對應 ArcGIS REST layer (NtpcURInfo MapServer 子 layer ID + case_id 欄位)
+# 比 CasebyDist 完整：CasebyDist 對跨區大 case (例如「捷運中和線沿線」case 90) 不會回 polygon，
+# ArcGIS REST /query 拿到的才是 map tile 真正用的所有 polygon (跟視覺一致)。
+NTPC_LAYER_META = [
+    # (sub_type, ntpc_layer_name, label, arcgis_id_field)
+    ("ama",     "都市更新事業計畫案", "都市更新事業計畫案", "UN01"),
+    ("easy",    "簡易都更",           "簡易都更",           "EasyUrbanMainID"),
+    ("danger",  "危老重建",           "危老重建",           "DangerReconstructionMainID"),
+    ("amdm",    "防災案件",           "防災案件",           "SGAID"),
+    ("rzoning", "劃定更新地區",       "劃定更新地區",       "RZoningMainID"),
+]
+
+
+# 雙北我們關注的區 (歷史保留 — district pre-fetch 已不用，但 NTPC_QUERY_TYPES 留著給萬一回退用)
 TPE_DISTRICTS = ['中正區','大同區','中山區','松山區','大安區','萬華區','信義區','內湖區','南港區','文山區']
-NTPC_DISTRICTS = ['板橋區','新店區','中和區','永和區']  # DB 內無新莊物件，省 5 個 API call
+NTPC_DISTRICTS = ['板橋區','新店區','中和區','永和區']
 
 # 台北 sub_type → WFS layer 對應 (uro-redevelop-ALL-5 layer 屬性 / 獨立 typeName)
 TPE_REDEV_LAYER_MAP = {
@@ -132,45 +145,58 @@ def fetch_tpe_polygons(t0):
 
 
 def fetch_ntpc_polygons(t0):
-    """新北：5 個區 × 4 sub_types = 20 個 CasebyDist call → 拿到所有 polygon。"""
+    """新北：直接打 ArcGIS REST /query 拿每個 layer 全部 polygon (跟 map tile 同源)。
+    跟 CasebyDist 比：CasebyDist 對「跨區大型 case」(如捷運中和線沿線 ID=90) 不回 polygon，
+    這條 path 才能拿到 map tile 看得到的全部範圍。每 layer 1 call (paginate) ~0.5-1s。"""
     polys = []
-    cookies = g._get_ntpcurinfo_cookies()
-    hdtoken = g._get_ntpcurinfo_hdtoken()
-    timeName = base64.b64encode(b"MapToken").decode()
-    base = "https://urban.planning.ntpc.gov.tw/NtpcURInfo/ajax/UrbanRenewalQuery.ashx"
-    if not hdtoken or not cookies:
-        print("  [NTPC] hdtoken / cookies 抓不到，skip", flush=True)
-        return polys
-    with httpx.Client(verify=False, timeout=20, cookies=cookies, headers={
-        "User-Agent": "Mozilla/5.0",
-        "Referer": "https://urban.planning.ntpc.gov.tw/NtpcURInfo/",
-    }) as cli:
-        for dist in NTPC_DISTRICTS:
-            for sub_id, kw, label, id_field in NTPC_QUERY_TYPES:
+    for sub_id, layer_name, label, id_field in NTPC_LAYER_META:
+        meta = g._get_ntpcurinfo_layer_meta(layer_name)
+        if not meta or not meta.get("agstoken"):
+            print(f"  [NTPC] {layer_name} meta 抓不到，skip", flush=True)
+            continue
+        url = meta["mapsrvurl"] + "/" + meta["layerids"] + "/query"
+        offset = 0
+        page = 2000
+        n = 0
+        while True:
+            try:
+                r = httpx.get(url, params={
+                    "token": meta["agstoken"],
+                    "where": "1=1", "outFields": "*",
+                    "returnGeometry": "true", "outSR": "3826",
+                    "f": "json",
+                    "resultOffset": str(offset), "resultRecordCount": str(page),
+                }, timeout=30, verify=False)
+                j = r.json()
+            except Exception as e:
+                print(f"  [NTPC] {layer_name} fetch 失敗: {e}", flush=True)
+                break
+            feats = j.get("features", [])
+            if not feats:
+                break
+            for f in feats:
+                attrs = f.get("attributes", {}) or {}
+                geom = f.get("geometry", {}) or {}
+                rings = geom.get("rings") or []
+                if not rings:
+                    continue
                 try:
-                    r = cli.post(base, data={
-                        "keyword": kw, "Dist": dist,
-                        "timeStamp": hdtoken, "timeName": timeName,
-                    })
-                    j = r.json()
-                except Exception as e:
-                    print(f"  [NTPC] {dist} {kw} 失敗: {e}", flush=True)
+                    if len(rings) == 1:
+                        poly = Polygon(rings[0])
+                    else:
+                        valid_rings = [Polygon(rg) for rg in rings if len(rg) >= 4]
+                        if not valid_rings:
+                            continue
+                        poly = MultiPolygon(valid_rings) if len(valid_rings) > 1 else valid_rings[0]
+                except Exception:
                     continue
-                md = j.get("MAINDATA") or []
-                if not isinstance(md, list):
-                    continue
-                n_with_shp = 0
-                for it in md:
-                    shp = it.get("shp")
-                    if not shp:
-                        continue
-                    poly = _parse_wkt_polygon(shp)
-                    if not poly:
-                        continue
-                    cid = it.get(id_field) or it.get("ID") or ""
-                    polys.append((poly, sub_id, label, str(cid)))
-                    n_with_shp += 1
-                print(f"  NTPC {dist} {sub_id}: {n_with_shp}/{len(md)} with shp ({time.time()-t0:.1f}s)", flush=True)
+                cid = attrs.get(id_field) or attrs.get("ID") or attrs.get("SID") or ""
+                polys.append((poly, sub_id, label, str(cid)))
+                n += 1
+            if not j.get("exceededTransferLimit"):
+                break
+            offset += page
+        print(f"  NTPC {sub_id} ({layer_name}): {n} polygons ({time.time()-t0:.1f}s)", flush=True)
     return polys
 
 
