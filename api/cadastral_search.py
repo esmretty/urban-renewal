@@ -20,7 +20,9 @@ API:
 """
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -28,6 +30,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.auth import get_current_user
 from api._ntpc_cadastral_data import NTPC_DISTRICT_BBOX_TWD97, NTPC_SEGMENTS
+
+# disk cache：台北段名 dump 到 data/cache/tpe_segments/<district>.json
+# 段名年單位才變，避免每次 server restart 第一個 user 等 3-15 秒 GeoServer cold fetch
+_TPE_SEGMENTS_CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "cache" / "tpe_segments"
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -53,10 +59,24 @@ _NTPC_DISTRICTS = {"板橋區", "新店區", "中和區", "永和區", "新莊�
 
 def _list_tpe_segments(district: str) -> list[str]:
     """打 WFS 拿該區所有 plot 的 sect_name 去重 + 排序。
-    首次 ~5-20 秒（看區大小），之後從 module 記憶體 cache 拿。"""
+    Cache 順序：memory → disk → cold fetch GeoServer + 寫雙層 cache
+    首次 cold ~5-20 秒；disk hit ~10ms；memory hit 0ms"""
     cached = _SEGMENTS_CACHE.get(district)
     if cached is not None:
         return cached
+    # disk cache check
+    disk_path = _TPE_SEGMENTS_CACHE_DIR / f"{district}.json"
+    if disk_path.exists():
+        try:
+            with open(disk_path, encoding="utf-8") as f:
+                data = json.load(f)
+            segs = data.get("segments") or []
+            if segs:
+                _SEGMENTS_CACHE[district] = segs
+                logger.info(f"_list_tpe_segments {district} → disk cache hit ({len(segs)} 段)")
+                return segs
+        except Exception as e:
+            logger.debug(f"disk cache 讀取失敗 {disk_path}: {e}")
     try:
         r = httpx.get(_TPE_WFS_URL, params={
             "service": "WFS", "version": "2.0.0", "request": "GetFeature",
@@ -82,7 +102,14 @@ def _list_tpe_segments(district: str) -> list[str]:
             seen.add(sect)
     result = sorted(seen)
     _SEGMENTS_CACHE[district] = result
-    logger.info(f"_list_tpe_segments {district} → cached {len(result)} 段")
+    # 寫 disk cache (年單位才會變，restart 後直接 hit disk)
+    try:
+        _TPE_SEGMENTS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        with open(disk_path, "w", encoding="utf-8") as f:
+            json.dump({"district": district, "segments": result}, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"_list_tpe_segments 寫 disk cache 失敗: {e}")
+    logger.info(f"_list_tpe_segments {district} → 從 GeoServer cold fetch ({len(result)} 段)，已寫 disk")
     return result
 
 
