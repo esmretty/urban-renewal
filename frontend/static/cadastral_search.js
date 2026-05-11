@@ -131,12 +131,12 @@
     goBtn.disabled = true;
     goBtn.textContent = '搜尋中…';
     try {
-      const u = new URL('/api/cadastral_search/lookup', location.origin);
-      u.searchParams.set('city', '台北市');
-      u.searchParams.set('district', district);
-      u.searchParams.set('segment', segment);
-      u.searchParams.set('landno', landno);
-      const r = await fetch(u.toString());
+      // 用相對路徑 — auth_gate.js 的 fetch override 只攔 startsWith('/api/')，
+      // 用絕對 URL 會繞過 Authorization header 注入 → 401「缺少登入憑證」
+      const qs = new URLSearchParams({
+        city: '台北市', district, segment, landno,
+      }).toString();
+      const r = await fetch(`/api/cadastral_search/lookup?${qs}`);
       if (!r.ok) {
         const detail = await r.json().catch(() => ({}));
         _toast(`查詢失敗 (${r.status})：${detail.detail || '請稍後重試'}`, 'error');
