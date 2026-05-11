@@ -75,40 +75,39 @@
     await _queryAtPoint(lat, lng);
   }
 
+  // 直接 DOM overlay 顯示 loading — 不經過 Leaflet renderer，避免被 tile redraw 排隊卡住
+  // (Leaflet 的 popup/circleMarker addTo 會 trigger render cycle，tile 在 flight 時可能延遲)
   function _showLoadingAt(lat, lng) {
-    if (!_map || !window.L) return;
-    // 清舊的 loading layer
-    if (_loadingLayer) {
-      try { _map.removeLayer(_loadingLayer); } catch (_e) {}
-      _loadingLayer = null;
-    }
-    // 灰色虛線小圓圈 (Leaflet circleMarker)
-    _loadingLayer = L.circleMarker([lat, lng], {
-      radius: 18,
-      color: '#888',
-      weight: 2,
-      dashArray: '4 4',
-      fillColor: '#999',
-      fillOpacity: 0.15,
-    }).addTo(_map);
-    // popup 「讀取中…」
-    if (_resultPopup) {
-      try { _map.closePopup(_resultPopup); } catch (_e) {}
-    }
-    _resultPopup = L.popup({
-      maxWidth: 200,
-      autoClose: false,
-      closeOnClick: false,
-      className: 'v2-cadsearch-popup-wrap',
-    })
-      .setLatLng([lat, lng])
-      .setContent(`<div class="v2-cadsearch-popup"><div style="padding:8px 4px; color:#666;"><span style="display:inline-block; width:14px; height:14px; border:2px solid #888; border-top-color:transparent; border-radius:50%; animation:v2-spin 0.8s linear infinite; vertical-align:middle; margin-right:6px;"></span>讀取中…</div></div>`)
-      .openOn(_map);
+    _clearLoading();
+    if (!_map) return;
+    const point = _map.latLngToContainerPoint([lat, lng]);
+    const mapEl = _map.getContainer();
+    const rect = mapEl.getBoundingClientRect();
+    const div = document.createElement('div');
+    div.id = 'v2-cadsearch-loading';
+    div.style.cssText = [
+      'position:fixed',
+      `left:${rect.left + point.x - 80}px`,
+      `top:${rect.top + point.y + 20}px`,
+      'z-index:1000',
+      'background:#fff',
+      'border:1px solid #999',
+      'border-radius:6px',
+      'padding:6px 12px',
+      'box-shadow:0 2px 6px rgba(0,0,0,.12)',
+      'font-size:12px',
+      'color:#555',
+      'pointer-events:none',
+      'white-space:nowrap',
+    ].join(';');
+    div.innerHTML = '<span style="display:inline-block;width:11px;height:11px;border:2px solid #888;border-top-color:transparent;border-radius:50%;animation:v2-spin 0.8s linear infinite;vertical-align:middle;margin-right:6px;"></span>讀取地塊資料中…';
+    document.body.appendChild(div);
+    _loadingLayer = div;
   }
 
   function _clearLoading() {
-    if (_loadingLayer && _map) {
-      try { _map.removeLayer(_loadingLayer); } catch (_e) {}
+    if (_loadingLayer) {
+      try { _loadingLayer.remove(); } catch (_e) {}
       _loadingLayer = null;
     }
   }

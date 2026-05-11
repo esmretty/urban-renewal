@@ -712,73 +712,6 @@ async def cadastral_search_lookup(
     return {"ok": True, **result}
 
 
-# Server-side spatial cache for at_point — 跨用戶共享，避免 tile 在 flight 時上游被擠
-# 結構：list of {bbox, coords, data}，最多 500 筆 FIFO
-# 第一個用戶點 plot X → cache；之後任何用戶點該 plot 任一點 → 直接命中，0 上游 query
-_AT_POINT_CACHE: list = []
-_AT_POINT_CACHE_MAX = 500
-
-
-def _at_point_cache_find(lat: float, lng: float) -> Optional[dict]:
-    """看 click 點是否在任一 cached polygon 內。"""
-    for entry in _AT_POINT_CACHE:
-        w, s, e, n = entry["bbox"]
-        if lat < s or lat > n or lng < w or lng > e:
-            continue
-        # bbox 內 → 精確 point-in-polygon
-        coords = entry["coords"]
-        if not coords:
-            continue
-        if _point_in_geojson_polygon(lat, lng, coords):
-            return entry["data"]
-    return None
-
-
-def _at_point_cache_add(data: dict):
-    """加 plot result 到 cache。"""
-    if not data or not data.get("polygon") or not data.get("bbox"):
-        return
-    key = (data.get("district"), data.get("segment"), data.get("landno"))
-    # 重複 → skip
-    for entry in _AT_POINT_CACHE:
-        if entry.get("_key") == key:
-            return
-    _AT_POINT_CACHE.append({
-        "_key": key,
-        "bbox": data["bbox"],
-        "coords": data["polygon"].get("coordinates"),
-        "data": data,
-    })
-    # FIFO trim
-    while len(_AT_POINT_CACHE) > _AT_POINT_CACHE_MAX:
-        _AT_POINT_CACHE.pop(0)
-
-
-def _point_in_ring(lat: float, lng: float, ring: list) -> bool:
-    inside = False
-    j = len(ring) - 1
-    for i in range(len(ring)):
-        xi, yi = ring[i][0], ring[i][1]
-        xj, yj = ring[j][0], ring[j][1]
-        if ((yi > lat) != (yj > lat)
-                and lng < (xj - xi) * (lat - yi) / (yj - yi + 1e-12) + xi):
-            inside = not inside
-        j = i
-    return inside
-
-
-def _point_in_geojson_polygon(lat: float, lng: float, coords: list) -> bool:
-    """GeoJSON Polygon coords = [outer_ring, hole1, ...]"""
-    if not coords:
-        return False
-    if not _point_in_ring(lat, lng, coords[0]):
-        return False
-    for i in range(1, len(coords)):
-        if _point_in_ring(lat, lng, coords[i]):
-            return False
-    return True
-
-
 @router.get("/api/cadastral_search/at_point")
 async def cadastral_search_at_point(
     lat: float = Query(..., description="WGS84 緯度"),
@@ -786,14 +719,9 @@ async def cadastral_search_at_point(
     _user: dict = Depends(get_current_user),
 ):
     """按地圖座標 (WGS84 lat/lng) 反查該位置的地塊資料。
-    Cache 優先：先看 click 點是否在 cached polygon 內 → 命中 0 上游 query。
-    沒命中再平行 fire plot×2 + zoning×2 (~0.5-1s)。"""
+    全 4 個 query 一次平行 fire (plot×2 + zoning×2)。"""
     if not (-90 <= lat <= 90 and -180 <= lng <= 180):
         raise HTTPException(400, "lat/lng 不在合法範圍")
-    # Cache check (spatial)
-    cached = _at_point_cache_find(lat, lng)
-    if cached:
-        return {"ok": True, "cached": True, **cached}
     from concurrent.futures import ThreadPoolExecutor
     # zoning query 需要 TWD97，先算好 (cheap)
     try:
@@ -817,11 +745,9 @@ async def cadastral_search_at_point(
     if tpe_plot:
         if tpe_zoning:
             tpe_plot.update(tpe_zoning)
-        _at_point_cache_add(tpe_plot)
         return {"ok": True, **tpe_plot}
     if ntpc_plot:
         if ntpc_zoning:
             ntpc_plot.update(ntpc_zoning)
-        _at_point_cache_add(ntpc_plot)
         return {"ok": True, **ntpc_plot}
     return {"ok": False, "reason": "此位置無地籍資料（可能為公園/水面/道路）"}
