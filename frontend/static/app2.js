@@ -672,8 +672,13 @@
     }
     const archivedClass = p.archived ? 'v2-card--archived' : '';
     const readClass = isRead(id) ? 'v2-card--read' : '';
-    // 套疊到任一都更圖層 → 地址紅色 + 射箭準心 icon (已讀狀態紅色變淡 by CSS)
-    const hasRedev = Array.isArray(p.redev_cases) && p.redev_cases.length > 0;
+    // 套疊到都更圖層 → 地址紅色 + 射箭準心 icon (已讀狀態紅色變淡 by CSS)
+    // 但「63 年以前建築物」(redev_63y_building) 範圍太廣 — 整個老社區都符合，
+    // 命中該層不代表真有都更熱點 → 過濾掉、僅看實質都更/危老 sub_type。
+    const _strongRedev = Array.isArray(p.redev_cases)
+      ? p.redev_cases.filter(c => c && c.sub_type !== '63y_building')
+      : [];
+    const hasRedev = _strongRedev.length > 0;
     const addrClass = hasRedev ? 'v2-card__addr v2-card__addr--redev' : 'v2-card__addr';
     const redevTargetIcon = hasRedev
       ? `<svg class="v2-card__redev-target" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="所在位置有貓膩，點進內頁觀看"
