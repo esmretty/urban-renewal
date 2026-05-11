@@ -1464,9 +1464,16 @@ a { color: inherit; text-decoration: none; }
     font-weight: 500;
     color: #2a2a3e;            /* 字保持深色 (確保可讀) */
   }
+  /* 星星跟旁邊 SVG icon 同尺寸 18×18，inline-flex 置中，
+     確保三按鈕下方 label 在同一條 baseline */
   .v2-drawer__fav-star {
-    font-size: 16px;
+    font-size: 20px;
     line-height: 1;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     /* color 從 .v2-drawer__fav-star base 規則繼承 (#c8b478)，這裡不覆寫 */
   }
   /* active (已加入最愛): 黃底 + 實心 ★ + 棕字 (base 規則已定義，這裡明確 mobile 也套) */
@@ -3256,13 +3263,27 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
 /* === 10. Toasts =========================================================== */
 .v2-toast-host {
   position: fixed;
-  bottom: var(--sp-5);
-  right: var(--sp-5);
+  /* PC：螢幕正中央 (top/left 50% + transform 置中) → 訊息最顯眼 */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--sp-2);
   z-index: 200;
   pointer-events: none;
+}
+/* Mobile：保留底部，避免擋住手指操作區 + 不擋住 sticky header */
+@media (max-width: 640px) {
+  .v2-toast-host {
+    top: auto;
+    left: auto;
+    bottom: var(--sp-5);
+    right: var(--sp-5);
+    transform: none;
+    align-items: flex-end;
+  }
 }
 .v2-toast {
   background: var(--c-topbar);
