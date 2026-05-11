@@ -162,7 +162,9 @@
   async function _queryAtPoint(lat, lng) {
     try {
       const qs = new URLSearchParams({ lat: String(lat), lng: String(lng) }).toString();
-      const r = await fetch(`/api/cadastral_search/at_point?${qs}`);
+      // priority:'high' 讓瀏覽器把 at_point 排在大量 tile fetch 之前 (Chrome 102+)
+      // 舊瀏覽器忽略此 option，無 side effect
+      const r = await fetch(`/api/cadastral_search/at_point?${qs}`, { priority: 'high' });
       _clearLoading();
       if (!r.ok) {
         if (_resultPopup) { try { _map.closePopup(_resultPopup); } catch (_e) {} }
