@@ -1241,7 +1241,9 @@
   function _updateFavBtn(p) {
     const btn = $('#v2-drawer-fav');
     if (!btn) return;
-    btn.style.display = '';
+    // 顯示三按鈕 group container (內部按鈕個別 display 控制由下方/HTML 處理)
+    const actions = $('#v2-drawer-actions');
+    if (actions) actions.style.display = '';
     const inW = !!(p._in_watchlist || p.user_url || p.added_at_user);
     btn.classList.toggle('v2-drawer__fav--active', inW);
     const lbl = btn.querySelector('.v2-drawer__fav-label');
@@ -1332,13 +1334,9 @@
     $('#v2-drawer').classList.remove('v2-open');
     $('#v2-drawer-backdrop').classList.remove('v2-open');
     state.selectedId = null;
-    // 收起 fav button + map button + share button + sources
-    const fav = $('#v2-drawer-fav');
-    if (fav) fav.style.display = 'none';
-    const mapBtn = $('#v2-drawer-map');
-    if (mapBtn) mapBtn.style.display = 'none';
-    const shareBtn = $('#v2-drawer-share');
-    if (shareBtn) shareBtn.style.display = 'none';
+    // 收起三按鈕 group + sources
+    const actions = $('#v2-drawer-actions');
+    if (actions) actions.style.display = 'none';
     const srcWrap = $('#v2-drawer-sources');
     if (srcWrap) { srcWrap.innerHTML = ''; srcWrap.style.display = 'none'; }
   }
