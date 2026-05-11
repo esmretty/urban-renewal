@@ -51,9 +51,13 @@
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-  // ── 已讀紀錄 (localStorage 共用 key 'urban_read_props')，v1/v2 共用 ────────
-  // value = JSON object { source_id: timestamp_iso }, 上限 5000 筆 LRU evict
+  // ── 已讀紀錄 ────────────────────────────────────────────────────────────
+  // 雙層存儲：localStorage (即時 read，快) + Firestore users/{uid}.reads (跨裝置同步)
+  // boot 時：merge localStorage + server fetch；migration：第一次把純 localStorage
+  // 的歷史紀錄一次 bulk POST 上 server。寫入時：dual-write localStorage + server (POST，
+  // fire-and-forget 不 block UI)。
   const READ_KEY = 'urban_read_props';
+  const READ_MIGRATED_KEY = 'urban_read_props__migrated_v1';
   let _readMap = null;
   function _loadReadMap() {
     if (_readMap) return _readMap;
@@ -63,7 +67,7 @@
   }
   function _saveReadMap() {
     if (!_readMap) return;
-    // 上限 5000 → 砍最舊的 1000 筆
+    // 上限 5000 → 砍最舊的 1000 筆 (本機，server 端不主動 trim 暫時)
     const keys = Object.keys(_readMap);
     if (keys.length > 5000) {
       const sorted = keys.sort((a, b) => (_readMap[a] || '').localeCompare(_readMap[b] || ''));
@@ -77,6 +81,59 @@
     if (!id) return;
     _loadReadMap()[id] = new Date().toISOString();
     _saveReadMap();
+    // server POST fire-and-forget (不阻塞 UI；失敗 console warn 就好)
+    _postReadsToServer([id]).catch(e => console.debug('markRead server post failed', e));
+  }
+
+  async function _postReadsToServer(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) return;
+    // batch limit 1000；超過切批
+    const chunks = [];
+    for (let i = 0; i < ids.length; i += 1000) chunks.push(ids.slice(i, i + 1000));
+    for (const chunk of chunks) {
+      try {
+        await fetch('/api/me/reads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: chunk }),
+        });
+      } catch (e) {
+        console.debug('reads POST chunk failed', e);
+      }
+    }
+  }
+
+  async function _syncReadsWithServer() {
+    // 1. GET server 端 reads，merge into _readMap
+    try {
+      const r = await fetch('/api/me/reads');
+      if (r.ok) {
+        const data = await r.json();
+        const serverItems = data.items || {};
+        const local = _loadReadMap();
+        let added = 0;
+        for (const k of Object.keys(serverItems)) {
+          if (!local[k]) {
+            local[k] = serverItems[k];
+            added++;
+          }
+        }
+        if (added) _saveReadMap();
+      }
+    } catch (e) {
+      console.debug('_syncReadsWithServer GET failed', e);
+      return;
+    }
+    // 2. Migration：首次 sync → 把純 localStorage 歷史紀錄 bulk POST 上 server
+    let migrated = false;
+    try { migrated = localStorage.getItem(READ_MIGRATED_KEY) === '1'; } catch {}
+    if (!migrated) {
+      const localIds = Object.keys(_loadReadMap());
+      if (localIds.length > 0) {
+        await _postReadsToServer(localIds);
+      }
+      try { localStorage.setItem(READ_MIGRATED_KEY, '1'); } catch {}
+    }
   }
 
   // ── Filter 偏好持久化 (per uid，僅 explore 用) ─────────────────────────────
@@ -3470,6 +3527,10 @@
 
     await Promise.all([distP, propsP, _restoreP]);
     window.__perfMark && window.__perfMark('boot_complete');
+    // 已讀紀錄跟 server sync (非阻塞)：完成後 re-apply 讓 server 同步的 read class 套上
+    _syncReadsWithServer().then(() => {
+      if (state.exploreLoaded || state.watchlistLoaded) applyFilters();
+    }).catch(_e => { /* silent */ });
     requestAnimationFrame(() => requestAnimationFrame(() => {
       window.__perfMark && window.__perfMark('first_paint_after_boot');
       _renderPerfPanel();

@@ -4021,3 +4021,7 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
   color: #8a8a8a;
   line-height: 1.3;
 }
+@keyframes v2-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

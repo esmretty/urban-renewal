@@ -1136,6 +1136,8 @@ from api.cadastral_search import router as cadastral_search_router
 app.include_router(cadastral_search_router)
 from api.external_checks import router as external_checks_router
 app.include_router(external_checks_router)
+from api.user_reads import router as user_reads_router
+app.include_router(user_reads_router)
 
 
 _INDEX2_HTML_CACHE = {"sha": None, "html": None, "mtime": 0.0}

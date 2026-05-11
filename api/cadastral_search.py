@@ -500,6 +500,10 @@ def _query_tpe_zoning_at(twd97_x: float, twd97_y: float) -> Optional[dict]:
 
 def _query_ntpc_zoning_at(twd97_x: float, twd97_y: float) -> Optional[dict]:
     """新北市使用分區 lookup (NTPC ArcGIS LandUse_WMS layer 0)。
+    Schema 重點欄位：
+      LZ1 = 都市計畫案名稱 (e.g., 「擬定永和都市計畫細部計畫案」)
+      LZ3 = 使用分區名稱 (e.g., 「商業區」「住宅區」「公園兼廣場用地」)
+      LZ8 = 都市計畫類別
     需 NTPC token；point query 取 first feature。
     """
     try:
@@ -516,7 +520,7 @@ def _query_ntpc_zoning_at(twd97_x: float, twd97_y: float) -> Optional[dict]:
                 "geometryType": "esriGeometryPoint",
                 "inSR": "3826",
                 "spatialRel": "esriSpatialRelIntersects",
-                "outFields": "*",
+                "outFields": "LZ1,LZ3,LZ8",
                 "returnGeometry": "false",
             },
             timeout=10,
@@ -534,22 +538,18 @@ def _query_ntpc_zoning_at(twd97_x: float, twd97_y: float) -> Optional[dict]:
     feats = d.get("features") or []
     if not feats:
         return None
-    # NTPC LandUse 欄位常見：USERNAME / USECODE / TXT etc. 抓所有 attrs 看哪個比較合適
     attrs = feats[0].get("attributes") or {}
-    # 嘗試常見欄位名
-    name = (attrs.get("USENAME") or attrs.get("UseName") or attrs.get("LUNAME")
-            or attrs.get("LU_NAME") or attrs.get("zoning_name") or attrs.get("分區名稱"))
-    code = (attrs.get("USECODE") or attrs.get("UseCode") or attrs.get("LUCODE")
-            or attrs.get("LU_CODE") or attrs.get("分區代碼"))
-    if not name and not code:
-        # 如果沒固定 schema，把整個 attrs 回去作為 debug
-        return {"zoning_raw_attrs": attrs}
+    name = attrs.get("LZ3")             # 使用分區名稱
+    plan = attrs.get("LZ1")             # 都市計畫案名稱
+    category = attrs.get("LZ8")         # 都市計畫類別
+    if not name:
+        return None
     return {
-        "zoning_code": code,
-        "zoning_name": name,
+        "zoning_code": None,
+        "zoning_name": name,            # 商業區 / 住宅區 / 公園兼廣場用地 / 道路用地 ...
         "zoning_text": name,
-        "zoning_category": None,
-        "zoning_memo": None,
+        "zoning_category": category,    # 都市計畫類別
+        "zoning_memo": plan,            # 都市計畫案
     }
 
 

@@ -39,9 +39,13 @@
 
   let _map = null;
   let _highlightLayer = null;
+  let _loadingLayer = null;     // 點地塊查詢中時的灰色 placeholder
   let _expanded = false;
   // 前端 segment cache：{district: [segment, ...]}
   const _segCache = {};
+  // 已查過的 plot result cache (in-memory)：[{ bbox, coords, data }]，最多 100 筆
+  const _plotCache = [];
+  const _PLOT_CACHE_MAX = 100;
 
   function init(map) {
     if (!map) return;
@@ -59,36 +63,124 @@
   async function _onMapClick(e) {
     if (!e || !e.latlng) return;
     const { lat, lng } = e.latlng;
-    // 若 click 落在搜尋結果 highlight 多邊形上 → 視為要清除，不查 (避免使用者點開的 highlight 又 trigger)
-    if (_highlightLayer) {
-      try {
-        // 簡單檢查：click 點是否在 highlight bbox 內，如是視為「點到 highlight」
-        const bounds = _highlightLayer.getBounds();
-        if (bounds.contains(e.latlng)) {
-          // 在 highlight 內 → 仍 trigger 新 query (使用者可能想看不同地塊)
-        }
-      } catch (_e) {}
+    // 0. 先檢查 in-memory cache：之前查過的地塊 polygon 是否包含這個 click 點
+    const cached = _findInPlotCache(lat, lng);
+    if (cached) {
+      _drawHighlight(cached);
+      _showResultPopup(cached);
+      return;
     }
+    // 1. 立即在 click 位置畫個灰色 placeholder + 「讀取中」popup → 視覺回饋
+    _showLoadingAt(lat, lng);
     await _queryAtPoint(lat, lng);
+  }
+
+  function _showLoadingAt(lat, lng) {
+    if (!_map || !window.L) return;
+    // 清舊的 loading layer
+    if (_loadingLayer) {
+      try { _map.removeLayer(_loadingLayer); } catch (_e) {}
+      _loadingLayer = null;
+    }
+    // 灰色虛線小圓圈 (Leaflet circleMarker)
+    _loadingLayer = L.circleMarker([lat, lng], {
+      radius: 18,
+      color: '#888',
+      weight: 2,
+      dashArray: '4 4',
+      fillColor: '#999',
+      fillOpacity: 0.15,
+    }).addTo(_map);
+    // popup 「讀取中…」
+    if (_resultPopup) {
+      try { _map.closePopup(_resultPopup); } catch (_e) {}
+    }
+    _resultPopup = L.popup({
+      maxWidth: 200,
+      autoClose: false,
+      closeOnClick: false,
+      className: 'v2-cadsearch-popup-wrap',
+    })
+      .setLatLng([lat, lng])
+      .setContent(`<div class="v2-cadsearch-popup"><div style="padding:8px 4px; color:#666;"><span style="display:inline-block; width:14px; height:14px; border:2px solid #888; border-top-color:transparent; border-radius:50%; animation:v2-spin 0.8s linear infinite; vertical-align:middle; margin-right:6px;"></span>讀取中…</div></div>`)
+      .openOn(_map);
+  }
+
+  function _clearLoading() {
+    if (_loadingLayer && _map) {
+      try { _map.removeLayer(_loadingLayer); } catch (_e) {}
+      _loadingLayer = null;
+    }
+  }
+
+  function _findInPlotCache(lat, lng) {
+    for (const entry of _plotCache) {
+      const [w, s, e, n] = entry.bbox;
+      if (lat < s || lat > n || lng < w || lng > e) continue;   // 快速 bbox 排除
+      if (_pointInGeoJSONPolygon(lat, lng, entry.coords)) return entry.data;
+    }
+    return null;
+  }
+
+  function _addToPlotCache(data) {
+    if (!data || !data.polygon || !data.bbox) return;
+    // 已存在 (用 district+segment+landno 判斷) → skip
+    const key = `${data.district}_${data.segment}_${data.landno}`;
+    if (_plotCache.some(c => c._key === key)) return;
+    _plotCache.push({
+      _key: key,
+      bbox: data.bbox,
+      coords: data.polygon.coordinates,
+      data: data,
+    });
+    // FIFO trim
+    while (_plotCache.length > _PLOT_CACHE_MAX) _plotCache.shift();
+  }
+
+  // ray-casting algorithm for point-in-polygon (GeoJSON Polygon = [outerRing, hole1, ...])
+  function _pointInRing(lat, lng, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0], yi = ring[i][1];
+      const xj = ring[j][0], yj = ring[j][1];
+      const intersect = (yi > lat) !== (yj > lat)
+        && lng < (xj - xi) * (lat - yi) / (yj - yi) + xi;
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+  function _pointInGeoJSONPolygon(lat, lng, coords) {
+    if (!coords || !coords.length) return false;
+    // GeoJSON Polygon: [outerRing, hole1, hole2, ...]
+    if (!_pointInRing(lat, lng, coords[0])) return false;
+    for (let i = 1; i < coords.length; i++) {
+      if (_pointInRing(lat, lng, coords[i])) return false;
+    }
+    return true;
   }
 
   async function _queryAtPoint(lat, lng) {
     try {
       const qs = new URLSearchParams({ lat: String(lat), lng: String(lng) }).toString();
       const r = await fetch(`/api/cadastral_search/at_point?${qs}`);
+      _clearLoading();
       if (!r.ok) {
+        if (_resultPopup) { try { _map.closePopup(_resultPopup); } catch (_e) {} }
         const detail = await r.json().catch(() => ({}));
         _toast(`查詢失敗 (${r.status})：${detail.detail || ''}`, 'error');
         return;
       }
       const data = await r.json();
       if (!data.ok) {
+        if (_resultPopup) { try { _map.closePopup(_resultPopup); } catch (_e) {} }
         _toast(data.reason || '此位置無地籍資料', 'info');
         return;
       }
+      _addToPlotCache(data);
       _drawHighlight(data);
       _showResultPopup(data);
     } catch (e) {
+      _clearLoading();
       _toast(`網路錯誤：${e.message || e}`, 'error');
     }
   }
@@ -261,6 +353,7 @@
         _toast(data.reason || '找不到該地塊', 'error');
         return;
       }
+      _addToPlotCache(data);
       _drawHighlight(data);
       _flyToBbox(data.bbox);
       _showResultPopup(data);
