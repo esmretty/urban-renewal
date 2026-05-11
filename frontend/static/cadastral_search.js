@@ -17,10 +17,25 @@
 (function () {
   'use strict';
 
-  const TPE_DISTRICTS = [
-    '大安區', '信義區', '中山區', '中正區', '文山區',
-    '松山區', '萬華區', '大同區',
+  // 12 區清單 + city mapping (台北 8 + 新北 4)
+  const DISTRICTS = [
+    { city: '台北市', name: '大安區' },
+    { city: '台北市', name: '信義區' },
+    { city: '台北市', name: '中山區' },
+    { city: '台北市', name: '中正區' },
+    { city: '台北市', name: '文山區' },
+    { city: '台北市', name: '松山區' },
+    { city: '台北市', name: '萬華區' },
+    { city: '台北市', name: '大同區' },
+    { city: '新北市', name: '板橋區' },
+    { city: '新北市', name: '新店區' },
+    { city: '新北市', name: '中和區' },
+    { city: '新北市', name: '永和區' },
   ];
+  function _cityOf(district) {
+    const m = DISTRICTS.find(d => d.name === district);
+    return m ? m.city : '台北市';
+  }
 
   let _map = null;
   let _highlightLayer = null;
@@ -60,7 +75,12 @@
         <div class="v2-cadsearch__row">
           <label class="v2-cadsearch__label">區</label>
           <select id="v2-cadsearch-district" class="v2-cadsearch__input">
-            ${TPE_DISTRICTS.map(d => `<option value="${d}">${d}</option>`).join('')}
+            <optgroup label="台北市">
+              ${DISTRICTS.filter(d => d.city === '台北市').map(d => `<option value="${d.name}">${d.name}</option>`).join('')}
+            </optgroup>
+            <optgroup label="新北市">
+              ${DISTRICTS.filter(d => d.city === '新北市').map(d => `<option value="${d.name}">${d.name}</option>`).join('')}
+            </optgroup>
           </select>
         </div>
         <div class="v2-cadsearch__row">
@@ -79,7 +99,7 @@
                   id="v2-cadsearch-go">搜尋</button>
           <button type="button" class="v2-cadsearch__btn" id="v2-cadsearch-clear">清除</button>
         </div>
-        <div class="v2-cadsearch__hint">目前只支援台北市，新北市資料源待後續整合</div>
+        <div class="v2-cadsearch__hint">支援台北 8 區 + 新北 4 區（板橋/新店/中和/永和）</div>
       </div>
     `;
     host.appendChild(wrap);
@@ -94,7 +114,7 @@
       if (e.key === 'Enter') _onSearch();
     });
     // 初次載入：default district 的段名清單
-    _loadSegments(TPE_DISTRICTS[0]);
+    _loadSegments(DISTRICTS[0].name);
   }
 
   async function _onDistrictChange() {
@@ -114,7 +134,7 @@
     segSel.innerHTML = '<option value="">載入中…</option>';
     segSel.disabled = true;
     try {
-      const qs = new URLSearchParams({ city: '台北市', district }).toString();
+      const qs = new URLSearchParams({ city: _cityOf(district), district }).toString();
       const r = await fetch(`/api/cadastral_search/segments?${qs}`);
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
@@ -187,7 +207,7 @@
       // 用相對路徑 — auth_gate.js 的 fetch override 只攔 startsWith('/api/')，
       // 用絕對 URL 會繞過 Authorization header 注入 → 401「缺少登入憑證」
       const qs = new URLSearchParams({
-        city: '台北市', district, segment, landno,
+        city: _cityOf(district), district, segment, landno,
       }).toString();
       const r = await fetch(`/api/cadastral_search/lookup?${qs}`);
       if (!r.ok) {

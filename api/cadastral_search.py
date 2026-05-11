@@ -5,13 +5,15 @@
   - app.py 只用 1 行 `app.include_router(cadastral_search.router)` 掛載
   - revert 時刪本 file + 拿掉那 1 行 include 即可，其他 file 完全不動
 
-支援範圍（MVP）：
+支援範圍：
   - 台北 8 區：透過 GeoServer WFS GetFeature 查 Taipei:LAND-ALL-TWD97
-    (attribute schema: dist_name + sect_name + land_no/land_pnum/land_snum)
-  - 新北 4 區：暫不支援（NtpcURInfo session-based proxy，技術上可行但要包 token chain）
-    若 city='新北市' 直接回 HTTP 501 提示「目前只支援台北市」
+    (attribute schema: dist_name + sect_name + land_no)
+  - 新北 4 區（板橋/新店/中和/永和）：透過 NTPC ArcGIS query 配 NtpcURInfo session token
+    打 NTPC_Urban/Land/MapServer/0/query；段名清單從 _ntpc_cadastral_data 拿
+    (一次性 enumerate 出來，hardcode 進去；段名年單位才會變)
 
 API:
+  - GET /api/cadastral_search/segments?city=&district= → 回該區段名清單
   - GET /api/cadastral_search/lookup?city=&district=&segment=&landno=
     → 回 {ok, center:[lng,lat], bbox:[w,s,e,n], polygon: GeoJSON, segment, landno, district}
     → 找不到回 {ok: false, reason: '...'}
@@ -25,6 +27,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.auth import get_current_user
+from api._ntpc_cadastral_data import NTPC_DISTRICT_BBOX_TWD97, NTPC_SEGMENTS
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -33,6 +36,8 @@ _TPE_WFS_URL = "https://zonegeo.udd.gov.taipei/geoserver/Taipei/wfs"
 _TPE_DISTRICTS = {"大安區", "信義區", "中山區", "中正區", "文山區",
                    "松山區", "萬華區", "大同區", "內湖區", "南港區",
                    "士林區", "北投區"}
+_NTPC_LAND_FIELD_LANDNO = "NTPCUPGIS_SDE.NTPCGIS2.%Land.LANDNO"
+_NTPC_LAND_FIELD_SECTNAME = "NTPCUPGIS_SDE.NTPCGIS2.%Land.SECTNAME"
 
 # 段名 cache：{district: sorted list of sect_name}
 # WFS query 一次撈該區所有 plot 的 sect_name 去重 → 永久 cache 在 module 記憶體
@@ -148,6 +153,96 @@ def _iter_coords(coords):
         yield from _iter_coords(c)
 
 
+def _query_ntpc_plot(district: str, segment: str, landno: str) -> Optional[dict]:
+    """打 NTPC ArcGIS Land/MapServer/0/query 查單一地塊。
+    NTPC ArcGIS WAF 擋 multi-field WHERE，所以策略：
+      WHERE LANDNO=N + district bbox 過濾 → Python 端再篩 SECTNAME 一致的那筆
+    回傳：找到 → {center, bbox, polygon, ...}；找不到 → None
+    """
+    bbox = NTPC_DISTRICT_BBOX_TWD97.get(district)
+    if not bbox:
+        return None
+    # 拿 NtpcURInfo session 的 ArcGIS token + URL (跟地籍圖 tile 共用同一個 session)
+    from api.gis_overlay import _get_ntpcurinfo_layer_meta
+    meta = _get_ntpcurinfo_layer_meta("地籍圖")
+    if not meta or not meta.get("agstoken") or not meta.get("mapsrvurl"):
+        raise HTTPException(502, "上游 NTPC ArcGIS session 暫時不可用，請稍後再試")
+    xmin, ymin, xmax, ymax = bbox
+    # WHERE 只能放一個 quoted field name，AND 多個會被 WAF 擋（含 % 字元觸發 SQL injection 偵測）
+    where = f'"{_NTPC_LAND_FIELD_LANDNO}"=\'{landno}\''
+    try:
+        r = httpx.get(
+            meta["mapsrvurl"] + "/0/query",
+            params={
+                "f": "json",
+                "token": meta["agstoken"],
+                "where": where,
+                "outFields": "*",
+                "returnGeometry": "true",
+                "outSR": "4326",   # 回 WGS84 lng/lat 省得換算
+                "geometry": f"{xmin},{ymin},{xmax},{ymax}",
+                "geometryType": "esriGeometryEnvelope",
+                "inSR": "3826",
+                "spatialRel": "esriSpatialRelIntersects",
+            },
+            timeout=20,
+            verify=False,
+        )
+    except Exception as e:
+        logger.warning(f"NTPC ArcGIS query 失敗: {e}")
+        raise HTTPException(502, "上游 NTPC ArcGIS 連線失敗")
+    if r.status_code != 200 or "json" not in (r.headers.get("content-type") or ""):
+        logger.warning(f"NTPC ArcGIS http={r.status_code} ct={r.headers.get('content-type')}")
+        raise HTTPException(502, f"上游 NTPC ArcGIS 異常 ({r.status_code})")
+    try:
+        data = r.json()
+    except Exception:
+        raise HTTPException(502, "上游 NTPC ArcGIS 回非 JSON")
+    if data.get("error"):
+        logger.warning(f"NTPC ArcGIS error: {data['error']}")
+        raise HTTPException(502, f"上游 NTPC ArcGIS 拒絕: {data['error'].get('message','')}")
+    feats = data.get("features") or []
+    # Python 端篩 SECTNAME 一致的那筆 (ArcGIS feature attributes 用 . 分隔的 full key)
+    match = None
+    for feat in feats:
+        attrs = feat.get("attributes") or {}
+        if attrs.get(_NTPC_LAND_FIELD_SECTNAME) == segment:
+            match = feat
+            break
+    if not match:
+        return None
+    # ArcGIS f=json 回 esri geometry (rings)，要轉成 GeoJSON polygon 給前端 L.geoJSON 用
+    esri_geom = match.get("geometry") or {}
+    rings = esri_geom.get("rings") or []
+    if not rings:
+        return None
+    # esri rings → GeoJSON Polygon (outer + inner rings 同層級；
+    # 簡化處理：假定第一 ring 是 outer，其他都 inner)
+    geojson_geom = {
+        "type": "Polygon",
+        "coordinates": rings,
+    }
+    lngs, lats = [], []
+    for ring in rings:
+        for lng, lat in ring:
+            lngs.append(lng)
+            lats.append(lat)
+    if not lngs:
+        return None
+    center = [sum(lngs) / len(lngs), sum(lats) / len(lats)]
+    plot_bbox = [min(lngs), min(lats), max(lngs), max(lats)]
+    attrs = match.get("attributes") or {}
+    return {
+        "center": center,
+        "bbox": plot_bbox,
+        "polygon": geojson_geom,
+        "district": district,
+        "segment": segment,
+        "landno": landno,
+        "scno": attrs.get("NTPCUPGIS_SDE.NTPCGIS2.%Land.SCNO"),
+    }
+
+
 @router.get("/api/cadastral_search/segments")
 async def cadastral_search_segments(
     city: str = Query(..., description="台北市 / 新北市"),
@@ -162,9 +257,13 @@ async def cadastral_search_segments(
     if any(c in district for c in ("'", '"', '\\', '%', '<', '>', ';')):
         raise HTTPException(400, "district 含不合法字元")
     if city == "新北市":
-        raise HTTPException(501, "目前只支援台北市段名清單")
+        # 新北從 hardcoded 清單拿 (一次性 enumerate，段名年單位才會變)
+        if district not in NTPC_SEGMENTS:
+            raise HTTPException(400, f"district 不在新北段清單支援範圍 (目前支援: {list(NTPC_SEGMENTS.keys())})")
+        segments = NTPC_SEGMENTS[district]
+        return {"city": city, "district": district, "segments": segments, "count": len(segments)}
     if city != "台北市":
-        raise HTTPException(400, "city 必須是 台北市")
+        raise HTTPException(400, "city 必須是 台北市 或 新北市")
     if district not in _TPE_DISTRICTS:
         raise HTTPException(400, "district 不屬於台北市行政區")
     segments = _list_tpe_segments(district)
@@ -191,9 +290,12 @@ async def cadastral_search_lookup(
         if any(c in s for c in ("'", '"', '\\', '%', '<', '>', ';')):
             raise HTTPException(400, f"{name} 含不合法字元")
     if city == "新北市":
-        if district not in _NTPC_DISTRICTS:
-            raise HTTPException(400, "district 不屬於新北市行政區")
-        raise HTTPException(501, "目前地塊搜尋只支援台北市（新北市資料源待後續實作）")
+        if district not in NTPC_DISTRICT_BBOX_TWD97:
+            raise HTTPException(400, f"district 不在新北支援清單 (目前支援: {list(NTPC_DISTRICT_BBOX_TWD97.keys())})")
+        result = _query_ntpc_plot(district, segment, landno)
+        if not result:
+            return {"ok": False, "reason": "找不到該地塊 — 請確認區/段/地號拼寫"}
+        return {"ok": True, **result}
     if city != "台北市":
         raise HTTPException(400, "city 必須是 台北市 或 新北市")
     if district not in _TPE_DISTRICTS:
