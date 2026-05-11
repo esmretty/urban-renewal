@@ -1246,6 +1246,9 @@
     btn.classList.toggle('v2-drawer__fav--active', inW);
     const lbl = btn.querySelector('.v2-drawer__fav-label');
     if (lbl) lbl.textContent = inW ? '從最愛移除' : '加入最愛';
+    // 空心 ☆ (未加入) ↔ 實心 ★ (已加入) — 比同色但同樣畫法的星星更直覺
+    const star = btn.querySelector('.v2-drawer__fav-star');
+    if (star) star.textContent = inW ? '★' : '☆';
     // 「在地圖上查看」按鈕：物件有座標才顯示
     const mapBtn = $('#v2-drawer-map');
     if (mapBtn) mapBtn.style.display = (p.latitude && p.longitude) ? '' : 'none';
