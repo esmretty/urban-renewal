@@ -61,6 +61,10 @@
     if (window.v2 && window.v2._overlays && typeof window.v2._overlays.init === 'function') {
       window.v2._overlays.init(m);
     }
+    // 地塊搜尋 — 隔離 module cadastral_search.js attach
+    if (window.v2 && window.v2._cadastralSearch && typeof window.v2._cadastralSearch.init === 'function') {
+      window.v2._cadastralSearch.init(m);
+    }
     // 左上 +/- zoom control 正下方的 zoom 數字 — Leaflet 同 position 自動 vertical stack
     const zoomCtrl = L.control({ position: 'topleft' });
     zoomCtrl.onAdd = function () {

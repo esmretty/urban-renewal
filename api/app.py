@@ -1132,6 +1132,8 @@ app.mount("/data/screenshots", StaticFiles(directory=str(BASE_DIR / "data" / "sc
 # GIS overlay proxy — v2 地圖模式 optional 圖層用 (隔離 module，revert 拿掉這 1 行 + 刪 file 即可)
 from api.gis_overlay import router as gis_overlay_router
 app.include_router(gis_overlay_router)
+from api.cadastral_search import router as cadastral_search_router
+app.include_router(cadastral_search_router)
 
 
 _INDEX2_HTML_CACHE = {"sha": None, "html": None, "mtime": 0.0}

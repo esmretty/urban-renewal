@@ -3880,3 +3880,109 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
 .v2-drawer__body::-webkit-scrollbar-thumb:hover {
   background: var(--c-text-light);
 }
+
+/* ─────────────────────────────────────────────────────────────────
+ * 地塊搜尋 (cadastral_search.js attach 的 UI 樣式)
+ * 隔離 prefix `.v2-cadsearch-*`，不依賴 / 不污染既有任何 class
+ * revert：把這整個 block 刪掉
+ * ───────────────────────────────────────────────────────────────── */
+.v2-cadsearch {
+  display: inline-block;
+  position: relative;
+  margin-left: 12px;
+  vertical-align: middle;
+}
+.v2-cadsearch__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: #fff;
+  border: 1px solid #c8b478;
+  border-radius: 14px;
+  color: #2a2a3e;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.v2-cadsearch__toggle:hover { background: #fef9e7; }
+.v2-cadsearch__toggle svg { color: #c8b478; }
+.v2-cadsearch__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 500;
+  width: 260px;
+  background: #fff;
+  border: 1px solid #d4cba0;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  padding: 10px 12px;
+}
+.v2-cadsearch__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.v2-cadsearch__label {
+  flex: 0 0 32px;
+  font-size: 12px;
+  color: #2a2a3e;
+  font-weight: 600;
+}
+.v2-cadsearch__input {
+  flex: 1 1 auto;
+  padding: 4px 8px;
+  border: 1px solid #d4cba0;
+  border-radius: 4px;
+  font-size: 13px;
+  background: #fafaf6;
+  font-family: inherit;
+}
+.v2-cadsearch__input:focus {
+  outline: none;
+  border-color: #c8b478;
+  background: #fff;
+}
+.v2-cadsearch__actions {
+  margin-top: 4px;
+  margin-bottom: 0;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.v2-cadsearch__btn {
+  padding: 4px 12px;
+  border: 1px solid #d4cba0;
+  background: #fafaf6;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #2a2a3e;
+  transition: background 0.15s;
+}
+.v2-cadsearch__btn:hover { background: #f0e8c8; }
+.v2-cadsearch__btn--primary {
+  background: #c8b478;
+  border-color: #c8b478;
+  color: #fff;
+  font-weight: 600;
+}
+.v2-cadsearch__btn--primary:hover { background: #b89f5f; }
+.v2-cadsearch__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.v2-cadsearch__hint {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed #e3dfd2;
+  font-size: 10px;
+  color: #8a8a8a;
+  line-height: 1.3;
+}
+/* Mobile：panel 寬度縮一點避免出畫面 */
+@media (max-width: 640px) {
+  .v2-cadsearch__panel { width: 240px; }
+}
