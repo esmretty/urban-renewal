@@ -50,6 +50,47 @@
     if (!document.getElementById('v2-cadsearch-toggle')) {
       _renderUI();
     }
+    // 地圖空白處 click → 查該點地塊資料 (Leaflet 預設 marker click 不會 bubble 到 map.on(click))
+    // 重複 init 時 off 舊 listener 再 on 新的，避免 attached 多次
+    map.off('click', _onMapClick);
+    map.on('click', _onMapClick);
+  }
+
+  async function _onMapClick(e) {
+    if (!e || !e.latlng) return;
+    const { lat, lng } = e.latlng;
+    // 若 click 落在搜尋結果 highlight 多邊形上 → 視為要清除，不查 (避免使用者點開的 highlight 又 trigger)
+    if (_highlightLayer) {
+      try {
+        // 簡單檢查：click 點是否在 highlight bbox 內，如是視為「點到 highlight」
+        const bounds = _highlightLayer.getBounds();
+        if (bounds.contains(e.latlng)) {
+          // 在 highlight 內 → 仍 trigger 新 query (使用者可能想看不同地塊)
+        }
+      } catch (_e) {}
+    }
+    await _queryAtPoint(lat, lng);
+  }
+
+  async function _queryAtPoint(lat, lng) {
+    try {
+      const qs = new URLSearchParams({ lat: String(lat), lng: String(lng) }).toString();
+      const r = await fetch(`/api/cadastral_search/at_point?${qs}`);
+      if (!r.ok) {
+        const detail = await r.json().catch(() => ({}));
+        _toast(`查詢失敗 (${r.status})：${detail.detail || ''}`, 'error');
+        return;
+      }
+      const data = await r.json();
+      if (!data.ok) {
+        _toast(data.reason || '此位置無地籍資料', 'info');
+        return;
+      }
+      _drawHighlight(data);
+      _showResultPopup(data);
+    } catch (e) {
+      _toast(`網路錯誤：${e.message || e}`, 'error');
+    }
   }
 
   function _renderUI() {
@@ -274,33 +315,41 @@
     const area_ping = d.area_ping;
     const val_m2 = d.land_value_per_sqm;
     const val_ping = val_m2 ? val_m2 * M_PER_PING : null;
-    const val_total = (val_m2 && area_sqm) ? val_m2 * area_sqm : null;
     const prc_m2 = d.land_price_per_sqm;
     const prc_ping = prc_m2 ? prc_m2 * M_PER_PING : null;
-    const prc_total = (prc_m2 && area_sqm) ? prc_m2 * area_sqm : null;
 
     const rows = [];
     rows.push(`<tr><td>面積</td><td><b>${_fmt2(area_ping)} 坪</b> (${_fmtInt(area_sqm)} m²)</td></tr>`);
+    if (d.zoning_name) {
+      const zt = d.zoning_text || d.zoning_name;
+      const approx = d.zoning_approx ? ' <span style="color:#888;">(鄰近分區，僅供參考)</span>' : '';
+      rows.push(`<tr><td>使用分區</td><td><b style="color:#1d4ed8;">${zt}</b>${approx}</td></tr>`);
+      if (d.zoning_all && d.zoning_all.length > 1) {
+        const others = d.zoning_all.slice(1).map(z => z.text || z.name).join(', ');
+        rows.push(`<tr><td></td><td style="color:#888; font-size:11px;">附近還有：${others}</td></tr>`);
+      }
+    }
     if (val_m2 != null) {
       rows.push(`<tr><td>公告現值</td><td>${_fmtInt(val_m2)} 元/m² (≈${_fmtInt(val_ping)} 元/坪)</td></tr>`);
-      rows.push(`<tr><td>公告現值總額</td><td><b style="color:#c0392b;">${_toWanReadable(val_total)}</b></td></tr>`);
     }
     if (prc_m2 != null) {
       rows.push(`<tr><td>公告地價</td><td>${_fmtInt(prc_m2)} 元/m² (≈${_fmtInt(prc_ping)} 元/坪)</td></tr>`);
-      rows.push(`<tr><td>公告地價總額</td><td>${_toWanReadable(prc_total)}</td></tr>`);
+    }
+    if (d.ownership) {
+      const own = d.ownership === '公有' ? `<b style="color:#c0392b;">公有</b>` : d.ownership;
+      let extra = '';
+      if (d.ownership_manager) extra += `<br/><span style="color:#888; font-size:11px;">管理機關：${d.ownership_manager}</span>`;
+      if (d.ownership_owner) extra += `<br/><span style="color:#888; font-size:11px;">所有人：${d.ownership_owner}</span>`;
+      rows.push(`<tr><td>權屬</td><td>${own}${extra}</td></tr>`);
     }
     if (d.announce_date_roc) {
       rows.push(`<tr><td>公告日期</td><td>${_rocToDateStr(d.announce_date_roc)}</td></tr>`);
-    }
-    if (d.shape_area_sqm && d.area_sqm && Math.abs(d.shape_area_sqm - d.area_sqm) / d.area_sqm > 0.02) {
-      // GIS 自算跟公告差 > 2% 標示參考
-      rows.push(`<tr><td>GIS 自算面積</td><td style="color:#888;">${_fmtInt(d.shape_area_sqm)} m² (僅供參考)</td></tr>`);
     }
     return `
       <div class="v2-cadsearch-popup">
         <h4>${d.district} ${d.segment} ${d.landno}</h4>
         <table>${rows.join('')}</table>
-        <div class="v2-cadsearch-popup__hint">資料來源：政府公告地價/現值（依政府年度公告值）</div>
+        <div class="v2-cadsearch-popup__hint">資料來源：政府公告現值/地價（依年度公告值）</div>
       </div>
     `;
   }

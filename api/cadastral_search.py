@@ -59,14 +59,20 @@ _TPE_DISTRICT_CODE: dict[str, str] = {
     "信義區": "17",
 }
 _TPE_DISTRICTS = set(_TPE_DISTRICT_CODE.keys())
+_TPE_DISTRICT_CODE_TO_NAME = {v: k for k, v in _TPE_DISTRICT_CODE.items()}
+
+import re as _re
+# 地號合法格式：純數字 or 數字-數字 (e.g., "1", "1-1", "123-45")
+_LANDNO_RE = _re.compile(r"^\d{1,5}(-\d{1,5})?$")
 
 _NTPC_LAND_FIELD_LANDNO = "NTPCUPGIS_SDE.NTPCGIS2.%Land.LANDNO"
 _NTPC_LAND_FIELD_SECTNAME = "NTPCUPGIS_SDE.NTPCGIS2.%Land.SECTNAME"
 _NTPC_LAND_FIELD_AREA = "NTPCUPGIS_SDE.NTPCGIS2.%Land.AA10"
 _NTPC_LAND_FIELD_SCNO = "NTPCUPGIS_SDE.NTPCGIS2.%Land.SCNO"
-_NTPC_LAND_FIELD_LAND_VALUE = "NTPCUPGIS_SDE.NTPCGIS2.%Land.AA16"  # 公告現值 元/m²
-_NTPC_LAND_FIELD_LAND_PRICE = "NTPCUPGIS_SDE.NTPCGIS2.%Land.AA17"  # 公告地價 元/m²
-_NTPC_LAND_FIELD_UPDATED = "NTPCUPGIS_SDE.NTPCGIS2.%Land.AA05"     # 公告日期 (民國年月日 7 字)
+_NTPC_LAND_FIELD_PLAND = "NTPCUPGIS_SDE.NTPCGIS2.%Land.PLAND"          # 公有 / 私有
+_NTPC_LAND_FIELD_PLAND_NAME = "NTPCUPGIS_SDE.NTPCGIS2.%Land.PLANDNAME"  # 管理機關 (公有時)
+_NTPC_LAND_FIELD_PLAND_OWNER = "NTPCUPGIS_SDE.NTPCGIS2.%Land.PLANDLNAME"  # 所有人 (公有時)
+# 註：NTPC URInfo 地籍 schema 列出 AA05/AA16/AA17 但實際 query 全 null，不取
 
 # 段名 → (AA46, AA48) memory cache：避免每筆 lookup 都重打 Layer 1
 # {(district_name, segment_name): (AA46, AA48)}
@@ -199,7 +205,7 @@ def _query_tpe_plot(district: str, segment: str, landno: str) -> Optional[dict]:
             params={
                 "f": "json",
                 "where": where,
-                "outFields": "AA05,AA10,AA16,AA17,KCNT,LandNo,AA46,AA48,AA49,TWD97E,TWD97N,Shape_Area",
+                "outFields": "AA05,AA10,AA16,AA17,KCNT,LandNo,AA46,AA48,AA49,TWD97E,TWD97N",
                 "returnGeometry": "true",
                 "outSR": "4326",   # WGS84 lng/lat
             },
@@ -250,8 +256,156 @@ def _query_tpe_plot(district: str, segment: str, landno: str) -> Optional[dict]:
         "land_value_per_sqm": attrs.get("AA16"),                    # 公告現值 元/m²
         "land_price_per_sqm": attrs.get("AA17"),                    # 公告地價 元/m²
         "announce_date_roc": attrs.get("AA05"),                     # 公告日期 民國年月日
-        "shape_area_sqm": attrs.get("Shape_Area"),                  # GIS 自算面積 (跟 AA10 略有差，僅參考)
     }
+
+
+def _query_tpe_plot_at_point(lat: float, lng: float) -> Optional[dict]:
+    """按地圖點查台北地塊 (使用 ArcGIS spatialRel=Intersects POINT)。"""
+    try:
+        r = httpx.get(
+            _TPE_LAND_ARCGIS_URL + "/2/query",
+            params={
+                "f": "json",
+                "geometry": f"{lng},{lat}",
+                "geometryType": "esriGeometryPoint",
+                "inSR": "4326",
+                "spatialRel": "esriSpatialRelIntersects",
+                "outFields": "AA05,AA10,AA16,AA17,KCNT,LandNo,AA46,AA48,AA49",
+                "returnGeometry": "true",
+                "outSR": "4326",
+            },
+            timeout=10,
+            verify=False,
+        )
+    except Exception as e:
+        logger.debug(f"_query_tpe_plot_at_point 失敗: {e}")
+        return None
+    if r.status_code != 200 or "json" not in (r.headers.get("content-type") or ""):
+        return None
+    try:
+        data = r.json()
+    except Exception:
+        return None
+    if data.get("error"):
+        return None
+    feats = data.get("features") or []
+    if not feats:
+        return None
+    feat = feats[0]
+    attrs = feat.get("attributes") or {}
+    esri_geom = feat.get("geometry") or {}
+    rings = esri_geom.get("rings") or []
+    if not rings:
+        return None
+    geojson_geom = {"type": "Polygon", "coordinates": rings}
+    lngs, lats = [], []
+    for ring in rings:
+        for lng_, lat_ in ring:
+            lngs.append(lng_); lats.append(lat_)
+    if not lngs:
+        return None
+    center = [sum(lngs) / len(lngs), sum(lats) / len(lats)]
+    plot_bbox = [min(lngs), min(lats), max(lngs), max(lats)]
+    area_sqm = attrs.get("AA10")
+    area_ping = round(area_sqm / 3.305785, 2) if area_sqm else None
+    district = _TPE_DISTRICT_CODE_TO_NAME.get(attrs.get("AA46"), "?")
+    return {
+        "center": center,
+        "bbox": plot_bbox,
+        "polygon": geojson_geom,
+        "district": district,
+        "segment": attrs.get("KCNT") or "?",
+        "landno": attrs.get("LandNo") or "?",
+        "area_sqm": area_sqm,
+        "area_ping": area_ping,
+        "land_value_per_sqm": attrs.get("AA16"),
+        "land_price_per_sqm": attrs.get("AA17"),
+        "announce_date_roc": attrs.get("AA05"),
+    }
+
+
+def _query_ntpc_plot_at_point(lat: float, lng: float) -> Optional[dict]:
+    """按地圖點查新北地塊 (使用 NtpcURInfo session + ArcGIS POINT query)。"""
+    from api.gis_overlay import _get_ntpcurinfo_layer_meta
+    meta = _get_ntpcurinfo_layer_meta("地籍圖")
+    if not meta or not meta.get("agstoken") or not meta.get("mapsrvurl"):
+        return None
+    try:
+        r = httpx.get(
+            meta["mapsrvurl"] + "/0/query",
+            params={
+                "f": "json",
+                "token": meta["agstoken"],
+                "geometry": f"{lng},{lat}",
+                "geometryType": "esriGeometryPoint",
+                "inSR": "4326",
+                "spatialRel": "esriSpatialRelIntersects",
+                "outFields": "*",
+                "returnGeometry": "true",
+                "outSR": "4326",
+            },
+            timeout=15,
+            verify=False,
+        )
+    except Exception as e:
+        logger.debug(f"_query_ntpc_plot_at_point 失敗: {e}")
+        return None
+    if r.status_code != 200 or "json" not in (r.headers.get("content-type") or ""):
+        return None
+    try:
+        data = r.json()
+    except Exception:
+        return None
+    if data.get("error"):
+        return None
+    feats = data.get("features") or []
+    if not feats:
+        return None
+    feat = feats[0]
+    attrs = feat.get("attributes") or {}
+    esri_geom = feat.get("geometry") or {}
+    rings = esri_geom.get("rings") or []
+    if not rings:
+        return None
+    geojson_geom = {"type": "Polygon", "coordinates": rings}
+    lngs, lats = [], []
+    for ring in rings:
+        for lng_, lat_ in ring:
+            lngs.append(lng_); lats.append(lat_)
+    if not lngs:
+        return None
+    center = [sum(lngs) / len(lngs), sum(lats) / len(lats)]
+    plot_bbox = [min(lngs), min(lats), max(lngs), max(lats)]
+    # district from bbox lookup (lat/lng → 新北哪區)
+    district = _guess_ntpc_district(lat, lng)
+    area_sqm = attrs.get(_NTPC_LAND_FIELD_AREA)
+    area_ping = round(area_sqm / 3.305785, 2) if area_sqm else None
+    return {
+        "center": center,
+        "bbox": plot_bbox,
+        "polygon": geojson_geom,
+        "district": district or "新北市",
+        "segment": attrs.get(_NTPC_LAND_FIELD_SECTNAME) or "?",
+        "landno": attrs.get(_NTPC_LAND_FIELD_LANDNO) or "?",
+        "area_sqm": area_sqm,
+        "area_ping": area_ping,
+        "ownership": attrs.get(_NTPC_LAND_FIELD_PLAND),
+        "ownership_manager": attrs.get(_NTPC_LAND_FIELD_PLAND_NAME),
+        "ownership_owner": attrs.get(_NTPC_LAND_FIELD_PLAND_OWNER),
+    }
+
+
+def _guess_ntpc_district(lat: float, lng: float) -> Optional[str]:
+    """WGS84 lat/lng → TWD97 → 哪個新北行政區 (bbox 命中)。"""
+    try:
+        from analysis.gov_gis import wgs84_to_twd97
+        x, y = wgs84_to_twd97(lat, lng)
+    except Exception:
+        return None
+    for dist, (xmin, ymin, xmax, ymax) in NTPC_DISTRICT_BBOX_TWD97.items():
+        if xmin <= x <= xmax and ymin <= y <= ymax:
+            return dist
+    return None
 
 
 def _iter_coords(coords):
@@ -263,6 +417,140 @@ def _iter_coords(coords):
         return
     for c in coords:
         yield from _iter_coords(c)
+
+
+def _enrich_with_zoning(result: dict, city: str) -> dict:
+    """為 plot result 加上 zoning 欄位 (使用 plot center)。台北 / 新北 各自的 zoning service。"""
+    if not result or not result.get("center"):
+        return result
+    try:
+        from analysis.gov_gis import wgs84_to_twd97
+        lng, lat = result["center"][0], result["center"][1]
+        x, y = wgs84_to_twd97(lat, lng)
+    except Exception:
+        return result
+    z = _query_tpe_zoning_at(x, y) if city == "台北市" else _query_ntpc_zoning_at(x, y)
+    if z:
+        result.update(z)
+    return result
+
+
+def _query_tpe_zoning_at(twd97_x: float, twd97_y: float) -> Optional[dict]:
+    """台北市使用分區 lookup (ublock97-TWD97 layer)。
+    Adaptive bbox：先 ±15m (剛好涵蓋多數地塊但不沾到隔壁地塊)，沒命中就放寬到 ±50m。
+    這是因為 plot 中心可能正好落在道路 / 分區間隙。
+    多分區命中 (e.g., 一半商三一半住三) 暫只取 first；之後可改 shapely intersection 算比例。
+    """
+    for radius in (15, 50):
+        bbox = f"{twd97_x - radius},{twd97_y - radius},{twd97_x + radius},{twd97_y + radius},EPSG:3826"
+        try:
+            r = httpx.get(
+                "https://zonegeo.udd.gov.taipei/geoserver/Taipei/wfs",
+                params={
+                    "service": "WFS", "version": "2.0.0", "request": "GetFeature",
+                    "typeNames": "Taipei:ublock97-TWD97",
+                    "outputFormat": "application/json",
+                    "bbox": bbox,
+                    "count": "10",
+                },
+                timeout=8,
+                verify=False,
+            )
+        except Exception as e:
+            logger.debug(f"_query_tpe_zoning_at radius={radius} 失敗: {e}")
+            continue
+        if r.status_code != 200:
+            continue
+        try:
+            d = r.json()
+        except Exception:
+            continue
+        feats = d.get("features") or []
+        if not feats:
+            continue
+        # 抓所有命中的 zoning 多邊形，去重
+        matched = []
+        seen_codes = set()
+        for f in feats:
+            props = f.get("properties") or {}
+            code = props.get("usecod")
+            if code and code not in seen_codes:
+                seen_codes.add(code)
+                matched.append({
+                    "code": code,
+                    "name": props.get("usenam"),
+                    "text": props.get("usetxt"),
+                    "category": props.get("usekin"),
+                    "memo": props.get("usemem"),
+                })
+        if not matched:
+            continue
+        primary = matched[0]
+        return {
+            "zoning_code": primary["code"],
+            "zoning_name": primary["name"],
+            "zoning_text": primary["text"],
+            "zoning_category": primary["category"],
+            "zoning_memo": primary["memo"],
+            "zoning_all": matched if len(matched) > 1 else None,
+            "zoning_approx": radius >= 30,  # 標示「鄰近最近 zoning」如果 bbox 大
+        }
+    return None
+
+
+def _query_ntpc_zoning_at(twd97_x: float, twd97_y: float) -> Optional[dict]:
+    """新北市使用分區 lookup (NTPC ArcGIS LandUse_WMS layer 0)。
+    需 NTPC token；point query 取 first feature。
+    """
+    try:
+        from analysis.gov_gis import _get_ntpc_token
+        token = _get_ntpc_token()
+        if not token:
+            return None
+        r = httpx.get(
+            "https://arcgis.planning.ntpc.gov.tw/server/rest/services/NTPC_Urban/LandUse_WMS/MapServer/0/query",
+            params={
+                "f": "json",
+                "token": token,
+                "geometry": f"{twd97_x},{twd97_y}",
+                "geometryType": "esriGeometryPoint",
+                "inSR": "3826",
+                "spatialRel": "esriSpatialRelIntersects",
+                "outFields": "*",
+                "returnGeometry": "false",
+            },
+            timeout=10,
+            verify=False,
+        )
+    except Exception as e:
+        logger.debug(f"_query_ntpc_zoning_at 失敗: {e}")
+        return None
+    if r.status_code != 200 or "json" not in (r.headers.get("content-type") or ""):
+        return None
+    try:
+        d = r.json()
+    except Exception:
+        return None
+    feats = d.get("features") or []
+    if not feats:
+        return None
+    # NTPC LandUse 欄位常見：USERNAME / USECODE / TXT etc. 抓所有 attrs 看哪個比較合適
+    attrs = feats[0].get("attributes") or {}
+    # 嘗試常見欄位名
+    name = (attrs.get("USENAME") or attrs.get("UseName") or attrs.get("LUNAME")
+            or attrs.get("LU_NAME") or attrs.get("zoning_name") or attrs.get("分區名稱"))
+    code = (attrs.get("USECODE") or attrs.get("UseCode") or attrs.get("LUCODE")
+            or attrs.get("LU_CODE") or attrs.get("分區代碼"))
+    if not name and not code:
+        # 如果沒固定 schema，把整個 attrs 回去作為 debug
+        return {"zoning_raw_attrs": attrs}
+    return {
+        "zoning_code": code,
+        "zoning_name": name,
+        "zoning_text": name,
+        "zoning_category": None,
+        "zoning_memo": None,
+    }
 
 
 def _query_ntpc_plot(district: str, segment: str, landno: str) -> Optional[dict]:
@@ -349,9 +637,9 @@ def _query_ntpc_plot(district: str, segment: str, landno: str) -> Optional[dict]
         "landno": landno,
         "area_sqm": area_sqm,         # 公告面積 m²
         "area_ping": area_ping,
-        "land_value_per_sqm": attrs.get(_NTPC_LAND_FIELD_LAND_VALUE),    # 公告現值 元/m²
-        "land_price_per_sqm": attrs.get(_NTPC_LAND_FIELD_LAND_PRICE),    # 公告地價 元/m²
-        "announce_date_roc": attrs.get(_NTPC_LAND_FIELD_UPDATED),         # 公告日期 民國年月日
+        "ownership": attrs.get(_NTPC_LAND_FIELD_PLAND),               # 公有 / 私有
+        "ownership_manager": attrs.get(_NTPC_LAND_FIELD_PLAND_NAME),   # 管理機關 (公有時)
+        "ownership_owner": attrs.get(_NTPC_LAND_FIELD_PLAND_OWNER),    # 所有人 (公有時)
         "scno": attrs.get(_NTPC_LAND_FIELD_SCNO),
     }
 
@@ -402,12 +690,16 @@ async def cadastral_search_lookup(
     for s, name in [(district, "district"), (segment, "segment"), (landno, "landno")]:
         if any(c in s for c in ("'", '"', '\\', '%', '<', '>', ';')):
             raise HTTPException(400, f"{name} 含不合法字元")
+    # 地號格式 fast-fail：必須是純數字 or 「數字-數字」(避免無效 query 浪費上游時間)
+    if not _LANDNO_RE.match(landno):
+        return {"ok": False, "reason": f"地號格式不對 (允許「123」或「123-45」這種，得到「{landno}」)"}
     if city == "新北市":
         if district not in NTPC_DISTRICT_BBOX_TWD97:
             raise HTTPException(400, f"district 不在新北支援清單 (目前支援: {list(NTPC_DISTRICT_BBOX_TWD97.keys())})")
         result = _query_ntpc_plot(district, segment, landno)
         if not result:
             return {"ok": False, "reason": "找不到該地塊 — 請確認區/段/地號拼寫"}
+        _enrich_with_zoning(result, "新北市")
         return {"ok": True, **result}
     if city != "台北市":
         raise HTTPException(400, "city 必須是 台北市 或 新北市")
@@ -416,4 +708,30 @@ async def cadastral_search_lookup(
     result = _query_tpe_plot(district, segment, landno)
     if not result:
         return {"ok": False, "reason": "找不到該地塊 — 請確認區/段/地號拼寫"}
+    _enrich_with_zoning(result, "台北市")
     return {"ok": True, **result}
+
+
+@router.get("/api/cadastral_search/at_point")
+async def cadastral_search_at_point(
+    lat: float = Query(..., description="WGS84 緯度"),
+    lng: float = Query(..., description="WGS84 經度"),
+    _user: dict = Depends(get_current_user),
+):
+    """按地圖座標 (WGS84 lat/lng) 反查該位置的地塊資料。
+    平行 fire 台北 + 新北 ArcGIS，回第一個有資料的；都沒 → ok=False。"""
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        raise HTTPException(400, "lat/lng 不在合法範圍")
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        tpe_fut = ex.submit(_query_tpe_plot_at_point, lat, lng)
+        ntpc_fut = ex.submit(_query_ntpc_plot_at_point, lat, lng)
+        tpe_result = tpe_fut.result()
+        ntpc_result = ntpc_fut.result()
+    if tpe_result:
+        _enrich_with_zoning(tpe_result, "台北市")
+        return {"ok": True, **tpe_result}
+    if ntpc_result:
+        _enrich_with_zoning(ntpc_result, "新北市")
+        return {"ok": True, **ntpc_result}
+    return {"ok": False, "reason": "此位置無地籍資料（可能為公園/水面/道路）"}
