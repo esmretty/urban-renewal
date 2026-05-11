@@ -1249,6 +1249,9 @@
     // 「在地圖上查看」按鈕：物件有座標才顯示
     const mapBtn = $('#v2-drawer-map');
     if (mapBtn) mapBtn.style.display = (p.latitude && p.longitude) ? '' : 'none';
+    // 「分享此頁」按鈕：detail 開著就顯示
+    const shareBtn = $('#v2-drawer-share');
+    if (shareBtn) shareBtn.style.display = '';
     // 來源連結 (591/永慶/信義)：放在 fav button 旁，drawer header 上 (對齊 v1 modal header)
     const srcWrap = $('#v2-drawer-sources');
     if (srcWrap) {
@@ -1326,13 +1329,49 @@
     $('#v2-drawer').classList.remove('v2-open');
     $('#v2-drawer-backdrop').classList.remove('v2-open');
     state.selectedId = null;
-    // 收起 fav button + map button + sources
+    // 收起 fav button + map button + share button + sources
     const fav = $('#v2-drawer-fav');
     if (fav) fav.style.display = 'none';
     const mapBtn = $('#v2-drawer-map');
     if (mapBtn) mapBtn.style.display = 'none';
+    const shareBtn = $('#v2-drawer-share');
+    if (shareBtn) shareBtn.style.display = 'none';
     const srcWrap = $('#v2-drawer-sources');
     if (srcWrap) { srcWrap.innerHTML = ''; srcWrap.style.display = 'none'; }
+  }
+
+  // 「分享此頁」detail header 按鈕：mobile (≤640px viewport) 出 native share sheet
+  // (LINE/FB/複製)，PC 直接複製連結 + toast。URL 用 ?id=<source_id> deep-link
+  // (同 LINE 通知連結機制)。
+  async function shareDetail() {
+    const id = state.selectedId;
+    if (!id) return;
+    const p = state.allProperties.find(x => (x.source_id || x.id) === id);
+    const title = '都更神探R';
+    const text = p ? (p.address_inferred || p.address || '物件詳情') : '物件詳情';
+    const u = new URL(location.href);
+    u.searchParams.set('id', id);
+    // 移除 perf 等 query string，避免分享連結帶調試參數
+    ['perf', 'debug'].forEach(k => u.searchParams.delete(k));
+    const url = u.toString();
+    // Mobile (≤640px viewport) 試 Web Share API → native share sheet 可選 LINE/FB/複製
+    const isMobile = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+    if (isMobile && navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;   // 用戶取消 share sheet
+        // 其他錯誤 → fallback 複製
+      }
+    }
+    // PC 或 mobile fallback：複製連結 + toast
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('已複製連結', 'success');
+    } catch (e) {
+      try { window.prompt('複製此連結：', url); } catch (_) {}
+    }
   }
 
   // 都更案件 body HTML — DB 只存「有壓到/沒壓到」+ case_id (內容會變不存 DB)
@@ -3583,7 +3622,7 @@
   window.v2 = {
     switchView, toggleDistrict, applyFilters, applySort, runSearch,
     resetFilters, gotoPage, openSidebar, closeSidebar,
-    openDetail, closeDetail, toggleWatchlist, toggleDetailWatchlist, viewOnMap, logout,
+    openDetail, closeDetail, toggleWatchlist, toggleDetailWatchlist, viewOnMap, shareDetail, logout,
     toggleAllFloors, onFloorChange,
     toggleAllInCity, toggleSortDir,
     triggerScrapeUrl, triggerManualAnalyze, populateManualDistricts,

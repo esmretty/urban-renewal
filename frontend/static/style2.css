@@ -1364,8 +1364,9 @@ a { color: inherit; text-decoration: none; }
 }
 .v2-drawer__fav--active .v2-drawer__fav-star { color: #f59e0b; }
 
-/* 「在地圖上查看」按鈕：跟 .v2-drawer__fav 同尺寸但只 icon */
-.v2-drawer__map {
+/* 「在地圖上查看」/「分享此頁」按鈕：icon-only 32×28 */
+.v2-drawer__map,
+.v2-drawer__share {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1382,6 +1383,7 @@ a { color: inherit; text-decoration: none; }
   flex-shrink: 0;
 }
 .v2-drawer__map:hover { background: #f4efe0; color: #1e88e5; }
+.v2-drawer__share:hover { background: #f4efe0; color: #0891b2; }
 
 /* drawer header 內 sources (591/永慶 連結) — 靠最右 + 對齊 v1 ghost button */
 .v2-drawer__sources {
@@ -1417,9 +1419,16 @@ a { color: inherit; text-decoration: none; }
   }
   .v2-drawer__back:hover { background: var(--c-accent-hover); }
   .v2-drawer__back-label { font-size: 14px; }
-  .v2-drawer__fav { padding: 9px 14px; font-size: 14px; font-weight: 700; }
-  .v2-drawer__fav-star { font-size: 15px; }
-  .v2-drawer__fav-label { font-size: 14px; }
+  /* Mobile：加入最愛改成跟「在地圖上查看」/「分享」同樣大小的星星 icon-only 按鈕 */
+  .v2-drawer__fav {
+    width: 32px;
+    height: 28px;
+    padding: 0;
+    gap: 0;
+    justify-content: center;
+  }
+  .v2-drawer__fav-star { font-size: 16px; }
+  .v2-drawer__fav-label { display: none; }
   .v2-drawer__title {
     font-size: 13px;
     flex: 1;
