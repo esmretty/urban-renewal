@@ -33,12 +33,52 @@ _TPE_WFS_URL = "https://zonegeo.udd.gov.taipei/geoserver/Taipei/wfs"
 _TPE_DISTRICTS = {"大安區", "信義區", "中山區", "中正區", "文山區",
                    "松山區", "萬華區", "大同區", "內湖區", "南港區",
                    "士林區", "北投區"}
+
+# 段名 cache：{district: sorted list of sect_name}
+# WFS query 一次撈該區所有 plot 的 sect_name 去重 → 永久 cache 在 module 記憶體
+# 段名不會頻繁變動 (年單位)，restart 才重抓
+_SEGMENTS_CACHE: dict[str, list[str]] = {}
 _NTPC_DISTRICTS = {"板橋區", "新店區", "中和區", "永和區", "新莊區",
                     "三重區", "蘆洲區", "土城區", "樹林區", "汐止區",
                     "淡水區", "林口區", "三峽區", "鶯歌區", "泰山區",
                     "五股區", "八里區", "深坑區", "石碇區", "坪林區",
                     "烏來區", "瑞芳區", "貢寮區", "雙溪區", "平溪區",
                     "金山區", "萬里區", "三芝區", "石門區"}
+
+
+def _list_tpe_segments(district: str) -> list[str]:
+    """打 WFS 拿該區所有 plot 的 sect_name 去重 + 排序。
+    首次 ~5-20 秒（看區大小），之後從 module 記憶體 cache 拿。"""
+    cached = _SEGMENTS_CACHE.get(district)
+    if cached is not None:
+        return cached
+    try:
+        r = httpx.get(_TPE_WFS_URL, params={
+            "service": "WFS", "version": "2.0.0", "request": "GetFeature",
+            "typeNames": "Taipei:LAND-ALL-TWD97",
+            "outputFormat": "application/json",
+            "propertyName": "sect_name",   # 只取段名 attribute，省頻寬
+            "cql_filter": f"dist_name='{district}'",
+        }, timeout=60, verify=False)
+    except Exception as e:
+        logger.warning(f"_list_tpe_segments {district} WFS 失敗: {e}")
+        raise HTTPException(502, "上游 GeoServer 連線失敗")
+    if r.status_code != 200:
+        logger.warning(f"_list_tpe_segments {district} WFS http={r.status_code}")
+        raise HTTPException(502, f"上游 GeoServer 回 {r.status_code}")
+    try:
+        data = r.json()
+    except Exception:
+        raise HTTPException(502, "上游 GeoServer 回非 JSON")
+    seen = set()
+    for feat in data.get("features") or []:
+        sect = (feat.get("properties") or {}).get("sect_name")
+        if sect:
+            seen.add(sect)
+    result = sorted(seen)
+    _SEGMENTS_CACHE[district] = result
+    logger.info(f"_list_tpe_segments {district} → cached {len(result)} 段")
+    return result
 
 
 def _query_tpe_plot(district: str, segment: str, landno: str) -> Optional[dict]:
@@ -106,6 +146,29 @@ def _iter_coords(coords):
         return
     for c in coords:
         yield from _iter_coords(c)
+
+
+@router.get("/api/cadastral_search/segments")
+async def cadastral_search_segments(
+    city: str = Query(..., description="台北市 / 新北市"),
+    district: str = Query(..., description="區名 e.g. 大安區"),
+    _user: dict = Depends(get_current_user),
+):
+    """回該區所有 distinct 段名 (給前端下拉選單用)。"""
+    city = (city or "").strip()
+    district = (district or "").strip()
+    if not city or not district:
+        raise HTTPException(400, "city/district 不可空")
+    if any(c in district for c in ("'", '"', '\\', '%', '<', '>', ';')):
+        raise HTTPException(400, "district 含不合法字元")
+    if city == "新北市":
+        raise HTTPException(501, "目前只支援台北市段名清單")
+    if city != "台北市":
+        raise HTTPException(400, "city 必須是 台北市")
+    if district not in _TPE_DISTRICTS:
+        raise HTTPException(400, "district 不屬於台北市行政區")
+    segments = _list_tpe_segments(district)
+    return {"city": city, "district": district, "segments": segments, "count": len(segments)}
 
 
 @router.get("/api/cadastral_search/lookup")

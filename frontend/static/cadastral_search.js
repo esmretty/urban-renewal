@@ -25,6 +25,8 @@
   let _map = null;
   let _highlightLayer = null;
   let _expanded = false;
+  // 前端 segment cache：{district: [segment, ...]}
+  const _segCache = {};
 
   function init(map) {
     if (!map) return;
@@ -63,8 +65,9 @@
         </div>
         <div class="v2-cadsearch__row">
           <label class="v2-cadsearch__label">段</label>
-          <input type="text" id="v2-cadsearch-segment" class="v2-cadsearch__input"
-                 placeholder="例：龍泉段一小段" autocomplete="off"/>
+          <select id="v2-cadsearch-segment" class="v2-cadsearch__input">
+            <option value="">載入中…</option>
+          </select>
         </div>
         <div class="v2-cadsearch__row">
           <label class="v2-cadsearch__label">地號</label>
@@ -84,12 +87,62 @@
     document.getElementById('v2-cadsearch-toggle').addEventListener('click', _toggle);
     document.getElementById('v2-cadsearch-go').addEventListener('click', _onSearch);
     document.getElementById('v2-cadsearch-clear').addEventListener('click', _onClear);
-    // Enter submit: 段 / 地號 兩個 input 都接 Enter
-    ['v2-cadsearch-segment', 'v2-cadsearch-landno'].forEach(id => {
-      document.getElementById(id).addEventListener('keydown', e => {
-        if (e.key === 'Enter') _onSearch();
-      });
+    // 區改變 → fetch 該區段名 dropdown
+    document.getElementById('v2-cadsearch-district').addEventListener('change', _onDistrictChange);
+    // Enter submit: 地號 input 接 Enter
+    document.getElementById('v2-cadsearch-landno').addEventListener('keydown', e => {
+      if (e.key === 'Enter') _onSearch();
     });
+    // 初次載入：default district 的段名清單
+    _loadSegments(TPE_DISTRICTS[0]);
+  }
+
+  async function _onDistrictChange() {
+    const district = document.getElementById('v2-cadsearch-district').value;
+    await _loadSegments(district);
+  }
+
+  async function _loadSegments(district) {
+    const segSel = document.getElementById('v2-cadsearch-segment');
+    if (!segSel) return;
+    // Cache hit → 直接填
+    if (_segCache[district]) {
+      _fillSegmentOptions(_segCache[district]);
+      return;
+    }
+    // Cache miss → fetch
+    segSel.innerHTML = '<option value="">載入中…</option>';
+    segSel.disabled = true;
+    try {
+      const qs = new URLSearchParams({ city: '台北市', district }).toString();
+      const r = await fetch(`/api/cadastral_search/segments?${qs}`);
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        _toast(`段清單載入失敗 (${r.status})：${d.detail || ''}`, 'error');
+        segSel.innerHTML = '<option value="">載入失敗</option>';
+        return;
+      }
+      const data = await r.json();
+      const segs = data.segments || [];
+      _segCache[district] = segs;
+      _fillSegmentOptions(segs);
+    } catch (e) {
+      _toast(`網路錯誤：${e.message || e}`, 'error');
+      segSel.innerHTML = '<option value="">載入失敗</option>';
+    } finally {
+      segSel.disabled = false;
+    }
+  }
+
+  function _fillSegmentOptions(segments) {
+    const segSel = document.getElementById('v2-cadsearch-segment');
+    if (!segSel) return;
+    if (!segments.length) {
+      segSel.innerHTML = '<option value="">(無資料)</option>';
+      return;
+    }
+    segSel.innerHTML = '<option value="">— 請選擇段 —</option>'
+      + segments.map(s => `<option value="${s}">${s}</option>`).join('');
   }
 
   function _toggle() {
@@ -124,7 +177,7 @@
     const district = (document.getElementById('v2-cadsearch-district').value || '').trim();
     const segment = (document.getElementById('v2-cadsearch-segment').value || '').trim();
     const landno = (document.getElementById('v2-cadsearch-landno').value || '').trim();
-    if (!segment) { _toast('請輸入段名', 'error'); return; }
+    if (!segment) { _toast('請選擇段', 'error'); return; }
     if (!landno) { _toast('請輸入地號', 'error'); return; }
 
     const goBtn = document.getElementById('v2-cadsearch-go');
