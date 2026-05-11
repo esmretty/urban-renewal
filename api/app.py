@@ -1713,21 +1713,29 @@ async def admin_system_usage(admin: dict = Depends(require_admin)):
     return out
 
 
-# psutil cpu_percent 第一次呼叫一律回 0；需要持續 prime 一個取樣才有意義。
-# admin 頁每 10-30 秒會 fetch 一次 → 每次都回「上次 fetch 到這次 fetch 的平均」即可。
-_LAST_CPU_TICK = {"ts": 0.0}
+# 背景 thread 持續用 5 秒窗 sample CPU；admin/stats 只讀 cache 不自己 trigger 取樣。
+# 之前實作用 interval=None「自上次呼叫到現在」的平均 → admin/stats handler 本身的 DB query
+# 算進 sample window，回傳值永遠停在 15-25%（觀察者效應）。改成獨立背景 thread 取樣，
+# admin/stats 只讀最新 cache，跟自己 request 完全解耦。
+_CPU_PCT_CACHE = {"value": None}
+_CPU_SAMPLER_STARTED = {"v": False}
+
+def _cpu_sampler_loop():
+    import psutil
+    psutil.cpu_percent(interval=None)  # prime first call (always returns 0)
+    while True:
+        try:
+            v = psutil.cpu_percent(interval=5.0)  # blocks 5s, returns true avg
+            _CPU_PCT_CACHE["value"] = round(v, 1)
+        except Exception:
+            pass
 
 def _get_cpu_percent():
-    import time as _t
-    import psutil
-    now = _t.time()
-    last = _LAST_CPU_TICK["ts"]
-    _LAST_CPU_TICK["ts"] = now
-    if last == 0.0:
-        # 第一次：用一個短 sample（會 block 100ms，可接受）拿真實值
-        return psutil.cpu_percent(interval=0.1)
-    # 後續：interval=None → 自動拿「自上次呼叫到現在」的平均
-    return psutil.cpu_percent(interval=None)
+    if not _CPU_SAMPLER_STARTED["v"]:
+        _CPU_SAMPLER_STARTED["v"] = True
+        import threading
+        threading.Thread(target=_cpu_sampler_loop, daemon=True, name="cpu-sampler").start()
+    return _CPU_PCT_CACHE["value"]
 
 
 @app.post("/admin/system_usage/cleanup_orphan_ocr")
