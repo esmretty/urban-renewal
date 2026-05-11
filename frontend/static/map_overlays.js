@@ -117,19 +117,21 @@
     const m = _state.map;
     if (!cfg || !m) return;
     _state.on[key] = on;
-    (_state.layerRefs[key] || []).forEach(l => m.removeLayer(l));
-    _state.layerRefs[key] = [];
-    if (!on) return;
+    // 重用 layer instance：OFF 只 removeLayer 不 destroy，ON 時 m.hasLayer 沒就 addLayer
+    // 之前 OFF 砍掉 instance + ON 重建 → tiles 全部重 decode (即便 browser cache 命中也要 100-300ms)
     const paneName = 'v2-overlay-' + key;
     if (!m.getPane(paneName)) {
       const pane = m.createPane(paneName);
       pane.style.zIndex = String(cfg.paneZ);
       pane.style.pointerEvents = 'none';
     }
-    cfg.backends.forEach(b => {
-      const layer = _makeWmsLayer(b, paneName);
-      layer.addTo(m);
-      _state.layerRefs[key].push(layer);
+    if (!_state.layerRefs[key] || !_state.layerRefs[key].length) {
+      // 第一次 toggle ON：建 layer instance (但不一定要 add)
+      _state.layerRefs[key] = cfg.backends.map(b => _makeWmsLayer(b, paneName));
+    }
+    _state.layerRefs[key].forEach(l => {
+      if (on && !m.hasLayer(l)) l.addTo(m);
+      else if (!on && m.hasLayer(l)) m.removeLayer(l);
     });
   }
 
@@ -232,6 +234,7 @@
   }
 
   // 個別 sub toggle: add/remove 單個 sub layer。任一取消會 sync 全選 checkbox
+  // 重用 layer instance：OFF 只 removeLayer 不 destroy → ON 時 tiles 不用 re-decode
   function _toggleRenewalSub(subId, on) {
     const m = _state.map;
     const sub = RENEWAL_SUBS.find(s => s.id === subId);
@@ -239,21 +242,14 @@
     _state.renewal.subs[subId] = on;
 
     const paneName = _ensureRenewalPane();
-    if (on) {
-      // 已存在的先清，避免 toggle 過快累積
-      const old = _state.renewal.layerSubs[subId];
-      if (old) m.removeLayer(old);
-      // className 給 CSS SVG filter 染色用 (server 是 grayscale，前端 colorize)
-      const layer = _makeWmsLayer(sub.backend, paneName, 'redev-color-' + subId);
-      layer.addTo(m);
+    let layer = _state.renewal.layerSubs[subId];
+    if (!layer) {
+      // 第一次 toggle ON → 建 instance + cache (即使之後 OFF 也保留 instance)
+      layer = _makeWmsLayer(sub.backend, paneName, 'redev-color-' + subId);
       _state.renewal.layerSubs[subId] = layer;
-    } else {
-      const layer = _state.renewal.layerSubs[subId];
-      if (layer) {
-        m.removeLayer(layer);
-        delete _state.renewal.layerSubs[subId];
-      }
     }
+    if (on && !m.hasLayer(layer)) layer.addTo(m);
+    else if (!on && m.hasLayer(layer)) m.removeLayer(layer);
     // sync 各城市「全選」checkbox：該城市所有 sub 都 checked → 勾起；任一 unchecked → 取消
     RENEWAL_CITIES.forEach(c => {
       const allCheckbox = document.querySelector(`input[data-renewal-all="${c.tag}"]`);
@@ -282,6 +278,10 @@
       pane: paneName,
       maxZoom: 22,
       _v: TILE_VERSION,   // L.tileLayer.wms 自動把所有 opts 加進 query string → ?_v=2
+      // 加 buffer：default 2 (只留視野外 2 圈) — 用戶 pan 一格回來就要重抓。設 6 多保留 4 圈，
+      // 來回 pan 不會 trigger 重抓 (browser cache 命中也要 decode 100-300ms)
+      keepBuffer: 6,
+      updateWhenIdle: false,   // pan 中持續 fetch，停下時不會還在 loading
     };
     if (minZoom != null) opts.minZoom = minZoom;
     if (extraClassName) opts.className = extraClassName;   // 給 SVG filter colorize 用
