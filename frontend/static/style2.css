@@ -3986,3 +3986,38 @@ select.v2-rv2-edit { text-align: left; padding-right: 18px; cursor: pointer; }
 @media (max-width: 640px) {
   .v2-cadsearch__panel { width: 240px; }
 }
+
+/* 搜尋結果 popup — 顯示面積/公告現值/地價等資訊 */
+.v2-cadsearch-popup {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #2a2a3e;
+}
+.v2-cadsearch-popup h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #1d4ed8;
+  border-bottom: 1px solid #d4cba0;
+  padding-bottom: 4px;
+}
+.v2-cadsearch-popup table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.v2-cadsearch-popup td {
+  padding: 3px 6px 3px 0;
+  vertical-align: top;
+}
+.v2-cadsearch-popup td:first-child {
+  color: #666;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.v2-cadsearch-popup__hint {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #e3dfd2;
+  font-size: 10px;
+  color: #8a8a8a;
+  line-height: 1.3;
+}

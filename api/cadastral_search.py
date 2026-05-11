@@ -6,8 +6,9 @@
   - revert 時刪本 file + 拿掉那 1 行 include 即可，其他 file 完全不動
 
 支援範圍：
-  - 台北 8 區：透過 GeoServer WFS GetFeature 查 Taipei:LAND-ALL-TWD97
-    (attribute schema: dist_name + sect_name + land_no)
+  - 台北 8 區：透過 臺北地政局 ArcGIS REST (maps.land.gov.taipei) 拿
+    (Layer 1 段界 → 段名清單；Layer 2 地號 → 含 AA10 公告面積 m² 的官方資料)
+    早期版本用 zonegeo.udd.gov.taipei GeoServer 但無面積欄位，2026-05 換 land.gov.taipei
   - 新北 4 區（板橋/新店/中和/永和）：透過 NTPC ArcGIS query 配 NtpcURInfo session token
     打 NTPC_Urban/Land/MapServer/0/query；段名清單從 _ntpc_cadastral_data 拿
     (一次性 enumerate 出來，hardcode 進去；段名年單位才會變)
@@ -15,7 +16,7 @@
 API:
   - GET /api/cadastral_search/segments?city=&district= → 回該區段名清單
   - GET /api/cadastral_search/lookup?city=&district=&segment=&landno=
-    → 回 {ok, center:[lng,lat], bbox:[w,s,e,n], polygon: GeoJSON, segment, landno, district}
+    → 回 {ok, center, bbox, polygon, segment, landno, district, area_sqm, area_ping}
     → 找不到回 {ok: false, reason: '...'}
 """
 from __future__ import annotations
@@ -32,35 +33,68 @@ from api.auth import get_current_user
 from api._ntpc_cadastral_data import NTPC_DISTRICT_BBOX_TWD97, NTPC_SEGMENTS
 
 # disk cache：台北段名 dump 到 data/cache/tpe_segments/<district>.json
-# 段名年單位才變，避免每次 server restart 第一個 user 等 3-15 秒 GeoServer cold fetch
+# 段名年單位才變，避免每次 server restart 第一個 user 等 3-15 秒 ArcGIS cold fetch
 _TPE_SEGMENTS_CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "cache" / "tpe_segments"
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-_TPE_WFS_URL = "https://zonegeo.udd.gov.taipei/geoserver/Taipei/wfs"
-_TPE_DISTRICTS = {"大安區", "信義區", "中山區", "中正區", "文山區",
-                   "松山區", "萬華區", "大同區", "內湖區", "南港區",
-                   "士林區", "北投區"}
+# 臺北地政局自家 ArcGIS（公開，無 token；地政雲背後就是這個）
+# Layer 0 LAND (group), 1 段界, 2 地號 (含 AA10 公告面積), 3 地段範圍
+_TPE_LAND_ARCGIS_URL = "https://maps.land.gov.taipei/server/rest/services/Tiled3857/Landtest/MapServer"
+
+# 台北 12 區代碼 (從地政雲 dropdown 抄)：AA46 欄位值
+_TPE_DISTRICT_CODE: dict[str, str] = {
+    "松山區": "01",
+    "大安區": "02",
+    "中正區": "03",
+    "萬華區": "05",
+    "大同區": "09",
+    "中山區": "10",
+    "文山區": "11",
+    "南港區": "13",
+    "內湖區": "14",
+    "士林區": "15",
+    "北投區": "16",
+    "信義區": "17",
+}
+_TPE_DISTRICTS = set(_TPE_DISTRICT_CODE.keys())
+
 _NTPC_LAND_FIELD_LANDNO = "NTPCUPGIS_SDE.NTPCGIS2.%Land.LANDNO"
 _NTPC_LAND_FIELD_SECTNAME = "NTPCUPGIS_SDE.NTPCGIS2.%Land.SECTNAME"
+_NTPC_LAND_FIELD_AREA = "NTPCUPGIS_SDE.NTPCGIS2.%Land.AA10"
+_NTPC_LAND_FIELD_SCNO = "NTPCUPGIS_SDE.NTPCGIS2.%Land.SCNO"
+_NTPC_LAND_FIELD_LAND_VALUE = "NTPCUPGIS_SDE.NTPCGIS2.%Land.AA16"  # 公告現值 元/m²
+_NTPC_LAND_FIELD_LAND_PRICE = "NTPCUPGIS_SDE.NTPCGIS2.%Land.AA17"  # 公告地價 元/m²
+_NTPC_LAND_FIELD_UPDATED = "NTPCUPGIS_SDE.NTPCGIS2.%Land.AA05"     # 公告日期 (民國年月日 7 字)
 
-# 段名 cache：{district: sorted list of sect_name}
-# WFS query 一次撈該區所有 plot 的 sect_name 去重 → 永久 cache 在 module 記憶體
-# 段名不會頻繁變動 (年單位)，restart 才重抓
+# 段名 → (AA46, AA48) memory cache：避免每筆 lookup 都重打 Layer 1
+# {(district_name, segment_name): (AA46, AA48)}
+_TPE_SEGMENT_CODE_CACHE: dict[tuple[str, str], tuple[str, str]] = {}
+
+# 段名清單 memory cache：{district: sorted list of KCNT}
 _SEGMENTS_CACHE: dict[str, list[str]] = {}
-_NTPC_DISTRICTS = {"板橋區", "新店區", "中和區", "永和區", "新莊區",
-                    "三重區", "蘆洲區", "土城區", "樹林區", "汐止區",
-                    "淡水區", "林口區", "三峽區", "鶯歌區", "泰山區",
-                    "五股區", "八里區", "深坑區", "石碇區", "坪林區",
-                    "烏來區", "瑞芳區", "貢寮區", "雙溪區", "平溪區",
-                    "金山區", "萬里區", "三芝區", "石門區"}
+
+
+def _pad_landno(landno: str) -> str:
+    """User 輸入「1」「1-1」「123-45」→ ArcGIS AA49 8 字元格式「00010000」「00010001」「01230045」。"""
+    landno = (landno or "").strip()
+    if not landno:
+        return ""
+    if "-" in landno:
+        main, sub = landno.split("-", 1)
+    else:
+        main, sub = landno, "0"
+    try:
+        return f"{int(main):04d}{int(sub):04d}"
+    except ValueError:
+        return ""
 
 
 def _list_tpe_segments(district: str) -> list[str]:
-    """打 WFS 拿該區所有 plot 的 sect_name 去重 + 排序。
-    Cache 順序：memory → disk → cold fetch GeoServer + 寫雙層 cache
-    首次 cold ~5-20 秒；disk hit ~10ms；memory hit 0ms"""
+    """打臺北地政 ArcGIS Layer 1 (段界) 拿該區所有段名。
+    Cache 順序：memory → disk → cold fetch ArcGIS + 寫雙層 cache
+    每區 ~40-200 段（<1000 ArcGIS query limit），response ~5-30KB"""
     cached = _SEGMENTS_CACHE.get(district)
     if cached is not None:
         return cached
@@ -71,101 +105,152 @@ def _list_tpe_segments(district: str) -> list[str]:
             with open(disk_path, encoding="utf-8") as f:
                 data = json.load(f)
             segs = data.get("segments") or []
-            if segs:
+            if segs and isinstance(data.get("segment_codes"), dict):
                 _SEGMENTS_CACHE[district] = segs
+                # 順便把段名→代碼填回 memory cache
+                for kcnt, aa48 in data["segment_codes"].items():
+                    _TPE_SEGMENT_CODE_CACHE[(district, kcnt)] = (_TPE_DISTRICT_CODE[district], aa48)
                 logger.info(f"_list_tpe_segments {district} → disk cache hit ({len(segs)} 段)")
                 return segs
         except Exception as e:
             logger.debug(f"disk cache 讀取失敗 {disk_path}: {e}")
+    # ArcGIS Layer 1 段界 query
+    aa46 = _TPE_DISTRICT_CODE[district]
     try:
-        r = httpx.get(_TPE_WFS_URL, params={
-            "service": "WFS", "version": "2.0.0", "request": "GetFeature",
-            "typeNames": "Taipei:LAND-ALL-TWD97",
-            "outputFormat": "application/json",
-            "propertyName": "sect_name",   # 只取段名 attribute，省頻寬
-            "cql_filter": f"dist_name='{district}'",
-        }, timeout=60, verify=False)
+        r = httpx.get(
+            _TPE_LAND_ARCGIS_URL + "/1/query",
+            params={
+                "f": "json",
+                "where": f"AA46='{aa46}'",
+                "outFields": "AA48,KCNT",
+                "returnGeometry": "false",
+            },
+            timeout=30,
+            verify=False,
+        )
     except Exception as e:
-        logger.warning(f"_list_tpe_segments {district} WFS 失敗: {e}")
-        raise HTTPException(502, "上游 GeoServer 連線失敗")
-    if r.status_code != 200:
-        logger.warning(f"_list_tpe_segments {district} WFS http={r.status_code}")
-        raise HTTPException(502, f"上游 GeoServer 回 {r.status_code}")
+        logger.warning(f"_list_tpe_segments {district} ArcGIS 失敗: {e}")
+        raise HTTPException(502, "上游臺北地政 ArcGIS 連線失敗")
+    if r.status_code != 200 or "json" not in (r.headers.get("content-type") or ""):
+        logger.warning(f"_list_tpe_segments {district} ArcGIS http={r.status_code}")
+        raise HTTPException(502, f"上游臺北地政 ArcGIS 回 {r.status_code}")
     try:
         data = r.json()
     except Exception:
-        raise HTTPException(502, "上游 GeoServer 回非 JSON")
-    seen = set()
+        raise HTTPException(502, "上游臺北地政 ArcGIS 回非 JSON")
+    if data.get("error"):
+        raise HTTPException(502, f"上游臺北地政 ArcGIS 拒絕: {data['error'].get('message','')}")
+    # 解析 features：每個是一個 段 record (AA46, AA48, KCNT)
+    segment_codes: dict[str, str] = {}
     for feat in data.get("features") or []:
-        sect = (feat.get("properties") or {}).get("sect_name")
-        if sect:
-            seen.add(sect)
-    result = sorted(seen)
-    _SEGMENTS_CACHE[district] = result
+        attrs = feat.get("attributes") or {}
+        kcnt = attrs.get("KCNT")
+        aa48 = attrs.get("AA48")
+        if kcnt and aa48:
+            segment_codes[kcnt] = aa48
+            _TPE_SEGMENT_CODE_CACHE[(district, kcnt)] = (aa46, aa48)
+    segs = sorted(segment_codes.keys())
+    _SEGMENTS_CACHE[district] = segs
     # 寫 disk cache (年單位才會變，restart 後直接 hit disk)
     try:
         _TPE_SEGMENTS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         with open(disk_path, "w", encoding="utf-8") as f:
-            json.dump({"district": district, "segments": result}, f, ensure_ascii=False, indent=2)
+            json.dump({
+                "district": district,
+                "segments": segs,
+                "segment_codes": segment_codes,  # 段名→AA48 mapping
+            }, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.warning(f"_list_tpe_segments 寫 disk cache 失敗: {e}")
-    logger.info(f"_list_tpe_segments {district} → 從 GeoServer cold fetch ({len(result)} 段)，已寫 disk")
-    return result
+    logger.info(f"_list_tpe_segments {district} → 從 ArcGIS cold fetch ({len(segs)} 段)，已寫 disk")
+    return segs
+
+
+def _get_tpe_segment_code(district: str, segment: str) -> Optional[str]:
+    """段名 → AA48 (4 字元代碼)。需要時 trigger _list_tpe_segments 來載入該區 mapping。"""
+    key = (district, segment)
+    if key in _TPE_SEGMENT_CODE_CACHE:
+        return _TPE_SEGMENT_CODE_CACHE[key][1]
+    # 觸發載入該區 mapping
+    _list_tpe_segments(district)
+    if key in _TPE_SEGMENT_CODE_CACHE:
+        return _TPE_SEGMENT_CODE_CACHE[key][1]
+    return None
 
 
 def _query_tpe_plot(district: str, segment: str, landno: str) -> Optional[dict]:
-    """打 GeoServer WFS GetFeature 查單一地塊。
-    回傳：找到 → {center, bbox, polygon, ...}；找不到 → None"""
-    # CQL filter：dist_name + sect_name + land_no 三者完全相等
-    cql = (
-        f"dist_name='{district}' AND "
-        f"sect_name='{segment}' AND "
-        f"land_no='{landno}'"
-    )
+    """打臺北地政 ArcGIS Layer 2 (地號) 查單一地塊。
+    用 AA46 (區代碼) + AA48 (段代碼) + AA49 (8 字元 padded 地號) 精確查詢。
+    回傳含 AA10 官方公告面積 m²。
+    """
+    aa46 = _TPE_DISTRICT_CODE.get(district)
+    if not aa46:
+        return None
+    aa48 = _get_tpe_segment_code(district, segment)
+    if not aa48:
+        return None
+    aa49 = _pad_landno(landno)
+    if not aa49:
+        return None
+    where = f"AA46='{aa46}' AND AA48='{aa48}' AND AA49='{aa49}'"
     try:
-        r = httpx.get(_TPE_WFS_URL, params={
-            "service": "WFS", "version": "2.0.0", "request": "GetFeature",
-            "typeNames": "Taipei:LAND-ALL-TWD97",
-            "outputFormat": "application/json",
-            "srsName": "EPSG:4326",   # 直接回 WGS84，省得我們本機換算
-            "cql_filter": cql,
-            "count": "1",
-        }, timeout=15, verify=False)
+        r = httpx.get(
+            _TPE_LAND_ARCGIS_URL + "/2/query",
+            params={
+                "f": "json",
+                "where": where,
+                "outFields": "AA05,AA10,AA16,AA17,KCNT,LandNo,AA46,AA48,AA49,TWD97E,TWD97N,Shape_Area",
+                "returnGeometry": "true",
+                "outSR": "4326",   # WGS84 lng/lat
+            },
+            timeout=20,
+            verify=False,
+        )
     except Exception as e:
-        logger.warning(f"GeoServer WFS 查詢失敗: {e}")
-        raise HTTPException(502, "上游 GeoServer 連線失敗")
-    if r.status_code != 200:
-        logger.warning(f"GeoServer WFS 回 {r.status_code}: {r.text[:200]}")
-        raise HTTPException(502, f"上游 GeoServer 回 {r.status_code}")
+        logger.warning(f"_query_tpe_plot 失敗: {e}")
+        raise HTTPException(502, "上游臺北地政 ArcGIS 連線失敗")
+    if r.status_code != 200 or "json" not in (r.headers.get("content-type") or ""):
+        raise HTTPException(502, f"上游臺北地政 ArcGIS 回 {r.status_code}")
     try:
         data = r.json()
-    except Exception as e:
-        logger.warning(f"GeoServer 回非 JSON: {e}")
-        raise HTTPException(502, "上游 GeoServer 回非 JSON")
+    except Exception:
+        raise HTTPException(502, "上游臺北地政 ArcGIS 回非 JSON")
+    if data.get("error"):
+        raise HTTPException(502, f"上游臺北地政 ArcGIS 拒絕: {data['error'].get('message','')}")
     feats = data.get("features") or []
     if not feats:
         return None
     feat = feats[0]
-    geom = feat.get("geometry") or {}
-    props = feat.get("properties") or {}
-    # 算 polygon centroid + bbox（取所有 coord 平均當中心；bbox 取 min/max）
-    coords_iter = _iter_coords(geom.get("coordinates"))
+    attrs = feat.get("attributes") or {}
+    esri_geom = feat.get("geometry") or {}
+    rings = esri_geom.get("rings") or []
+    if not rings:
+        return None
+    geojson_geom = {"type": "Polygon", "coordinates": rings}
     lngs, lats = [], []
-    for lng, lat in coords_iter:
-        lngs.append(lng)
-        lats.append(lat)
+    for ring in rings:
+        for lng, lat in ring:
+            lngs.append(lng)
+            lats.append(lat)
     if not lngs:
         return None
     center = [sum(lngs) / len(lngs), sum(lats) / len(lats)]
-    bbox = [min(lngs), min(lats), max(lngs), max(lats)]
+    plot_bbox = [min(lngs), min(lats), max(lngs), max(lats)]
+    area_sqm = attrs.get("AA10")     # 官方公告面積 m²
+    area_ping = round(area_sqm / 3.305785, 2) if area_sqm else None  # m² → 坪
     return {
-        "center": center,           # [lng, lat] for Leaflet flyTo
-        "bbox": bbox,               # [w, s, e, n]
-        "polygon": geom,            # GeoJSON geometry (MultiPolygon / Polygon)
+        "center": center,
+        "bbox": plot_bbox,
+        "polygon": geojson_geom,
         "district": district,
         "segment": segment,
         "landno": landno,
-        "sect_id": props.get("sect_id"),
+        "area_sqm": area_sqm,                                       # 公告面積 m²
+        "area_ping": area_ping,                                     # 公告面積 坪
+        "land_value_per_sqm": attrs.get("AA16"),                    # 公告現值 元/m²
+        "land_price_per_sqm": attrs.get("AA17"),                    # 公告地價 元/m²
+        "announce_date_roc": attrs.get("AA05"),                     # 公告日期 民國年月日
+        "shape_area_sqm": attrs.get("Shape_Area"),                  # GIS 自算面積 (跟 AA10 略有差，僅參考)
     }
 
 
@@ -184,7 +269,7 @@ def _query_ntpc_plot(district: str, segment: str, landno: str) -> Optional[dict]
     """打 NTPC ArcGIS Land/MapServer/0/query 查單一地塊。
     NTPC ArcGIS WAF 擋 multi-field WHERE，所以策略：
       WHERE LANDNO=N + district bbox 過濾 → Python 端再篩 SECTNAME 一致的那筆
-    回傳：找到 → {center, bbox, polygon, ...}；找不到 → None
+    回傳：找到 → {center, bbox, polygon, area_sqm, ...}；找不到 → None
     """
     bbox = NTPC_DISTRICT_BBOX_TWD97.get(district)
     if not bbox:
@@ -238,17 +323,11 @@ def _query_ntpc_plot(district: str, segment: str, landno: str) -> Optional[dict]
             break
     if not match:
         return None
-    # ArcGIS f=json 回 esri geometry (rings)，要轉成 GeoJSON polygon 給前端 L.geoJSON 用
     esri_geom = match.get("geometry") or {}
     rings = esri_geom.get("rings") or []
     if not rings:
         return None
-    # esri rings → GeoJSON Polygon (outer + inner rings 同層級；
-    # 簡化處理：假定第一 ring 是 outer，其他都 inner)
-    geojson_geom = {
-        "type": "Polygon",
-        "coordinates": rings,
-    }
+    geojson_geom = {"type": "Polygon", "coordinates": rings}
     lngs, lats = [], []
     for ring in rings:
         for lng, lat in ring:
@@ -259,6 +338,8 @@ def _query_ntpc_plot(district: str, segment: str, landno: str) -> Optional[dict]
     center = [sum(lngs) / len(lngs), sum(lats) / len(lats)]
     plot_bbox = [min(lngs), min(lats), max(lngs), max(lats)]
     attrs = match.get("attributes") or {}
+    area_sqm = attrs.get(_NTPC_LAND_FIELD_AREA)
+    area_ping = round(area_sqm / 3.305785, 2) if area_sqm else None
     return {
         "center": center,
         "bbox": plot_bbox,
@@ -266,7 +347,12 @@ def _query_ntpc_plot(district: str, segment: str, landno: str) -> Optional[dict]
         "district": district,
         "segment": segment,
         "landno": landno,
-        "scno": attrs.get("NTPCUPGIS_SDE.NTPCGIS2.%Land.SCNO"),
+        "area_sqm": area_sqm,         # 公告面積 m²
+        "area_ping": area_ping,
+        "land_value_per_sqm": attrs.get(_NTPC_LAND_FIELD_LAND_VALUE),    # 公告現值 元/m²
+        "land_price_per_sqm": attrs.get(_NTPC_LAND_FIELD_LAND_PRICE),    # 公告地價 元/m²
+        "announce_date_roc": attrs.get(_NTPC_LAND_FIELD_UPDATED),         # 公告日期 民國年月日
+        "scno": attrs.get(_NTPC_LAND_FIELD_SCNO),
     }
 
 
@@ -305,14 +391,14 @@ async def cadastral_search_lookup(
     landno: str = Query(..., description="地號 e.g. 2-1 或 123"),
     _user: dict = Depends(get_current_user),
 ):
-    """查詢單一地塊位置 (台北市)。"""
+    """查詢單一地塊位置 + 公告面積。"""
     city = (city or "").strip()
     district = (district or "").strip()
     segment = (segment or "").strip()
     landno = (landno or "").strip()
     if not (city and district and segment and landno):
         raise HTTPException(400, "city/district/segment/landno 都不可空")
-    # 防 SQL injection / CQL injection：擋掉特殊字元
+    # 防 injection：擋掉特殊字元
     for s, name in [(district, "district"), (segment, "segment"), (landno, "landno")]:
         if any(c in s for c in ("'", '"', '\\', '%', '<', '>', ';')):
             raise HTTPException(400, f"{name} 含不合法字元")

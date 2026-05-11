@@ -1134,6 +1134,8 @@ from api.gis_overlay import router as gis_overlay_router
 app.include_router(gis_overlay_router)
 from api.cadastral_search import router as cadastral_search_router
 app.include_router(cadastral_search_router)
+from api.external_checks import router as external_checks_router
+app.include_router(external_checks_router)
 
 
 _INDEX2_HTML_CACHE = {"sha": None, "html": None, "mtime": 0.0}

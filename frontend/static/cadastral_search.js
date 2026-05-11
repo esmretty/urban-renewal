@@ -222,7 +222,7 @@
       }
       _drawHighlight(data);
       _flyToBbox(data.bbox);
-      _toast(`找到 ${district} ${segment} ${landno}`, 'success');
+      _showResultPopup(data);
     } catch (e) {
       _toast(`網路錯誤：${e.message || e}`, 'error');
     } finally {
@@ -236,8 +236,92 @@
       try { _map.removeLayer(_highlightLayer); } catch (_e) { /* noop */ }
       _highlightLayer = null;
     }
+    if (_resultPopup && _map) {
+      try { _map.closePopup(_resultPopup); } catch (_e) {}
+      _resultPopup = null;
+    }
     document.getElementById('v2-cadsearch-segment').value = '';
     document.getElementById('v2-cadsearch-landno').value = '';
+  }
+
+  // 民國年月日 7 字元 (e.g., '0670409') → 西元日期 + 民國年
+  function _rocToDateStr(roc) {
+    if (!roc || roc.length !== 7) return roc || '—';
+    const rocY = parseInt(roc.slice(0, 3), 10);
+    const m = roc.slice(3, 5), d = roc.slice(5, 7);
+    return `${rocY + 1911}/${m}/${d} (民國${rocY})`;
+  }
+
+  // 整數金額 → 萬元 / 億元 readable string
+  function _toWanReadable(n) {
+    if (n == null || !isFinite(n)) return '—';
+    const wan = n / 10000;
+    if (wan >= 10000) return (wan / 10000).toFixed(2) + ' 億元';
+    if (wan >= 1) return wan.toFixed(0) + ' 萬元';
+    return n.toLocaleString('zh-TW') + ' 元';
+  }
+
+  function _fmtInt(n) {
+    return (n != null && isFinite(n)) ? Math.round(n).toLocaleString('zh-TW') : '—';
+  }
+  function _fmt2(n) {
+    return (n != null && isFinite(n)) ? n.toFixed(2) : '—';
+  }
+
+  function _buildResultHTML(d) {
+    const M_PER_PING = 3.305785;
+    const area_sqm = d.area_sqm;
+    const area_ping = d.area_ping;
+    const val_m2 = d.land_value_per_sqm;
+    const val_ping = val_m2 ? val_m2 * M_PER_PING : null;
+    const val_total = (val_m2 && area_sqm) ? val_m2 * area_sqm : null;
+    const prc_m2 = d.land_price_per_sqm;
+    const prc_ping = prc_m2 ? prc_m2 * M_PER_PING : null;
+    const prc_total = (prc_m2 && area_sqm) ? prc_m2 * area_sqm : null;
+
+    const rows = [];
+    rows.push(`<tr><td>面積</td><td><b>${_fmt2(area_ping)} 坪</b> (${_fmtInt(area_sqm)} m²)</td></tr>`);
+    if (val_m2 != null) {
+      rows.push(`<tr><td>公告現值</td><td>${_fmtInt(val_m2)} 元/m² (≈${_fmtInt(val_ping)} 元/坪)</td></tr>`);
+      rows.push(`<tr><td>公告現值總額</td><td><b style="color:#c0392b;">${_toWanReadable(val_total)}</b></td></tr>`);
+    }
+    if (prc_m2 != null) {
+      rows.push(`<tr><td>公告地價</td><td>${_fmtInt(prc_m2)} 元/m² (≈${_fmtInt(prc_ping)} 元/坪)</td></tr>`);
+      rows.push(`<tr><td>公告地價總額</td><td>${_toWanReadable(prc_total)}</td></tr>`);
+    }
+    if (d.announce_date_roc) {
+      rows.push(`<tr><td>公告日期</td><td>${_rocToDateStr(d.announce_date_roc)}</td></tr>`);
+    }
+    if (d.shape_area_sqm && d.area_sqm && Math.abs(d.shape_area_sqm - d.area_sqm) / d.area_sqm > 0.02) {
+      // GIS 自算跟公告差 > 2% 標示參考
+      rows.push(`<tr><td>GIS 自算面積</td><td style="color:#888;">${_fmtInt(d.shape_area_sqm)} m² (僅供參考)</td></tr>`);
+    }
+    return `
+      <div class="v2-cadsearch-popup">
+        <h4>${d.district} ${d.segment} ${d.landno}</h4>
+        <table>${rows.join('')}</table>
+        <div class="v2-cadsearch-popup__hint">資料來源：政府公告地價/現值（依政府年度公告值）</div>
+      </div>
+    `;
+  }
+
+  let _resultPopup = null;
+  function _showResultPopup(data) {
+    if (!_map || !window.L) return;
+    if (_resultPopup) {
+      try { _map.closePopup(_resultPopup); } catch (_e) {}
+    }
+    const html = _buildResultHTML(data);
+    const [lng, lat] = data.center;
+    _resultPopup = L.popup({
+      maxWidth: 340,
+      autoClose: false,
+      closeOnClick: false,
+      className: 'v2-cadsearch-popup-wrap',
+    })
+      .setLatLng([lat, lng])
+      .setContent(html)
+      .openOn(_map);
   }
 
   function _drawHighlight(result) {

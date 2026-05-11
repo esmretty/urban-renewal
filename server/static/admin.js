@@ -3204,6 +3204,74 @@ window.clearCentralDb = async function () {
   }
 };
 
+// ────────────── 外部連結測試 ──────────────
+window.runExternalChecks = async function (force) {
+  const btn = document.getElementById("extchk-run-btn");
+  const meta = document.getElementById("extchk-meta");
+  const resultsEl = document.getElementById("extchk-results");
+  if (!resultsEl) return;
+  if (btn) { btn.disabled = true; btn.textContent = "🔄 測試中…"; }
+  if (meta) meta.textContent = "";
+  resultsEl.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">測試中… (21 項並行，最多需 15 秒)</div>';
+  try {
+    const r = await authedFetch(`/admin/external_checks/run?force=${force ? 1 : 0}`);
+    const data = await r.json();
+    if (!r.ok) {
+      resultsEl.innerHTML = `<div style="color:#c0392b;">測試失敗：${data.detail || r.status}</div>`;
+      return;
+    }
+    _renderExternalCheckResults(data, resultsEl, meta);
+  } catch (e) {
+    resultsEl.innerHTML = `<div style="color:#c0392b;">網路錯誤：${e.message}</div>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "🔄 重新測試（30 秒內讀 cache）"; }
+  }
+};
+
+function _renderExternalCheckResults(data, host, metaEl) {
+  // 分組 by category，每組一個 table
+  const groups = {};
+  for (const r of data.results) {
+    if (!groups[r.category]) groups[r.category] = [];
+    groups[r.category].push(r);
+  }
+  let html = "";
+  const failCount = data.results.length - data.ok_count;
+  const cacheMeta = data.cached ? `(${data.age_s}秒前的 cache)` : "(剛剛打的)";
+  if (metaEl) {
+    metaEl.innerHTML = `共 ${data.results.length} 項，<b style="color:#27ae60;">${data.ok_count} OK</b>` +
+      (failCount > 0 ? `, <b style="color:#c0392b;">${failCount} 失敗</b>` : '') +
+      ` ${cacheMeta}`;
+  }
+  for (const cat of Object.keys(groups)) {
+    html += `<h3 style="margin:18px 0 8px; font-size:14px; color:#2c3e50; border-bottom:2px solid #ecf0f1; padding-bottom:4px;">${cat}</h3>`;
+    html += `<table style="width:100%; border-collapse:collapse; font-size:13px;">`;
+    html += `<thead><tr style="background:#f8f9fa;">
+      <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #ddd; width:40px;">狀態</th>
+      <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #ddd; width:170px;">服務</th>
+      <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #ddd; width:80px;">回應</th>
+      <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #ddd;">失敗會造成的結果</th>
+    </tr></thead><tbody>`;
+    for (const r of groups[cat]) {
+      const slow = r.ok && r.time_ms > 5000;
+      const icon = !r.ok ? '<span style="color:#c0392b; font-weight:700;">✗ FAIL</span>'
+        : slow ? '<span style="color:#e67e22; font-weight:700;">⚠ 慢</span>'
+        : '<span style="color:#27ae60; font-weight:700;">✓ OK</span>';
+      const resp = r.ok
+        ? `<span style="color:${slow ? '#e67e22' : '#27ae60'};">${r.time_ms}ms${r.status_code ? ` (${r.status_code})` : ''}</span>`
+        : `<span style="color:#c0392b;" title="${(r.note || '').replace(/"/g, '&quot;')}">${r.note || 'fail'}</span>`;
+      html += `<tr style="border-bottom:1px solid #f0f0f0;">
+        <td style="padding:6px 8px;">${icon}</td>
+        <td style="padding:6px 8px;"><b>${r.name}</b><br/><span style="color:#999; font-size:11px;">${r.host}</span></td>
+        <td style="padding:6px 8px;">${resp}</td>
+        <td style="padding:6px 8px; color:#555; font-size:12px;">${r.failure_impact}</td>
+      </tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+  host.innerHTML = html;
+}
+
 boot().catch(e => {
   document.getElementById("login-err").textContent = "初始化失敗：" + e.message;
 });

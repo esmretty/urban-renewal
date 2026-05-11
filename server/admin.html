@@ -50,6 +50,7 @@
       <button class="admin-nav" data-page="members" onclick="switchAdminPage('members')">👥 會員資料</button>
       <button class="admin-nav" data-page="line" onclick="switchAdminPage('line')">📱 LINE 通知</button>
       <button class="admin-nav" data-page="maintenance" onclick="switchAdminPage('maintenance')">🛠 網站維護</button>
+      <button class="admin-nav" data-page="external_checks" onclick="switchAdminPage('external_checks')">🌐 外部連結測試</button>
     </aside>
 
     <!-- ── 右側內容區 ─────────────────────────────────────── -->
@@ -580,6 +581,30 @@
       </section>
     </div>
     <!-- ════════════ /網站維護 page ════════════ -->
+
+    <!-- ════════════ 外部連結測試 page ════════════ -->
+    <div class="admin-page hidden" data-page="external_checks">
+      <section class="panel">
+        <h2>外部連結測試</h2>
+        <p style="font-size:13px; color:#555; margin:0 0 12px;">
+          一鍵測試我們網站用到的所有對外服務（房源 scraper / GIS 圖資 / Google / AI / LINE 等）是否正常。
+          結果 30 秒內 cache，再按「重新測試」會等 cache 過期或強制刷新。
+        </p>
+        <div style="display:flex; gap:10px; margin-bottom:14px; align-items:center;">
+          <button id="extchk-run-btn" onclick="runExternalChecks(false)"
+            style="padding:8px 18px; background:#3a3a4a; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:600;">
+            🔄 重新測試（30 秒內讀 cache）
+          </button>
+          <button onclick="runExternalChecks(true)"
+            style="padding:8px 14px; background:#c78a00; color:#fff; border:none; border-radius:4px; cursor:pointer;">
+            ⚡ 強制重打（忽略 cache）
+          </button>
+          <span id="extchk-meta" style="font-size:13px; color:#888;"></span>
+        </div>
+        <div id="extchk-results" style="font-size:13px;">尚未測試 — 請按上方按鈕</div>
+      </section>
+    </div>
+    <!-- ════════════ /外部連結測試 page ════════════ -->
 
     </main>
   </div>
