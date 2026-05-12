@@ -48,14 +48,17 @@ if [[ "$1" != "--no-push" ]]; then
     git push origin main
 fi
 
-echo "==> SSH → git pull + 寫 VERSION + restart $SERVICE"
+echo "==> SSH → git pull + 寫 VERSION + restart $SERVICE + scheduler sidecar"
 # VERSION 檔給 /api/version 讀，admin UI 顯示在「管理後台」badge 旁邊（對版用）
+# 同時 restart $SERVICE（3 個 HTTP worker）+ ${SERVICE}-scheduler.service（sidecar）
+# 兩者各跑一份 code，不一起 restart 的話 sidecar 會跑舊 code（特別是改 scheduler 邏輯時）
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$SSH_HOST" "
     cd $APP_DIR &&
     git pull origin main 2>&1 | tail -5 &&
     git rev-parse --short HEAD > VERSION &&
     sudo systemctl restart $SERVICE &&
-    echo '✓ service restarted'
+    sudo systemctl restart ${SERVICE}-scheduler &&
+    echo '✓ HTTP service + scheduler sidecar restarted'
 "
 
 echo "==> Verify CSS md5 + 取版本號"

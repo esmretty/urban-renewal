@@ -1659,16 +1659,45 @@ async def admin_system_usage(admin: dict = Depends(require_admin)):
             out["screenshots"] = {"file_count": 0, "total_mb": 0}
     except Exception as e:
         out["screenshots"] = {"error": str(e)}
-    # ── data/ 整體 ─（screenshots + LVR DB + cache + logs）
+    # ── data/ 整體 ─（screenshots + LVR DB + logs；**跳過 data/cache/**）
+    # data/cache/ 是 GIS tile 預烤產物（~360K 個 PNG / 800MB），每次 stat 一輪要 10+ 秒，
+    # 不該每次 admin refresh 都掃。改用 os.scandir 在頂層 yield，遇到 cache 整顆 skip。
     try:
+        import os
         data_root = BASE_DIR / "data"
+        cache_total = 0
+        non_cache_total = 0
         if data_root.exists():
-            total = 0
-            for p in data_root.rglob("*"):
-                if p.is_file():
-                    try: total += p.stat().st_size
-                    except OSError: pass
-            out["data_dir"] = {"total_mb": round(total / 1024**2, 1)}
+            def _walk(d):
+                nonlocal cache_total, non_cache_total
+                try:
+                    for entry in os.scandir(d):
+                        if entry.is_dir(follow_symlinks=False):
+                            if entry.name == "cache":
+                                # 只算頂層大小，不展開
+                                for sub in os.scandir(entry.path):
+                                    if sub.is_file(follow_symlinks=False):
+                                        try: cache_total += sub.stat().st_size
+                                        except OSError: pass
+                                    elif sub.is_dir(follow_symlinks=False):
+                                        # cache 第二層也 sum 但不再深入
+                                        for f in os.scandir(sub.path):
+                                            try:
+                                                if f.is_file(follow_symlinks=False):
+                                                    cache_total += f.stat().st_size
+                                            except OSError: pass
+                                continue
+                            _walk(entry.path)
+                        elif entry.is_file(follow_symlinks=False):
+                            try: non_cache_total += entry.stat().st_size
+                            except OSError: pass
+                except OSError: pass
+            _walk(str(data_root))
+            out["data_dir"] = {
+                "total_mb": round((cache_total + non_cache_total) / 1024**2, 1),
+                "cache_mb": round(cache_total / 1024**2, 1),
+                "non_cache_mb": round(non_cache_total / 1024**2, 1),
+            }
         else:
             out["data_dir"] = {"total_mb": 0}
     except Exception as e:
@@ -1746,7 +1775,19 @@ def _get_cpu_percent():
         _CPU_SAMPLER_STARTED["v"] = True
         import threading
         threading.Thread(target=_cpu_sampler_loop, daemon=True, name="cpu-sampler").start()
-    return _CPU_PCT_CACHE["value"]
+    v = _CPU_PCT_CACHE["value"]
+    if v is not None:
+        return v
+    # cache 還沒 prime（worker 剛起來、或 refresh 打到另一個 worker 的冷 cache）→
+    # 同步 block 0.5s 直接取一筆，避免前端顯示 "?%"。block 期間 handler 自己不做事，
+    # 不會被觀察者效應污染。
+    try:
+        import psutil
+        v = round(psutil.cpu_percent(interval=0.5), 1)
+        _CPU_PCT_CACHE["value"] = v
+        return v
+    except Exception:
+        return None
 
 
 @app.post("/admin/system_usage/cleanup_orphan_ocr")
