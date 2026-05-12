@@ -718,34 +718,39 @@ async def cadastral_search_at_point(
     lng: float = Query(..., description="WGS84 經度"),
     _user: dict = Depends(get_current_user),
 ):
-    """按地圖座標 (WGS84 lat/lng) 反查該位置的地塊資料。
-    全 4 個 query 一次平行 fire (plot×2 + zoning×2)。"""
+    """按地圖座標反查該位置地塊資料。
+
+    台北市優先短路：先平行打 Taipei (plot + zoning)，命中即回。台北物件不會碰 NTPC
+    URInfo session，避免第一次點擊被 NTPC session token (10-20s) 拖住。
+    Taipei miss 才退而求其次打新北（這時 NTPC session 冷啟動的成本由 click 那筆吸收）。
+    """
     if not (-90 <= lat <= 90 and -180 <= lng <= 180):
         raise HTTPException(400, "lat/lng 不在合法範圍")
     from concurrent.futures import ThreadPoolExecutor
-    # zoning query 需要 TWD97，先算好 (cheap)
     try:
         from analysis.gov_gis import wgs84_to_twd97
         twd97_x, twd97_y = wgs84_to_twd97(lat, lng)
     except Exception:
         twd97_x = twd97_y = None
     with ThreadPoolExecutor(max_workers=4) as ex:
+        # ── Phase 1: Taipei plot + zoning（fast，無 token）─────────────
         tpe_plot_fut = ex.submit(_query_tpe_plot_at_point, lat, lng)
-        ntpc_plot_fut = ex.submit(_query_ntpc_plot_at_point, lat, lng)
-        if twd97_x is not None:
-            tpe_zoning_fut = ex.submit(_query_tpe_zoning_at, twd97_x, twd97_y)
-            ntpc_zoning_fut = ex.submit(_query_ntpc_zoning_at, twd97_x, twd97_y)
-        else:
-            tpe_zoning_fut = None
-            ntpc_zoning_fut = None
+        tpe_zoning_fut = ex.submit(_query_tpe_zoning_at, twd97_x, twd97_y) if twd97_x is not None else None
         tpe_plot = tpe_plot_fut.result()
+        if tpe_plot:
+            tpe_zoning = tpe_zoning_fut.result() if tpe_zoning_fut else None
+            if tpe_zoning:
+                tpe_plot.update(tpe_zoning)
+            return {"ok": True, **tpe_plot}
+        # Taipei miss → 取消 zoning future (還沒跑完就讓它跑完丟掉；ArcGIS 不可中斷)
+        if tpe_zoning_fut:
+            try: tpe_zoning_fut.result(timeout=0.001)
+            except Exception: pass
+        # ── Phase 2: 新北 plot + zoning（need NTPC URInfo session）────
+        ntpc_plot_fut = ex.submit(_query_ntpc_plot_at_point, lat, lng)
+        ntpc_zoning_fut = ex.submit(_query_ntpc_zoning_at, twd97_x, twd97_y) if twd97_x is not None else None
         ntpc_plot = ntpc_plot_fut.result()
-        tpe_zoning = tpe_zoning_fut.result() if tpe_zoning_fut else None
         ntpc_zoning = ntpc_zoning_fut.result() if ntpc_zoning_fut else None
-    if tpe_plot:
-        if tpe_zoning:
-            tpe_plot.update(tpe_zoning)
-        return {"ok": True, **tpe_plot}
     if ntpc_plot:
         if ntpc_zoning:
             ntpc_plot.update(ntpc_zoning)
