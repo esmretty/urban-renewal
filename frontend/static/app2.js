@@ -368,7 +368,8 @@
   // skip 跟物件資訊重複的 section：樓高 / 屋齡 (左 table 已顯示) + 其他
   // (其他 section 主要是地段/捷運說明，跟物件資訊地址欄已知；優勢/抗性 chips 在
   //  「其他資訊」區頂部已顯示，不需 ai 補述)
-  const _SKIP_AI_SECTIONS = new Set(['樓高', '屋齡', '其他']);
+  // 整合難度永遠 = 待評估 (沒實質判斷)，2026-05 刪除；既有物件 ai_reason 還有 → 前端也 skip 顯示
+  const _SKIP_AI_SECTIONS = new Set(['樓高', '屋齡', '整合難度', '其他']);
 
   function renderAiText(text, p, prices) {
     // 優勢/抗性 chips 追加到 ai-sec 列表最後 (對齊 v1 ai-section grid 結構)

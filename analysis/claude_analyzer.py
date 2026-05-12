@@ -638,8 +638,7 @@ def generate_final_recommendation(
     else:
         sections.append("【屋齡】資料缺失")
 
-    # § 3 整合難度
-    sections.append("【整合難度】待評估")
+    # § 3 整合難度 — 之前永遠輸出「待評估」(沒實質判斷邏輯)，2026-05 刪除
 
     # § 4 分回價值 + 出價建議
     v2 = renewal_calc.get("v2") or {}
