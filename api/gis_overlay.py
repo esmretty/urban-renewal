@@ -1072,25 +1072,61 @@ def _browser_cache_ttl(layer: str, cfg: dict) -> int:
 # ── Endpoint ───────────────────────────────────────────────────────────────
 # ── 流量控制：避免快速 pan / 高 zoom 拉爆 server ──────────────────────
 # 三層防護：
-#  1. _UPSTREAM_SEM 全 process 限 5 個並發 upstream fetch
-#     (per worker 5 × 3 worker = 15 process-wide；對照本機 prewarm 單執行緒 1 RPS
-#     在政府 server 跑得通，prod 15 並發是 polite ceiling)
+#  1. per-host semaphore：每個上游 host 各自 5 個 slot 池，互不干擾。
+#     之前全域共用 1 個 semaphore，5 個 NTPC slow fetch 卡住整池 → 台北 GeoServer
+#     拿不到 slot 變慢 (反向飢餓)。改 per-host 後台北跟新北兩條獨立水管。
+#     per worker 5 × 3 worker = 每個上游 host 最多 15 process-wide，
+#     對照本機 prewarm 單執行緒 1 RPS 跑得通，15 算 polite。
 #  2. _INFLIGHT 相同 tile 同時多 request → 只實打一次，其他人等同結果（dedup）
 #  3. handler 從 async def 改 def → FastAPI 自動 run in threadpool，
 #     httpx sync call 不再阻塞 event loop（之前每張 tile fetch 卡住整個 worker
 #     的所有其他 endpoint 是 server「掛掉」感的主因）
 import threading as _threading
 
-_UPSTREAM_SEM = _threading.Semaphore(5)
+_HOST_SEMAPHORES: dict = {}
+_HOST_SEM_LOCK = _threading.Lock()
+_PER_HOST_LIMIT = 5
+
+def _get_host_semaphore(bucket: str) -> _threading.Semaphore:
+    """Lazy 建立並 cache 該 bucket 的 semaphore。bucket 通常是 upstream URL host
+    (zonegeo.udd.gov.taipei / arcgis2.planning.ntpc.gov.tw) 或固定 kind 字串
+    (ntpcurinfo_layer / 591_dmaps_proxy)。"""
+    sem = _HOST_SEMAPHORES.get(bucket)
+    if sem is not None:
+        return sem
+    with _HOST_SEM_LOCK:
+        sem = _HOST_SEMAPHORES.get(bucket)
+        if sem is None:
+            sem = _threading.Semaphore(_PER_HOST_LIMIT)
+            _HOST_SEMAPHORES[bucket] = sem
+        return sem
+
+
+def _semaphore_bucket(cfg: dict) -> str:
+    """從 layer cfg 算出 semaphore bucket key。
+    - 有 upstream URL → 用 URL host (urlparse netloc)
+    - 沒 upstream (e.g. ntpcurinfo_layer 動態組 URL) → 用 cfg['kind']
+    """
+    upstream = cfg.get("upstream") or ""
+    if upstream:
+        try:
+            from urllib.parse import urlparse
+            host = urlparse(upstream).netloc
+            if host:
+                return host
+        except Exception:
+            pass
+    return cfg.get("kind", "default")
+
 
 # in-flight dedup：key → (event, [result_holder])
 _INFLIGHT_LOCK = _threading.Lock()
 _INFLIGHT: dict = {}
 
 
-def _fetch_with_dedup(key, fetch_fn, timeout: float = 30.0):
+def _fetch_with_dedup(key, fetch_fn, bucket: str, timeout: float = 30.0):
     """同一個 key 有人正在 fetch → 等他結果（不打第二次 upstream）。
-    沒人在 fetch → 自己變 fetcher，跑完 set event 喚醒等候者。"""
+    沒人在 fetch → 自己變 fetcher，acquire 該 bucket 的 semaphore，跑完 set event。"""
     with _INFLIGHT_LOCK:
         entry = _INFLIGHT.get(key)
         if entry is None:
@@ -1103,7 +1139,7 @@ def _fetch_with_dedup(key, fetch_fn, timeout: float = 30.0):
             is_fetcher = False
     if is_fetcher:
         try:
-            with _UPSTREAM_SEM:
+            with _get_host_semaphore(bucket):
                 holder[0] = fetch_fn()
         finally:
             event.set()
@@ -1190,8 +1226,9 @@ def gis_overlay(layer: str, request: Request) -> Response:
         else:
             raise HTTPException(500, f"unknown kind: {cfg['kind']}")
 
-    # in-flight dedup — 同 tile 同時多 request 共享一次 upstream fetch
-    content = _fetch_with_dedup(cache_key, _do_fetch)
+    # in-flight dedup + per-host semaphore — 同 tile 同時多 request 共享一次 upstream fetch；
+    # bucket 用上游 host (台北/新北/NLSC 各自一個 5-slot 池，互不飢餓)
+    content = _fetch_with_dedup(cache_key, _do_fetch, _semaphore_bucket(cfg))
 
     if not content:
         # 上游失敗 → 回透明 1×1，前端 layer 不會 break；status 504 給前端可選擇靜默或顯示警告
