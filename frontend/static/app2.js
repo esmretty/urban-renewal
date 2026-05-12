@@ -368,8 +368,19 @@
   // skip 跟物件資訊重複的 section：樓高 / 屋齡 (左 table 已顯示) + 其他
   // (其他 section 主要是地段/捷運說明，跟物件資訊地址欄已知；優勢/抗性 chips 在
   //  「其他資訊」區頂部已顯示，不需 ai 補述)
-  // 整合難度永遠 = 待評估 (沒實質判斷)，2026-05 刪除；既有物件 ai_reason 還有 → 前端也 skip 顯示
+  // 整合難度永遠 = 待評估 (沒實質判斷)，2026-05 刪除；既有物件 ai_reason 還有 → 前端也 skip
   const _SKIP_AI_SECTIONS = new Set(['樓高', '屋齡', '整合難度', '其他']);
+
+  // 「左欄都更換回試算」可不可以實際算 — 給右欄「分回價值」用：左方有 → 右方才顯示
+  function _canShowBidSuggestion(p, prices) {
+    if (!p || !prices) return false;
+    if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal) return false;
+    if (typeof isLandSuspicious === 'function' && isLandSuspicious(p)) return false;
+    const land = p.land_area_ping;
+    const farPct = effectiveFar(p);
+    const newPrice = p.new_house_price_wan_override ?? prices[p.district];
+    return !!(land && farPct != null && newPrice);
+  }
 
   function renderAiText(text, p, prices) {
     // 優勢/抗性 chips 追加到 ai-sec 列表最後 (對齊 v1 ai-section grid 結構)
@@ -390,8 +401,10 @@
       if (m) {
         const title = m[1];
         if (_SKIP_AI_SECTIONS.has(title)) return '';
-        // 「分回價值」section 用動態 dropdown 渲染 (從 input 即時算)；title 改顯示「出價試算」
-        if (title === '分回價值' && p && prices) {
+        // 「分回價值」section：只有左欄「都更換回試算」實際算得出來時才顯示
+        // (用戶要求：避免左欄缺資料但右欄還出數字的不一致)
+        if (title === '分回價值') {
+          if (!_canShowBidSuggestion(p, prices)) return '';
           return `<div class="v2-ai-sec"><div class="v2-ai-sec__title">出價試算</div>
             <div class="v2-ai-sec__body" id="v2-ai-bid-section">${renderBidSection(p, prices)}</div></div>`;
         }
