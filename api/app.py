@@ -1075,8 +1075,13 @@ async def lifespan(app: FastAPI):
         logger.info("[warmup] central_search query cache 預填完成（%d districts）", len(DEFAULT_FRONTEND_DISTRICTS))
     except Exception as e:
         logger.warning("[warmup] central_search 預填失敗: %s", e)
-    if os.getenv("DISABLE_SCHEDULER", "").lower() in ("1", "true", "yes"):
-        logger.info("[scheduler] DISABLE_SCHEDULER=true，本次啟動不執行定時 batch（本機 debug 模式）")
+    # Scheduler / retry-queue 預設 ON（保留本機 dev 體驗）；
+    # systemd 主服務（多 worker）必須設 RUN_SCHEDULER=false → 由 sidecar service 獨家跑，
+    # 否則 N 個 worker 會各跑一份 → LINE 通知 N 連發、retry 重複 N 次。
+    _run_sched = os.getenv("RUN_SCHEDULER", "true").lower() not in ("false", "0", "no")
+    _legacy_disable = os.getenv("DISABLE_SCHEDULER", "").lower() in ("1", "true", "yes")
+    if _legacy_disable or not _run_sched:
+        logger.info("[scheduler] disabled in this process (RUN_SCHEDULER=%s, DISABLE_SCHEDULER=%s)", _run_sched, _legacy_disable)
         sched_task = None
         retry_task = None
     else:

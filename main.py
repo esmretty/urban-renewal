@@ -44,6 +44,29 @@ def run_server(port: int = 8000):
     )
 
 
+def run_scheduler_sidecar(port: int = 8001):
+    """Sidecar 模式：單一 worker、只跑 scheduler/retry/warmup，不對外服務 HTTP。
+
+    系統架構：
+      taipei-urban.service          多 worker，RUN_SCHEDULER=false（僅服務 HTTP）
+      taipei-urban-scheduler.service 單 worker，RUN_SCHEDULER=true（獨家跑定時任務）
+
+    Sidecar 仍開 uvicorn 是因為 lifespan 內的初始化邏輯（gRPC 連線/warmup/scheduler task）
+    都掛在 FastAPI 上；綁 127.0.0.1 不暴露外部，nginx 不會 proxy 過來，零外部影響。
+    """
+    import os
+    os.environ["RUN_SCHEDULER"] = "true"
+    logger.info(f"啟動 scheduler sidecar → http://127.0.0.1:{port}（單一 worker，僅內部）")
+    uvicorn.run(
+        "api.app:app",
+        host="127.0.0.1",
+        port=port,
+        reload=False,
+        log_level="warning",
+        workers=1,
+    )
+
+
 def run_scrape_cli(district: str = "", headless: bool = False, limit: int = 0):
     from database.db import init_db, get_col
     from database.models import make_property_doc
@@ -216,6 +239,7 @@ def run_scrape_cli(district: str = "", headless: bool = False, limit: int = 0):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="都更神探R")
     parser.add_argument("--scrape", action="store_true", help="只執行爬取（不啟動伺服器）")
+    parser.add_argument("--scheduler-only", action="store_true", help="只跑 scheduler/retry/warmup sidecar（本機 127.0.0.1，不對外）")
     parser.add_argument("--port", type=int, default=8000, help="Web 伺服器 port（預設 8000）")
     parser.add_argument("--district", type=str, default="", help="只爬指定地區，例如 大安區")
     parser.add_argument("--headless", action="store_true", default=False, help="無頭模式（預設 False）")
@@ -224,5 +248,7 @@ if __name__ == "__main__":
 
     if args.scrape:
         run_scrape_cli(district=args.district, headless=args.headless, limit=args.limit)
+    elif args.scheduler_only:
+        run_scheduler_sidecar(port=args.port if args.port != 8000 else 8001)
     else:
         run_server(port=args.port)
