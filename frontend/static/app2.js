@@ -1391,21 +1391,14 @@
       document.querySelectorAll('input[data-overlay]').forEach(turnOff);
       document.querySelectorAll('input[data-renewal-all]').forEach(turnOff);
       document.querySelectorAll('input[data-renewal-sub]').forEach(turnOff);
-      // 2. 只開該物件命中的 redev sub-layer
-      //    台北 sub_type: 'pub_renew' / 'chloride' / etc → checkbox id 直接同名
-      //    新北 sub_type: 'ama' / 'easy' / etc → checkbox id 是 'ntpc_ama' 'ntpc_easy'
-      const cases = Array.isArray(p.redev_cases) ? p.redev_cases : [];
-      const isNtpc = p.city === '新北市';
-      const subIds = new Set();
-      for (const c of cases) {
-        if (!c || !c.sub_type) continue;
-        subIds.add(isNtpc ? `ntpc_${c.sub_type}` : c.sub_type);
-      }
-      for (const sid of subIds) {
-        const cb = document.querySelector(`input[data-renewal-sub="${sid}"]`);
-        if (cb && !cb.checked) {
-          cb.checked = true;
-          cb.dispatchEvent(new Event('change', { bubbles: true }));
+      // 2. 只勾「物件所屬城市」的都更全選 checkbox（連動展開該城市所有 sub-layer）
+      //    台北市物件 → data-renewal-all="tpe"，新北市物件 → data-renewal-all="ntpc"
+      const cityTag = p.city === '新北市' ? 'ntpc' : (p.city === '台北市' ? 'tpe' : null);
+      if (cityTag) {
+        const allCb = document.querySelector(`input[data-renewal-all="${cityTag}"]`);
+        if (allCb && !allCb.checked) {
+          allCb.checked = true;
+          allCb.dispatchEvent(new Event('change', { bubbles: true }));
         }
       }
     }, 300);
