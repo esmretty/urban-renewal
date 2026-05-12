@@ -1072,14 +1072,16 @@ def _browser_cache_ttl(layer: str, cfg: dict) -> int:
 # ── Endpoint ───────────────────────────────────────────────────────────────
 # ── 流量控制：避免快速 pan / 高 zoom 拉爆 server ──────────────────────
 # 三層防護：
-#  1. _UPSTREAM_SEM 全 process 限 20 個並發 upstream fetch (政府 server polite)
+#  1. _UPSTREAM_SEM 全 process 限 5 個並發 upstream fetch
+#     (per worker 5 × 3 worker = 15 process-wide；對照本機 prewarm 單執行緒 1 RPS
+#     在政府 server 跑得通，prod 15 並發是 polite ceiling)
 #  2. _INFLIGHT 相同 tile 同時多 request → 只實打一次，其他人等同結果（dedup）
 #  3. handler 從 async def 改 def → FastAPI 自動 run in threadpool，
 #     httpx sync call 不再阻塞 event loop（之前每張 tile fetch 卡住整個 worker
 #     的所有其他 endpoint 是 server「掛掉」感的主因）
 import threading as _threading
 
-_UPSTREAM_SEM = _threading.Semaphore(20)
+_UPSTREAM_SEM = _threading.Semaphore(5)
 
 # in-flight dedup：key → (event, [result_holder])
 _INFLIGHT_LOCK = _threading.Lock()
