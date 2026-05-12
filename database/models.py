@@ -539,6 +539,11 @@ def detect_foreclosure(item: dict, detail_text: str = "") -> tuple[bool, list]:
       2. 591「社區」欄位 RAW value（item["_community_raw"]）含「【」廣告詞 → 法拍。
          仲介在「社區」label 寫「【店長推薦】XX」這種廣告字串通常是法拍特徵。
       3. 標題或「社區」欄位明寫「法拍」字樣 → 法拍。
+      4. 591「房源描述」body (前 5000 字) 含法拍仲介常用 phrase → 法拍。
+         仲介可美化 title 拿掉「法拍」字眼，但業務話術 / FAQ 模板必然洩漏在 body：
+         「法拍小常識」「拍底價」「投標保證金」「法院公告」這些 phrase 一般屋主
+         絕不會寫；公司名 / 業務類型也常含「誠信法拍」「代標服務」。raw 已在
+         記憶體 (scraper body_text)，零 storage、~微秒額外成本。
     回 (是否法拍, [reason 列表])
     """
     title = item.get("title") or ""
@@ -553,6 +558,14 @@ def detect_foreclosure(item: dict, detail_text: str = "") -> tuple[bool, list]:
         return True, ["標題含 # 或 ＃ + 代理人"]
     if "【" in community_raw:
         return True, [f"591「社區」欄位含「【」廣告詞：{community_raw[:50]}"]
+    # rule 4: body phrase 偵測 (放最後是因為前 4 條更便宜 — title/community 比較短)
+    _FORECLOSURE_BODY_PHRASES = (
+        "法拍小常識", "法拍屋", "誠信法拍", "拍底價",
+        "法拍能貸款", "投標保證金", "代標服務", "法院公告",
+    )
+    for phrase in _FORECLOSURE_BODY_PHRASES:
+        if phrase in raw:
+            return True, [f"591 房源描述含「{phrase}」（法拍仲介常用語）"]
     return False, []
 
 
