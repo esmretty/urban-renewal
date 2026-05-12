@@ -329,16 +329,8 @@ def _pick_closest_by_address(candidates: list[str], ref_addr: str) -> str:
     return ranked[0]
 
 
-def _zhtw_normalize(s: str) -> str:
-    """把 Google reverse geocode 偶爾回的簡體 / 異體字一次轉成台灣繁體。
-    至少涵蓋 reverse_geocode 已踩到的字 (区→區，板桥→板橋，縣字、臺/台異體)；
-    不做的：庄、湾 等繁簡都是有效台灣字、誤改風險高。"""
-    if not s:
-        return s
-    return (s.replace("区", "區")
-             .replace("桥", "橋")
-             .replace("县", "縣")
-             .replace("臺", "台"))
+# normalize helpers 集中在 helpers/text_norm.py。保留 _zhtw_normalize alias 給內部使用。
+from helpers.text_norm import zhtw_normalize as _zhtw_normalize  # noqa: E402
 
 
 def _reverse_geocode_loose(lat: float, lng: float, road_hint: str, prefer_distance: bool = False) -> Optional[str]:

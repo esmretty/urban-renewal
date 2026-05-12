@@ -3,33 +3,18 @@
 優先使用 Google Maps；無 API Key 則 fallback 至 Nominatim (免費)。
 """
 import math
-import re
 import time
 import logging
 import httpx
 from typing import Optional
 
 from config import GOOGLE_MAPS_API_KEY, MRT_STATIONS
+# normalize helpers 集中在 helpers/text_norm.py。保留 _ 前綴 alias 給 sprint #1 之前
+# 既有 import 用（e.g. scripts/backfill_geocode_floor_strip.py）。新 code 直接從
+# helpers.text_norm import 即可。
+from helpers.text_norm import strip_floor as _strip_floor_for_geocode, FLOOR_TAIL_RE as _FLOOR_TAIL_RE
 
 logger = logging.getLogger(__name__)
-
-# Google geocoder 對「N號X樓」處理不穩 — 帶樓層常解不出 ROOFTOP 精度、退到上層
-# 巷弄/路段 centroid。例：「永吉路278巷58弄5號2樓」回 58弄 centroid (差 20m)，
-# 但「永吉路278巷58弄5號」回精確 ROOFTOP。同棟所有樓層 lat/lng 本該一樣，
-# 樓層資訊對地理座標無意義 → forward geocode 前一律 strip。
-# 樣式：
-#   "5號2樓" / "5號十二樓" / "5號B1樓" / "5號頂樓" / "5號地下1樓"
-_FLOOR_TAIL_RE = re.compile(
-    r"\s*(?:B\d+樓|地下\d*樓?|頂樓|[\d一二三四五六七八九十]+樓)\s*$"
-)
-
-
-def _strip_floor_for_geocode(address: str) -> str:
-    """從地址尾端剝掉樓層 token 再 forward geocode。樓層不影響經緯度，
-    保留會讓 Google 降級到 centroid。"""
-    if not address:
-        return address
-    return _FLOOR_TAIL_RE.sub("", address).strip()
 
 
 def geocode_address(address: str) -> Optional[tuple[float, float]]:

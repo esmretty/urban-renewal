@@ -236,21 +236,9 @@ def looks_like_real_address(text: str, *, require_number: bool = False) -> bool:
     return bool(_ADDRESS_ROAD_TOKEN_RE.search(text))
 
 
-def strip_region_prefix(addr: str, city: str = "", district: str = "") -> str:
-    """從地址字串去除所有 city / district 開頭前綴（處理舊資料重複前綴）。
-    e.g. 「台北市中正區中正區羅斯福路...」→「羅斯福路...」
-    注意繁簡體：傳入的 city 可能是「台北市」，但 LVR 資料用「臺北市」→ 兩者都要剝。
-    """
-    if not addr:
-        return addr
-    # city 前綴：一律比對「台北市|臺北市|新北市」（而且可能重複多次）
-    addr = re.sub(r"^(台北市|臺北市|新北市)+", "", addr)
-    # district 前綴：若有傳入具體 district 先剝，再 fallback 任何「X區」
-    if district:
-        addr = re.sub(f"^({re.escape(district)})+", "", addr)
-    addr = re.sub(r"^([\u4e00-\u9fa5]{1,3}區)+", "", addr)
-    return addr.strip()
-
+# normalize helpers 集中在 helpers/text_norm.py。re-export 維持 public API 不變
+# (這個函式被 api/analysis_pipeline / app.py / scripts/ 多處 import)。
+from helpers.text_norm import strip_region_prefix  # noqa: E402,F401
 
 def compose_full_address(doc: dict, prefer_inferred: bool = True) -> str:
     """拼 city + district + address 回完整地址（讀取端用）。

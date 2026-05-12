@@ -29,18 +29,12 @@ AREA_TOLERANCE_PING = 0.01   # 使用者規格：誤差超過 0.01 坪即視為�
 # 地址 normalize
 # ─────────────────────────────────────────────────────────
 
-def _to_halfwidth(s: str) -> str:
-    """全形 → 半形（數字 / 英文 / 符號）。"""
-    out = []
-    for ch in s:
-        code = ord(ch)
-        if 0xFF01 <= code <= 0xFF5E:
-            out.append(chr(code - 0xFEE0))
-        elif code == 0x3000:    # 全形空白
-            out.append(" ")
-        else:
-            out.append(ch)
-    return "".join(out)
+# normalize helpers 集中到 helpers/text_norm.py
+from helpers.text_norm import (
+    to_halfwidth as _to_halfwidth,
+    digit_section_to_cn as _digit_section_to_cn,
+    strip_li_name as _strip_li_name,
+)
 
 
 _CN_DIGIT = {"一": 1, "二": 2, "兩": 2, "三": 3, "四": 4, "五": 5,
@@ -69,31 +63,26 @@ def _cn_num_to_int(s: str) -> Optional[int]:
     return _CN_DIGIT.get(s)
 
 
-_DIGIT_TO_CN = {"1": "一", "2": "二", "3": "三", "4": "四", "5": "五",
-                "6": "六", "7": "七", "8": "八", "9": "九", "10": "十"}
-
-
 def normalize_address(s: str) -> str:
     """
     全形→半形、去空白、剝除樓層、段格式統一（LVR 存法用漢字「一段」「二段」...）。
     支援樓層：4F、4樓、五樓、五F、十二樓、二十F、4F-1、4樓之1…
     支援段：1段、2段、３段 → 一段、二段、三段
+
+    注意：跟 helpers/text_norm.strip_floor 不同 — manual_analyze 這條要支援更多
+    樓層 token 變體 (4F / 五F / 4F-1)，所以保留專屬樓層 strip regex。其餘共用 helpers。
     """
     if not s:
         return ""
     s = _to_halfwidth(s)
     s = s.replace(" ", "").replace("　", "").strip()
     s = s.replace("臺北", "台北")
-    # 去開頭的「縣市+區」前綴（LVR 有時會含，使用者輸入通常沒有）
+    # 去開頭的「縣市+區」前綴 (manual_analyze 接受外縣市輸入，比 helpers.strip_region_prefix
+    # 多支援桃園 / 基隆，所以這條 regex 不直接用 helpers 版本)
     s = re.sub(r"^(台北市|新北市|桃園市|基隆市)", "", s)
     s = re.sub(r"^[\u4e00-\u9fa5]{1,4}區", "", s)
-    # 去掉里名 (Google reverse-geocode 會在「區」跟路名之間塞「華興里」之類)
-    # LVR / 591 都不存里名，比對前必須剝除否則 ±0.01 三角驗證 fail
-    s = re.sub(r"^[一-龥]{1,4}里", "", s)
-    # 段：阿拉伯 → 漢字（1段→一段 ... 10段→十段；其餘保持）
-    s = re.sub(r"(\d+)段",
-               lambda m: _DIGIT_TO_CN.get(m.group(1), m.group(1)) + "段",
-               s)
+    s = _strip_li_name(s)
+    s = _digit_section_to_cn(s)
     # 剝除尾端樓層（阿拉伯或漢字 + 可選「之X」「-X」）
     s = re.sub(
         r"(?:\d+|[一二兩三四五六七八九十]+)[樓FfＦｆ](?:[之\-]?[\d一二兩三四五六七八九十]+)?$",

@@ -188,29 +188,11 @@ DETAIL_OCR_PROMPT = """請仔細看這張 591 房屋詳情頁截圖，找出以�
 }"""
 
 
-def _normalize_address_format(addr: str) -> str:
-    """統一複合門牌格式為「N之M號」。
-    - 「10-1號」→「10之1號」
-    - 「10號之1」→「10之1號」
-    - 「10之1號」→「10之1號」（保持不變）"""
-    if not addr:
-        return addr
-    # 1) 「N號之M」→「N之M號」（號在中間的非標準格式調整為號在末尾）
-    addr = re.sub(r"(\d+)號之(\d+)", r"\1之\2號", addr)
-    # 2) 「N-M號」→「N之M號」（hyphen 統一為「之」）
-    addr = re.sub(r"(\d+)-(\d+)號", r"\1之\2號", addr)
-    return addr
-
-
-def _clean_address_garbage(addr: str) -> str:
-    """去除「數字」與「巷/弄/號」之間的錯字/綴字 + 複合門牌格式標準化。
-    案例：「恆光街3時巷」→「3巷」；「85X號」→「85號」；「10-1號」→「10之1號」。
-    數字本身可含 '-' 或 '之'（複合門牌），其他中文字/英文都視為雜訊。"""
-    if not addr:
-        return addr
-    addr = re.sub(r"(\d+(?:[-之]\d+)?)([^\d\-之巷弄號]+?)(巷|弄|號)", r"\1\3", addr)
-    addr = _normalize_address_format(addr)
-    return addr
+# normalize helpers 集中在 helpers/text_norm.py。保留 _ 前綴 alias 給既有 caller 用。
+from helpers.text_norm import (
+    normalize_address_format as _normalize_address_format,
+    clean_address_garbage as _clean_address_garbage,
+)
 
 
 def _ocr_address_once(crop_path: str, city: str, district: str, road_list: list) -> Optional[str]:
