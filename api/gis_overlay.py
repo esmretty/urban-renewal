@@ -1060,8 +1060,51 @@ def _browser_cache_ttl(layer: str, cfg: dict) -> int:
 
 
 # ── Endpoint ───────────────────────────────────────────────────────────────
+# ── 流量控制：避免快速 pan / 高 zoom 拉爆 server ──────────────────────
+# 三層防護：
+#  1. _UPSTREAM_SEM 全 process 限 20 個並發 upstream fetch (政府 server polite)
+#  2. _INFLIGHT 相同 tile 同時多 request → 只實打一次，其他人等同結果（dedup）
+#  3. handler 從 async def 改 def → FastAPI 自動 run in threadpool，
+#     httpx sync call 不再阻塞 event loop（之前每張 tile fetch 卡住整個 worker
+#     的所有其他 endpoint 是 server「掛掉」感的主因）
+import threading as _threading
+
+_UPSTREAM_SEM = _threading.Semaphore(20)
+
+# in-flight dedup：key → (event, [result_holder])
+_INFLIGHT_LOCK = _threading.Lock()
+_INFLIGHT: dict = {}
+
+
+def _fetch_with_dedup(key, fetch_fn, timeout: float = 30.0):
+    """同一個 key 有人正在 fetch → 等他結果（不打第二次 upstream）。
+    沒人在 fetch → 自己變 fetcher，跑完 set event 喚醒等候者。"""
+    with _INFLIGHT_LOCK:
+        entry = _INFLIGHT.get(key)
+        if entry is None:
+            event = _threading.Event()
+            holder = [None]   # result_holder
+            _INFLIGHT[key] = (event, holder)
+            is_fetcher = True
+        else:
+            event, holder = entry
+            is_fetcher = False
+    if is_fetcher:
+        try:
+            with _UPSTREAM_SEM:
+                holder[0] = fetch_fn()
+        finally:
+            event.set()
+            with _INFLIGHT_LOCK:
+                _INFLIGHT.pop(key, None)
+        return holder[0]
+    else:
+        event.wait(timeout=timeout)
+        return holder[0]
+
+
 @router.get("/api/gis_overlay/{layer}")
-async def gis_overlay(layer: str, request: Request) -> Response:
+def gis_overlay(layer: str, request: Request) -> Response:
     """前端 Leaflet `L.tileLayer.wms('/api/gis_overlay/zoning_tpe', { layers: 'zoning_tpe', ... })` 用。
 
     Required query params (都從 Leaflet 自動帶過來)：
@@ -1070,6 +1113,9 @@ async def gis_overlay(layer: str, request: Request) -> Response:
       srs / SRS       投影 (例如 EPSG:3857)
 
     回傳：image/png（10 min memory cache 命中省 round trip）；上游失敗 → 透明 1×1 png + 504。
+
+    handler 是 sync `def` 不是 `async def` — FastAPI 會自動把它跑在 threadpool，
+    讓 httpx 同步 call 不阻塞 event loop。這是 high-zoom 快速 pan 不再炸 server 的關鍵。
     """
     if layer not in _LAYER_DEFS:
         raise HTTPException(404, f"unknown layer: {layer}")
@@ -1114,21 +1160,26 @@ async def gis_overlay(layer: str, request: Request) -> Response:
             if not skip_cache:
                 _cache_set(cache_key, disk_content)
             return Response(content=disk_content, media_type="image/png", headers={"X-Cache": "DISK-HIT", "Cache-Control": cc_header})
-    if cfg["kind"] == "wms":
-        content = _fetch_wms(cfg["upstream"], cfg["layers"], bbox, width, height, srs,
-                             cfg.get("cql_filter"), cfg.get("sld_body"), cfg.get("format_options"))
-    elif cfg["kind"] == "arcgis_export":
-        content = _fetch_arcgis_export(cfg, bbox, width, height, srs)
-    elif cfg["kind"] == "nlsc_wms":
-        content = _fetch_nlsc_wms(cfg, bbox, width, height, srs)
-    elif cfg["kind"] == "nlsc_wmts":
-        content = _fetch_nlsc_wmts(cfg, bbox, width, height, srs)
-    elif cfg["kind"] == "591_dmaps_proxy":
-        content = _fetch_591_dmaps(cfg, bbox, width, height, srs)
-    elif cfg["kind"] == "ntpcurinfo_layer":
-        content = _fetch_ntpcurinfo_layer(cfg, bbox, width, height, srs)
-    else:
-        raise HTTPException(500, f"unknown kind: {cfg['kind']}")
+
+    def _do_fetch():
+        if cfg["kind"] == "wms":
+            return _fetch_wms(cfg["upstream"], cfg["layers"], bbox, width, height, srs,
+                              cfg.get("cql_filter"), cfg.get("sld_body"), cfg.get("format_options"))
+        elif cfg["kind"] == "arcgis_export":
+            return _fetch_arcgis_export(cfg, bbox, width, height, srs)
+        elif cfg["kind"] == "nlsc_wms":
+            return _fetch_nlsc_wms(cfg, bbox, width, height, srs)
+        elif cfg["kind"] == "nlsc_wmts":
+            return _fetch_nlsc_wmts(cfg, bbox, width, height, srs)
+        elif cfg["kind"] == "591_dmaps_proxy":
+            return _fetch_591_dmaps(cfg, bbox, width, height, srs)
+        elif cfg["kind"] == "ntpcurinfo_layer":
+            return _fetch_ntpcurinfo_layer(cfg, bbox, width, height, srs)
+        else:
+            raise HTTPException(500, f"unknown kind: {cfg['kind']}")
+
+    # in-flight dedup — 同 tile 同時多 request 共享一次 upstream fetch
+    content = _fetch_with_dedup(cache_key, _do_fetch)
 
     if not content:
         # 上游失敗 → 回透明 1×1，前端 layer 不會 break；status 504 給前端可選擇靜默或顯示警告
