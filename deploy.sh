@@ -62,10 +62,10 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$SSH_HOST" "
 "
 
 echo "==> Verify CSS md5 + 取版本號"
-LOCAL_MD5=$(md5sum frontend/static/style.css | awk '{print $1}')
+LOCAL_MD5=$(md5sum frontend/static/style2.css | awk '{print $1}')
 LOCAL_SHA=$(git rev-parse --short HEAD)
 sleep 2
-REMOTE_MD5=$(curl -sf https://taipei.retty-ai.com/static/style.css | md5sum | awk '{print $1}')
+REMOTE_MD5=$(curl -sf https://taipei.retty-ai.com/static/style2.css | md5sum | awk '{print $1}')
 REMOTE_SHA=$(curl -sf https://taipei.retty-ai.com/api/version | sed -n 's/.*"sha":"\([^"]*\)".*/\1/p')
 if [[ "$LOCAL_MD5" == "$REMOTE_MD5" ]]; then
     echo "✓ CSS md5 match: $LOCAL_MD5"

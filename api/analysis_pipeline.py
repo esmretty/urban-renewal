@@ -1208,7 +1208,7 @@ def analyze_single_property(
                 from analysis.scorer import resolve_effective_zoning
                 effective_zoning = resolve_effective_zoning(z["zoning"], z.get("original_zone"))
                 # 防災都更資格：1974 前的台北市建物（屋齡 ≥ 當年 - 1974）
-                # 跟前端 isFangzai 判定對齊（app.js: city==="台北市" && (now - currentAge) <= 1974）
+                # 跟前端 isFangzai 判定對齊（app2.js: city==="台北市" && (now - currentAge) <= 1974）
                 _is_fz_dugen = False
                 _city_for_fz = item.get("city") or doc_data.get("city")
                 _age_for_fz = doc_data.get("building_age") or item.get("building_age")
