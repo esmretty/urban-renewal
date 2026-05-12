@@ -724,6 +724,8 @@ async def cadastral_search_at_point(
     URInfo session，避免第一次點擊被 NTPC session token (10-20s) 拖住。
     Taipei miss 才退而求其次打新北（這時 NTPC session 冷啟動的成本由 click 那筆吸收）。
     """
+    import time as _t
+    _t0 = _t.time()
     if not (-90 <= lat <= 90 and -180 <= lng <= 180):
         raise HTTPException(400, "lat/lng 不在合法範圍")
     from concurrent.futures import ThreadPoolExecutor
@@ -732,13 +734,18 @@ async def cadastral_search_at_point(
         twd97_x, twd97_y = wgs84_to_twd97(lat, lng)
     except Exception:
         twd97_x = twd97_y = None
+    _t_twd97 = _t.time()
     with ThreadPoolExecutor(max_workers=4) as ex:
         # ── Phase 1: Taipei plot + zoning（fast，無 token）─────────────
         tpe_plot_fut = ex.submit(_query_tpe_plot_at_point, lat, lng)
         tpe_zoning_fut = ex.submit(_query_tpe_zoning_at, twd97_x, twd97_y) if twd97_x is not None else None
         tpe_plot = tpe_plot_fut.result()
+        _t_tpe_plot = _t.time()
+        logger.info(f"[at_point timing] lat={lat} lng={lng} twd97_conv={(_t_twd97-_t0)*1000:.0f}ms tpe_plot={(_t_tpe_plot-_t_twd97)*1000:.0f}ms hit={bool(tpe_plot)}")
         if tpe_plot:
             tpe_zoning = tpe_zoning_fut.result() if tpe_zoning_fut else None
+            _t_tpe_zon = _t.time()
+            logger.info(f"[at_point timing] tpe_zoning={(_t_tpe_zon-_t_tpe_plot)*1000:.0f}ms zoning_hit={bool(tpe_zoning)} TOTAL={(_t_tpe_zon-_t0)*1000:.0f}ms")
             if tpe_zoning:
                 tpe_plot.update(tpe_zoning)
             return {"ok": True, **tpe_plot}
