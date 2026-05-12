@@ -1852,10 +1852,16 @@
     if (/^(?:臺北市|台北市|新北市)/.test(base)) return base;
     return (p.city || '') + (p.district || '') + base;
   }
+  // 鏡像 backend analysis/geocoder.py 的 _FLOOR_TAIL_RE：剝掉地址尾端樓層 token，
+  // 讓 Google Maps 抓到 ROOFTOP 精確 building 座標（帶樓層會 fallback 到 centroid）。
+  function _stripFloorForMap(addr) {
+    if (!addr) return addr;
+    return addr.replace(/\s*(?:B\d+樓|地下\d*樓?|頂樓|[\d一二三四五六七八九十]+樓)\s*$/, '').trim();
+  }
   function inferredAddressCellHTML(p) {
     const cands = Array.isArray(p.address_inferred_candidates_detail) ? p.address_inferred_candidates_detail : [];
     const current = p.address_inferred || p.address || p.title || '';
-    const mapLink = `<a href="https://www.google.com/maps/search/${encodeURIComponent(fullAddress(p))}" target="_blank" rel="noopener" class="v2-d-map-link" title="Google Maps">📍</a>`;
+    const mapLink = `<a href="https://www.google.com/maps/search/${encodeURIComponent(_stripFloorForMap(fullAddress(p)))}" target="_blank" rel="noopener" class="v2-d-map-link" title="Google Maps">📍</a>`;
     if (cands.length <= 1) {
       return `${esc(stripCityDist(current))} ${mapLink}`;
     }
