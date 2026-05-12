@@ -1355,7 +1355,9 @@
     if (p) _updateFavBtn(p);
   }
 
-  // 「在地圖上查看」detail header 按鈕 → 切地圖模式 + center 物件位置 + z=18 + 自動勾分區/地籍/都更
+  // 「在地圖上查看」detail header 按鈕 → 切地圖模式 + center 物件位置 + z=18
+  // 預設關掉所有 overlay layer，只開「該物件所在 redev sub-layer」(根據 p.redev_cases.sub_type)
+  // 這樣不會撞 server 把所有圖層 tile 同時 fetch 造成 CPU 飽和
   async function viewOnMap() {
     const id = state.selectedId;
     if (!id) return;
@@ -1365,9 +1367,7 @@
       return;
     }
     closeDetail();   // 關掉 drawer
-    // 標記目標 id → map_mode.js renderMap 讀這個給對應 marker 加 focused class (放大+光暈)
     state._focusedId = id;
-    // setViewMode 在 map_mode.js IIFE 內 attach 到 window.v2 (跨 module)
     if (window.v2 && typeof window.v2.setViewMode === 'function') {
       window.v2.setViewMode('map');
     } else {
@@ -1378,21 +1378,35 @@
     setTimeout(() => {
       const m = state._mapInst;
       if (!m) return;
-      try {
-        m.setView([p.latitude, p.longitude], 18);
-      } catch (e) { console.warn('setView fail', e); }
-      // 自動勾「土地分區」+「地籍圖」+「都更圖層 group」(該物件所在城市的全部 sub)
-      const cbZoning = document.querySelector('input[data-overlay="zoning"]');
-      const cbCadastral = document.querySelector('input[data-overlay="cadastral"]');
-      [cbZoning, cbCadastral].forEach(cb => {
-        if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change', { bubbles: true })); }
-      });
-      // 都更：根據物件 city 選對應全選 (台北→tpe / 新北→ntpc)
-      const cityTag = p.city === '新北市' ? 'ntpc' : 'tpe';
-      const cbRenewalAll = document.querySelector(`input[data-renewal-all="${cityTag}"]`);
-      if (cbRenewalAll && !cbRenewalAll.checked) {
-        cbRenewalAll.checked = true;
-        cbRenewalAll.dispatchEvent(new Event('change', { bubbles: true }));
+      try { m.setView([p.latitude, p.longitude], 18); }
+      catch (e) { console.warn('setView fail', e); }
+      // 1. 預設全關：所有 cadastral group overlay (zoning / cadastral / building_floors)
+      //    + 兩個都更 city 全選 + 所有 redev sub
+      const turnOff = (cb) => {
+        if (cb && cb.checked) {
+          cb.checked = false;
+          cb.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      };
+      document.querySelectorAll('input[data-overlay]').forEach(turnOff);
+      document.querySelectorAll('input[data-renewal-all]').forEach(turnOff);
+      document.querySelectorAll('input[data-renewal-sub]').forEach(turnOff);
+      // 2. 只開該物件命中的 redev sub-layer
+      //    台北 sub_type: 'pub_renew' / 'chloride' / etc → checkbox id 直接同名
+      //    新北 sub_type: 'ama' / 'easy' / etc → checkbox id 是 'ntpc_ama' 'ntpc_easy'
+      const cases = Array.isArray(p.redev_cases) ? p.redev_cases : [];
+      const isNtpc = p.city === '新北市';
+      const subIds = new Set();
+      for (const c of cases) {
+        if (!c || !c.sub_type) continue;
+        subIds.add(isNtpc ? `ntpc_${c.sub_type}` : c.sub_type);
+      }
+      for (const sid of subIds) {
+        const cb = document.querySelector(`input[data-renewal-sub="${sid}"]`);
+        if (cb && !cb.checked) {
+          cb.checked = true;
+          cb.dispatchEvent(new Event('change', { bubbles: true }));
+        }
       }
     }, 300);
   }

@@ -28,13 +28,19 @@ logger = logging.getLogger(__name__)
 
 
 def run_server(port: int = 8000):
-    logger.info(f"啟動都更神探R → http://localhost:{port}")
+    import os
+    # workers > 1 在 production 才有意義；local dev 留 1 個方便 debug
+    # 透過 env var UVICORN_WORKERS 控制 (deploy.sh / systemd 可設)
+    # 預設 prod 3 workers (GCE 2-core VM)，local 1 worker
+    workers = int(os.getenv("UVICORN_WORKERS", "1"))
+    logger.info(f"啟動都更神探R → http://localhost:{port} (workers={workers})")
     uvicorn.run(
         "api.app:app",
         host="0.0.0.0",
         port=port,
         reload=False,
         log_level="warning",
+        workers=workers,
     )
 
 
