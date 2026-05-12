@@ -339,63 +339,73 @@ def _fetch_591_dmaps(cfg: dict, bbox: str, width: int, height: int, srs: str) ->
 # session cookie 一起檢驗，缺 cookie → MSGCODE 300「參數檢驗失敗」
 _NTPCURINFO_CACHE: dict = {"by_name": {}, "fetched_at": 0.0, "hdtoken": None, "cookies": {}}
 _NTPCURINFO_TTL = 50 * 60  # 50 min
+# refresh lock：handler 改 sync def 後 multiple threadpool thread 會同時偵測 session 過期，
+# 沒 lock 會各自打 NTPC GetLayerList 一次（3 倍流量 + cache 互蓋）。double-checked locking：
+# 拿 lock 後再檢查一次 cache 是否已被其他 thread refresh 好。
+import threading as _ntpc_threading
+_NTPCURINFO_REFRESH_LOCK = _ntpc_threading.Lock()
 
 
 def _refresh_ntpcurinfo_layers() -> bool:
     """重新打 NtpcURInfo / datahandler.ashx GetLayerList，把全部 layer config (含
-    AGSTOKEN/MAPSRVURL/LAYERIDS) 寫進 _NTPCURINFO_CACHE['by_name']。回 True/False。"""
+    AGSTOKEN/MAPSRVURL/LAYERIDS) 寫進 _NTPCURINFO_CACHE['by_name']。回 True/False。
+    Thread-safe：double-checked locking 確保多 thread 並發只實際 refresh 一次。"""
     import base64
     import re as _re
     import time as _t
-    try:
-        with httpx.Client(verify=False, timeout=15, headers={
-            "User-Agent": "Mozilla/5.0",
-            "Referer": "https://urban.planning.ntpc.gov.tw/NtpcURInfo/",
-        }) as client:
-            r = client.get("https://urban.planning.ntpc.gov.tw/NtpcURInfo/")
-            m = _re.search(r'id="hdToken"[^>]*value="([^"]+)"', r.text)
-            if not m:
-                logger.warning("NtpcURInfo: 抓不到 #hdToken")
-                return False
-            hdtoken = m.group(1)
-            r2 = client.post(
-                "https://urban.planning.ntpc.gov.tw/NtpcURInfo/ajax/datahandler.ashx",
-                data={
-                    "keyword": "GetLayerList",
-                    "timeStamp": hdtoken,
-                    "timeName": base64.b64encode(b"MapToken").decode(),
-                },
-            )
-            j = r2.json()
-            if j.get("MSGCODE") != 200:
-                logger.warning(f"NtpcURInfo GetLayerList MSGCODE={j.get('MSGCODE')}")
-                return False
-            by_name: dict[str, dict] = {}
-            for it in j.get("DATA", []) or []:
-                name = it.get("LAYERNAME") or ""
-                if not name:
-                    continue
-                by_name[name] = {
-                    "agstoken": it.get("AGSTOKEN") or "",
-                    "mapsrvurl": it.get("MAPSRVURL") or "",
-                    "layerids": (it.get("LAYERIDS") or "").strip() or "0",
-                }
-            if not by_name:
-                logger.warning("NtpcURInfo GetLayerList: 0 layers")
-                return False
-            _NTPCURINFO_CACHE["by_name"] = by_name
-            _NTPCURINFO_CACHE["hdtoken"] = hdtoken
-            _NTPCURINFO_CACHE["fetched_at"] = _t.time()
-            # 把 client 的 session cookies 保留下來給 UrbanRenewalQuery.ashx 用
-            # (server 用 ASP.NET_SessionId + TS01xxxx 驗證 hdToken；缺 cookie → MSGCODE 300)
-            try:
-                _NTPCURINFO_CACHE["cookies"] = dict(client.cookies)
-            except Exception:
-                _NTPCURINFO_CACHE["cookies"] = {}
+    with _NTPCURINFO_REFRESH_LOCK:
+        # double-check：在等 lock 期間另一個 thread 可能已經 refresh 完
+        if _NTPCURINFO_CACHE["by_name"] and (_t.time() - _NTPCURINFO_CACHE["fetched_at"]) < _NTPCURINFO_TTL:
             return True
-    except Exception as e:
-        logger.warning(f"NtpcURInfo refresh layer list 失敗: {e}")
-        return False
+        try:
+            with httpx.Client(verify=False, timeout=15, headers={
+                "User-Agent": "Mozilla/5.0",
+                "Referer": "https://urban.planning.ntpc.gov.tw/NtpcURInfo/",
+            }) as client:
+                r = client.get("https://urban.planning.ntpc.gov.tw/NtpcURInfo/")
+                m = _re.search(r'id="hdToken"[^>]*value="([^"]+)"', r.text)
+                if not m:
+                    logger.warning("NtpcURInfo: 抓不到 #hdToken")
+                    return False
+                hdtoken = m.group(1)
+                r2 = client.post(
+                    "https://urban.planning.ntpc.gov.tw/NtpcURInfo/ajax/datahandler.ashx",
+                    data={
+                        "keyword": "GetLayerList",
+                        "timeStamp": hdtoken,
+                        "timeName": base64.b64encode(b"MapToken").decode(),
+                    },
+                )
+                j = r2.json()
+                if j.get("MSGCODE") != 200:
+                    logger.warning(f"NtpcURInfo GetLayerList MSGCODE={j.get('MSGCODE')}")
+                    return False
+                by_name: dict[str, dict] = {}
+                for it in j.get("DATA", []) or []:
+                    name = it.get("LAYERNAME") or ""
+                    if not name:
+                        continue
+                    by_name[name] = {
+                        "agstoken": it.get("AGSTOKEN") or "",
+                        "mapsrvurl": it.get("MAPSRVURL") or "",
+                        "layerids": (it.get("LAYERIDS") or "").strip() or "0",
+                    }
+                if not by_name:
+                    logger.warning("NtpcURInfo GetLayerList: 0 layers")
+                    return False
+                _NTPCURINFO_CACHE["by_name"] = by_name
+                _NTPCURINFO_CACHE["hdtoken"] = hdtoken
+                _NTPCURINFO_CACHE["fetched_at"] = _t.time()
+                # 把 client 的 session cookies 保留下來給 UrbanRenewalQuery.ashx 用
+                # (server 用 ASP.NET_SessionId + TS01xxxx 驗證 hdToken；缺 cookie → MSGCODE 300)
+                try:
+                    _NTPCURINFO_CACHE["cookies"] = dict(client.cookies)
+                except Exception:
+                    _NTPCURINFO_CACHE["cookies"] = {}
+                return True
+        except Exception as e:
+            logger.warning(f"NtpcURInfo refresh layer list 失敗: {e}")
+            return False
 
 
 def _get_ntpcurinfo_layer_meta(layer_name: str) -> Optional[dict]:
