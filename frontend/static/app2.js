@@ -3421,94 +3421,6 @@
   // 路名 / 學區語音輸入 — webkitSpeechRecognition (auto-end on speech pause)
   // 點 mic → 開始辨識 → 偵測到 silence 後自動 end → 把 final transcript 寫入 input
   // iOS WKWebView 的 OS 層 mic indicator 釋放有延遲是 known limitation，這版不處理。
-  function _showVoiceStatus(text, kind) {
-    let host = $('#v2-voice-banner');
-    if (!host) {
-      host = document.createElement('div');
-      host.id = 'v2-voice-banner';
-      document.body.appendChild(host);
-    }
-    host.className = 'v2-voice-banner' + (kind ? ' v2-voice-banner--' + kind : '');
-    host.textContent = text;
-    host.style.display = 'block';
-    if (kind === 'error' || kind === 'success') {
-      setTimeout(() => { if (host.textContent === text) host.style.display = 'none'; }, 3000);
-    }
-  }
-  const _VOICE_ERR_TXT = {
-    'no-speech': '沒偵測到語音 — 請靠近麥克風再試一次',
-    'audio-capture': '麥克風無法使用 — 請檢查裝置麥克風',
-    'not-allowed': '瀏覽器拒絕麥克風權限 — 請在設定→Safari/Chrome 開啟麥克風',
-    'service-not-allowed': '系統拒絕語音服務 — 改用其他瀏覽器試試',
-    'network': '語音辨識需要網路連線',
-    'language-not-supported': '不支援中文辨識',
-    'aborted': '語音辨識被取消',
-  };
-
-  function _startVoice(inputId, btnId) {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const inp = $('#' + inputId);
-    const btn = $('#' + btnId);
-    if (!SR) {
-      _showVoiceStatus('此瀏覽器不支援語音輸入。Chrome 或 iOS Safari 較新版本才支援', 'error');
-      return;
-    }
-    if (!inp) return;
-    if (!window.isSecureContext) {
-      _showVoiceStatus('語音輸入只能在 HTTPS 環境用', 'error');
-      return;
-    }
-    const rec = new SR();
-    rec.lang = 'zh-TW';
-    rec.interimResults = true;
-    rec.maxAlternatives = 1;
-    rec.continuous = false;
-    if (btn) btn.classList.add('v2-road-mic--active');
-    let gotAnyResult = false;
-    rec.onaudiostart = () => _showVoiceStatus('🎤 麥克風已開啟，請說話…', 'listening');
-    rec.onspeechstart = () => _showVoiceStatus('🎙 偵測到聲音，繼續說…', 'listening');
-    rec.onresult = (e) => {
-      let interim = '', final = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const tr = e.results[i][0].transcript || '';
-        if (e.results[i].isFinal) final += tr;
-        else interim += tr;
-      }
-      if (interim) {
-        gotAnyResult = true;
-        _showVoiceStatus('辨識中：' + interim, 'listening');
-      }
-      if (final) {
-        gotAnyResult = true;
-        const text = final.trim().replace(/\s+/g, '').replace(/。$/, '');
-        inp.value = text;
-        inp.dispatchEvent(new Event('input', { bubbles: true }));
-        _showVoiceStatus('✓ 已輸入：' + text, 'success');
-      }
-    };
-    rec.onnomatch = () => _showVoiceStatus('沒辨識出內容，再試一次', 'error');
-    rec.onerror = (ev) => {
-      _showVoiceStatus(_VOICE_ERR_TXT[ev.error] || ('語音辨識錯誤：' + ev.error), 'error');
-      if (btn) btn.classList.remove('v2-road-mic--active');
-    };
-    rec.onend = () => {
-      if (btn) btn.classList.remove('v2-road-mic--active');
-      if (!gotAnyResult) {
-        const host = $('#v2-voice-banner');
-        if (!host || host.className.indexOf('--error') < 0) {
-          _showVoiceStatus('未偵測到語音，請靠近麥克風再試一次', 'error');
-        }
-      }
-    };
-    try {
-      rec.start();
-    } catch (e) {
-      _showVoiceStatus('語音啟動失敗：' + (e.message || e), 'error');
-      if (btn) btn.classList.remove('v2-road-mic--active');
-    }
-  }
-  function startVoiceRoad() { _startVoice('v2-road', 'v2-road-mic'); }
-  function startVoiceSchool() { _startVoice('v2-school', 'v2-school-mic'); }
 
   // ── Boot ─────────────────────────────────────────────────────────────────
   // 地圖模式 (setViewMode / renderMap / _initMap) 在獨立檔 frontend/static/map_mode.js
@@ -3729,8 +3641,6 @@
     openRoadOverlay, scanRoadWidth, deleteRow,
     showRedevDetailPopup, hideRedevDetailPopup,
     hardReload,
-    startVoiceRoad,
-    startVoiceSchool,
     capInput,
   };
 
