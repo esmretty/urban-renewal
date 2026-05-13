@@ -1169,6 +1169,8 @@ from api.routers.admin_misc import router as admin_misc_router
 app.include_router(admin_misc_router)
 from api.routers.property_actions import router as property_actions_router
 app.include_router(property_actions_router)
+from api.routers.admin_data_view import router as admin_data_view_router
+app.include_router(admin_data_view_router)
 from api.external_checks import router as external_checks_router
 app.include_router(external_checks_router)
 from api.user_reads import router as user_reads_router
@@ -1570,92 +1572,6 @@ async def admin_cleanup_orphan_ocr(admin: dict = Depends(require_admin)):
         "freed_mb": round(freed / 1024**2, 1),
         "errors": errs[:20],   # 最多回 20 條 error
     }
-
-
-@app.get("/admin/properties")
-async def admin_properties(
-    source: Optional[str] = Query(None),
-    admin: dict = Depends(require_admin),
-):
-    """列出中央 DB docs。
-    source=batch    → 排除 source_origin == 'user_url' （= admin batch 抓進來的）
-    source=user_url → 只回 source_origin == 'user_url' （用戶貼 URL 送出，附 submitted_by_email）
-    省略 source     → 全部
-    """
-    col = get_col()
-    docs = list(col.get())
-    items = []
-    for d in docs:
-        data = d.to_dict() or {}
-        data["id"] = d.id
-        if source == "batch" and data.get("source_origin") == "user_url":
-            continue
-        if source == "user_url" and data.get("source_origin") != "user_url":
-            continue
-        items.append(data)
-    # 對 user_url 物件，補上送件人 email（從 doc 上的 submitted_by_uid → users 反查）
-    if source == "user_url" and items:
-        fs = get_firestore()
-        uid_email_cache = {}
-        def _email_of(uid):
-            if not uid:
-                return None
-            if uid in uid_email_cache:
-                return uid_email_cache[uid]
-            try:
-                u = fs.collection("users").document(uid).get()
-                em = (u.to_dict() or {}).get("email") if u.exists else None
-            except Exception:
-                em = None
-            uid_email_cache[uid] = em
-            return em
-        for it in items:
-            it["submitted_by_email"] = _email_of(it.get("submitted_by_uid"))
-    items.sort(key=lambda x: (x.get("list_rank") if x.get("list_rank") is not None else 9999))
-    items.sort(key=lambda x: x.get("scrape_session_at") or x.get("scraped_at") or "", reverse=True)
-    return {"total": len(items), "items": items}
-
-
-@app.get("/admin/manual_properties")
-async def admin_manual_properties(admin: dict = Depends(require_admin)):
-    """列出全部用戶的 manual 物件（users/{uid}/manual/{src_id}）。
-    每筆附 submitted_by_email + submitted_by_uid。"""
-    fs = get_firestore()
-    items = []
-    for u in fs.collection("users").get():
-        uid = u.id
-        udata = u.to_dict() or {}
-        email = udata.get("email")
-        for m in fs.collection("users").document(uid).collection("manual").get():
-            d = m.to_dict() or {}
-            d["id"] = m.id
-            d["submitted_by_uid"] = uid
-            d["submitted_by_email"] = email
-            items.append(d)
-    items.sort(key=lambda x: x.get("scraped_at") or "", reverse=True)
-    return {"total": len(items), "items": items}
-
-
-@app.get("/admin/properties/{property_id:path}")
-async def admin_get_property(property_id: str, admin: dict = Depends(require_admin)):
-    doc = get_col().document(property_id).get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="物件不存在")
-    data = doc.to_dict()
-    data["id"] = doc.id
-    return data
-
-
-@app.delete("/admin/properties/{property_id:path}")
-async def admin_delete_property(property_id: str, admin: dict = Depends(require_admin)):
-    """從中央 DB 真刪除（非軟刪）。"""
-    ref = get_col().document(property_id)
-    if not ref.get().exists:
-        raise HTTPException(status_code=404, detail="物件不存在")
-    ref.delete()
-    invalidate_query_cache()
-    logger.warning("[admin] %s 永久刪除 %s", admin.get("email"), property_id)
-    return {"status": "ok", "deleted": property_id}
 
 
 def _gis_overlay_layers_for_admin() -> list:
@@ -2611,19 +2527,6 @@ async def admin_reanalyze(property_id: str, source: str = "all", admin: dict = D
     asyncio.create_task(_do())
     logger.warning("[admin] %s 觸發重新分析（完整重爬） %s", admin.get("email"), property_id)
     return {"status": "started"}
-
-
-@app.get("/admin/manual/{uid}/{property_id:path}")
-async def admin_get_manual(uid: str, property_id: str, admin: dict = Depends(require_admin)):
-    """admin 讀取指定用戶的 manual doc（給 reanalyze 輪詢用）。"""
-    from database.db import get_user_manual
-    doc = get_user_manual(uid).document(property_id).get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="物件不存在")
-    data = doc.to_dict() or {}
-    data["id"] = doc.id
-    data["submitted_by_uid"] = uid
-    return data
 
 
 @app.get("/admin/ocr_misread_scan")
