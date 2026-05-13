@@ -32,14 +32,18 @@ def to_halfwidth(s: str) -> str:
 # ── 繁簡 / 異體字 ───────────────────────────────────────────────────
 def zhtw_normalize(s: str) -> str:
     """把 Google reverse geocode 偶爾回的簡體 / 異體字一次轉成台灣繁體。
-    至少涵蓋 reverse_geocode 已踩到的字 (区→區，板桥→板橋，縣字、臺/台異體)；
+    至少涵蓋 reverse_geocode + NLSC API 已踩到的字:
+      - 区→區，桥→橋，县→縣 (簡體)
+      - 臺/台 異體
+      - 峯/峰 異體 (NLSC 政府 polygon 回「五峯里」但學區 CSV / 街道名 用「五峰」)
     不做的：庄、湾 等繁簡都是有效台灣字、誤改風險高。"""
     if not s:
         return s
     return (s.replace("区", "區")
              .replace("桥", "橋")
              .replace("县", "縣")
-             .replace("臺", "台"))
+             .replace("臺", "台")
+             .replace("峯", "峰"))
 
 
 # ── 樓層 ────────────────────────────────────────────────────────────

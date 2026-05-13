@@ -53,8 +53,18 @@ def _load_lookup() -> dict:
     return _LOOKUP_CACHE
 
 
+def _normalize_village(village: str) -> str:
+    """村里名異字 normalize — NLSC 政府 polygon 回「五峯里」但學區 CSV 用「五峰里」。
+    走 zhtw_normalize 統一 (含 臺/台、峯/峰、簡體繁體) 後再當 key 比對。"""
+    if not village:
+        return village
+    from helpers.text_norm import zhtw_normalize
+    return zhtw_normalize(village)
+
+
 def _build_index() -> dict:
-    """Build (city, district, village) → list[row] 索引。Lazy + cached。"""
+    """Build (city, district, village) → list[row] 索引。Lazy + cached。
+    village 用 _normalize_village 統一異字後當 key (避免「五峯里」vs「五峰里」mismatch)。"""
     global _INDEX_CACHE
     if _INDEX_CACHE is not None:
         return _INDEX_CACHE
@@ -62,7 +72,7 @@ def _build_index() -> dict:
     rows = lk.get("rows") or []
     idx: dict = {}
     for r in rows:
-        key = (r.get("city"), r.get("district"), r.get("village"))
+        key = (r.get("city"), r.get("district"), _normalize_village(r.get("village")))
         idx.setdefault(key, []).append(r)
     _INDEX_CACHE = idx
     return idx
@@ -92,6 +102,7 @@ def lookup_by_village_detail(city: str, district: str, village: str) -> List[dic
     if not (city and district and village):
         return []
     city = _normalize_city(city)
+    village = _normalize_village(village)
     idx = _build_index()
     rows = idx.get((city, district, village)) or []
     groups: dict = {}
