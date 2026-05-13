@@ -434,6 +434,9 @@ def _reset_scrape_progress():
 
 
 SCHEDULER_ALLOWED_INTERVAL_HR = (1, 3, 6, 12, 24)
+SCHEDULER_VERIFY_INTERVAL_HR = (12, 24, 72, 360)   # 偵測下架可選的間隔
+SCHEDULER_UPDATE_PRICES_INTERVAL_HR = (24, 168, 720)   # 更新單價可選間隔（每天/週/月）
+SCHEDULER_GIS_OVERLAY_INTERVAL_HR = (360, 720, 1440, 4320)   # 更新圖層 cache：15/30/60/180 天
 
 
 def _load_scheduler_config() -> dict:
