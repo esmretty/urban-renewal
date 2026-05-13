@@ -30,6 +30,9 @@ block_result.json
 debug_*.py
 debug_*.png
 
+# Claude session 累積的本機紀錄 (大維護 snapshot / 安全 audit / handoff doc) — 含內部 finding，不入 git
+notes/
+
 # Deploy 時 server 寫的版本號檔（git short SHA），不入 commit
 VERSION
 
