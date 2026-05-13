@@ -21,7 +21,6 @@
     page: 1,
     pageSize: 50,
     selectedId: null,
-    targetRegions: {},
     districtPicks: new Set(),
     sortDir: 'desc',
     gridCity: '台北市',   // mobile 兩城切換用 (≤1024px)
@@ -894,18 +893,13 @@
 
   // ── Districts: load + render chips ──────────────────────────────────────
   // 用 with_counts=true 拿物件數量，前端隱藏「沒資料的區」
+  // (前端 chip 來源是 hardcoded V1_DISTRICTS — endpoint 回的 regions 不用，
+  //  只取 counts。server 端仍會多算 regions，但跟前端 dead code 無關。)
   async function loadDistricts() {
     try {
       const r = await fetch('/api/target_regions?with_counts=true');
       const data = await r.json();
-      // 兼容兩種 response：with_counts 時是 {regions, counts}；否則是純 regions
-      if (data && data.regions) {
-        state.targetRegions = data.regions;
-        state.districtCounts = data.counts || {};
-      } else {
-        state.targetRegions = data;
-        state.districtCounts = {};
-      }
+      state.districtCounts = (data && data.counts) || {};
       renderDistrictChips();
     } catch (e) { console.warn('target_regions failed', e); }
   }
