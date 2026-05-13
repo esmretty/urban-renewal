@@ -265,6 +265,29 @@ def _get_email_whitelist() -> set:
         return set()
 
 
+# 維護模式狀態（本地檔案，per-server 切換不影響 production）。
+# 多處共用：public.py 的 /api/me + /api/maintenance_status；admin_misc.py 的
+# /admin/maintenance GET/POST。留在 app.py 為單一定義源。
+def _maintenance_file_path():
+    from config import DATA_DIR
+    return DATA_DIR / "maintenance.json"
+
+
+def _get_maintenance_state() -> dict:
+    """讀本地檔案 data/maintenance.json（per-server，不共用）。
+    刻意不放 Firestore：本機 debug 時切換不該影響 production VM。"""
+    import json as _json
+    path = _maintenance_file_path()
+    if not path.exists():
+        return {"enabled": False, "message": ""}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return _json.load(f) or {"enabled": False, "message": ""}
+    except Exception as e:
+        logger.warning("[maintenance] load state failed: %s", e)
+        return {"enabled": False, "message": ""}
+
+
 def _ensure_user_profile(user: dict):
     """第一次看到該 uid 就建 profile doc；已存在但缺 tier 欄位則補上。
     新用戶必須在 email 白名單（或是 owner / system admin 的 env 指定）才准建立 profile，
@@ -1142,6 +1165,8 @@ from api.routers.school_district import router as school_district_router
 app.include_router(school_district_router)
 from api.routers.public import router as public_router
 app.include_router(public_router)
+from api.routers.admin_misc import router as admin_misc_router
+app.include_router(admin_misc_router)
 from api.external_checks import router as external_checks_router
 app.include_router(external_checks_router)
 from api.user_reads import router as user_reads_router
@@ -2931,152 +2956,6 @@ async def admin_dedupe_merge(body: DedupeMergeReq, admin: dict = Depends(require
             "deleted_count": len(deleted_ids), "deleted_ids": deleted_ids[:50]}
 
 
-@app.delete("/admin/users/{uid}")
-async def admin_delete_user(uid: str, admin: dict = Depends(require_admin)):
-    """刪除指定用戶所有私人資料（watchlist + manual + profile）。不動中央。"""
-    counts = {}
-    for name, col in [
-        ("watchlist", get_user_watchlist(uid)),
-        ("manual", get_user_manual(uid)),
-    ]:
-        c = 0
-        for d in col.get():
-            d.reference.delete()
-            c += 1
-        counts[name] = c
-    # 刪 profile doc（若存在）
-    profile_ref = get_user_doc(uid)
-    profile_existed = profile_ref.get().exists
-    if profile_existed:
-        profile_ref.delete()
-        counts["profile"] = 1
-    else:
-        counts["profile"] = 0
-
-    total_deleted = sum(counts.values())
-    if total_deleted == 0:
-        return {"status": "empty", "uid": uid, "message": "此用戶無資料可刪。"}
-    logger.warning("[admin] %s 刪除 uid=%s 所有資料: %s", admin.get("email"), uid, counts)
-    return {"status": "ok", "uid": uid, "deleted": counts}
-
-
-@app.get("/admin/users")
-async def admin_users(admin: dict = Depends(require_admin)):
-    """列出 users collection。"""
-    from api.auth import resolve_tier, tier_name
-    out = []
-    try:
-        users_col = get_firestore().collection("users")
-        for u in users_col.get():
-            data = u.to_dict() or {}
-            email = data.get("email") or ""
-            # tier 若 doc 沒存（舊資料）→ 用 email 推算
-            tier = data.get("tier") if data.get("tier") is not None else resolve_tier(email)
-            out.append({
-                "uid": u.id,
-                "email": email,
-                "display_name": data.get("display_name"),
-                "created_at": data.get("created_at"),
-                "tier": tier,
-                "tier_name_zh": tier_name(tier, "zh"),
-                "tier_name_en": tier_name(tier, "en"),
-            })
-    except Exception as e:
-        logger.warning("admin_users failed: %s", e)
-    return {"items": out}
-
-
-# ── Email 白名單（admin 管理） ──────────────────────────────────────────────
-class WhitelistReq(BaseModel):
-    email: str
-
-
-@app.get("/admin/email_whitelist")
-async def get_email_whitelist(admin: dict = Depends(require_admin)):
-    """列出 email 白名單（新用戶首次登入時會被檢查）。"""
-    emails = sorted(_get_email_whitelist())
-    return {"emails": emails}
-
-
-@app.post("/admin/email_whitelist/add")
-async def add_email_whitelist(body: WhitelistReq, admin: dict = Depends(require_admin)):
-    email = (body.email or "").strip().lower()
-    if not email or "@" not in email:
-        raise HTTPException(400, "請提供有效 email")
-    current = _get_email_whitelist()
-    current.add(email)
-    get_firestore().collection("settings").document("email_whitelist").set(
-        {"emails": sorted(current), "updated_at": now_tw_iso(),
-         "updated_by_email": admin.get("email") or ""},
-        merge=True,
-    )
-    logger.warning("[whitelist] %s 新增 %s", admin.get("email"), email)
-    return {"status": "ok", "emails": sorted(current)}
-
-
-@app.post("/admin/email_whitelist/remove")
-async def remove_email_whitelist(body: WhitelistReq, admin: dict = Depends(require_admin)):
-    email = (body.email or "").strip().lower()
-    current = _get_email_whitelist()
-    current.discard(email)
-    get_firestore().collection("settings").document("email_whitelist").set(
-        {"emails": sorted(current), "updated_at": now_tw_iso(),
-         "updated_by_email": admin.get("email") or ""},
-        merge=True,
-    )
-    logger.warning("[whitelist] %s 移除 %s", admin.get("email"), email)
-    return {"status": "ok", "emails": sorted(current)}
-
-
-# ── 網站維護模式（admin 切換） ──────────────────────────────────────────────
-class MaintenanceReq(BaseModel):
-    enabled: bool
-    message: Optional[str] = None
-
-
-def _maintenance_file_path():
-    from config import DATA_DIR
-    return DATA_DIR / "maintenance.json"
-
-
-def _get_maintenance_state() -> dict:
-    """讀本地檔案 data/maintenance.json（per-server，不共用）。
-    刻意不放 Firestore：本機 debug 時切換不該影響 production VM。"""
-    import json as _json
-    path = _maintenance_file_path()
-    if not path.exists():
-        return {"enabled": False, "message": ""}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return _json.load(f) or {"enabled": False, "message": ""}
-    except Exception as e:
-        logger.warning("[maintenance] load state failed: %s", e)
-        return {"enabled": False, "message": ""}
-
-
-@app.get("/admin/maintenance")
-async def get_maintenance(admin: dict = Depends(require_admin)):
-    """回傳目前維護模式狀態 + 訊息（本 server 的）。"""
-    return _get_maintenance_state()
-
-
-@app.post("/admin/maintenance")
-async def set_maintenance(body: MaintenanceReq, admin: dict = Depends(require_admin)):
-    """切換維護模式 + 自訂訊息。寫入本地檔案，不影響其他 server。"""
-    import json as _json
-    state = {
-        "enabled": bool(body.enabled),
-        "message": (body.message or "").strip(),
-        "updated_at": now_tw_iso(),
-        "updated_by_email": admin.get("email") or "",
-    }
-    path = _maintenance_file_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        _json.dump(state, f, ensure_ascii=False, indent=2)
-    logger.warning("[maintenance] %s 設定 enabled=%s message=%r (本機檔案)",
-                   admin.get("email"), state["enabled"], state["message"])
-    return {"status": "ok", **state}
 
 
 # ── 失敗重試佇列（admin） ───────────────────────────────────────────────────
