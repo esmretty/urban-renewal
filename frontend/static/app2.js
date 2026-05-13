@@ -1285,6 +1285,14 @@
         list.innerHTML = _groupAndRender(items, queryDistrict);
       }
     };
+    // cache short-circuit — 學區只跟物件地點 (lat/lng) 有關，跟用戶改數字無關。
+    // saveOverride 重 render detail 時會再呼叫本函式，命中 cache 直接重畫，不打 API。
+    if (p._school_cache) {
+      const c = p._school_cache;
+      renderRow('國小', c.esItems.length ? c.esItems : c.fallback_es, c.queryDistrict);
+      renderRow('國中', c.jhItems.length ? c.jhItems : c.fallback_jh, c.queryDistrict);
+      return;
+    }
     if (!lat || !lng) {
       renderRow('國小', []); renderRow('國中', []);
       return;
@@ -1300,6 +1308,12 @@
       const queryDistrict = data.district || '';
       const esItems = detail.filter(d => d.kind === 'elementary');
       const jhItems = detail.filter(d => d.kind === 'junior_high');
+      // 寫進 cache，下次 saveOverride 重 render 時直接命中、不打 API
+      p._school_cache = {
+        esItems, jhItems, queryDistrict,
+        fallback_es: data.school_elementary || [],
+        fallback_jh: data.school_junior_high || [],
+      };
       // backward compat fallback: 若 rows_detail 缺，用校名 list
       renderRow('國小', esItems.length ? esItems : (data.school_elementary || []), queryDistrict);
       renderRow('國中', jhItems.length ? jhItems : (data.school_junior_high || []), queryDistrict);
@@ -2167,7 +2181,7 @@
       p._pending_overrides[field] = v;
     }
     applyFilters();
-    // 重新 render detail 讓試算數字更新
+    // 重新 render detail 讓試算數字更新 (_renderDetailFromCurrent 內部會 repaint 學區 chip from cache)
     _renderDetailFromCurrent();
 
     // POST 給後端 (永遠發；後端會寫到 user watchlist override，等同自動加入)
@@ -2191,6 +2205,10 @@
     if (!p) return;
     const prices = await getDistrictPrices();
     $('#v2-drawer-body').innerHTML = detailHTML(p, prices);
+    // detailHTML 內學區 chip 是「載入中…」placeholder。重 render 把它 reset。
+    // 命中 _school_cache 時 _loadSchoolDistrict 不打 API、直接重畫。
+    // (saveOverride / scanRoadWidth 等所有 re-render 場景都自動受惠)
+    _loadSchoolDistrict(id);
   }
 
   // ── LVR popup helper (對齊 v1 showLvrPopup hover 行為) ───────────────────
