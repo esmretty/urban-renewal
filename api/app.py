@@ -1167,6 +1167,8 @@ from api.routers.public import router as public_router
 app.include_router(public_router)
 from api.routers.admin_misc import router as admin_misc_router
 app.include_router(admin_misc_router)
+from api.routers.property_actions import router as property_actions_router
+app.include_router(property_actions_router)
 from api.external_checks import router as external_checks_router
 app.include_router(external_checks_router)
 from api.user_reads import router as user_reads_router
@@ -5145,36 +5147,6 @@ async def _run_manual_analysis(uid: str, src_id: str, item: dict):
     await asyncio.to_thread(_do)
 
 
-class NewHousePriceOverride(BaseModel):
-    new_house_price_wan_per_ping: float
-
-
-class RoadWidthOverride(BaseModel):
-    road_width_m: float
-
-
-class BonusOverride(BaseModel):
-    which: str       # "weishau" | "dugen"
-    value: float     # e.g., 0.30 / 0.50 / 0.80
-
-
-class CoeffOverride(BaseModel):
-    value: float
-
-
-@app.post("/api/properties/{property_id:path}/bonus")
-async def override_bonus(property_id: str, body: BonusOverride, user: dict = Depends(get_current_user)):
-    field = "bonus_weishau" if body.which == "weishau" else "bonus_dugen"
-    _user_override_ref(user, property_id).set({field: body.value}, merge=True)
-    return {"status": "ok", field: body.value}
-
-
-@app.post("/api/properties/{property_id:path}/rebuild_coeff")
-async def override_rebuild_coeff(property_id: str, body: CoeffOverride, user: dict = Depends(get_current_user)):
-    _user_override_ref(user, property_id).set({"rebuild_coeff": body.value}, merge=True)
-    return {"status": "ok", "rebuild_coeff": body.value}
-
-
 @app.post("/api/_debug/hide_legacy_manual")
 def hide_legacy_manual():
     """一次把舊 id 格式（manual_YYYYMMDD_xxx）的手動 doc 軟刪除。"""
@@ -5264,54 +5236,6 @@ def debug_manual_docs():
         "manual_count": len(out),
         "manuals": out,
     }
-
-
-@app.post("/api/properties/{property_id:path}/hide")
-async def hide_property(property_id: str, user: dict = Depends(get_current_user)):
-    """刪除使用者清單中的物件。
-    - manual / 中央 user_url 物件：硬刪 DB（不留 archive，跟 DELETE /api/watchlist 一致）
-    - 其他中央物件（batch/scheduler）：軟刪（個人 deleted=True flag，不影響 DB）"""
-    uid = user["uid"]
-    if property_id.startswith("manual_"):
-        try:
-            get_user_manual(uid).document(property_id).delete()
-            logger.info(f"[hide] manual {property_id} hard-deleted (user={uid})")
-        except Exception as e:
-            logger.warning(f"hide manual delete failed {property_id}: {e}")
-        return {"status": "ok"}
-    # 中央 user_url 也硬刪
-    try:
-        doc_ref = get_col().document(property_id)
-        snap = doc_ref.get()
-        if snap.exists:
-            data = snap.to_dict() or {}
-            if data.get("source_origin") == "user_url" and data.get("submitted_by_uid") == uid:
-                doc_ref.delete()
-                logger.info(f"[hide] user_url doc {property_id} hard-deleted (送件人={uid})")
-                return {"status": "ok"}
-    except Exception as e:
-        logger.warning(f"hide central doc check failed {property_id}: {e}")
-    # 其他中央物件 → 軟刪
-    _user_override_ref(user, property_id).set({"deleted": True}, merge=True)
-    return {"status": "ok"}
-
-
-class FloorPremiumOverride(BaseModel):
-    floor_premium: float   # 0.00 ~ 0.80
-
-
-@app.post("/api/properties/{property_id:path}/floor_premium")
-async def override_floor_premium(property_id: str, body: FloorPremiumOverride, user: dict = Depends(get_current_user)):
-    v = max(0.0, min(0.80, float(body.floor_premium)))
-    _user_override_ref(user, property_id).set({"floor_premium": v}, merge=True)
-    return {"status": "ok", "floor_premium": v}
-
-
-@app.post("/api/properties/{property_id:path}/road_width")
-async def override_road_width(property_id: str, body: RoadWidthOverride, user: dict = Depends(get_current_user)):
-    """使用者手動覆寫臨路寬度（只存自己 watchlist，不影響中央）。"""
-    _user_override_ref(user, property_id).set({"road_width_m_override": body.road_width_m}, merge=True)
-    return {"status": "ok", "road_width_m": body.road_width_m}
 
 
 class ManualReanalyzeReq(BaseModel):
@@ -5461,14 +5385,6 @@ async def refresh_redev_cases_endpoint(property_id: str, user: dict = Depends(ge
     cases = await asyncio.to_thread(_do)
     invalidate_query_cache()
     return {"status": "ok", "redev_cases": cases}
-
-
-@app.post("/api/properties/{property_id:path}/zoning_ratios")
-async def set_zoning_ratios(property_id: str, body: dict, user: dict = Depends(get_current_user)):
-    """使用者手動設定多分區的坪數比例（個人覆寫）。"""
-    ratios = body.get("zoning_ratios", [])
-    _user_override_ref(user, property_id).set({"zoning_ratios": ratios}, merge=True)
-    return {"status": "ok", "zoning_ratios": ratios}
 
 
 @app.post("/api/properties/{property_id:path}/scan_road_width")
@@ -6541,64 +6457,6 @@ def _scrape_single_url_591_inner(url: str, src_id: str, is_reanalyze: bool = Fal
                 doc["id"] = new_doc_id
             col.document(new_doc_id).set(_safe_doc(doc))
             return {"status": "ok", "source_id": src_id, "message": "完整分析完成（新增）"}
-
-
-class DesiredPriceOverride(BaseModel):
-    desired_price_wan: float
-
-
-@app.post("/api/properties/{property_id:path}/desired_price")
-async def override_desired_price(property_id: str, body: DesiredPriceOverride, user: dict = Depends(get_current_user)):
-    """欲出價（萬），個人設定。"""
-    _user_override_ref(user, property_id).set({"desired_price_wan": body.desired_price_wan}, merge=True)
-    return {"status": "ok", "desired_price_wan": body.desired_price_wan}
-
-
-class InferredChoiceOverride(BaseModel):
-    address: str
-
-
-@app.post("/api/properties/{property_id:path}/inferred_choice")
-async def override_inferred_choice(property_id: str, body: InferredChoiceOverride, user: dict = Depends(get_current_user)):
-    """用戶從 address_inferred_candidates_detail 中挑一個當作推測地址（個人設定）。
-    地址必須命中候選清單；儲存後讀取時 _read_user_property 會 swap address_inferred + land_area_ping。"""
-    p = _read_user_property(user, property_id)
-    if p is None:
-        raise HTTPException(status_code=404, detail="物件不存在")
-    cands = p.get("address_inferred_candidates_detail") or []
-    matched = next((c for c in cands if c.get("address") == body.address), None)
-    if not matched:
-        raise HTTPException(status_code=400, detail="所選地址不在候選清單中")
-    _user_override_ref(user, property_id).set({"inferred_address_choice": body.address}, merge=True)
-    return {"status": "ok", "address": body.address, "land_ping": matched.get("land_ping")}
-
-
-@app.post("/api/properties/{property_id:path}/new_house_price")
-async def override_new_house_price(property_id: str, body: NewHousePriceOverride, user: dict = Depends(get_current_user)):
-    """覆寫新成屋單價（個人設定）— renewal v2 結果由前端即時算，不存 DB（CLAUDE.md 規則 8）。"""
-    from analysis.scorer import calculate_renewal_scenarios, resolve_effective_zoning
-    p = _read_user_property(user, property_id)
-    if p is None:
-        raise HTTPException(status_code=404, detail="物件不存在")
-    # 只存「輸入欄位」（用戶覆寫的單價）；結果即時回給前端，不寫進 DB
-    _user_override_ref(user, property_id).set({
-        "new_house_price_wan_override": body.new_house_price_wan_per_ping,
-    }, merge=True)
-    v2 = calculate_renewal_scenarios(
-        land_area_ping=p.get("land_area_ping"),
-        zoning=resolve_effective_zoning(p.get("zoning"), p.get("zoning_original")),
-        district=p.get("district"),
-        price_ntd=p.get("price_ntd"),
-        new_house_price_wan_per_ping=body.new_house_price_wan_per_ping,
-        road_width_m=p.get("road_width_m_override") or p.get("road_width_m"),
-        zoning_list=p.get("zoning_list"),
-        zoning_ratios=p.get("zoning_ratios"),
-        floor=p.get("floor"),
-        floor_range_min=p.get("floor_range_min"),
-        floor_premium=p.get("floor_premium"),
-        building_area_ping=p.get("building_area_ping"),
-    )
-    return {"status": "ok", "renewal_v2": v2}
 
 
 @app.post("/api/clear_db")
