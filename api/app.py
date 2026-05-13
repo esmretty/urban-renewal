@@ -92,6 +92,19 @@ async def _auth_middleware(request, call_next):
         except HTTPException as e:
             from fastapi.responses import JSONResponse
             return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
+        # ── 全站 invite-only：驗 email 在 whitelist (admin 免檢) ──
+        # 修 2026-05-13 audit: 之前只在 /api/me /api/watchlist /api/manual_analyze /api/scrape_url
+        # 5 個 endpoint 內 call _ensure_user_profile 做 whitelist check，其他 ~25 個 user endpoint
+        # 沒擋 → 任意 Gmail 拿 valid Firebase token 直接 curl /api/properties /central_search
+        # 可繞過 whitelist 拉全 DB。改在 middleware 統一擋。
+        if not user.get("is_admin"):
+            _email = (user.get("email") or "").lower()
+            if _email not in _get_email_whitelist_cached():
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "此帳號尚未獲邀，請聯絡管理者將您加入白名單。"},
+                )
         # admin-only 加 check is_admin (2026-05-13 audit — 避免 /docs /openapi.json 公開洩漏 API surface)
         if is_admin_only and not user.get("is_admin"):
             from fastapi.responses import JSONResponse
@@ -277,6 +290,29 @@ def _get_email_whitelist() -> set:
     except Exception as e:
         logger.warning("_get_email_whitelist failed: %s", e)
         return set()
+
+
+# 1 分鐘 TTL cache — middleware 每個 request 都要 check whitelist、
+# 不能每次都打 Firestore (50-200ms 太貴)。admin 加新 email 後最多等 60 秒生效。
+_EMAIL_WHITELIST_CACHE: dict = {"data": None, "fetched_at": 0.0}
+_EMAIL_WHITELIST_TTL = 60
+
+
+def _get_email_whitelist_cached() -> set:
+    import time as _t
+    now = _t.time()
+    if _EMAIL_WHITELIST_CACHE["data"] is not None and (now - _EMAIL_WHITELIST_CACHE["fetched_at"]) <= _EMAIL_WHITELIST_TTL:
+        return _EMAIL_WHITELIST_CACHE["data"]
+    data = _get_email_whitelist()
+    _EMAIL_WHITELIST_CACHE["data"] = data
+    _EMAIL_WHITELIST_CACHE["fetched_at"] = now
+    return data
+
+
+def invalidate_email_whitelist_cache():
+    """admin 加/刪 email 後呼叫，下次 middleware check 立即吃到新值。"""
+    _EMAIL_WHITELIST_CACHE["data"] = None
+    _EMAIL_WHITELIST_CACHE["fetched_at"] = 0.0
 
 
 # 維護模式狀態（本地檔案，per-server 切換不影響 production）。
@@ -2135,7 +2171,7 @@ def get_property(property_id: str, user: dict = Depends(get_current_user)):
 from typing import Optional as _Opt
 
 @app.post("/api/analyze/{property_id:path}")
-async def analyze_pending(property_id: str):
+async def analyze_pending(property_id: str, admin: dict = Depends(require_admin)):
     """
     對一個被跳過分析的物件 (analysis_status=pending)，
     手動觸發完整分析 pipeline（AI + zoning lookup + renewal 試算）。
@@ -2652,7 +2688,7 @@ def busy_state():
 
 
 @app.post("/api/cancel")
-async def cancel_task():
+async def cancel_task(admin: dict = Depends(require_admin)):
     global _cancel_requested
     _cancel_requested = True
     return {"status": "ok"}
@@ -3330,7 +3366,7 @@ async def clear_db(admin: dict = Depends(require_admin)):
 
 
 @app.post("/api/deep_analyze/{property_id:path}")
-async def deep_analyze(property_id: str):
+async def deep_analyze(property_id: str, admin: dict = Depends(require_admin)):
     doc = get_col().document(property_id).get()
     if not doc.exists:
         raise HTTPException(status_code=404, detail="物件不存在")

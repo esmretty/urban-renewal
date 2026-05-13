@@ -105,7 +105,7 @@ async def get_email_whitelist(admin: dict = Depends(require_admin)):
 
 @router.post("/admin/email_whitelist/add")
 async def add_email_whitelist(body: WhitelistReq, admin: dict = Depends(require_admin)):
-    from api.app import _get_email_whitelist
+    from api.app import _get_email_whitelist, invalidate_email_whitelist_cache
     email = (body.email or "").strip().lower()
     if not email or "@" not in email:
         raise HTTPException(400, "請提供有效 email")
@@ -116,13 +116,14 @@ async def add_email_whitelist(body: WhitelistReq, admin: dict = Depends(require_
          "updated_by_email": admin.get("email") or ""},
         merge=True,
     )
+    invalidate_email_whitelist_cache()
     logger.warning("[whitelist] %s 新增 %s", admin.get("email"), email)
     return {"status": "ok", "emails": sorted(current)}
 
 
 @router.post("/admin/email_whitelist/remove")
 async def remove_email_whitelist(body: WhitelistReq, admin: dict = Depends(require_admin)):
-    from api.app import _get_email_whitelist
+    from api.app import _get_email_whitelist, invalidate_email_whitelist_cache
     email = (body.email or "").strip().lower()
     current = _get_email_whitelist()
     current.discard(email)
@@ -131,6 +132,7 @@ async def remove_email_whitelist(body: WhitelistReq, admin: dict = Depends(requi
          "updated_by_email": admin.get("email") or ""},
         merge=True,
     )
+    invalidate_email_whitelist_cache()
     logger.warning("[whitelist] %s 移除 %s", admin.get("email"), email)
     return {"status": "ok", "emails": sorted(current)}
 
