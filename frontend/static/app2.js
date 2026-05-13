@@ -1893,7 +1893,9 @@
       const data = await r.json();
       const idx = state.allProperties.findIndex(x => (x.source_id || x.id) === id);
       if (idx >= 0) {
-        const patch = { address_inferred: address };
+        // candidate.address 含「台北市大安區」前綴；address_inferred 統一無前綴
+        // (跟 pipeline LVR / reverse-geo 寫進 doc 的格式一致) → strip 再 patch
+        const patch = { address_inferred: stripCityDist(address) };
         if (data.land_ping != null) {
           patch.land_area_ping = data.land_ping;
           patch.land_area_sqm = Math.round(data.land_ping * 3.30578 * 100) / 100;

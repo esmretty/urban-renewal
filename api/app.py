@@ -372,7 +372,10 @@ def _apply_inferred_choice(doc: dict) -> None:
     matched = next((c for c in cands if c.get("address") == choice), None)
     if not matched:
         return
-    doc["address_inferred"] = choice
+    # candidate 的 address 含 "台北市大安區" 前綴；address_inferred 對齊既有資料
+    # (pipeline LVR / reverse-geo 寫進 doc 時都是無前綴形式) → strip 再賦值
+    from helpers.text_norm import strip_region_prefix
+    doc["address_inferred"] = strip_region_prefix(choice, doc.get("city", ""), doc.get("district", ""))
     land = matched.get("land_ping")
     if land is not None:
         doc["land_area_ping"] = land
