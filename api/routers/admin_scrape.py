@@ -271,34 +271,16 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
         return m.group(1) if m else ""
 
     def find_duplicate(item):
-        """價格 + 建坪 ±0.01 + 地址路名 + 樓層 全部一樣 → 同物件，回 doc id；否則 None。
-        加 floor 是為了區分同棟不同戶（建坪可能相同但 floor 不同 = 不同戶，例如 2樓 vs 3樓）"""
+        """591 batch 線性 scan 找 dup。最終比對呼叫 database.dedup.is_same_property
+        (single source of truth)。回 doc_id 或 None。"""
+        from database.dedup import is_same_property
         from database.models import make_source_key
-        price = item.get("price_ntd")
-        area = item.get("building_area_ping")
-        road = _extract_road_name(item.get("address") or item.get("title") or "")
-        floor = item.get("floor")
-        if not price or not area or not road:
-            return None
         my_key = make_source_key(item.get("source") or "591", item.get("source_id") or "")
         for ex in _existing_items:
             if my_key in (ex.get("source_keys") or []):
                 continue   # 自己 — 跳過
-            if not (ex["price_ntd"] and abs(ex["price_ntd"] - price) < 1):
-                continue
-            if not (ex["building_area_ping"] and abs(ex["building_area_ping"] - area) <= 0.01):
-                continue
-            # 路名比對：先試 ex.address；若 ex 有 address_road_fixed (verify_and_fix 改名過) →
-            # 再試「改名前的 raw 路名」(對齊 591 listing 給的原始路名 — 否則永遠 mismatch)
-            if _extract_road_name(ex["address"]) != road:
-                raw_road = _extract_road_name(((ex.get("address_road_fixed") or {}).get("from")) or "")
-                if not raw_road or raw_road != road:
-                    continue
-            # 樓層比對：兩邊都有值且不等 → 不同戶；單邊空或都空 → 信其他條件當同
-            if floor is not None and ex.get("floor") is not None:
-                if str(floor).strip() != str(ex["floor"]).strip():
-                    continue
-            return ex["id"]   # 回傳 UUID 給呼叫端用 col.document(id)
+            if is_same_property(item, ex):
+                return ex["id"]
         return None
 
     label = "、".join(districts) if districts else "全部地區"
@@ -464,22 +446,10 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
 
     # 預先載入既有所有記錄做 dedup 索引
     from database.models import doc_richness
-    _dup_index = {}  # key (district, road_short, area_band, price_band) -> [doc_dict, ...]
-    def _dup_key(d):
-        addr = (d.get("address") or "")
-        # 取「路+巷」級別
-        import re as _re
-        # 先剝掉「台北市/臺北市/新北市/…」及「XX區」前綴，避免 greedy regex 把「大安區信義」當成路名
-        # （新 item 的 address 帶完整前綴、DB 既有物件經 pipeline strip_region_prefix 後不帶 → key 不一致）
-        addr = _re.sub(r"^(台北市|臺北市|新北市|桃園市|台中市|臺中市|高雄市|台南市|臺南市|基隆市|新竹市)", "", addr)
-        addr = _re.sub(r"^[一-龥]{1,3}區", "", addr)
-        m = _re.search(r"([\u4e00-\u9fa5]{1,5}(?:路|街|大道)(?:[一二三四五六七八九十]段)?(?:\d+巷)?)", addr)
-        road = m.group(1) if m else ""
-        bld = round((d.get("building_area_ping") or 0) * 10) / 10  # 0.1 坪精度
-        price_wan = round((d.get("price_ntd") or 0) / 10000)
-        # floor 加入 key — 同棟不同戶建坪可能一樣，用樓層區分
-        floor = str(d.get("floor") or "").strip()
-        return (d.get("district") or "", road, bld, price_wan, floor)
+    # bucket key 用 database.dedup.dup_bucket_key (coarse precision)；
+    # 同 bucket 內的 doc 是 candidates，最終 dup 判定呼叫 is_same_property。
+    from database.dedup import dup_bucket_key as _dup_key, is_same_property as _is_same_prop
+    _dup_index = {}  # bucket_key → [doc_dict, ...]
     for _doc in col.get():
         _d = _doc.to_dict() or {}
         _d["_id"] = _doc.id

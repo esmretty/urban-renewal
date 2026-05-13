@@ -182,6 +182,24 @@ def check_scenarios_xcheck() -> int:
     return 0
 
 
+def check_dedup_baseline() -> int:
+    """§5 跑 dedup expected case baseline — 抓「is_same_property 行為漂掉」這類 drift。
+    跑 ~1 秒（純 in-memory 邏輯）。baseline: tests/dedup_cases.json"""
+    import subprocess
+    print("[predeploy] §5 dedup rule baseline (is_same_property 22 expected cases)")
+    r = subprocess.run(
+        [sys.executable, str(ROOT / "tests" / "dedup_run.py")],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    if r.returncode != 0:
+        print(r.stdout)
+        return 1
+    for line in r.stdout.split("\n"):
+        if "✓" in line or "✗" in line:
+            print(f"  {line.strip()}")
+    return 0
+
+
 def main() -> int:
     t0 = time.time()
     rc = 0
@@ -189,6 +207,7 @@ def main() -> int:
     rc |= check_hasattr()
     rc |= check_pyflakes()
     rc |= check_scenarios_xcheck()
+    rc |= check_dedup_baseline()
     elapsed = time.time() - t0
     if rc:
         print(f"\n[predeploy] FAIL ({elapsed:.1f}s) — 修好再 push")
