@@ -1138,6 +1138,8 @@ from api.gis_overlay import router as gis_overlay_router
 app.include_router(gis_overlay_router)
 from api.cadastral_search import router as cadastral_search_router
 app.include_router(cadastral_search_router)
+from api.routers.school_district import router as school_district_router
+app.include_router(school_district_router)
 from api.external_checks import router as external_checks_router
 app.include_router(external_checks_router)
 from api.user_reads import router as user_reads_router
@@ -1210,142 +1212,6 @@ async def school_lookup_page():
 _TARGET_REGIONS_COUNTS_CACHE = {"ts": 0.0, "data": None}
 _TARGET_REGIONS_COUNTS_TTL = 120   # 2 分鐘 — 物件數變化頻率低，每次 page load 都打 Firestore 浪費
 
-@app.get("/api/school_district/lookup")
-def api_school_district_lookup(
-    address: Optional[str] = Query(None),
-    lat: Optional[float] = Query(None),
-    lng: Optional[float] = Query(None),
-    city: Optional[str] = Query(None),
-    district: Optional[str] = Query(None),
-    village: Optional[str] = Query(None),
-):
-    """測試頁專用：地址 / 座標 / (city+district+village) 任一組合都可查學區。
-    優先序：village > coord > address。"""
-    from analysis import school_district as sd
-    if village and city and district:
-        r = sd.lookup_by_village(city, district, village)
-        detail = sd.lookup_by_village_detail(city, district, village)
-        return {"mode": "village", "city": city, "district": district, "village": village,
-                "school_elementary": r["elementary"], "school_junior_high": r["junior_high"],
-                "rows_detail": detail}
-    if lat is not None and lng is not None:
-        return {"mode": "coord", **sd.lookup_by_coord(lat, lng, city or "", district or "")}
-    if address:
-        return {"mode": "address", **sd.lookup_by_address(address)}
-    return {"error": "請提供 address / lat+lng / city+district+village 任一組合"}
-
-
-@app.get("/api/school_district/supported")
-def api_school_district_supported():
-    """回 {city: [district, ...]} 給測試頁下拉選單。"""
-    from analysis import school_district as sd
-    return sd.get_supported_districts()
-
-
-@app.get("/api/school_district/by_district")
-def api_school_district_by_district(city: str = Query(...), district: str = Query(...)):
-    """測試頁地圖用：回某區所有里的學區對照表。"""
-    from analysis import school_district as sd
-    villages = sd.get_district_villages(city, district)
-    return {"city": city, "district": district, "villages": villages}
-
-
-_POLYGON_CACHE = {"data": None}
-
-@app.get("/api/school_district/polygons")
-def api_school_district_polygons(city: str = Query(...), district: str = Query(...)):
-    """回某區所有里的 polygon (GeoJSON FeatureCollection) + 每個 feature merge 學校資料。
-    給測試頁地圖按學校上色用。"""
-    from analysis import school_district as sd
-    if _POLYGON_CACHE["data"] is None:
-        try:
-            import json as _json
-            poly_path = BASE_DIR / "data" / "school_districts" / "villages_polygon.geojson"
-            with open(poly_path, encoding="utf-8") as f:
-                _POLYGON_CACHE["data"] = _json.load(f)
-        except Exception as e:
-            return {"error": f"polygon 檔案載入失敗: {e}"}
-    all_features = (_POLYGON_CACHE["data"] or {}).get("features") or []
-    villages_lookup = sd.get_district_villages(city, district)
-    out = []
-    for ft in all_features:
-        p = ft.get("properties") or {}
-        if p.get("county") != city or p.get("town") != district:
-            continue
-        v = p.get("village")
-        info = villages_lookup.get(v) or {}
-        merged = dict(ft)
-        merged["properties"] = {
-            "county": p.get("county"),
-            "town": p.get("town"),
-            "village": v,
-            "elementary": info.get("elementary") or [],
-            "junior_high": info.get("junior_high") or [],
-        }
-        out.append(merged)
-    return {"type": "FeatureCollection", "features": out}
-
-
-# NLSC _raw_twvillage.json 自身缺字 → lookup canonical name 的 alias 表。
-# 例：NLSC 「五?里」實際是「五峰里」(峰字 dump 失敗)、「灰?里」是「灰磘里」(磘字)
-# 注意 NLSC 缺字 placeholder 不統一—中和用 ■「■」、新店用  PUA。
-# 用 _normalize_nlsc_village 統一替成「?」，alias key 才一致。
-import re as _re_nlsc
-_NLSC_UNKNOWN_RE = _re_nlsc.compile(r"[^一-鿿 -~]")
-
-
-def _normalize_nlsc_village(v: str) -> str:
-    """把 NLSC dump 內非標準中文/ASCII 的字符（缺字 placeholder ■、PUA 區）替成「?」。"""
-    return _NLSC_UNKNOWN_RE.sub("?", v or "")
-
-
-_NLSC_VILLAGE_ALIAS = {
-    ("新北市", "新店區", "五?里"): "五峰里",
-    ("新北市", "中和區", "灰?里"): "灰磘里",
-    ("新北市", "中和區", "瓦?里"): "瓦磘里",
-    ("新北市", "永和區", "新?里"): "新廍里",
-    ("新北市", "板橋區", "公?里"): "公館里",
-}
-
-
-@app.get("/api/school_district/polygons_all")
-def api_school_district_polygons_all():
-    """回所有 supported (city, district) 的 polygon 合集 — 給「全區學區地圖」用。
-    一次 response 含台北/新北所有里的 polygon + 學校資料。"""
-    from analysis import school_district as sd
-    if _POLYGON_CACHE["data"] is None:
-        try:
-            import json as _json
-            poly_path = BASE_DIR / "data" / "school_districts" / "villages_polygon.geojson"
-            with open(poly_path, encoding="utf-8") as f:
-                _POLYGON_CACHE["data"] = _json.load(f)
-        except Exception as e:
-            return {"error": f"polygon 檔案載入失敗: {e}"}
-    all_features = (_POLYGON_CACHE["data"] or {}).get("features") or []
-    supported = sd.get_supported_districts()  # {city: [district, ...]}
-    supported_pairs = {(c, d) for c, dists in supported.items() for d in dists}
-    villages_cache: dict = {}   # (city, district) → villages dict
-    out = []
-    for ft in all_features:
-        p = ft.get("properties") or {}
-        c, t, v = p.get("county"), p.get("town"), p.get("village")
-        if (c, t) not in supported_pairs:
-            continue
-        # NLSC 自身缺字 → alias 對到 lookup canonical name (五?里→五峰里, 灰?里→灰磘里)
-        canonical_v = _NLSC_VILLAGE_ALIAS.get((c, t, _normalize_nlsc_village(v)), v)
-        if (c, t) not in villages_cache:
-            villages_cache[(c, t)] = sd.get_district_villages(c, t)
-        info = villages_cache[(c, t)].get(canonical_v) or {}
-        out.append({
-            "type": "Feature",
-            "geometry": ft.get("geometry"),
-            "properties": {
-                "county": c, "town": t, "village": canonical_v,  # 顯示 canonical
-                "elementary": info.get("elementary") or [],
-                "junior_high": info.get("junior_high") or [],
-            },
-        })
-    return {"type": "FeatureCollection", "features": out}
 
 
 @app.get("/api/target_regions")
