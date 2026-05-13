@@ -545,8 +545,10 @@
       const r = await fetch('/api/district_new_house_price');
       const data = await r.json();
       const by = (data && data.by_district) || {};
-      // 合併 fallback：API 沒回的區用寫死常數兜底
-      DISTRICT_PRICE_CACHE = { ...DISTRICT_PRICE_FALLBACK, ...by };
+      const overrides = (data && data.manual_overrides) || {};
+      // 優先序：manual_overrides > LVR by_district > 寫死 fallback
+      // (跟後端 analysis/presale_price.py:get_district_new_house_price 一致)
+      DISTRICT_PRICE_CACHE = { ...DISTRICT_PRICE_FALLBACK, ...by, ...overrides };
     } catch {
       DISTRICT_PRICE_CACHE = { ...DISTRICT_PRICE_FALLBACK };
     }
