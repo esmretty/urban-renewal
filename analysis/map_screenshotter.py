@@ -15,11 +15,9 @@ Phase 2 實作時，每個函式都會：
   5. 回傳截圖路徑
 """
 import logging
-from pathlib import Path
 from typing import Optional
 
 from config import SCREENSHOTS_DIR
-from scraper.browser_manager import get_browser_context, human_delay
 
 logger = logging.getLogger(__name__)
 

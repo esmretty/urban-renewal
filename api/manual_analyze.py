@@ -11,12 +11,11 @@
 import hashlib
 import logging
 import re
-import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime
 from difflib import get_close_matches
 from typing import Optional
 
-from analysis.geocoder import geocode_address, geocode_with_district
+from analysis.geocoder import geocode_with_district
 from analysis.lvr_index import init_db
 from analysis.building_info import query_building_floors
 

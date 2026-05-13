@@ -4,7 +4,6 @@
 """
 import logging
 import re
-from datetime import datetime, timezone
 from database.time_utils import now_tw_iso
 
 logger = logging.getLogger(__name__)

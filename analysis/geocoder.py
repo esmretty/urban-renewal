@@ -12,7 +12,7 @@ from config import GOOGLE_MAPS_API_KEY, MRT_STATIONS
 # normalize helpers 集中在 helpers/text_norm.py。保留 _ 前綴 alias 給 sprint #1 之前
 # 既有 import 用（e.g. scripts/backfill_geocode_floor_strip.py）。新 code 直接從
 # helpers.text_norm import 即可。
-from helpers.text_norm import strip_floor as _strip_floor_for_geocode, FLOOR_TAIL_RE as _FLOOR_TAIL_RE
+from helpers.text_norm import strip_floor as _strip_floor_for_geocode
 
 logger = logging.getLogger(__name__)
 

@@ -14,7 +14,6 @@ from typing import Optional
 import anthropic
 
 from config import ANTHROPIC_API_KEY
-from analysis.scorer import get_recommendation
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +189,6 @@ DETAIL_OCR_PROMPT = """請仔細看這張 591 房屋詳情頁截圖，找出以�
 
 # normalize helpers 集中在 helpers/text_norm.py。保留 _ 前綴 alias 給既有 caller 用。
 from helpers.text_norm import (
-    normalize_address_format as _normalize_address_format,
     clean_address_garbage as _clean_address_garbage,
 )
 

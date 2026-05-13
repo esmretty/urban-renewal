@@ -12,7 +12,7 @@ FastAPI 後端 API。
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from typing import Optional, AsyncGenerator, List
 
 from fastapi import FastAPI, Query, HTTPException, Depends, Response, Request
@@ -23,8 +23,8 @@ import os
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from database.db import init_db, get_col, get_firestore, get_user_doc, get_user_watchlist, get_user_manual, get_user_bookmarks
-from database.time_utils import now_tw, now_tw_iso, TW_TZ
+from database.db import init_db, get_col, get_firestore, get_user_doc, get_user_watchlist, get_user_manual
+from database.time_utils import now_tw, now_tw_iso
 from google.cloud.firestore_v1 import FieldFilter
 from database.models import sanitize_for_firestore, merge_watchlist_with_central
 from config import BASE_DIR
@@ -670,7 +670,6 @@ async def _run_verify_alive_command(progress=None, trigger_label: str = "verify_
     全部 sources 都失效 → archive doc。
 
     進度同步寫進 Firestore settings/verify_alive_progress（給 admin UI live poll）。"""
-    from analysis.lvr_index import _haversine   # noqa
     from database.run_log import log_action
     col = get_col()
     docs = list(col.stream())
@@ -715,7 +714,7 @@ async def _run_verify_alive_command(progress=None, trigger_label: str = "verify_
                 if (i + 1) % 5 == 0:
                     _write_progress(current=i + 1)
                 continue
-            from database.models import primary_source_id, primary_url, compute_source_keys, all_sources_dead
+            from database.models import primary_source_id, compute_source_keys, all_sources_dead
             sources = list(data.get("sources") or [])
             if not sources:
                 if (i + 1) % 5 == 0:
@@ -1917,7 +1916,6 @@ def _gis_overlay_layer_meta(name: str) -> dict:
 
 def _ensure_layer_display_map() -> None:
     """deprecated — kept for compat; 改用 _gis_overlay_layer_meta。"""
-    pass
 
 
 @app.get("/admin/scheduler/status")
@@ -2197,7 +2195,6 @@ async def line_webhook(request: Request):
         })
     if seen:
         try:
-            from google.cloud.firestore_v1 import ArrayUnion
             ref = get_firestore().collection("settings").document("line_recent_events")
             doc = ref.get()
             existing = (doc.to_dict() or {}).get("events", []) if doc.exists else []
@@ -2404,7 +2401,6 @@ async def admin_line_notifications(
     coll = get_firestore().collection("line_notifications")
     # 抓 total count (用 aggregation count 比較快；萬一 aggregation 不可用 fallback list 全表 limit 1000)
     try:
-        from google.cloud.firestore_v1.aggregation import AggregationQuery
         agg = coll.count()
         snap = list(agg.get())
         total = int(snap[0][0].value) if snap and snap[0] else 0
@@ -4113,10 +4109,6 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
     log_action(trigger_label, "batch_start", message=f"{source} / {','.join(districts) or 'all'} / limit={limit}",
                details={"source": source, "districts": districts, "limit": limit, "triggered_by_uid": triggered_by_uid})
     from scraper.scraper_591 import scrape_591
-    from analysis.geocoder import geocode_address, get_nearest_mrt
-    from analysis.scorer import calculate_score, calculate_renewal_value
-    from analysis.claude_analyzer import analyze_property_text, generate_final_recommendation
-    from database.models import make_property_doc
 
     col = get_col()
 
@@ -4328,9 +4320,8 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
     # 分析並儲存新物件（50% → 100%）
     from analysis.claude_analyzer import extract_full_detail_from_screenshot
     from scraper.scraper_591 import screenshot_detail_page
-    from scraper.browser_manager import get_browser_context
     from scraper.zoning_lookup import lookup_zoning
-    from analysis.lvr_index import triangulate_address, _extract_road_seg, ensure_fresh as _lvr_refresh
+    from analysis.lvr_index import ensure_fresh as _lvr_refresh
 
     # 確保 LVR 索引為最新（失敗不阻塞爬取）
     try:
@@ -5161,7 +5152,6 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 if is_replacement:
                     from database.models import (
                         remove_source_from_doc, add_source_to_doc, compute_source_keys,
-                        all_sources_dead,
                     )
                     old_doc = item["_existing_doc"]
                     old_doc_id = old_doc.get("id")
@@ -6496,19 +6486,10 @@ def _scrape_single_url_591_inner(url: str, src_id: str, is_reanalyze: bool = Fal
     本函式內部仍保留多個 inline cleanup（idempotent，重複呼叫無害），用於 early-return path
     讓 cleanup 點離 return 近、語意清楚。"""
     from scraper.browser_manager import get_browser_context
-    from scraper.scraper_591 import _parse_card  # 既有 card 解析（不適用詳情頁）
     from scraper.scraper_591 import screenshot_detail_page
     from analysis.claude_analyzer import (
-        extract_detail_from_screenshot,
         extract_full_detail_from_screenshot,
-        analyze_property_text,
-        generate_final_recommendation,
     )
-    from analysis.geocoder import geocode_address, get_nearest_mrt
-    from analysis.scorer import calculate_score, calculate_renewal_value
-    from scraper.zoning_lookup import lookup_zoning
-    from database.models import make_property_doc, should_skip_analysis, make_minimal_doc
-    from datetime import datetime
 
     col = get_col()
     from api.analysis_pipeline import _cleanup_ephemeral_screenshots as _cleanup_shots
@@ -7067,7 +7048,6 @@ async def deep_analyze(property_id: str):
 async def _run_deep_analysis(property_id: str):
     from analysis.map_screenshotter import run_deep_analysis_screenshots
     from analysis.claude_analyzer import analyze_maps
-    from analysis.scorer import calculate_score, calculate_renewal_value
 
     col = get_col()
     doc = col.document(property_id).get()

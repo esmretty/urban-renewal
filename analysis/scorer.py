@@ -9,7 +9,6 @@
   - 臨路寬度   10 分
   - 整合潛力    5 分（Phase 2，暫給中間值）
 """
-import math
 import logging
 from datetime import datetime
 from typing import Optional

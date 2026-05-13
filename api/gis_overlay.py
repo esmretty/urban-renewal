@@ -480,7 +480,6 @@ def _bbox_to_tile_xyz(bbox: str) -> Optional[tuple[int, int, int]]:
 # user 滑到哪 cache 哪，不主動 batch download，避免上游 server 偵測 burst pattern。
 # 1 month 後熱區自然接近 100% cached，平日上游流量 = 平常 user browse 流量。
 # 啟用方式：layer config 加 "disk_cache": True
-import os as _os
 from pathlib import Path as _Path
 _DISK_CACHE_BASE = _Path(__file__).resolve().parent.parent / "data" / "cache"
 

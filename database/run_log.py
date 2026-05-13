@@ -124,7 +124,6 @@ def list_recent(limit: int = 200, trigger_prefix: Optional[str] = None) -> list[
     """取最近 N 筆 log entry（依 at desc）。給 admin endpoint 用。"""
     try:
         from database.db import get_firestore
-        from google.cloud.firestore_v1.base_query import FieldFilter
         q = get_firestore().collection(_FS_COLLECTION).order_by("at", direction="DESCENDING").limit(int(limit))
         if trigger_prefix:
             # Firestore range query 一次只能對一個欄位，所以 trigger 過濾改後處理

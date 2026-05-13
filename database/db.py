@@ -1,10 +1,9 @@
 """
 Firebase Firestore 資料庫連線管理。
 """
-import os
 
 import logging
-from typing import Optional, Tuple
+from typing import Optional
 import firebase_admin
 from firebase_admin import credentials, firestore as fs
 
@@ -96,7 +95,7 @@ def find_cross_source_duplicate(item: dict):
             return None
         road = m.group(1)
         from google.cloud.firestore_v1.base_query import FieldFilter
-        from database.models import make_source_key, compute_source_keys
+        from database.models import make_source_key
         item_key = make_source_key(item.get("source") or "591", item.get("source_id") or "")
         col = get_col()
         cand = list(col
