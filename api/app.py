@@ -2181,8 +2181,8 @@ async def _run_pending_analysis(property_id: str):
 # ── 手動輸入地址送出分析 ──────────────────────────────────────────────────────
 
 @app.post("/api/_debug/hide_legacy_manual")
-def hide_legacy_manual():
-    """一次把舊 id 格式（manual_YYYYMMDD_xxx）的手動 doc 軟刪除。"""
+def hide_legacy_manual(admin: dict = Depends(require_admin)):
+    """一次把舊 id 格式（manual_YYYYMMDD_xxx）的手動 doc 軟刪除。Admin-only (2026-05-13 安全 audit)。"""
     col = get_col()
     import re as _re
     legacy_pat = _re.compile(r"^manual_\d{8}_")
@@ -2195,10 +2195,11 @@ def hide_legacy_manual():
 
 
 @app.get("/api/_debug/lvr_probe")
-def debug_lvr_probe(city: str, district: str, road_keyword: str):
+def debug_lvr_probe(city: str, district: str, road_keyword: str, admin: dict = Depends(require_admin)):
     """
     直接掃 LVR SQLite 看指定 city/district 下，含 road_keyword 的所有紀錄。
     用來定位「明明網路上有 LVR、我們 DB 卻找不到」的問題。
+    Admin-only (2026-05-13 安全 audit)。
     """
     from analysis.lvr_index import init_db as lvr_init
     from api.manual_analyze import normalize_address, _strip_section
@@ -2244,8 +2245,9 @@ def debug_lvr_probe(city: str, district: str, road_keyword: str):
 
 
 @app.get("/api/_debug/manual_docs")
-def debug_manual_docs():
-    """直接列出 Firestore 所有 source_id 以 manual_ 開頭的 doc。繞過所有 server-side filter。"""
+def debug_manual_docs(admin: dict = Depends(require_admin)):
+    """直接列出 Firestore 所有 source_id 以 manual_ 開頭的 doc。繞過所有 server-side filter。
+    Admin-only (2026-05-13 安全 audit — 之前 logged-in user 可拿到其他用戶 manual 物件、跨用戶外洩)。"""
     col = get_col()
     docs = list(col.get())
     out = []
