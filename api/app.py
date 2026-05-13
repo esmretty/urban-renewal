@@ -483,6 +483,7 @@ async def _retry_queue_loop():
                     # 用既有 _scrape_single_url 重抓（會自動分流 591/永慶）
                     # mark_user_url=False：retry queue 補抓的物件原本是 batch 失敗來的，
                     # 不該標 user_url（標了 admin 物件列表會看不到）
+                    from api.routers.admin_scrape import _scrape_single_url
                     res = await asyncio.to_thread(_scrape_single_url, url, src_id, False, mark_user_url=False)
                     # 「合法 skip」(非公寓樓層 > 5)：scraper 已知這 src_id 永遠不該建 doc
                     # → dequeue 且不再重試，避免無限循環
@@ -2329,6 +2330,7 @@ async def reanalyze_manual(
             item[_k] = old[_k]
 
     manual_col.document(property_id).update({"analysis_in_progress": True})
+    from api.routers.admin_scrape import _run_manual_analysis
     asyncio.create_task(_run_manual_analysis(uid, property_id, item))
     logger.info(f"[manual reanalyze] uid={uid} src_id={property_id} (after validate)")
     return {"status": "started", "source_id": property_id}

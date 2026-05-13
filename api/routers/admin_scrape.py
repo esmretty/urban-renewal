@@ -813,7 +813,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     # 下架偵測：listing 列表還在快取顯示卡片，但詳情頁已是 404 → 刪 DB 並跳過
                     if getattr(_detail_ret, "delisted", False) or (isinstance(_detail_ret, tuple) and len(_detail_ret) >= 2 and _detail_ret[1] == "__DELISTED__"):
                         try:
-                            db.collection("properties").document(src_id).delete()
+                            get_col().document(src_id).delete()
                             logger.warning(f"已移除下架物件 {src_id}")
                         except Exception as _de:
                             logger.warning(f"移除下架物件失敗 {src_id}: {_de}")
@@ -1063,7 +1063,7 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                 except Exception: _total_f = 0
                 if _total_f >= 6:
                     try:
-                        db.collection("properties").document(src_id).delete()
+                        get_col().document(src_id).delete()
                         logger.warning(f"已從 DB 移除非公寓 {src_id} (總樓層 {_total_f}F)")
                     except Exception as _de:
                         logger.warning(f"移除非公寓 doc 失敗 {src_id}: {_de}")

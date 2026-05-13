@@ -132,11 +132,43 @@ def check_hasattr() -> int:
     return 0
 
 
+def check_pyflakes() -> int:
+    """§3 pyflakes 抓 undefined name (silently-failing 變數引用)。
+
+    上次踩雷: F 搬 scrape/manual_analyze 時 admin_scrape.py 內 `db.collection(...)`
+    + `get_user_watchlist(uid)` 都是 undefined name。前者是 pre-existing latent bug，
+    後者是 F 漏 import。都被 try/except 吞掉, endpoint 仍回 200 ok → 前端看到「成功」
+    但 DB write 沒發生。AST parse 不會 catch (因為 Python 對函式體 name 是 lazy 解析)。
+
+    這條只 fail on "undefined name" — 忽略 unused import / f-string 等 cosmetic warning。
+    """
+    import subprocess
+    print("[predeploy] §3 pyflakes (undefined name only)")
+    targets = [str(f) for f in _router_files()]
+    targets.append(str(ROOT / "api" / "app.py"))
+    r = subprocess.run(
+        [sys.executable, "-m", "pyflakes", *targets],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    # pyflakes 對任何 warning 都 exit 1，要自己 filter 只看 undefined name
+    undef_lines = [l for l in r.stdout.split("\n") if "undefined name" in l]
+    if undef_lines:
+        print(f"  ✗ undefined name 共 {len(undef_lines)} 處:")
+        for l in undef_lines[:10]:
+            print(f"      {l}")
+        if len(undef_lines) > 10:
+            print(f"      ... 還有 {len(undef_lines) - 10} 條")
+        return 1
+    print(f"  ✓ 0 個 undefined name")
+    return 0
+
+
 def main() -> int:
     t0 = time.time()
     rc = 0
     rc |= check_router_imports()
     rc |= check_hasattr()
+    rc |= check_pyflakes()
     elapsed = time.time() - t0
     if rc:
         print(f"\n[predeploy] FAIL ({elapsed:.1f}s) — 修好再 push")
