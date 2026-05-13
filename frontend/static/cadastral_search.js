@@ -62,6 +62,14 @@
 
   async function _onMapClick(e) {
     if (!e || !e.latlng) return;
+    // 嚴格擋：z<18 (地籍圖最小 zoom) 或地籍圖 toggle 沒勾 → silent return 不耗資源 (user 要求)
+    // 用戶看不到地籍圖時不該觸發查詢
+    if (!_map || _map.getZoom() < 18) return;
+    try {
+      if (window.v2 && window.v2._overlays && typeof window.v2._overlays.isOn === 'function') {
+        if (!window.v2._overlays.isOn('cadastral')) return;
+      }
+    } catch (_e) { /* 取不到 toggle state 就保守不擋 — 至少 z 條件先把關 */ }
     const { lat, lng } = e.latlng;
     // 0. 先檢查 in-memory cache：之前查過的地塊 polygon 是否包含這個 click 點
     const cached = _findInPlotCache(lat, lng);

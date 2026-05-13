@@ -73,6 +73,48 @@ class SchedulerConfigReq(BaseModel):
 
 
 # ── Endpoints ───────────────────────────────────────────────────────────
+
+@router.get("/admin/district_prices")
+async def admin_get_district_prices(admin: dict = Depends(require_admin)):
+    """回傳所有區的 (LVR 算的單價 / 樣本數 / admin 手動覆蓋值)。給 UI 表格用。"""
+    from analysis.presale_price import get_all_district_prices
+    return get_all_district_prices()
+
+
+class DistrictPriceOverrideReq(BaseModel):
+    district: str
+    value: Optional[float] = None   # None / 0 / 負數 = 清除覆蓋；正數 = 設定覆蓋值
+
+
+@router.post("/admin/district_prices/override")
+async def admin_set_district_price_override(body: DistrictPriceOverrideReq, admin: dict = Depends(require_admin)):
+    """設定或清除某區的手動覆蓋單價。
+    覆蓋優先序高於 LVR 自動算的中位數；scheduler 重算 LVR 不會清掉覆蓋。
+    value=None / <=0 → 清除覆蓋（之後該區用 LVR 自動算的）。"""
+    from database.db import get_firestore
+    from analysis.presale_price import invalidate_district_price_cache
+    fs = get_firestore()
+    ref = fs.collection("settings").document("district_new_house_price")
+    snap = ref.get()
+    if not snap.exists:
+        raise HTTPException(400, "district_new_house_price doc 不存在，請先跑「立即執行更新預售屋單價」一次建立 baseline")
+    data = snap.to_dict() or {}
+    overrides = dict(data.get("manual_overrides") or {})
+    district = (body.district or "").strip()
+    if not district:
+        raise HTTPException(400, "district 不可空")
+    if body.value is None or body.value <= 0:
+        overrides.pop(district, None)
+        action = "cleared"
+    else:
+        overrides[district] = float(body.value)
+        action = "set"
+    ref.update({"manual_overrides": overrides})
+    invalidate_district_price_cache()
+    logger.warning(f"[admin] {admin.get('email')} {action} {district} override → {overrides.get(district, '(cleared)')}")
+    return {"status": "ok", "action": action, "district": district, "value": overrides.get(district), "manual_overrides": overrides}
+
+
 @router.post("/admin/update_district_prices")
 @router.post("/admin/update_district_prices/run-now")
 async def admin_update_district_prices(admin: dict = Depends(require_admin)):

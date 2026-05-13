@@ -171,10 +171,17 @@
         <div class="cmd-pane hidden" data-pane="update_prices">
           <div class="cmd-pane-grid">
             <div class="cmd-pane-left">
-              <h4>立即執行</h4>
+              <h4>各區單價（含手動覆蓋）</h4>
               <p style="font-size:13px; color:#555; margin:0 0 10px;">
-                從內政部實價登錄下載最新預售屋 CSV，重算各區單價中位數寫進 Firestore。
-                前端載入後會自動套用新單價。
+                LVR 算出來的中位數可用「手動覆蓋」覆寫。覆蓋值優先於 LVR 算的、
+                scheduler 重算不會清掉覆蓋。
+              </p>
+              <div id="district-prices-table" style="margin-bottom:14px;">載入中…</div>
+              <hr style="border:none; border-top:1px solid #ddd; margin:14px 0;">
+              <h4>立即重算 LVR</h4>
+              <p style="font-size:13px; color:#555; margin:0 0 10px;">
+                從內政部實價登錄下載最新預售屋 CSV，重算各區中位數寫進 Firestore。
+                手動覆蓋值會保留。
               </p>
               <button onclick="runUpdatePricesNow()" style="padding:8px 18px; background:#16a085; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:600;">
                 💰 立即更新預售屋單價

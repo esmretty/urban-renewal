@@ -1741,6 +1741,7 @@ window.switchCmdTab = function (tab) {
     p.classList.toggle("hidden", p.dataset.pane !== tab);
   });
   if (tab === "update_layers") loadLayersTab();
+  if (tab === "update_prices") loadDistrictPricesTable();
 };
 
 // ── 更新圖層 tab ──────────────────────────────────────────────────
@@ -1943,6 +1944,127 @@ window.runLayersRefresh = async function () {
 
 // scheduler render 已整合到既有 renderScheduler / _renderSchedulerByType（cmd type='gis_overlay_refresh'）
 // 舊獨立 _renderLayersScheduler / saveLayersScheduler 已移除（dead code）
+
+// ── 各區單價表格 (含手動覆蓋) ──────────────────────────────────────
+async function loadDistrictPricesTable() {
+  const box = document.getElementById("district-prices-table");
+  if (!box) return;
+  box.textContent = "載入中…";
+  try {
+    const r = await authedFetch("/admin/district_prices");
+    if (!r.ok) {
+      box.innerHTML = `<span style="color:#c0392b;">載入失敗 HTTP ${r.status}</span>`;
+      return;
+    }
+    const data = await r.json();
+    _renderDistrictPricesTable(box, data);
+  } catch (e) {
+    box.innerHTML = `<span style="color:#c0392b;">${esc(e.message)}</span>`;
+  }
+}
+
+function _renderDistrictPricesTable(box, data) {
+  const byDistrict = data.by_district || {};
+  const samples = data.samples || {};
+  const overrides = data.manual_overrides || {};
+  // 按區排序（台北 10 區 + 新北 5 區）
+  const tpe = ["中正區","大同區","中山區","松山區","大安區","萬華區","信義區","內湖區","南港區","文山區"];
+  const ntpc = ["板橋區","新莊區","新店區","中和區","永和區"];
+  const allDist = [...tpe, ...ntpc].filter(d => d in byDistrict || d in overrides);
+  // 確保任何 by_district / overrides 都有但不在 tpe/ntpc 的也列出
+  Object.keys(byDistrict).forEach(d => { if (!allDist.includes(d)) allDist.push(d); });
+  Object.keys(overrides).forEach(d => { if (!allDist.includes(d)) allDist.push(d); });
+
+  const rows = allDist.map(d => {
+    const lvr = byDistrict[d];
+    const n = samples[d] || 0;
+    const ov = overrides[d];
+    const isOverridden = (ov != null);
+    const effective = isOverridden ? ov : lvr;
+    return `
+      <tr data-district="${esc(d)}" ${isOverridden ? 'style="background:#fff8e1;"' : ''}>
+        <td style="padding:4px 8px;">${esc(d)}</td>
+        <td style="padding:4px 8px; text-align:right; color:#666;">${lvr != null ? lvr.toFixed(1) : "—"}</td>
+        <td style="padding:4px 8px; text-align:right; color:#888; font-size:12px;">${n}</td>
+        <td style="padding:4px 8px; text-align:right;">
+          <input type="number" step="0.1" min="0"
+                 class="dp-override-input"
+                 value="${isOverridden ? ov : ''}"
+                 placeholder="(無覆蓋)"
+                 style="width:80px; text-align:right; padding:3px 5px; border:1px solid #ccc; border-radius:3px;">
+        </td>
+        <td style="padding:4px 8px; text-align:right; font-weight:600; color:${isOverridden ? '#d68910' : '#555'};">
+          ${effective != null ? effective.toFixed(1) : "—"}
+        </td>
+        <td style="padding:4px 8px; text-align:center;">
+          <button class="dp-save-btn" style="padding:2px 8px; font-size:12px; background:#3498db; color:#fff; border:none; border-radius:3px; cursor:pointer; margin-right:3px;">儲存</button>
+          ${isOverridden ? '<button class="dp-clear-btn" style="padding:2px 8px; font-size:12px; background:#95a5a6; color:#fff; border:none; border-radius:3px; cursor:pointer;">清除</button>' : ''}
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  box.innerHTML = `
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead>
+        <tr style="background:#f0f0f0; border-bottom:1px solid #ccc;">
+          <th style="padding:6px 8px; text-align:left;">區域</th>
+          <th style="padding:6px 8px; text-align:right;">LVR 算的 (萬/坪)</th>
+          <th style="padding:6px 8px; text-align:right;">樣本數</th>
+          <th style="padding:6px 8px; text-align:right;">手動覆蓋</th>
+          <th style="padding:6px 8px; text-align:right;">實際採用</th>
+          <th style="padding:6px 8px; text-align:center;">動作</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p style="font-size:11px; color:#888; margin-top:6px;">
+      黃底列 = 有手動覆蓋；「實際採用」優先序：手動覆蓋 &gt; LVR 算的 &gt; config 寫死值。
+    </p>
+  `;
+
+  // 綁定 save / clear 按鈕
+  box.querySelectorAll(".dp-save-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const tr = btn.closest("tr");
+      const district = tr.dataset.district;
+      const input = tr.querySelector(".dp-override-input");
+      const value = parseFloat(input.value);
+      if (!value || value <= 0) {
+        alert("請輸入大於 0 的數字（萬/坪）。要清除請按「清除」按鈕。");
+        return;
+      }
+      await _submitDistrictOverride(district, value);
+    });
+  });
+  box.querySelectorAll(".dp-clear-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const tr = btn.closest("tr");
+      const district = tr.dataset.district;
+      if (!confirm(`清除 ${district} 的手動覆蓋值？\n清除後該區會用 LVR 算的中位數。`)) return;
+      await _submitDistrictOverride(district, null);
+    });
+  });
+}
+
+async function _submitDistrictOverride(district, value) {
+  try {
+    const r = await authedFetch("/admin/district_prices/override", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ district, value }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      alert(`設定失敗：HTTP ${r.status}\n${data.detail || ""}`);
+      return;
+    }
+    // 重 render 表格
+    loadDistrictPricesTable();
+  } catch (e) {
+    alert(`設定失敗：${e.message}`);
+  }
+}
 
 window.runUpdatePricesNow = async function () {
   const statusEl = document.getElementById("update-prices-status");

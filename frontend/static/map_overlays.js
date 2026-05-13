@@ -308,7 +308,11 @@
       setTimeout(_install, 50);
       return;
     }
-    window.v2._overlays = { init };
+    window.v2._overlays = {
+      init,
+      // 給其他 module 查 toggle 狀態用 (例: cadastral_search.js 嚴格擋「地籍圖關著就不查地塊」)
+      isOn: (key) => !!_state.on[key],
+    };
     const existingMap = window.v2.state && window.v2.state._mapInst;
     if (existingMap) init(existingMap);
   }

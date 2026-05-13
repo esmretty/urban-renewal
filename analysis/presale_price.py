@@ -172,6 +172,8 @@ def update_district_prices(*, max_seasons: int = 5, base_dir: Optional[Path] = N
     old_samples = previous.get("samples") or {}
     old_updated_at = previous.get("updated_at")
     old_latest_season = previous.get("latest_season")
+    # 保留 manual_overrides — scheduler / 手動重算只更新 LVR by_district，不能覆蓋 admin 手動覆蓋值
+    old_manual_overrides = previous.get("manual_overrides") or {}
 
     # 2. 算新值
     rows = collect_recent_seasons(base_dir, max_seasons=max_seasons)
@@ -208,6 +210,9 @@ def update_district_prices(*, max_seasons: int = 5, base_dir: Optional[Path] = N
         "previous_updated_at": old_updated_at,
         "row_count": len(rows),
         "diff": diff,
+        # 保留既有 manual_overrides — 任何 admin 手動覆蓋值在 LVR 重算時必須保留，
+        # 否則 scheduler 跑完一輪就清掉了
+        "manual_overrides": old_manual_overrides,
     }
     try:
         from database.db import get_firestore
@@ -222,64 +227,88 @@ def update_district_prices(*, max_seasons: int = 5, base_dir: Optional[Path] = N
 
 
 # ── 給 scorer.py 讀的 cache 介面 ─────────────────────────────────────
-_PRICE_CACHE: dict = {"data": None, "samples": None, "fetched_at": 0.0}
+_PRICE_CACHE: dict = {"data": None, "samples": None, "manual_overrides": None, "fetched_at": 0.0}
 _CACHE_TTL_SEC = 3600   # 1 小時 cache，避免每筆 renewal_v2 都打 Firestore
+
+
+def _refresh_price_cache_if_stale():
+    """1 hr TTL cache refresh helper — 集中 cache 邏輯避免多份。"""
+    import time
+    now = time.time()
+    if _PRICE_CACHE["data"] is not None and (now - _PRICE_CACHE["fetched_at"]) <= _CACHE_TTL_SEC:
+        return
+    try:
+        from database.db import get_firestore
+        doc = get_firestore().collection("settings").document("district_new_house_price").get()
+        if doc.exists:
+            data = doc.to_dict() or {}
+            _PRICE_CACHE["data"] = data.get("by_district") or {}
+            _PRICE_CACHE["samples"] = data.get("samples") or {}
+            _PRICE_CACHE["manual_overrides"] = data.get("manual_overrides") or {}
+            _PRICE_CACHE["fetched_at"] = now
+    except Exception as e:
+        logger.debug(f"讀 Firestore district price cache 失敗（fallback const）: {e}")
+
+
+def invalidate_district_price_cache():
+    """admin 手動改 manual_override 後呼叫，立刻失效 cache 讓下次讀回到 Firestore。"""
+    _PRICE_CACHE["data"] = None
+    _PRICE_CACHE["manual_overrides"] = None
+    _PRICE_CACHE["fetched_at"] = 0.0
 
 
 def get_district_new_house_price(district: str) -> Optional[float]:
     """回傳該區「最新預售屋單價」（萬/坪）。
-    優先 Firestore（auto update），找不到 fallback 到 config.py 的常數。"""
-    import time
-    now = time.time()
-    if not _PRICE_CACHE["data"] or (now - _PRICE_CACHE["fetched_at"]) > _CACHE_TTL_SEC:
+    優先序：
+      1. manual_overrides[district]   ← admin 手動覆蓋值（最高優先）
+      2. by_district[district]        ← LVR 自動算的中位數
+      3. config.DISTRICT_NEW_HOUSE_PRICE_WAN ← 寫死 fallback
+    """
+    _refresh_price_cache_if_stale()
+    # 1. 手動覆蓋優先
+    mo = _PRICE_CACHE.get("manual_overrides") or {}
+    if district in mo and mo[district] is not None:
         try:
-            from database.db import get_firestore
-            doc = get_firestore().collection("settings").document("district_new_house_price").get()
-            if doc.exists:
-                data = doc.to_dict() or {}
-                _PRICE_CACHE["data"] = data.get("by_district") or {}
-                _PRICE_CACHE["samples"] = data.get("samples") or {}
-                _PRICE_CACHE["fetched_at"] = now
-        except Exception as e:
-            logger.debug(f"讀 Firestore district price cache 失敗（fallback const）: {e}")
+            return float(mo[district])
+        except (TypeError, ValueError):
+            pass
+    # 2. LVR 算的中位數
     if _PRICE_CACHE["data"] and district in _PRICE_CACHE["data"]:
         return _PRICE_CACHE["data"][district]
-    # fallback
+    # 3. fallback const
     from config import DISTRICT_NEW_HOUSE_PRICE_WAN
     return DISTRICT_NEW_HOUSE_PRICE_WAN.get(district)
 
 
 def get_all_district_prices() -> dict:
     """給 frontend 用：回完整 dict（觸發 cache refresh）。
-    回 {by_district: {區: 價}, samples: {區: n}, source: str}"""
-    import time
-    now = time.time()
-    if not _PRICE_CACHE["data"] or (now - _PRICE_CACHE["fetched_at"]) > _CACHE_TTL_SEC:
+    回 {by_district, samples, manual_overrides, source, updated_at}"""
+    _refresh_price_cache_if_stale()
+    if _PRICE_CACHE["data"] is not None:
+        # 也順手把 source / updated_at 重抓 Firestore (cache 沒存這兩個)
+        meta_source = None
+        meta_updated_at = None
         try:
             from database.db import get_firestore
             doc = get_firestore().collection("settings").document("district_new_house_price").get()
             if doc.exists:
                 data = doc.to_dict() or {}
-                _PRICE_CACHE["data"] = data.get("by_district") or {}
-                _PRICE_CACHE["samples"] = data.get("samples") or {}
-                _PRICE_CACHE["fetched_at"] = now
-                return {
-                    "by_district": _PRICE_CACHE["data"],
-                    "samples": _PRICE_CACHE["samples"],
-                    "source": data.get("source"),
-                    "updated_at": data.get("updated_at"),
-                }
+                meta_source = data.get("source")
+                meta_updated_at = data.get("updated_at")
         except Exception:
             pass
-    if _PRICE_CACHE["data"]:
         return {
             "by_district": _PRICE_CACHE["data"],
             "samples": _PRICE_CACHE["samples"] or {},
+            "manual_overrides": _PRICE_CACHE["manual_overrides"] or {},
+            "source": meta_source,
+            "updated_at": meta_updated_at,
         }
     # 完全 fallback 到 const
     from config import DISTRICT_NEW_HOUSE_PRICE_WAN
     return {
         "by_district": dict(DISTRICT_NEW_HOUSE_PRICE_WAN),
         "samples": {},
+        "manual_overrides": {},
         "source": "config.py 預設值（尚未 update_district_prices）",
     }
