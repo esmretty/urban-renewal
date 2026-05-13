@@ -899,7 +899,9 @@
     try {
       const r = await fetch('/api/target_regions?with_counts=true');
       const data = await r.json();
-      state.districtCounts = (data && data.counts) || {};
+      // 嚴格保留原版 data.regions gate：API 若哪天回奇怪 shape (只有 counts、無 regions)，
+      // 不會吃進來。和原版 if/else 邏輯 100% 等價。
+      state.districtCounts = (data?.regions && data.counts) || {};
       renderDistrictChips();
     } catch (e) { console.warn('target_regions failed', e); }
   }
