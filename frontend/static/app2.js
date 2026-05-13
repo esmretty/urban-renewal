@@ -2236,7 +2236,38 @@
       s = s.replace(/^[一-龥]{1,3}(?:區|鄉|鎮|市)/, '');
       return s.trim() || '—';
     };
-    pop.innerHTML = `<div class="v2-lvr-popup__title">附近實價登錄 (${recs.length} 筆)</div>
+    // 「本路段完整記錄」連結 → 5168 (price.houseprice.tw) 對應路段頁
+    // 地址轉換規則：
+    //   1. strip 樓 + 號(及之Y)
+    //   2. rightmost 是弄 → 去掉弄字；剩下 rightmost 是巷 → 去掉巷字
+    const _5168Kw = (addr) => {
+      if (!addr) return '';
+      let s = String(addr).trim();
+      // strip 城市 + 區 prefix
+      s = s.replace(/^(?:臺北市|台北市|新北市|桃園市|台中市|臺中市|高雄市|台南市|臺南市|基隆市|新竹市|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義市|嘉義縣|屏東縣|宜蘭縣|花蓮縣|台東縣|臺東縣)/, '');
+      s = s.replace(/^[一-龥]{1,3}(?:區|鄉|鎮|市)/, '');
+      // strip 樓 (e.g., 5樓 / 五樓 / 5樓之1 / 4F / 4F-1)
+      s = s.replace(/(?:[一二兩三四五六七八九十百0-9]+)(?:樓|[Ff])(?:[之\-][一二兩三四五六七八九十0-9]+)?\s*$/, '');
+      // strip 號 + 數字 (e.g., 5號 / 5號之1)
+      s = s.replace(/(?:[0-9]+)號(?:[之\-][0-9]+)?\s*$/, '');
+      // 剩下 rightmost 是弄 → 去弄字 (preserve 之前的 N巷M)
+      s = s.replace(/弄\s*$/, '');
+      // 剩下 rightmost 是巷 → 去巷字
+      s = s.replace(/巷\s*$/, '');
+      return s.trim();
+    };
+    const _5168Url = (p) => {
+      const city = (p.city || '').trim();
+      const district = (p.district || '').trim();
+      const kw = _5168Kw(p.address_inferred || p.address || '');
+      if (!city || !district || !kw) return null;
+      return `https://price.houseprice.tw/list/${encodeURIComponent(city)}_city/${encodeURIComponent(district)}_zip/${encodeURIComponent('公寓')}_use/${encodeURIComponent(kw)}_kw/`;
+    };
+    const url5168 = _5168Url(p);
+    const fullLink = url5168
+      ? `<a href="${url5168}" target="_blank" rel="noopener" class="v2-lvr-full-link" style="float:right; font-size:12px; color:#16a085; text-decoration:none;" onclick="event.stopPropagation()">本路段完整記錄 ↗</a>`
+      : '';
+    pop.innerHTML = `<div class="v2-lvr-popup__title">附近實價登錄 (${recs.length} 筆)${fullLink}</div>
       <table class="v2-lvr-tbl">
         <thead><tr><th>交易日</th><th>總價</th><th>建坪</th><th>地坪</th><th>單價</th><th>地址</th><th></th></tr></thead>
         <tbody>${recs.map(r => {
