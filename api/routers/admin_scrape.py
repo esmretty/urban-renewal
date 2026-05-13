@@ -32,7 +32,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from api.auth import require_admin, get_current_user
-from database.db import get_col, get_firestore
+from database.db import get_col, get_firestore, get_user_watchlist, get_user_manual
 from database.time_utils import now_tw, now_tw_iso
 from config import BASE_DIR
 
