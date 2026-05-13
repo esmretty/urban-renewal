@@ -386,9 +386,12 @@ def _apply_inferred_choice(doc: dict) -> None:
         doc["land_area_sqm"] = None
 
 
-_scrape_queue: Optional[asyncio.Queue] = None
 _scrape_running: bool = False
 _cancel_requested: bool = False
+
+# Scrape 進度跨 process 共享檔（prod 跑 3 個 uvicorn worker，POST 跟 SSE 可能落在不同 worker；
+# 用 file (O_APPEND atomic write < 4KB) 取代 in-memory asyncio.Queue 才能跨 process 看到同一份）
+_SCRAPE_PROGRESS_FILE = BASE_DIR / "data" / "scrape_progress.jsonl"
 
 # 單筆 URL 分析併發控制（不再跟批次互斥，允許批次跑時用戶貼網址照常處理）
 MAX_URL_CONCURRENCY = int(os.getenv("MAX_URL_CONCURRENCY", "2"))
@@ -407,17 +410,27 @@ SCHEDULER_INTER_COMMAND_SLEEP_SEC = 30
 
 
 def _safe_put_progress(msg_json: str):
-    """非阻塞寫入 progress queue。queue 滿時先吃掉最舊訊息再放。
-    定時 batch 沒 admin 監聽時，queue 會 fill up，用 drop-oldest 防止記憶體爆。"""
-    if _scrape_queue is None:
-        return
+    """寫一條 progress 訊息到共享檔（跨 uvicorn worker process）。
+
+    舊版用 in-memory asyncio.Queue；prod 跑 3 個 worker 時 POST 跟 SSE 落在不同
+    process → SSE 永遠收不到訊息（只看得到初始「連線成功」+ heartbeat）。
+    改用 O_APPEND 寫檔，所有 worker 共讀同一份 file。
+    file 在新 batch 啟動時由 _reset_scrape_progress 截斷，size 不會無限長。"""
     try:
-        _scrape_queue.put_nowait(msg_json)
-    except asyncio.QueueFull:
-        try: _scrape_queue.get_nowait()
-        except Exception: pass
-        try: _scrape_queue.put_nowait(msg_json)
-        except Exception: pass
+        _SCRAPE_PROGRESS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with _SCRAPE_PROGRESS_FILE.open("a", encoding="utf-8") as f:
+            f.write(msg_json + "\n")
+    except Exception as e:
+        logger.warning(f"_safe_put_progress write failed: {e}")
+
+
+def _reset_scrape_progress():
+    """新 batch 啟動前清空 progress file，讓 SSE 從乾淨狀態 tail。"""
+    try:
+        _SCRAPE_PROGRESS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _SCRAPE_PROGRESS_FILE.write_text("", encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"_reset_scrape_progress failed: {e}")
 
 
 SCHEDULER_ALLOWED_INTERVAL_HR = (1, 3, 6, 12, 24)
@@ -1070,8 +1083,7 @@ async def _scheduled_scrape_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _scrape_queue, _url_sem, _sched_wake_event
-    _scrape_queue = asyncio.Queue(maxsize=500)
+    global _url_sem, _sched_wake_event
     _url_sem = asyncio.Semaphore(MAX_URL_CONCURRENCY)
     _sched_wake_event = asyncio.Event()
     init_db()
@@ -2163,6 +2175,7 @@ async def trigger_scrape(req: ScrapeRequest, user: dict = Depends(require_admin)
     source = (req.source or "591").lower()
     if source not in ("591", "yongqing", "sinyi"):
         raise HTTPException(400, f"未知 source: {req.source}")
+    _reset_scrape_progress()
     asyncio.create_task(_run_scrape_task(
         headless=req.headless, districts=req.districts,
         limit=limit, thresholds=thresholds,
@@ -2186,15 +2199,48 @@ async def scrape_status():
 
 
 async def _sse_generator() -> AsyncGenerator[str, None]:
+    """Tail _SCRAPE_PROGRESS_FILE 把訊息推給瀏覽器。
+    用 byte offset 追蹤已讀位置，500ms 輪詢一次新內容。
+    file 被新 batch 截斷時自動 reset offset。30s 沒新訊息 yield heartbeat 防 proxy timeout。"""
     yield "data: {\"msg\": \"連線成功，等待爬取任務...\"}\n\n"
+    offset = 0
+    idle_ticks = 0
+    POLL_SEC = 0.5
+    HEARTBEAT_AFTER = int(30 / POLL_SEC)
     while True:
         try:
-            msg = await asyncio.wait_for(_scrape_queue.get(), timeout=30)
-            yield f"data: {msg}\n\n"
-            if '"done"' in msg or '"error"' in msg:
-                break
-        except asyncio.TimeoutError:
-            yield "data: {\"msg\": \"heartbeat\"}\n\n"
+            if _SCRAPE_PROGRESS_FILE.exists():
+                size = _SCRAPE_PROGRESS_FILE.stat().st_size
+                if size < offset:
+                    offset = 0   # 被截斷，重新 tail
+                if size > offset:
+                    with _SCRAPE_PROGRESS_FILE.open("rb") as f:
+                        f.seek(offset)
+                        chunk = f.read()
+                    offset += len(chunk)
+                    last_was_terminal = False
+                    for raw in chunk.split(b"\n"):
+                        if not raw.strip():
+                            continue
+                        try:
+                            line = raw.decode("utf-8")
+                        except UnicodeDecodeError:
+                            continue
+                        yield f"data: {line}\n\n"
+                        if '"done"' in line or '"error"' in line:
+                            last_was_terminal = True
+                    if last_was_terminal:
+                        return
+                    idle_ticks = 0
+                    continue
+            idle_ticks += 1
+            if idle_ticks >= HEARTBEAT_AFTER:
+                yield "data: {\"msg\": \"heartbeat\"}\n\n"
+                idle_ticks = 0
+            await asyncio.sleep(POLL_SEC)
+        except Exception as e:
+            logger.warning(f"SSE tail loop error: {e}")
+            await asyncio.sleep(1)
 
 
 async def _run_scrape_task(headless: bool = True, districts: list = None, limit: int = 30, thresholds: dict = None, triggered_by_uid: Optional[str] = None, source: str = "591", trigger_label: str = "manual_batch"):
@@ -2206,18 +2252,15 @@ async def _run_scrape_task(headless: bool = True, districts: list = None, limit:
     _cancel_reset()
     import json
 
-    loop = asyncio.get_running_loop()
-
     def progress(msg: str, percent: Optional[float] = None, new_item: bool = False):
         payload = {"msg": msg}
         if percent is not None:
             payload["percent"] = round(percent, 1)
         if new_item:
             payload["new_item"] = True
-        loop.call_soon_threadsafe(
-            _safe_put_progress,
-            json.dumps(payload, ensure_ascii=False),
-        )
+        # file IO 是 thread-safe (O_APPEND atomic)，可直接從 worker thread 寫，
+        # 不必再 loop.call_soon_threadsafe bounce 回 event loop
+        _safe_put_progress(json.dumps(payload, ensure_ascii=False))
 
     stats = None
     try:
