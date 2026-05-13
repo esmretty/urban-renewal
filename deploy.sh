@@ -15,6 +15,21 @@
 
 set -e
 
+# Pre-deploy smoke — 在 git push 之前掃 router cross-module reference (~2 秒)。
+# 抓 sprint 2 step 6 那種「regex strip 過頭刪掉 module-level 常數但 router 還用」的 bug。
+# fail 就直接 abort (set -e + exit code 非 0)，prod 完全不動到。
+# 可用 SKIP_PREDEPLOY=1 跳過 (例：要 deploy 純 deploy.sh / 純 frontend 改動 / 無 Python 改動時)。
+if [[ "$SKIP_PREDEPLOY" != "1" ]]; then
+    echo "==> Pre-deploy smoke (router cross-module check)"
+    if command -v python >/dev/null 2>&1; then
+        python scripts/predeploy_smoke.py
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 scripts/predeploy_smoke.py
+    else
+        echo "  ⚠ 找不到 python，跳過 smoke"
+    fi
+fi
+
 # 確保 gcloud default project 是 urban-renewal-32f02（之前 default 是 piano-key-detector
 # 跑 gcloud compute 系列指令會卡 "Compute Engine API not enabled" Y/N prompt）。
 # deploy.sh 本身用 plain ssh 不需要 gcloud，但這條一次性修保證後續 monitor batch / debug 用
