@@ -20,6 +20,14 @@ import time
 import tokenize
 from pathlib import Path
 
+# Windows cp950 default stdout 會把 ✓ ✗ 等 unicode 炸成 UnicodeEncodeError；
+# deploy.sh 從 bash 開 subshell 跑這支時尤其明顯。強制 UTF-8 輸出。
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))   # 讓 `python scripts/predeploy_smoke.py` 能 import api
 
