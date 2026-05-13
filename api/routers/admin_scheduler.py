@@ -403,7 +403,7 @@ async def get_retry_queue(admin: dict = Depends(require_admin)):
 @router.post("/admin/retry_queue/{queue_id}/run-now")
 async def run_retry_now(queue_id: str, admin: dict = Depends(require_admin)):
     """手動立刻重抓某筆 — admin 不想等 10 分鐘。"""
-    from api.app import _scrape_single_url
+    from api.routers.admin_scrape import _scrape_single_url
     from database.retry_queue import dequeue, enqueue
     from database.db import find_doc_by_source_id as _fd
     db = get_firestore()

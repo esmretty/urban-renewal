@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     from database.db import get_firestore
-    from api.app import _scrape_single_url
+    from api.routers.admin_scrape import _scrape_single_url
 
     db = get_firestore()
     col = db.collection("properties")

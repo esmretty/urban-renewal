@@ -90,7 +90,8 @@ async def admin_reanalyze(property_id: str, source: str = "all", admin: dict = D
     source 參數：
       - "all"（預設）：重抓該物件所有來源（依 sources array 順序）
       - "591" / "永慶" / "信義"：只重抓指定來源"""
-    from api.app import _scrape_single_url, invalidate_query_cache
+    from api.routers.admin_scrape import _scrape_single_url
+    from api.app import invalidate_query_cache
     col = get_col()
     doc = col.document(property_id).get()
     if not doc.exists:
@@ -214,7 +215,7 @@ async def admin_reanalyze_manual(uid: str, property_id: str, admin: dict = Depen
     """admin 重分析其他用戶的 manual 物件（/admin/manual_properties tab 用）。
     跟用戶端 reanalyze 走同一條 validate；若觸發歧義 admin 端會看到 status!=started，
     需要請該用戶自己處理（admin 不該替別人選戶）。"""
-    from api.app import _run_manual_analysis
+    from api.routers.admin_scrape import _run_manual_analysis
     if not property_id.startswith("manual_"):
         raise HTTPException(status_code=400, detail="只能重分析 manual 物件")
     manual_col = get_user_manual(uid)
