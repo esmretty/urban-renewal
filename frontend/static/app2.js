@@ -503,7 +503,7 @@
   // ── 優勢 chip (對齊 v1 computeAdvantageChips) — TOD / 防災型 / 商業區 ────
   function computeAdvantageChips(p) {
     const chips = [];
-    if (p.nearest_mrt_dist_m != null && p.nearest_mrt_dist_m <= 500) {
+    if (p.nearest_mrt_dist_m != null && p.nearest_mrt_dist_m <= 300) {
       chips.push({ label: 'ＴＯＤ', cls: 'v2-achip v2-achip--tod' });
     }
     const age = currentAge(p);

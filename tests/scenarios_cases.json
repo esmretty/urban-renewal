@@ -1,0 +1,162 @@
+[
+  {
+    "name": "大安住三 30坪 40年 1500萬 3F",
+    "doc": {
+      "city": "台北市",
+      "district": "大安區",
+      "zoning": "第三種住宅區",
+      "land_area_ping": 30.0,
+      "building_area_ping": 60.0,
+      "building_age": 40,
+      "price_ntd": 15000000,
+      "road_width_m": 12,
+      "floor": 3,
+      "total_floors": 4
+    },
+    "new_house_price_wan_per_ping": 80
+  },
+  {
+    "name": "信義商三 50坪 50年 8000萬 5F",
+    "doc": {
+      "city": "台北市",
+      "district": "信義區",
+      "zoning": "第三種商業區",
+      "land_area_ping": 50.0,
+      "building_area_ping": 120.0,
+      "building_age": 50,
+      "price_ntd": 80000000,
+      "road_width_m": 20,
+      "floor": 5,
+      "total_floors": 5
+    },
+    "new_house_price_wan_per_ping": 120
+  },
+  {
+    "name": "中山住二 20坪 30年 800萬 2F",
+    "doc": {
+      "city": "台北市",
+      "district": "中山區",
+      "zoning": "第二種住宅區",
+      "land_area_ping": 20.0,
+      "building_area_ping": 40.0,
+      "building_age": 30,
+      "price_ntd": 8000000,
+      "road_width_m": 8,
+      "floor": 2,
+      "total_floors": 4
+    },
+    "new_house_price_wan_per_ping": 60
+  },
+  {
+    "name": "文山住三 25坪 55年 1200萬 (1F 加成)",
+    "doc": {
+      "city": "台北市",
+      "district": "文山區",
+      "zoning": "第三種住宅區",
+      "land_area_ping": 25.0,
+      "building_area_ping": 50.0,
+      "building_age": 55,
+      "price_ntd": 12000000,
+      "road_width_m": 10,
+      "floor": 1,
+      "total_floors": 4
+    },
+    "new_house_price_wan_per_ping": 70
+  },
+  {
+    "name": "板橋住三 35坪 35年 2000萬",
+    "doc": {
+      "city": "新北市",
+      "district": "板橋區",
+      "zoning": "第三種住宅區",
+      "land_area_ping": 35.0,
+      "building_area_ping": 70.0,
+      "building_age": 35,
+      "price_ntd": 20000000,
+      "road_width_m": 15,
+      "floor": 3,
+      "total_floors": 5
+    },
+    "new_house_price_wan_per_ping": 65
+  },
+  {
+    "name": "永和住三 22坪 45年 1300萬",
+    "doc": {
+      "city": "新北市",
+      "district": "永和區",
+      "zoning": "第三種住宅區",
+      "land_area_ping": 22.0,
+      "building_area_ping": 44.0,
+      "building_age": 45,
+      "price_ntd": 13000000,
+      "road_width_m": 8,
+      "floor": 2,
+      "total_floors": 4
+    },
+    "new_house_price_wan_per_ping": 60
+  },
+  {
+    "name": "大安住三 1969 完工 (應觸發防災都更)",
+    "doc": {
+      "city": "台北市",
+      "district": "大安區",
+      "zoning": "第三種住宅區",
+      "land_area_ping": 28.0,
+      "building_area_ping": 56.0,
+      "building_age_completed_year": 1969,
+      "price_ntd": 14000000,
+      "road_width_m": 10,
+      "floor": 3,
+      "total_floors": 4
+    },
+    "new_house_price_wan_per_ping": 75
+  },
+  {
+    "name": "信義住三 1980 完工 (不應觸發防災都更)",
+    "doc": {
+      "city": "台北市",
+      "district": "信義區",
+      "zoning": "第三種住宅區",
+      "land_area_ping": 30.0,
+      "building_area_ping": 60.0,
+      "building_age_completed_year": 1980,
+      "price_ntd": 16000000,
+      "road_width_m": 12,
+      "floor": 3,
+      "total_floors": 5
+    },
+    "new_house_price_wan_per_ping": 80
+  },
+  {
+    "name": "中正住三 路寬 6m (應路寬限縮)",
+    "doc": {
+      "city": "台北市",
+      "district": "中正區",
+      "zoning": "第三種住宅區",
+      "land_area_ping": 30.0,
+      "building_area_ping": 60.0,
+      "building_age": 50,
+      "price_ntd": 14000000,
+      "road_width_m": 6,
+      "floor": 2,
+      "total_floors": 4
+    },
+    "new_house_price_wan_per_ping": 75
+  },
+  {
+    "name": "中山住二 路寬 4m (極窄路、強限縮)",
+    "doc": {
+      "city": "台北市",
+      "district": "中山區",
+      "zoning": "第二種住宅區",
+      "land_area_ping": 20.0,
+      "building_area_ping": 40.0,
+      "building_age": 50,
+      "price_ntd": 9000000,
+      "road_width_m": 4,
+      "floor": 2,
+      "total_floors": 4
+    },
+    "new_house_price_wan_per_ping": 60
+  }
+]

@@ -163,12 +163,32 @@ def check_pyflakes() -> int:
     return 0
 
 
+def check_scenarios_xcheck() -> int:
+    """§4 跑 Python + JS 算式對 baseline 比對 — 抓「前後端算式漂掉」這類 drift。
+    跑 ~5 秒 (Python 1s + Node 0.5s + 比對)。baseline: tests/scenarios_expected.json"""
+    import subprocess
+    print("[predeploy] §4 scenarios cross-check (Python + JS 算式 baseline 比對)")
+    r = subprocess.run(
+        [sys.executable, str(ROOT / "tests" / "scenarios_xcheck.py")],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    if r.returncode != 0:
+        print(r.stdout)
+        return 1
+    # 萃取 「✓ ... 一致」摘要行
+    for line in r.stdout.split("\n"):
+        if "Python vs baseline" in line or "JS vs baseline" in line or "✓" in line:
+            print(f"  {line.strip()}")
+    return 0
+
+
 def main() -> int:
     t0 = time.time()
     rc = 0
     rc |= check_router_imports()
     rc |= check_hasattr()
     rc |= check_pyflakes()
+    rc |= check_scenarios_xcheck()
     elapsed = time.time() - t0
     if rc:
         print(f"\n[predeploy] FAIL ({elapsed:.1f}s) — 修好再 push")
