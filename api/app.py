@@ -63,6 +63,14 @@ _PUBLIC_PREFIXES = (
     "/api/gis_overlay/",      # 政府 GIS 圖磚 forward proxy，內容公開無個資；
                               # Leaflet tile fetch 不帶 Authorization header → 必須 public
 )
+# Admin-only paths — middleware verify Firebase token + 進一步 check is_admin (2026-05-13 安全 audit)
+# 避免外部人士 GET /openapi.json 拿到「全 119 endpoint + schema」洩漏 API 設計
+_ADMIN_ONLY_PATHS = {
+    "/docs",                  # FastAPI 預設 Swagger UI
+    "/redoc",                 # FastAPI 預設 ReDoc UI
+    "/openapi.json",          # OpenAPI 機器可讀 JSON
+    "/docs/oauth2-redirect",  # Swagger UI OAuth redirect helper
+}
 
 
 async def _auth_middleware(request, call_next):
@@ -73,7 +81,9 @@ async def _auth_middleware(request, call_next):
         return await call_next(request)
     if path in _PUBLIC_PATHS or any(path.startswith(p) for p in _PUBLIC_PREFIXES):
         return await call_next(request)
-    if path.startswith("/api/") or path.startswith("/admin/"):
+    # admin-only paths (/docs /redoc /openapi.json) + 所有 /api/* /admin/* 都先驗 token
+    is_admin_only = path in _ADMIN_ONLY_PATHS
+    if is_admin_only or path.startswith("/api/") or path.startswith("/admin/"):
         # Time auth verify (token cache hit 通常 <1ms; miss ~100-200ms)
         import time as _at
         _at0 = _at.perf_counter()
@@ -82,6 +92,10 @@ async def _auth_middleware(request, call_next):
         except HTTPException as e:
             from fastapi.responses import JSONResponse
             return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
+        # admin-only 加 check is_admin (2026-05-13 audit — 避免 /docs /openapi.json 公開洩漏 API surface)
+        if is_admin_only and not user.get("is_admin"):
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=403, content={"detail": "需要管理員權限才能存取 API 文件"})
         request.state.user = user
         request.state.auth_ms = (_at.perf_counter() - _at0) * 1000
     return await call_next(request)
