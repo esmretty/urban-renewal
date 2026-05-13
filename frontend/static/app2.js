@@ -2119,50 +2119,6 @@
       </div>`;
   }
 
-  // 出價建議區塊 — Row 2 右欄獨立 render (出價設定已移到都更換回試算右欄)
-  function bidSectionHTML(p, prices) {
-    if (p.is_foreclosure || p.is_remote_area || p.unsuitable_for_renewal || isLandSuspicious(p)) {
-      return `<div class="v2-bid-section"><div class="v2-d-alert v2-d-alert--soft">此物件不適用都更/危老試算，故無出價建議。</div></div>`;
-    }
-    const land = p.land_area_ping;
-    const newPrice = p.new_house_price_wan_override ?? prices[p.district];
-    const farPct = effectiveFar(p);
-    // farPct null 涵蓋「single zoning 空」+「multi zoning_list 加權失敗」兩種 case
-    if (!land || farPct == null || !newPrice) {
-      return `<div class="v2-d-alert v2-d-alert--soft">缺資料，無法給出價建議。</div>`;
-    }
-    const coeff = p.rebuild_coeff ?? 1.57;
-    const [ratio, parking] = lookupShareRatio(newPrice);
-    if (!ratio) return `<div class="v2-d-alert v2-d-alert--soft">缺分回比例，無法給出價建議。</div>`;
-    const isFangzai = p.city === '台北市' && currentAge(p) && (new Date().getFullYear() - currentAge(p)) <= 1974;
-    const bonusW = p.bonus_weishau ?? 0.30;
-    const bonusD = p.bonus_dugen ?? (isFangzai ? 0.80 : 0.50);
-    const is1F = Number(p.floor) === 1 || Number(p.floor_range_min) === 1;
-    const floorPremium = p.floor_premium ?? (is1F ? 0.20 : 0);
-    const effectivePrice = newPrice * (1 + floorPremium);
-    const calcVal = (b) => {
-      const share = land * (farPct / 100) * (1 + b) * coeff * ratio;
-      return share * effectivePrice + (share / 40) * (parking || 0);
-    };
-    const valW = calcVal(bonusW);
-    const valD = calcVal(bonusD);
-    const wValRound = Math.round(valW), dValRound = Math.round(valD);
-    const desired = parseFloat(p.desired_price_wan ?? (p.price_ntd ? Math.round(p.price_ntd / 10000 * 0.9 / 10) * 10 : 0)) || 0;
-    const fmtN = (n) => Math.round(n).toLocaleString('zh-TW');
-    const opts = [3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0, 4.2, 4.5, 5.0];
-    const mkOpts = (sel) => opts.map(v =>
-      `<option value="${v}" ${Math.abs(v - sel) < 0.01 ? 'selected' : ''}>${v.toFixed(1)} 倍</option>`).join('');
-    if (desired <= 0) {
-      return `<div class="v2-bid-section">
-        <div class="v2-bid-row v2-bid-row--muted">尚未填入出價設定，無法給出建議</div>
-      </div>`;
-    }
-    return `<div class="v2-bid-section">
-      ${valW > 0 ? `<div class="v2-bid-row">危老出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${wValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(wValRound / 3.2)} 萬</span></div>` : ''}
-      <div class="v2-bid-row">都更出價建議：<select class="v2-bid-select" onchange="this.nextElementSibling.textContent='≤ '+Math.round(${dValRound}/parseFloat(this.value)).toLocaleString()+' 萬'">${mkOpts(3.2)}</select> <span class="v2-bid-max">≤ ${fmtN(dValRound / 3.2)} 萬</span></div>
-    </div>`;
-  }
-
   // ── 個人 override 儲存 (對齊 v1 行為) ─────────────────────────────────────
   // v1: input 永遠 editable，save 永遠 POST。POST 寫到 user 的 watchlist 子文件，
   //     不在 watchlist 就設 _ephemeral_edit_made flag。
@@ -2769,16 +2725,6 @@
     if (window.matchMedia('(max-width: 1024px)').matches) {
       closeSidebar();
     }
-  }
-
-  // ── City tab switch (narrow viewport) ────────────────────────────────────
-  function switchCityTab(city) {
-    state.activeCityTab = city;
-    const grid = $('#v2-district-chips .v2-city-grid');
-    if (grid) grid.dataset.activeCity = city;
-    $$('.v2-city-pill').forEach(p => {
-      p.classList.toggle('v2-city-pill--active', p.dataset.city === city);
-    });
   }
 
   // ── Sidebar / view toggling ──────────────────────────────────────────────
