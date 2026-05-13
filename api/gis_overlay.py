@@ -1302,10 +1302,13 @@ from fastapi import Depends as _Depends
 from api.auth import require_admin as _require_admin
 
 
-@router.get("/admin/gis_overlay/cache_stats")
-async def admin_cache_stats(admin: dict = _Depends(_require_admin)):
-    """每 layer 的 disk cache 統計 (中文名 / file 數 / total bytes / 最舊 cache mtime)。
-    scheduler 部分由既有 /admin/scheduler/status 提供 (cmd type='gis_overlay_refresh')。"""
+_CACHE_STATS_TTL_SEC = 300   # 5 分鐘
+_CACHE_STATS_FILE = _DISK_CACHE_BASE / "_admin_stats_cache.json"
+
+
+def _compute_all_cache_stats() -> list[dict]:
+    """走 21 個 layer disk dir、累計 file_count / total_bytes / oldest_mtime。
+    prod 620K PNG 檔走完約 20 秒。"""
     out = []
     for name in _disk_cache_layers():
         meta = _layer_admin_meta(name)
@@ -1316,7 +1319,46 @@ async def admin_cache_stats(admin: dict = _Depends(_require_admin)):
             "total_bytes": stats["total_bytes"],
             "oldest_mtime": stats["oldest_mtime"],
         })
-    return {"layers": out}
+    return out
+
+
+@router.get("/admin/gis_overlay/cache_stats")
+async def admin_cache_stats(admin: dict = _Depends(_require_admin)):
+    """每 layer 的 disk cache 統計 (中文名 / file 數 / total bytes / 最舊 cache mtime)。
+    scheduler 部分由既有 /admin/scheduler/status 提供 (cmd type='gis_overlay_refresh')。
+
+    Cache 策略: 走 21 個 layer 累計 620K 檔案 stat ~20 秒，所以結果存 file (跨 worker
+    共享)、TTL 5 分鐘。同個 worker 5 分內第二次打、跨 worker 打、都直接讀檔。
+    """
+    import json as _json
+    now = time.time()
+    cached_at = None
+    cached_layers = None
+    if _CACHE_STATS_FILE.exists():
+        try:
+            mtime = _CACHE_STATS_FILE.stat().st_mtime
+            if now - mtime < _CACHE_STATS_TTL_SEC:
+                with _CACHE_STATS_FILE.open("r", encoding="utf-8") as f:
+                    data = _json.load(f)
+                cached_at = data.get("computed_at")
+                cached_layers = data.get("layers")
+        except Exception as e:
+            logger.warning(f"cache_stats read failed: {e}")
+
+    if cached_layers is not None:
+        return {"layers": cached_layers, "cached_at": cached_at, "from_cache": True}
+
+    # 過期或不存在 → 在 thread 跑 (避免阻塞 event loop)
+    import asyncio as _aio
+    layers = await _aio.to_thread(_compute_all_cache_stats)
+    payload = {"computed_at": time.time(), "layers": layers}
+    try:
+        _CACHE_STATS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with _CACHE_STATS_FILE.open("w", encoding="utf-8") as f:
+            _json.dump(payload, f)
+    except Exception as e:
+        logger.warning(f"cache_stats write failed: {e}")
+    return {"layers": layers, "cached_at": payload["computed_at"], "from_cache": False}
 
 
 from pydantic import BaseModel as _BaseModel
