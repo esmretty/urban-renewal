@@ -86,6 +86,7 @@ class ScrapeRequest(BaseModel):
 @router.post("/api/scrape")
 async def trigger_scrape(req: ScrapeRequest, user: dict = Depends(require_admin)):
     import api.app as _app
+    from api.app import _ensure_user_profile
     """觸發 591 批次爬取（僅 admin）。"""
     if _app._scrape_running:
         return {"status": "already_running", "message": "爬取已在進行中"}
@@ -1482,6 +1483,7 @@ async def analyze_manual(req: ManualAnalyzeReq, user: dict = Depends(get_current
     手動輸入地址觸發分析（私人）。
     不寫中央；結果存 users/{uid}/manual/{manual_id}。
     """
+    from api.app import _ensure_user_profile, _safe_doc
     from api.manual_analyze import validate_manual_input, make_manual_source_id
 
     v = validate_manual_input(
@@ -1606,6 +1608,7 @@ class ScrapeUrlRequest(BaseModel):
 @router.post("/api/scrape_url")
 async def scrape_url(req: ScrapeUrlRequest, user: dict = Depends(get_current_user)):
     import api.app as _app
+    from api.app import _ensure_user_profile
     """
     單一 591 URL 送出：
       1) 先查中央，如果已經分析過（done 且無 error）→ 直接把 src_id 加進本人 watchlist，不重跑 pipeline
