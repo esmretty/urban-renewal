@@ -1747,6 +1747,54 @@ def _strip_for_list(d: dict) -> dict:
     return out
 
 
+# /api/central_search 列表用的欄位白名單 — Firestore .select() projection 用
+# 跟 LIST_DROP_FIELDS 互補：DROP 是「拿回來後剝掉」、KEEP 是「Firestore 端就不傳」
+# 加 select() 後預期省 Firestore protobuf decode + Python dict 化的時間
+# ★ 漏列任何前端列表/filter/sort 用到的 field → 該卡片會缺欄位 → 投資決策 bug
+# ★ 改前端 cardHTML 用新 field 時，同步加進這 list
+LIST_KEEP_FIELDS = [
+    # 基本識別 / source
+    "source_id", "source_keys", "sources", "source_origin",
+    "submitted_by_uid", "submitted_by_email", "user_url",
+    # 物件屬性
+    "district", "city", "building_type",
+    "building_age", "building_age_completed_year",
+    "building_area_ping", "land_area_ping", "price_ntd",
+    "address", "title",
+    "floor", "total_floors", "floor_range_min", "floor_range_max",
+    "land_area_inconsistent", "image_url",
+    # 狀態 (client filter / hide)
+    "archived", "archived_at", "archived_reason",
+    "deleted", "analysis_status", "analysis_error", "analysis_in_progress",
+    # 抗性
+    "is_basement", "is_remote_area", "unsuitable_for_renewal", "is_foreclosure",
+    # 分數 / AI 推薦
+    "score_total", "ai_recommendation",
+    # 學區
+    "school_elementary", "school_junior_high",
+    # 地理 / 地址推測
+    "latitude", "longitude", "source_latitude", "source_longitude",
+    "address_inferred", "address_road_fixed", "address_suspicious",
+    # 路寬 (列表卡片要顯示)
+    "road_width_m", "road_width_m_override", "road_width_name", "road_width_unknown",
+    # 分區 / 都更
+    "zoning", "zoning_original", "zoning_candidates", "zoning_error",
+    "zoning_list", "zoning_source", "zoning_source_url",
+    "zoning_ratios", "zoning_ratios_locked",
+    "renewal_v2",   # 列表倍數計算用，scenarios 子 dict 在 _strip_for_list 內剝
+    "redev_cases",
+    # 用戶 override (merge_watchlist_with_central / _apply_inferred_choice 用)
+    "bonus_dugen", "bonus_weishau", "rebuild_coeff", "floor_premium",
+    "new_house_price_wan_override", "desired_price_wan",
+    # Timestamps
+    "scrape_session_at", "scraped_at", "published_at", "last_change_at",
+    "added_at", "is_price_changed",
+    # 雜
+    "nearest_mrt_dist_m",
+    "lvr_records",   # 用戶要求保留在卡片列表
+]
+
+
 def _query_districts_parallel(col, dist_list, max_price_wan, min_price_wan):
     """切 N districts query 用 Firestore `in` operator (現代 SDK 支援 ≤30 值)。
 
@@ -1754,6 +1802,9 @@ def _query_districts_parallel(col, dist_list, max_price_wan, min_price_wan):
     但實測：N=15 parallel 仍要 ~1.3 秒（gRPC 多路複用瓶頸）。
     現在 Python SDK ≥ 2.x 對 `in [≤30]` 已優化成單 query，1 個 round-trip 就拿全部。
     超過 30 districts → 切 chunks 平行 fire（保留舊 fallback）。
+
+    .select(LIST_KEEP_FIELDS): Firestore 端 projection，少傳少 parse — central_search
+    永遠 slim=true (前端固定)，列表用不到 ai_analysis / screenshot_* 等重欄位。
     """
     from google.cloud.firestore_v1 import FieldFilter
 
@@ -1766,6 +1817,7 @@ def _query_districts_parallel(col, dist_list, max_price_wan, min_price_wan):
             q = q.where(filter=FieldFilter("price_ntd", "<=", max_ntd))
         if min_ntd is not None:
             q = q.where(filter=FieldFilter("price_ntd", ">=", min_ntd))
+        q = q.select(LIST_KEEP_FIELDS)
         return list(q.get())
 
     if len(dist_list) <= 30:
