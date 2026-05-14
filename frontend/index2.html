@@ -88,6 +88,45 @@
       window.__perfMark('html_inline_script_run', { ms_since_nav: Math.round(performance.now()) });
       document.addEventListener('DOMContentLoaded', function () { window.__perfMark('DOMContentLoaded'); });
       window.addEventListener('load', function () { window.__perfMark('window_load'); });
+
+      // __perfDump(): console.table 印 3 張表（Navigation Timing / Resource Timing / Custom marks）
+      // 對齊 10 步驟。使用方式：?perf=1 reload → 等列表+學區 chip 都載完 → console 跑 __perfDump()
+      window.__perfDump = function () {
+        var marks = (window.__PERF && window.__PERF.marks) || [];
+        var nav = (performance.getEntriesByType && performance.getEntriesByType('navigation') || [])[0];
+        var navRows = [];
+        if (nav) {
+          navRows = [
+            ['1.DNS lookup',    Math.round(nav.domainLookupEnd - nav.domainLookupStart)],
+            ['2.TCP connect',   Math.round(nav.connectEnd - nav.connectStart)],
+            ['3.TLS handshake', nav.secureConnectionStart > 0 ? Math.round(nav.connectEnd - nav.secureConnectionStart) : 0],
+            ['4.Req → TTFB',    Math.round(nav.responseStart - nav.requestStart)],
+            ['5.HTML download', Math.round(nav.responseEnd - nav.responseStart)],
+            ['6.DOMContentLoaded', Math.round(nav.domContentLoadedEventEnd - nav.startTime)],
+            ['7.load event',    Math.round(nav.loadEventEnd - nav.startTime)],
+          ];
+        }
+        var res = (performance.getEntriesByType && performance.getEntriesByType('resource')) || [];
+        var resRows = res.filter(function (r) {
+          return /\/static\/|leaflet|unpkg|fonts\.googleapis|fonts\.gstatic/.test(r.name);
+        }).map(function (r) {
+          var name = r.name.replace(/^https?:\/\/[^\/]+/, '').replace(/\?.*$/, '');
+          var dur = Math.round(r.duration);
+          var size = (r.transferSize === 0 && r.decodedBodySize > 0)
+                     ? 'cache HIT'
+                     : Math.round((r.transferSize || r.encodedBodySize || 0) / 1024) + 'KB';
+          return [name, dur, size];
+        }).sort(function (a, b) { return b[1] - a[1]; });
+        console.group('%c[perfDump]', 'color:#0e7490;font-weight:700');
+        console.log('-- (1) Navigation Timing (對齊步驟 1-2) --');
+        console.table(Object.fromEntries(navRows.map(function (r) { return [r[0], { ms: r[1] }]; })));
+        console.log('-- (2) Resources (static + 3rd party) --');
+        console.table(Object.fromEntries(resRows.map(function (r) { return [r[0], { ms: r[1], size: r[2] }]; })));
+        console.log('-- (3) Custom marks (時間 = 從 nav 起點起算 ms) --');
+        console.table(marks.map(function (m) { return { name: m.name, t_ms: m.t, extra: m.extra ? JSON.stringify(m.extra) : '' }; }));
+        console.groupEnd();
+        console.log('截圖以上 3 張 table 回貼 Claude。');
+      };
     })();
   </script>
   <!-- Early data fetch：用上次存的 cached token 在 Firebase SDK 還沒載入前就 fire central_search，

@@ -601,6 +601,7 @@
 
   // ── Render: card grid，分台北/新北兩欄 ────────────────────────────────────
   async function renderGrid() {
+    window.__perfMark && window.__perfMark('render_start', { mode: state.viewMode });
     // 地圖模式：跳過 list render；count 由 map_mode.js 的 renderMap 負責更新
     if (state.viewMode === 'map' && window.v2 && typeof window.v2._renderMap === 'function') {
       return window.v2._renderMap();
@@ -685,6 +686,7 @@
         toggleWatchlist(el.dataset.id);
       });
     });
+    window.__perfMark && window.__perfMark('render_done', { cards: $$('.v2-card').length });
   }
 
   function cardHTML(p, prices) {
@@ -966,6 +968,7 @@
   //   5. 寫進 state.filteredSorted + render
   // 整條 pipeline idempotent，每次都從 raw 起跑 — 不會「第一次有效第二次無效」的累積 bug
   async function applyFilters() {
+    window.__perfMark && window.__perfMark('filter_start', { all: state.allProperties.length });
     if (state.view === 'explore') _saveFilters();   // 自動存 explore filter 偏好
     const prices = await getDistrictPrices();
     let list = state.allProperties.filter(p =>
@@ -994,6 +997,7 @@
 
     state.filteredSorted = list;
     state.page = 1;
+    window.__perfMark && window.__perfMark('filter_done', { kept: list.length });
     renderGrid();
   }
 
@@ -2693,8 +2697,10 @@
     // per-property idempotent — 切換 explore/watchlist tab 時也會自動 enrich 新進 list
     const todo = state.allProperties.filter(p => !p.school_elementary && !p.school_junior_high);
     if (!todo.length) return;
+    window.__perfMark && window.__perfMark('school_enrich_start', { todo: todo.length });
     try {
       const idx = await _ensureSchoolPolygonIndex();
+      window.__perfMark && window.__perfMark('school_polygons_ready', { polygons: idx.length });
       let n = 0;
       todo.forEach(p => {
         const lat = p.latitude || p.source_latitude;
@@ -2711,10 +2717,12 @@
         }
       });
       console.info(`[school] enrich: +${n}/${todo.length} 物件補上學區`);
+      window.__perfMark && window.__perfMark('school_enrich_done', { added: n, of: todo.length });
       // user 已輸入學區關鍵字 → 立刻 re-filter
       if (($('#v2-school')?.value || '').trim()) applyFilters();
     } catch (e) {
       console.warn('[school] enrich 失敗:', e);
+      window.__perfMark && window.__perfMark('school_enrich_failed', { err: String(e).slice(0, 80) });
     }
   }
 
