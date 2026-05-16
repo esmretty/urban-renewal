@@ -251,11 +251,29 @@ async def admin_run_logs(limit: int = 200, trigger_prefix: Optional[str] = None,
 
 
 @router.get("/admin/run-sessions")
-async def admin_run_sessions(limit: int = 50, admin: dict = Depends(require_admin)):
+async def admin_run_sessions(limit: int = 50, per_type: Optional[int] = None,
+                              admin: dict = Depends(require_admin)):
     """回傳最近的「執行紀錄」session（依 batch_start/end 或 verify_alive_start/end 分組）。
     每個 session 含 trigger / started_at / ended_at / status / counts / actions。
-    actions 是該 session 內所有 per-object log 條目（new/enrich/dup_merge/archive/prune 等）。"""
-    from database.run_log import list_sessions
+    actions 是該 session 內所有 per-object log 條目（new/enrich/dup_merge/archive/prune 等）。
+
+    參數：
+      - limit (default 50)：總量 cap 模式，回最近 N 個 session 不分類型
+      - per_type (optional)：per-type 模式 — 每類各取最近 N 個 session，回合併 flat
+        list（按 started_at desc）+ counts_by_type 各桶數量。解 limit 模式高頻
+        batch 把冷門類型擠掉的問題。per_type 給值時 limit 被忽略。
+    """
+    from database.run_log import list_sessions, list_sessions_by_type
+    if per_type is not None:
+        n = min(int(per_type), 200)
+        result = list_sessions_by_type(per_type_limit=n)
+        return {
+            "count": result["total"],
+            "items": result["sessions"],
+            "counts_by_type": result["counts_by_type"],
+            "logs_fetched": result["logs_fetched"],
+            "per_type_limit": n,
+        }
     sessions = list_sessions(limit=min(int(limit), 200))
     return {"count": len(sessions), "items": sessions}
 

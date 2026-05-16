@@ -146,81 +146,151 @@ _START_ACTIONS = {"batch_start", "verify_alive_start"}
 _END_ACTIONS = {"batch_end", "verify_alive_end"}
 
 
+# Session 類型分桶 matcher — 跟 admin frontend `_RUNSESSION_TYPE_MATCHERS` 對齊。
+# (key, predicate(trigger)) 順序敏感：predicate 命中第一個就歸該桶，不會再 fallthrough。
+# trigger 不屬任何桶的 session 進 "_other" 桶。
+_TYPE_BUCKETS = [
+    ("batch",               lambda t: t == "manual_batch" or t.startswith("scheduler_scan_")),
+    ("verify_alive",        lambda t: t.startswith("verify_alive_")),
+    ("update_prices",       lambda t: t.startswith("update_prices")),
+    ("gis_overlay_refresh", lambda t: t.startswith("gis_overlay_refresh")),
+    ("retry_queue",         lambda t: t == "retry_queue"),
+]
+
+
+def _bucket_for(trigger: str) -> str:
+    """把 trigger 歸成桶名（前端 dropdown value）；不命中任何桶 → '_other'。"""
+    t = trigger or ""
+    for name, pred in _TYPE_BUCKETS:
+        if pred(t):
+            return name
+    return "_other"
+
+
+def _group_logs_to_sessions(all_logs: list[dict]) -> list[dict]:
+    """共用 grouping 邏輯：把按 at desc 的 raw logs 分組成 session list（按 started_at desc）。
+    抽出來讓 list_sessions / list_sessions_by_type 共用，避免兩處邏輯漂掉。
+    輸入 all_logs 不會被 mutate；輸入順序不限（內部會重排）。"""
+    # 按時間順序掃，遇 start 開新 session、遇 end 關掉 session
+    logs_asc = sorted(all_logs, key=lambda x: x.get("at") or "")
+    open_sessions: dict = {}   # trigger → 最近一個未關 session
+    sessions: list = []
+    for log in logs_asc:
+        t = log.get("trigger") or ""
+        a = log.get("action") or ""
+        if a in _START_ACTIONS:
+            prev = open_sessions.pop(t, None)
+            if prev:
+                prev["status"] = "interrupted"
+                sessions.append(prev)
+            open_sessions[t] = {
+                "trigger": t,
+                "started_at": log.get("at"),
+                "ended_at": None,
+                "status": "running",
+                "start_log": log,
+                "end_log": None,
+                "actions": [],
+                "counts": {},
+            }
+        elif a in _END_ACTIONS:
+            sess = open_sessions.pop(t, None)
+            if sess:
+                sess["ended_at"] = log.get("at")
+                sess["status"] = "done"
+                sess["end_log"] = log
+                sess["counts"][a] = sess["counts"].get(a, 0) + 1
+                sessions.append(sess)
+            else:
+                sessions.append({
+                    "trigger": t, "started_at": None, "ended_at": log.get("at"),
+                    "status": "orphan_end", "start_log": None, "end_log": log,
+                    "actions": [log], "counts": {a: 1},
+                })
+        else:
+            sess = open_sessions.get(t)
+            if sess:
+                sess["actions"].append(log)
+                sess["counts"][a] = sess["counts"].get(a, 0) + 1
+    # 還沒關的 session 也加進結果（標 running）
+    for sess in open_sessions.values():
+        sessions.append(sess)
+    sessions.sort(key=lambda s: s.get("started_at") or "", reverse=True)
+    return sessions
+
+
+def _fetch_logs(limit: int) -> list[dict]:
+    """從 Firestore 拉最近 limit 筆 raw log。"""
+    from database.db import get_firestore
+    docs = list(
+        get_firestore().collection(_FS_COLLECTION)
+        .order_by("at", direction="DESCENDING").limit(int(limit)).stream()
+    )
+    out = []
+    for d in docs:
+        x = d.to_dict() or {}
+        x["_id"] = d.id
+        out.append(x)
+    return out
+
+
 def list_sessions(limit: int = 50) -> list[dict]:
     """把 action logs 依 trigger + start/end 分組成 session。
     每個 session = 從 *_start 到 *_end 之間（同 trigger）的所有 action。
     回傳：依 started_at desc 排序，最多 limit 個 session。"""
     try:
-        from database.db import get_firestore
-        # 拉一段時間內所有 logs（避免漏掉 session 起點）
-        all_docs = list(
-            get_firestore().collection(_FS_COLLECTION)
-            .order_by("at", direction="DESCENDING").limit(2000).stream()
-        )
-        # 依 trigger 分群、找成對 start/end
-        # 簡化：按時間順序掃，遇 start 開新 session、遇 end 關掉 session
-        all_logs = []
-        for d in all_docs:
-            x = d.to_dict() or {}
-            x["_id"] = d.id
-            all_logs.append(x)
-        all_logs.sort(key=lambda x: x.get("at") or "")   # asc
-
-        # open_sessions: trigger → session dict（最近一個未關的）
-        open_sessions: dict = {}
-        sessions: list = []
-        for log in all_logs:
-            t = log.get("trigger") or ""
-            a = log.get("action") or ""
-            if a in _START_ACTIONS:
-                # 若同 trigger 有未關的 session → 強制關掉（孤兒）
-                prev = open_sessions.pop(t, None)
-                if prev:
-                    prev["status"] = "interrupted"
-                    sessions.append(prev)
-                # 開新 session
-                open_sessions[t] = {
-                    "trigger": t,
-                    "started_at": log.get("at"),
-                    "ended_at": None,
-                    "status": "running",
-                    "start_log": log,
-                    "end_log": None,
-                    "actions": [],
-                    "counts": {},   # action_type → count
-                }
-            elif a in _END_ACTIONS:
-                sess = open_sessions.pop(t, None)
-                if sess:
-                    sess["ended_at"] = log.get("at")
-                    sess["status"] = "done"
-                    sess["end_log"] = log
-                    sess["counts"][a] = sess["counts"].get(a, 0) + 1
-                    sessions.append(sess)
-                else:
-                    # 孤兒 end（找不到對應 start）
-                    sessions.append({
-                        "trigger": t, "started_at": None, "ended_at": log.get("at"),
-                        "status": "orphan_end", "start_log": None, "end_log": log,
-                        "actions": [log], "counts": {a: 1},
-                    })
-            else:
-                # 內部 action：歸入 open session（若有同 trigger）
-                sess = open_sessions.get(t)
-                if sess:
-                    sess["actions"].append(log)
-                    sess["counts"][a] = sess["counts"].get(a, 0) + 1
-
-        # 還沒關的 session 也加進結果（標 running）
-        for sess in open_sessions.values():
-            sessions.append(sess)
-
-        # 依 started_at desc 排序
-        sessions.sort(key=lambda s: s.get("started_at") or "", reverse=True)
+        all_logs = _fetch_logs(2000)
+        sessions = _group_logs_to_sessions(all_logs)
         return sessions[:limit]
     except Exception as e:
         logger.warning("[run_log] list_sessions failed: %s", e)
         return []
+
+
+def list_sessions_by_type(per_type_limit: int = 50, fetch_logs: int = 5000) -> dict:
+    """每種類型各取最近 per_type_limit 個 session。
+
+    解 list_sessions(limit=50) 的問題：總量 cap 50 會把冷門類型（update_prices
+    / gis_overlay_refresh / retry_queue 等一週可能才幾次的）擠出 cache。
+
+    回傳 dict:
+      {
+        "sessions": [flat list 按 started_at desc，各桶合併後排序],
+        "counts_by_type": {"batch": N, "verify_alive": N, ..., "_other": N},
+        "total": int,
+        "logs_fetched": int,   # 實際從 Firestore 拉了幾筆 raw log
+      }
+
+    fetch_logs 上限 = `_FS_MAX_KEEP` (5000) — Firestore 保留的全部。"""
+    try:
+        # cap 在 _FS_MAX_KEEP 避免拉超過 Firestore 實際保留量造成無效 query
+        fetch_n = min(int(fetch_logs), _FS_MAX_KEEP)
+        all_logs = _fetch_logs(fetch_n)
+        sessions = _group_logs_to_sessions(all_logs)   # 已按 started_at desc
+
+        # 分桶（順序保留按時間 desc，因為輸入已排好）
+        buckets: dict = {name: [] for name, _ in _TYPE_BUCKETS}
+        buckets["_other"] = []
+        for sess in sessions:
+            bucket = _bucket_for(sess.get("trigger") or "")
+            if len(buckets[bucket]) < per_type_limit:
+                buckets[bucket].append(sess)
+
+        # 合併 + 再按 started_at desc 排（合併後順序會亂，要重排）
+        merged: list = []
+        for sess_list in buckets.values():
+            merged.extend(sess_list)
+        merged.sort(key=lambda s: s.get("started_at") or "", reverse=True)
+
+        return {
+            "sessions": merged,
+            "counts_by_type": {name: len(lst) for name, lst in buckets.items()},
+            "total": len(merged),
+            "logs_fetched": len(all_logs),
+        }
+    except Exception as e:
+        logger.warning("[run_log] list_sessions_by_type failed: %s", e)
+        return {"sessions": [], "counts_by_type": {}, "total": 0, "logs_fetched": 0}
 
 
 def prune_old(keep_max: int = _FS_MAX_KEEP) -> int:

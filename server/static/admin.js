@@ -929,17 +929,30 @@ function _fmtSessionDuration(sess) {
   return `${Math.floor(ms / 60000)}m${Math.round((ms % 60000) / 1000)}s`;
 }
 
+// 後端 counts_by_type 每桶的中文 label — 跟 dropdown option text 對齊
+const _RUNSESSION_TYPE_ZH = {
+  batch: "Batch 抓取",
+  verify_alive: "偵測下架",
+  update_prices: "預售屋更新",
+  gis_overlay_refresh: "圖磚更新",
+  retry_queue: "重試佇列",
+  _other: "其他",
+};
+let _runSessionsCountsByType = null;   // {batch: N, verify_alive: N, ...}
+
 window.loadRunSessions = async function () {
   const box = document.getElementById("runsession-box");
   if (!box) return;
   try {
-    const r = await authedFetch("/admin/run-sessions?limit=50");
+    // per_type=50：每類各取最近 50 個 session，避免高頻 batch 把冷門類型擠掉
+    const r = await authedFetch("/admin/run-sessions?per_type=50");
     if (!r.ok) {
       box.innerHTML = `<div style="color:#c0392b;">載入失敗 HTTP ${r.status}</div>`;
       return;
     }
     const data = await r.json();
     _runSessionsCache = data.items || [];
+    _runSessionsCountsByType = data.counts_by_type || null;
     renderRunSessions();
   } catch (e) {
     box.innerHTML = `<div style="color:#c0392b;">載入失敗：${esc(e.message)}</div>`;
@@ -961,9 +974,20 @@ window.renderRunSessions = function () {
   // 用 cache 內的原始 index render，這樣 onclick="showSessionModal(idx)" 仍對得到原 _runSessionsCache[idx]
   const indexed = filtered.map(s => ({ sess: s, origIdx: _runSessionsCache.indexOf(s) }));
   if (countEl) {
-    countEl.textContent = filterVal
-      ? `共 ${_runSessionsCache.length} 次執行（篩選後 ${filtered.length} 筆）`
-      : `共 ${_runSessionsCache.length} 次執行`;
+    if (filterVal) {
+      // 篩選中：顯示「分類: N / 全部: 總數」
+      const zh = _RUNSESSION_TYPE_ZH[filterVal] || filterVal;
+      countEl.textContent = `${zh}：${filtered.length} 筆（總共 ${_runSessionsCache.length} 筆）`;
+    } else if (_runSessionsCountsByType) {
+      // 全部：列各桶數量（只顯示 > 0 的）
+      const parts = [];
+      for (const [k, n] of Object.entries(_runSessionsCountsByType)) {
+        if (n > 0) parts.push(`${_RUNSESSION_TYPE_ZH[k] || k} ${n}`);
+      }
+      countEl.textContent = `共 ${_runSessionsCache.length} 次｜${parts.join(" ｜ ")}`;
+    } else {
+      countEl.textContent = `共 ${_runSessionsCache.length} 次執行`;
+    }
   }
   if (!_runSessionsCache.length) {
     box.innerHTML = `<div style="color:#888; padding:8px;">尚無執行紀錄</div>`;
