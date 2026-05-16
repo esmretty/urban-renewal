@@ -858,6 +858,16 @@ const _ACTION_COLOR = {
 
 let _runSessionsCache = [];
 
+// 類型過濾器 — value 對應 admin.html 的 <select> option
+// 每個 matcher 接 session.trigger string，回 true 表示該 session 屬於此類型。
+const _RUNSESSION_TYPE_MATCHERS = {
+  "batch":               t => t === "manual_batch" || t.startsWith("scheduler_scan_"),
+  "verify_alive":        t => t.startsWith("verify_alive_"),
+  "update_prices":       t => t.startsWith("update_prices"),
+  "gis_overlay_refresh": t => t.startsWith("gis_overlay_refresh"),
+  "retry_queue":         t => t === "retry_queue",
+};
+
 function _triggerLabel(sess_or_trigger) {
   // 接受字串 trigger 或整個 session 物件（拿 source 入 label）
   const t = (typeof sess_or_trigger === "string") ? sess_or_trigger : (sess_or_trigger?.trigger || "");
@@ -921,7 +931,6 @@ function _fmtSessionDuration(sess) {
 
 window.loadRunSessions = async function () {
   const box = document.getElementById("runsession-box");
-  const countEl = document.getElementById("runsession-count");
   if (!box) return;
   try {
     const r = await authedFetch("/admin/run-sessions?limit=50");
@@ -931,43 +940,68 @@ window.loadRunSessions = async function () {
     }
     const data = await r.json();
     _runSessionsCache = data.items || [];
-    if (countEl) countEl.textContent = `共 ${data.count} 次執行`;
-    if (!_runSessionsCache.length) {
-      box.innerHTML = `<div style="color:#888; padding:8px;">尚無執行紀錄</div>`;
-      return;
-    }
-    box.innerHTML = `<table style="width:100%; border-collapse:collapse; table-layout:auto;">
-      <thead><tr style="background:#f0ece0; text-align:left;">
-        <th style="padding:6px 8px; white-space:nowrap;">開始</th>
-        <th style="padding:6px 8px; white-space:nowrap;">耗時</th>
-        <th style="padding:6px 8px; white-space:nowrap;">類型 / 來源</th>
-        <th style="padding:6px 8px;">範圍</th>
-        <th style="padding:6px 8px; white-space:nowrap;">狀態</th>
-        <th style="padding:6px 8px;">結果（點 row 看明細）</th>
-      </tr></thead>
-      <tbody>${_runSessionsCache.map((sess, idx) => {
-        const t = sess.started_at ? new Date(sess.started_at).toLocaleString("zh-TW", {hour12:false}) : "—";
-        const isRunning = sess.status === "running";
-        const status = isRunning ? "🟢 進行中"
-                     : sess.status === "interrupted" ? "⚠ 中斷"
-                     : sess.status === "orphan_end" ? "⚠ 孤兒"
-                     : "✓ 完成";
-        const killBtn = isRunning
-          ? `<button onclick="event.stopPropagation(); killSessionByIdx(${idx})" title="中斷此 session" style="margin-left:6px; padding:1px 6px; background:#c0392b; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px;">✕</button>`
-          : "";
-        return `<tr style="border-bottom:1px solid #eee; cursor:pointer;" onclick="showSessionModal(${idx})" onmouseover="this.style.background='#fffaed'" onmouseout="this.style.background=''">
-          <td style="padding:6px 10px; font-family:Consolas,monospace; font-size:12px; color:#555; white-space:nowrap;">${esc(t)}</td>
-          <td style="padding:6px 10px; font-size:12px; color:#888; white-space:nowrap;">${esc(_fmtSessionDuration(sess))}</td>
-          <td style="padding:6px 10px; white-space:nowrap;">${esc(_triggerLabel(sess))}</td>
-          <td style="padding:6px 10px; font-size:13px; color:#555;">${esc(_sessionScope(sess))}</td>
-          <td style="padding:6px 10px; font-size:12px; white-space:nowrap;">${status}${killBtn}</td>
-          <td style="padding:6px 10px; font-size:13px;">${_sessionSummary(sess)}</td>
-        </tr>`;
-      }).join("")}</tbody>
-    </table>`;
+    renderRunSessions();
   } catch (e) {
     box.innerHTML = `<div style="color:#c0392b;">載入失敗：${esc(e.message)}</div>`;
   }
+};
+
+// 把 cache render 成 table（依當前類型過濾器）。dropdown 改變時直接呼叫，不重打 API。
+window.renderRunSessions = function () {
+  const box = document.getElementById("runsession-box");
+  const countEl = document.getElementById("runsession-count");
+  if (!box) return;
+  const filter = document.getElementById("runsession-type-filter");
+  const filterVal = filter ? filter.value : "";
+  const matcher = _RUNSESSION_TYPE_MATCHERS[filterVal];
+  // 不過濾 → 全部；有 matcher → 跑 predicate
+  const filtered = matcher
+    ? _runSessionsCache.filter(s => matcher(s.trigger || ""))
+    : _runSessionsCache;
+  // 用 cache 內的原始 index render，這樣 onclick="showSessionModal(idx)" 仍對得到原 _runSessionsCache[idx]
+  const indexed = filtered.map(s => ({ sess: s, origIdx: _runSessionsCache.indexOf(s) }));
+  if (countEl) {
+    countEl.textContent = filterVal
+      ? `共 ${_runSessionsCache.length} 次執行（篩選後 ${filtered.length} 筆）`
+      : `共 ${_runSessionsCache.length} 次執行`;
+  }
+  if (!_runSessionsCache.length) {
+    box.innerHTML = `<div style="color:#888; padding:8px;">尚無執行紀錄</div>`;
+    return;
+  }
+  if (!filtered.length) {
+    box.innerHTML = `<div style="color:#888; padding:8px;">所選類型的最近 50 次執行中沒有紀錄</div>`;
+    return;
+  }
+  box.innerHTML = `<table style="width:100%; border-collapse:collapse; table-layout:auto;">
+    <thead><tr style="background:#f0ece0; text-align:left;">
+      <th style="padding:6px 8px; white-space:nowrap;">開始</th>
+      <th style="padding:6px 8px; white-space:nowrap;">耗時</th>
+      <th style="padding:6px 8px; white-space:nowrap;">類型 / 來源</th>
+      <th style="padding:6px 8px;">範圍</th>
+      <th style="padding:6px 8px; white-space:nowrap;">狀態</th>
+      <th style="padding:6px 8px;">結果（點 row 看明細）</th>
+    </tr></thead>
+    <tbody>${indexed.map(({ sess, origIdx }) => {
+      const t = sess.started_at ? new Date(sess.started_at).toLocaleString("zh-TW", {hour12:false}) : "—";
+      const isRunning = sess.status === "running";
+      const status = isRunning ? "🟢 進行中"
+                   : sess.status === "interrupted" ? "⚠ 中斷"
+                   : sess.status === "orphan_end" ? "⚠ 孤兒"
+                   : "✓ 完成";
+      const killBtn = isRunning
+        ? `<button onclick="event.stopPropagation(); killSessionByIdx(${origIdx})" title="中斷此 session" style="margin-left:6px; padding:1px 6px; background:#c0392b; color:#fff; border:none; border-radius:3px; cursor:pointer; font-size:11px;">✕</button>`
+        : "";
+      return `<tr style="border-bottom:1px solid #eee; cursor:pointer;" onclick="showSessionModal(${origIdx})" onmouseover="this.style.background='#fffaed'" onmouseout="this.style.background=''">
+        <td style="padding:6px 10px; font-family:Consolas,monospace; font-size:12px; color:#555; white-space:nowrap;">${esc(t)}</td>
+        <td style="padding:6px 10px; font-size:12px; color:#888; white-space:nowrap;">${esc(_fmtSessionDuration(sess))}</td>
+        <td style="padding:6px 10px; white-space:nowrap;">${esc(_triggerLabel(sess))}</td>
+        <td style="padding:6px 10px; font-size:13px; color:#555;">${esc(_sessionScope(sess))}</td>
+        <td style="padding:6px 10px; font-size:12px; white-space:nowrap;">${status}${killBtn}</td>
+        <td style="padding:6px 10px; font-size:13px;">${_sessionSummary(sess)}</td>
+      </tr>`;
+    }).join("")}</tbody>
+  </table>`;
 };
 
 window.killSessionByIdx = async function (idx) {
