@@ -7,7 +7,7 @@
  *   - revert：刪此 file + index2.html 的 <script> tag + map_mode.js 的 1 行 init 呼叫
  *
  * UI：
- *   - 地圖左上角浮動「🔍 搜尋地塊」按鈕（跟 overlay toolbar 旁邊）
+ *   - 地圖左上角浮動「🔍 地號」按鈕（跟 overlay toolbar 旁邊）
  *   - 點開 → 展開 inline form（區 dropdown + 段 input + 地號 input + 搜尋按鈕）
  *   - 找到 → 飛到該地塊 + 紅色高亮 polygon
  *   - 找不到 → toast 提示
@@ -205,13 +205,13 @@
     wrap.className = 'v2-cadsearch';
     wrap.innerHTML = `
       <button type="button" class="v2-cadsearch__toggle" id="v2-cadsearch-toggle"
-              aria-label="搜尋地塊" title="搜尋地塊">
+              aria-label="地號" title="地號">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="11" cy="11" r="7"/>
           <line x1="21" y1="21" x2="16.5" y2="16.5"/>
         </svg>
-        <span>搜尋地塊</span>
+        <span>地號</span>
       </button>
       <div class="v2-cadsearch__panel" id="v2-cadsearch-panel" style="display:none">
         <div class="v2-cadsearch__row">

@@ -21,6 +21,15 @@
   function _v2() { return window.v2 || {}; }
   function _state() { return _v2().state || null; }
 
+  // 已讀判定 — 跟 app2.js _loadReadMap 共用 localStorage 'urban_read_props'
+  // 直接讀 localStorage 而非透過 v2.isRead 是因為 app2.js 沒 expose 該 helper，
+  // key 是文字常數不會漂移；若哪天改 key 兩處同步即可
+  function _isRead(id) {
+    if (!id) return false;
+    try { return !!JSON.parse(localStorage.getItem('urban_read_props') || '{}')[id]; }
+    catch { return false; }
+  }
+
   // HTML escape (跟 app2.js 內部 esc 同行為)
   const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -75,6 +84,24 @@
       return el;
     };
     zoomCtrl.addTo(m);
+    // 「僅未瀏覽物件」filter — 勾選後 renderMap 只顯示 isRead=false 的物件
+    const unreadCtrl = L.control({ position: 'topleft' });
+    unreadCtrl.onAdd = function () {
+      const el = L.DomUtil.create('div', 'v2-map-unread-filter');
+      el.innerHTML = `<label class="v2-map-unread-filter__label">
+        <input type="checkbox" id="v2-map-unread-only"${st.unreadOnly ? ' checked' : ''}>
+        僅未瀏覽物件
+      </label>`;
+      L.DomEvent.disableClickPropagation(el);
+      L.DomEvent.disableScrollPropagation(el);
+      const cb = el.querySelector('#v2-map-unread-only');
+      cb.addEventListener('change', () => {
+        st.unreadOnly = cb.checked;
+        renderMap();
+      });
+      return el;
+    };
+    unreadCtrl.addTo(m);
   }
 
   // ── 同學校永遠同色 (string hash → HSL) ──
@@ -193,13 +220,23 @@
     const prices = (typeof v2.getDistrictPrices === 'function')
       ? await v2.getDistrictPrices() : {};
     const all = st.filteredSorted || [];
-    const list = all.filter(p => p.latitude && p.longitude);
+    let list = all.filter(p => p.latitude && p.longitude);
     const noCoordCount = all.length - list.length;
+    // 「僅未瀏覽物件」filter
+    let unreadFilteredCount = 0;
+    if (st.unreadOnly) {
+      const before = list.length;
+      list = list.filter(p => !_isRead(p.source_id || p.id));
+      unreadFilteredCount = before - list.length;
+    }
 
     const cnt = document.getElementById('v2-result-count');
     if (cnt) {
-      cnt.innerHTML = `共 <strong>${all.length}</strong> 筆` +
-        (noCoordCount > 0 ? ` <span class="v2-d-hint">（${noCoordCount} 筆無座標未標）</span>` : '');
+      let extras = [];
+      if (noCoordCount > 0) extras.push(`${noCoordCount} 筆無座標未標`);
+      if (unreadFilteredCount > 0) extras.push(`已隱藏 ${unreadFilteredCount} 筆已瀏覽`);
+      const extra = extras.length ? ` <span class="v2-d-hint">（${extras.join('、')}）</span>` : '';
+      cnt.innerHTML = `共 <strong>${list.length}</strong> 筆${extra}`;
     }
 
     const bounds = [];

@@ -5,9 +5,9 @@
 
 .v2-map-overlays-toolbar {
   display: flex;
-  gap: 12px;
+  gap: 4px 12px;        /* row gap 4 / col gap 12 — 三行 wrap 時行間距縮小 */
   align-items: center;
-  padding: 7px 12px;
+  padding: 4px 12px;
   background: #f5f0e3;
   border: 1px solid var(--c-border, #d8cdb6);
   border-top: none;     /* 跟上面 v2-map-toolbar 共用底邊 */
@@ -53,16 +53,16 @@
   border: 1px solid var(--c-border, #d8cdb6);
   border-top: none;
   border-bottom: none;
-  padding: 6px 12px;
+  padding: 3px 12px;
   font-size: 13px;
 }
 
 .v2-renewal-header {
   display: flex;
-  gap: 12px;
+  gap: 4px 12px;
   align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 6px;
+  margin-bottom: 3px;
 }
 
 .v2-renewal-all {

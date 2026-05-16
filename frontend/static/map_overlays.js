@@ -27,10 +27,10 @@
       backends: ['zoning_tpe', 'zoning_ntpc'],
     },
     building_floors: {
-      label: '建物套繪圖',
+      label: '建物套繪',
       paneZ: 402,
       backends: [{ name: 'building_floors_tpe', minZoom: 18 }],
-      hint: 'z=18+，僅台北市',
+      hint: 'z=18+僅台北',
     },
     cadastral: {
       label: '地籍圖',
