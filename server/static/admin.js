@@ -944,8 +944,8 @@ window.loadRunSessions = async function () {
   const box = document.getElementById("runsession-box");
   if (!box) return;
   try {
-    // per_type=50：每類各取最近 50 個 session，避免高頻 batch 把冷門類型擠掉
-    const r = await authedFetch("/admin/run-sessions?per_type=50");
+    // per_type=100：每類各取最近 100 個 session
+    const r = await authedFetch("/admin/run-sessions?per_type=100");
     if (!r.ok) {
       box.innerHTML = `<div style="color:#c0392b;">載入失敗 HTTP ${r.status}</div>`;
       return;

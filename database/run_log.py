@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 _BASE_DIR = Path(__file__).resolve().parent.parent
 _LOG_DIR = _BASE_DIR / "data" / "logs"
 _FS_COLLECTION = "run_logs"
-_FS_MAX_KEEP = 5000   # 超過自動清舊（簡單 cap）
+_FS_MAX_KEEP = 5000   # prune_old 用的上限（**目前沒人 call prune_old**，Firestore 上實際 doc 數遠超此值，僅作為 prune_old 預設參數）
 
 
 def _ensure_dir():
@@ -247,11 +247,11 @@ def list_sessions(limit: int = 50) -> list[dict]:
         return []
 
 
-def list_sessions_by_type(per_type_limit: int = 50, fetch_logs: int = 5000) -> dict:
+def list_sessions_by_type(per_type_limit: int = 100, fetch_logs: int = 30000) -> dict:
     """每種類型各取最近 per_type_limit 個 session。
 
-    解 list_sessions(limit=50) 的問題：總量 cap 50 會把冷門類型（update_prices
-    / gis_overlay_refresh / retry_queue 等一週可能才幾次的）擠出 cache。
+    解 list_sessions(limit=50) 的問題：總量 cap 會把冷門類型（update_prices /
+    gis_overlay_refresh / retry_queue 等一週才幾次的）擠出 cache。
 
     回傳 dict:
       {
@@ -261,11 +261,11 @@ def list_sessions_by_type(per_type_limit: int = 50, fetch_logs: int = 5000) -> d
         "logs_fetched": int,   # 實際從 Firestore 拉了幾筆 raw log
       }
 
-    fetch_logs 上限 = `_FS_MAX_KEEP` (5000) — Firestore 保留的全部。"""
+    fetch_logs 預設 30000：一週左右的 batch 紀錄，足以覆蓋每類 100 個 session
+    各自的最早 start_log + 內部 actions。Firestore 平台沒有實際 cap，只受
+    free tier 讀取 quota（一天 50K read）影響 — admin 偶爾開後台讀一次無感。"""
     try:
-        # cap 在 _FS_MAX_KEEP 避免拉超過 Firestore 實際保留量造成無效 query
-        fetch_n = min(int(fetch_logs), _FS_MAX_KEEP)
-        all_logs = _fetch_logs(fetch_n)
+        all_logs = _fetch_logs(int(fetch_logs))
         sessions = _group_logs_to_sessions(all_logs)   # 已按 started_at desc
 
         # 分桶（順序保留按時間 desc，因為輸入已排好）
