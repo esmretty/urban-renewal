@@ -640,9 +640,13 @@ def merge_watchlist_with_central(central: dict, watch: dict) -> dict:
             out[k] = v
     addr_over = watch.get("address_override")
     if addr_over and isinstance(addr_over, str) and addr_over.strip():
+        v = addr_over.strip()
         if out.get("address"):
             out["_address_original"] = out["address"]
-        out["address"] = addr_over.strip()
+        out["address"] = v
+        # 推測地址（卡片列表 / detail / LINE 通知都優先顯示）也同步 — 用戶要求 watchlist
+        # 卡片地址跟著改，不重跑 LVR 推地址（policy 8 動態結果不存 DB；個人 override 純顯示）
+        out["address_inferred"] = v
     return out
 
 

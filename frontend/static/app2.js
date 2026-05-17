@@ -2172,12 +2172,16 @@
     // 更新 local state（鏡像後端 merge_watchlist_with_central 邏輯）
     if (trimmed) {
       if (!p._address_original) p._address_original = p.address;
+      if (p._address_inferred_original == null) p._address_inferred_original = p.address_inferred ?? null;
       p.address = trimmed;
+      p.address_inferred = trimmed;   // 同步推測地址（卡片列表也跟著改）
       p.address_override = trimmed;
     } else {
       if (p._address_original) p.address = p._address_original;
+      if (p._address_inferred_original !== undefined) p.address_inferred = p._address_inferred_original;
       p.address_override = null;
       delete p._address_original;
+      delete p._address_inferred_original;
     }
     applyFilters();
     _renderDetailFromCurrent();
