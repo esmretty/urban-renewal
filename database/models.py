@@ -592,6 +592,7 @@ USER_OVERRIDE_FIELDS = {
     "road_width_m_override", "new_house_price_wan_override", "desired_price_wan",
     "bonus_weishau", "bonus_dugen", "rebuild_coeff",
     "floor_premium", "zoning_ratios",
+    "address_override",   # 個人改的原始地址（覆蓋顯示用 address，不影響中央）
     "deleted", "note", "tags",
     "added_at", "last_viewed_at",
 }
@@ -627,6 +628,9 @@ def merge_watchlist_with_central(central: dict, watch: dict) -> dict:
     """
     讀取 endpoint 用：把中央 properties 的共用事實 + 使用者 watchlist overrides 合併。
     watchlist 任一欄位有值（非 None）就蓋掉 central 對應欄位；其他保留 central。
+
+    特殊處理：`address_override` 覆蓋顯示用 `address`（原值保留在 `_address_original`
+    給 UI 顯示「（已自訂，原為 X）」hint）。中央 DB 完全不動。
     """
     if not watch:
         return dict(central)
@@ -634,6 +638,11 @@ def merge_watchlist_with_central(central: dict, watch: dict) -> dict:
     for k, v in watch.items():
         if v is not None:
             out[k] = v
+    addr_over = watch.get("address_override")
+    if addr_over and isinstance(addr_over, str) and addr_over.strip():
+        if out.get("address"):
+            out["_address_original"] = out["address"]
+        out["address"] = addr_over.strip()
     return out
 
 

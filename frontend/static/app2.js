@@ -1635,7 +1635,7 @@
           <div class="v2-d-basic-grid v2-d-basic-grid--v1">
             <div class="v2-d-basic-col">
               <table class="v2-d-tbl">
-                <tr><td>原始地址</td><td class="v2-d-addr-val">${esc(stripCityDist(p.address || p.title))}${p.address_road_fixed ? `<div class="v2-d-addr-fixed">已自動修正：${esc(p.address_road_fixed.from)} → ${esc(p.address_road_fixed.to)}</div>` : ''}${p.address_suspicious ? `<div class="v2-d-warn">⚠ 路名可能不存在於此行政區，請自行確認</div>` : ''}</td></tr>
+                <tr><td>原始地址</td><td class="v2-d-addr-val">${esc(stripCityDist(p.address || p.title))}${p._in_watchlist ? ` <button class="v2-d-addr-edit-btn" onclick="v2.editAddressOverride('${esc(p.source_id || p.id || '')}')" title="編輯個人地址（不影響中央 DB）" style="background:none;border:none;cursor:pointer;color:#c78a00;font-size:13px;padding:0 4px;">✎</button>` : ''}${p._address_original ? `<div class="v2-d-addr-fixed">已自訂（原為 ${esc(stripCityDist(p._address_original))}）</div>` : ''}${p.address_road_fixed ? `<div class="v2-d-addr-fixed">已自動修正：${esc(p.address_road_fixed.from)} → ${esc(p.address_road_fixed.to)}</div>` : ''}${p.address_suspicious ? `<div class="v2-d-warn">⚠ 路名可能不存在於此行政區，請自行確認</div>` : ''}</td></tr>
                 <tr><td>推測地址</td><td class="v2-d-addr-val">${inferredAddressCellHTML(p)}</td></tr>
                 <tr><td>類型 / 樓層</td><td>${esc(p.building_type || '—')} ・ ${formatFloor(p)}</td></tr>
                 <tr><td>屋齡</td><td>${age != null ? age + ' 年' + (p.building_age_completed_year ? ` <span class="v2-d-hint">（${p.building_age_completed_year} 年完工）</span>` : '') : '未知'}</td></tr>
@@ -2141,6 +2141,49 @@
   // v1: input 永遠 editable，save 永遠 POST。POST 寫到 user 的 watchlist 子文件，
   //     不在 watchlist 就設 _ephemeral_edit_made flag。
   // closeDetail 時 if flag && !inWatchlist → toast 「沒有自動儲存」警示
+  // 個人地址覆寫 — 寫進 watchlist sub-doc，不影響中央 DB。
+  // 只對 _in_watchlist 物件開放（沒加 watchlist 時 toast 提示先加入）。
+  // 空字串 = 清除 override 回中央值。
+  async function editAddressOverride(id) {
+    const p = state.allProperties.find(x => (x.source_id || x.id) === id);
+    if (!p) return;
+    if (!p._in_watchlist) {
+      toast('請先加入觀察清單才能編輯地址', 'warn');
+      return;
+    }
+    const current = stripCityDist(p.address || p.title || '');
+    const next = window.prompt(
+      '輸入新的原始地址（清空後按「確定」= 還原中央 DB 值）：\n\n注意：修改只存自己的觀察清單，不影響中央資料。',
+      current,
+    );
+    if (next == null) return;   // 用戶按取消
+    const trimmed = next.trim();
+    try {
+      const r = await fetch(`/api/properties/${encodeURIComponent(id)}/address_override`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: trimmed }),
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+    } catch (e) {
+      toast('儲存失敗：' + e.message, 'error');
+      return;
+    }
+    // 更新 local state（鏡像後端 merge_watchlist_with_central 邏輯）
+    if (trimmed) {
+      if (!p._address_original) p._address_original = p.address;
+      p.address = trimmed;
+      p.address_override = trimmed;
+    } else {
+      if (p._address_original) p.address = p._address_original;
+      p.address_override = null;
+      delete p._address_original;
+    }
+    applyFilters();
+    _renderDetailFromCurrent();
+    toast(trimmed ? '已儲存個人地址' : '已還原為中央地址', 'success');
+  }
+
   async function saveOverride(id, field, value) {
     const p = state.allProperties.find(x => (x.source_id || x.id) === id);
     if (!p) return;
@@ -3726,7 +3769,7 @@
     showLvrPopup, hideLvrPopup,
     showSchoolPopup, hideSchoolPopup,
     showRedevTargetPopup, hideRedevTargetPopup,
-    saveOverride, saveInferredChoice, setZonePing,
+    saveOverride, saveInferredChoice, setZonePing, editAddressOverride,
     // 給 map_mode.js (獨立檔) 用：state、helpers，map_mode.js 透過 window.v2 取
     state, getDistrictPrices, _saveFilters,
     openRoadOverlay, scanRoadWidth, deleteRow,

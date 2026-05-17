@@ -56,6 +56,10 @@ class InferredChoiceOverride(BaseModel):
     address: str
 
 
+class AddressOverride(BaseModel):
+    address: str   # 空字串/空白 = 清除 override，回中央 DB 值
+
+
 # ── Endpoints ────────────────────────────────────────────────────────────
 @router.post("/api/properties/{property_id:path}/bonus")
 async def override_bonus(property_id: str, body: BonusOverride, user: dict = Depends(get_current_user)):
@@ -150,6 +154,22 @@ async def override_inferred_choice(property_id: str, body: InferredChoiceOverrid
         raise HTTPException(status_code=400, detail="所選地址不在候選清單中")
     _user_override_ref(user, property_id).set({"inferred_address_choice": body.address}, merge=True)
     return {"status": "ok", "address": body.address, "land_ping": matched.get("land_ping")}
+
+
+@router.post("/api/properties/{property_id:path}/address_override")
+async def override_address(property_id: str, body: AddressOverride, user: dict = Depends(get_current_user)):
+    """用戶覆寫顯示用「原始地址」— 只存個人 watchlist sub-doc，**絕不寫中央 properties**。
+
+    安全：_user_override_ref 對非 watchlist 物件回 NoopRef → 防誤觸；要先加 watchlist 才能存。
+    讀取：merge_watchlist_with_central 自動把 address_override 蓋掉顯示用 address，
+    原值保留在 _address_original 給 UI hint 用。
+    空字串/空白 = 清除 override 回中央值。"""
+    from api.app import _user_override_ref
+    val = (body.address or "").strip()
+    _user_override_ref(user, property_id).set(
+        {"address_override": val if val else None}, merge=True,
+    )
+    return {"status": "ok", "address_override": val or None}
 
 
 @router.post("/api/properties/{property_id:path}/new_house_price")
