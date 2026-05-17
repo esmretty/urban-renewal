@@ -104,6 +104,111 @@ def find_cross_source_duplicate(item: dict):
         return None
 
 
+def recheck_and_archive_if_cross_dup(new_doc_id: str, trigger_label: str = "post_write_recheck",
+                                     dry_run: bool = False) -> Optional[str]:
+    """寫完新 doc 後 call：用最新 DB 狀態再跑一次 cross-source 確認，命中既有 doc 就 retro merge。
+
+    解 dedup audit 抓到的 25 對 silent 漏 merge — root cause 是 batch find_duplicate
+    依賴 batch_start 那刻 snapshot 的 _existing_items in-memory cache，同 batch 內後續寫的
+    doc 沒進 snapshot、或 transient race 都會漏。post-write recheck 用 Firestore 即時 query
+    最終把關。
+
+    行為：
+      - 拉 new_doc 重跑 find_cross_source_duplicate 邏輯（已含 self-skip via source_keys）
+      - 命中既有 existing → existing 補上 new doc 的 sources + last_change_at + latest_event
+      - new doc 標 `archived=True` + `merged_into=existing_id`（**不真刪**：保護 user
+        watchlist / reads 等 reference 完整性；前端列表 archived 不顯示，等於 merge）
+      - 回傳：合併到的 existing_doc_id，或 None（沒找到）
+
+    dry_run=True：只回 existing_id 不寫 DB（給 audit / 測試用）"""
+    try:
+        col = get_col()
+        new_doc = col.document(new_doc_id).get().to_dict() or {}
+        if not new_doc:
+            return None
+        if new_doc.get("archived"):
+            return None   # 已 archived 不再處理
+        from database.dedup import is_same_property
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        district = new_doc.get("district") or ""
+        price = new_doc.get("price_ntd")
+        if not (district and price):
+            return None
+        cand = list(col
+                    .where(filter=FieldFilter("district", "==", district))
+                    .where(filter=FieldFilter("price_ntd", "==", int(price)))
+                    .stream())
+        new_source_keys = set(new_doc.get("source_keys") or [])
+        for d in cand:
+            if d.id == new_doc_id:
+                continue
+            dd = d.to_dict() or {}
+            if dd.get("archived"):
+                continue   # 已 archived 的 existing 不算 dup target
+            # 避免 self-merge：如果 candidate doc 跟 new_doc 有任何共同 source_key (例如歷史殘留)
+            # 跳過 — 該情況用其他 path 處理 (Sprint 3.3 dedup 統一以後不會發生)
+            cand_keys = set(dd.get("source_keys") or [])
+            if new_source_keys & cand_keys:
+                continue
+            if is_same_property(new_doc, dd):
+                existing_id = d.id
+                if dry_run:
+                    return existing_id
+                # 把 new doc 的 sources 併入 existing
+                from database.models import add_source_to_doc, compute_source_keys
+                from database.time_utils import now_tw_iso
+                existing_sources = list(dd.get("sources") or [])
+                new_sources = new_doc.get("sources") or []
+                changed = False
+                first_new_name = None
+                first_new_sid = None
+                for s in new_sources:
+                    name = s.get("name") or ""
+                    sid = s.get("source_id") or ""
+                    url = s.get("url") or ""
+                    if not (name and sid and url):
+                        continue
+                    if first_new_name is None:
+                        first_new_name = name
+                        first_new_sid = sid
+                    tmp = {"sources": existing_sources}
+                    if add_source_to_doc(tmp, name, sid, url, s.get("added_at")):
+                        existing_sources = tmp["sources"]
+                        changed = True
+                updates = {}
+                if changed:
+                    updates["sources"] = existing_sources
+                    updates["source_keys"] = compute_source_keys(existing_sources)
+                updates["last_change_at"] = now_tw_iso()
+                updates["latest_event"] = {
+                    "type": "cross_source",
+                    "source": first_new_name or "?",
+                    "at": now_tw_iso(),
+                }
+                col.document(existing_id).update(updates)
+                col.document(new_doc_id).update({
+                    "archived": True,
+                    "archived_reason": f"post_write_recheck dup of {existing_id}",
+                    "archived_at": now_tw_iso(),
+                    "merged_into": existing_id,
+                })
+                try:
+                    from database.run_log import log_action
+                    log_action(trigger_label, "cross_source",
+                               source_id=(f"{first_new_name}_{first_new_sid}" if first_new_sid else None),
+                               doc_id=existing_id,
+                               message=f"post-write recheck 命中 doc {existing_id[:8]}，{new_doc_id[:8]} archived 併入",
+                               details={"merged_from": new_doc_id, "merged_into": existing_id,
+                                        "added_sources_count": sum(1 for s in new_sources if s.get("url"))})
+                except Exception:
+                    pass
+                return existing_id
+        return None
+    except Exception as e:
+        logger.exception(f"recheck_and_archive_if_cross_dup({new_doc_id}) failed: {e}")
+        return None
+
+
 def find_doc_by_source_key(source_name: str, site_id: str) -> tuple:
     """用 (source_name, site_id) 找 properties doc，回傳 (doc_id, dict) 或 (None, None)。
     Schema：每 doc 有 source_keys[] 平面索引（如 ["591:20114614", "yongqing:8893"]）。

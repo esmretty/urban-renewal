@@ -713,6 +713,11 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                                    message=f"{_src_name} 新物件入庫：{yc_doc.get('address_inferred') or yc_doc.get('address') or ''}",
                                    details=build_doc_log_details(item, yc_doc, source=_src_name))
                     except Exception: pass
+                    # post-write cross-source recheck — 防 batch _existing_items snapshot 漏 catch
+                    try:
+                        from database.db import recheck_and_archive_if_cross_dup as _recheck
+                        _recheck(yc_doc_id, trigger_label=trigger_label)
+                    except Exception: pass
                     _record_outcome(item, "new", f"{_src_name} 新物件 doc={yc_doc_id}")
                     continue   # 不走下面 591 OCR 流程
 
@@ -1342,6 +1347,11 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     doc_data = merged
                 else:
                     col.document(target_doc_id).set(_safe_doc(doc_data))
+                    # post-write cross-source recheck — 防 591 batch _dup_index snapshot 漏 catch
+                    try:
+                        from database.db import recheck_and_archive_if_cross_dup as _recheck
+                        _recheck(target_doc_id, trigger_label=trigger_label)
+                    except Exception: pass
                 # 將剛寫入的 doc 加進 _dup_index，讓同 session 內後續 item 能比對到
                 try:
                     _new_d = dict(doc_data)

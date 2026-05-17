@@ -2832,6 +2832,11 @@ def _scrape_single_url_yongqing(url: str, src_id: str, is_reanalyze: bool = Fals
             message="永慶物件分析完成（新增）",
             details=_bld({"source": "永慶", "url": url, "title": item.get("title")}, doc))
     except Exception: pass
+    # post-write cross-source recheck — 防 dedup 因 snapshot/race 漏 catch（dedup audit 25 對 case）
+    try:
+        from database.db import recheck_and_archive_if_cross_dup as _recheck
+        _recheck(new_doc_id, trigger_label=_trig)
+    except Exception: pass
     return {"status": "ok", "source_id": src_id, "id": new_doc_id, "message": "永慶物件分析完成（新增）"}
 
 
@@ -2921,6 +2926,11 @@ def _scrape_single_url_sinyi(url: str, src_id: str, is_reanalyze: bool = False, 
     try: _la(_trig, "new", source_id=src_id, doc_id=new_doc_id,
             message="信義物件分析完成（新增）",
             details=_bld({"source": "信義", "url": url, "title": item.get("title")}, doc))
+    except Exception: pass
+    # post-write cross-source recheck — 防 dedup 因 snapshot/race 漏 catch
+    try:
+        from database.db import recheck_and_archive_if_cross_dup as _recheck
+        _recheck(new_doc_id, trigger_label=_trig)
     except Exception: pass
     return {"status": "ok", "source_id": src_id, "id": new_doc_id, "message": "信義物件分析完成（新增）"}
 
@@ -3377,6 +3387,11 @@ def _scrape_single_url_591_inner(url: str, src_id: str, is_reanalyze: bool = Fal
                 new_doc_id = gen_dated_id()
                 doc["id"] = new_doc_id
             col.document(new_doc_id).set(_safe_doc(doc))
+            # post-write cross-source recheck — 防 dedup 因 snapshot/race 漏 catch
+            try:
+                from database.db import recheck_and_archive_if_cross_dup as _recheck
+                _recheck(new_doc_id, trigger_label=("manual_reanalyze" if is_reanalyze else "manual_url"))
+            except Exception: pass
             return {"status": "ok", "source_id": src_id, "message": "完整分析完成（新增）"}
 
 
