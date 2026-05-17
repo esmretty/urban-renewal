@@ -28,15 +28,20 @@ _SHORT_URL_TTL = 86400
 
 
 def _shorten_url(long_url: str) -> str:
-    """用 is.gd 縮址，失敗 fallback 原 URL；同 URL 24h 內走 cache。"""
+    """雙服務 fallback 縮網址：is.gd 優先（短 ~20 字）→ tinyurl（~28 字）→ 原 URL。
+
+    is.gd 偶爾整段 backend DB 掛掉回 'Error, database insert failed'（2026-05-17 踩過，
+    持續多小時），tinyurl 作為備胎；is.gd 修好自動回去用（不換靜態 service）。
+    同 URL 24h 內走 in-memory cache，process restart 失效。"""
     if not long_url or len(long_url) < 30:
         return long_url or ""
     now = time.time()
     cached = _SHORT_URL_CACHE.get(long_url)
     if cached and cached[1] > now:
         return cached[0]
+    import httpx
+    # 第一層：is.gd
     try:
-        import httpx
         r = httpx.get(
             "https://is.gd/create.php",
             params={"format": "simple", "url": long_url},
@@ -49,6 +54,21 @@ def _shorten_url(long_url: str) -> str:
         logger.warning("is.gd shorten failed status=%d body=%s for %s", r.status_code, body[:80], long_url[:80])
     except Exception as e:
         logger.warning("is.gd shorten exception: %s for %s", e, long_url[:80])
+    # 第二層：tinyurl（is.gd 掛的時候的備胎；比 is.gd 長 ~8 字但仍比原 URL 短很多）
+    try:
+        r = httpx.get(
+            "https://tinyurl.com/api-create.php",
+            params={"url": long_url},
+            timeout=5,
+        )
+        body = (r.text or "").strip()
+        if r.status_code == 200 and body.startswith("http"):
+            _SHORT_URL_CACHE[long_url] = (body, now + _SHORT_URL_TTL)
+            return body
+        logger.warning("tinyurl shorten failed status=%d body=%s for %s", r.status_code, body[:80], long_url[:80])
+    except Exception as e:
+        logger.warning("tinyurl shorten exception: %s for %s", e, long_url[:80])
+    # 兩家都失敗 → 回原 URL
     return long_url
 
 
