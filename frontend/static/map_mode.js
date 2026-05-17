@@ -21,14 +21,6 @@
   function _v2() { return window.v2 || {}; }
   function _state() { return _v2().state || null; }
 
-  // 已讀判定 — 跟 app2.js _loadReadMap 共用 localStorage 'urban_read_props'
-  // 直接讀 localStorage 而非透過 v2.isRead 是因為 app2.js 沒 expose 該 helper，
-  // key 是文字常數不會漂移；若哪天改 key 兩處同步即可
-  function _isRead(id) {
-    if (!id) return false;
-    try { return !!JSON.parse(localStorage.getItem('urban_read_props') || '{}')[id]; }
-    catch { return false; }
-  }
 
   // HTML escape (跟 app2.js 內部 esc 同行為)
   const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -84,24 +76,40 @@
       return el;
     };
     zoomCtrl.addTo(m);
-    // 「僅未瀏覽物件」filter — 勾選後 renderMap 只顯示 isRead=false 的物件
-    const unreadCtrl = L.control({ position: 'topleft' });
-    unreadCtrl.onAdd = function () {
-      const el = L.DomUtil.create('div', 'v2-map-unread-filter');
-      el.innerHTML = `<label class="v2-map-unread-filter__label">
-        <input type="checkbox" id="v2-map-unread-only"${st.unreadOnly ? ' checked' : ''}>
-        僅未瀏覽物件
-      </label>`;
+    // 「近 N 天內」新進物件 filter — 兩 checkbox 互斥（勾一個 auto-uncheck 另一個）
+    // 勾「近七天內」→ st.recencyDays=7；勾「近三天內」→ st.recencyDays=3；都不勾→ null（全部）
+    const recencyCtrl = L.control({ position: 'topleft' });
+    recencyCtrl.onAdd = function () {
+      const el = L.DomUtil.create('div', 'v2-map-recency-filter');
+      el.innerHTML = `
+        <label class="v2-map-recency-filter__label">
+          <input type="checkbox" data-recency="7"${st.recencyDays === 7 ? ' checked' : ''}>
+          近七天內
+        </label>
+        <label class="v2-map-recency-filter__label">
+          <input type="checkbox" data-recency="3"${st.recencyDays === 3 ? ' checked' : ''}>
+          近三天內
+        </label>`;
       L.DomEvent.disableClickPropagation(el);
       L.DomEvent.disableScrollPropagation(el);
-      const cb = el.querySelector('#v2-map-unread-only');
-      cb.addEventListener('change', () => {
-        st.unreadOnly = cb.checked;
+      el.addEventListener('change', (e) => {
+        const t = e.target;
+        if (!t.matches('input[data-recency]')) return;
+        const days = parseInt(t.dataset.recency, 10);
+        if (t.checked) {
+          st.recencyDays = days;
+          // 互斥：勾一個就 uncheck 另一個
+          el.querySelectorAll('input[data-recency]').forEach(cb => {
+            if (cb !== t) cb.checked = false;
+          });
+        } else {
+          st.recencyDays = null;
+        }
         renderMap();
       });
       return el;
     };
-    unreadCtrl.addTo(m);
+    recencyCtrl.addTo(m);
   }
 
   // ── 同學校永遠同色 (string hash → HSL) ──
@@ -222,19 +230,25 @@
     const all = st.filteredSorted || [];
     let list = all.filter(p => p.latitude && p.longitude);
     const noCoordCount = all.length - list.length;
-    // 「僅未瀏覽物件」filter
-    let unreadFilteredCount = 0;
-    if (st.unreadOnly) {
+    // 「近 N 天內」新進物件 filter（用 scrape_session_at / scraped_at / published_at 取第一個有值）
+    let recencyFilteredCount = 0;
+    if (st.recencyDays) {
+      const cutoff = Date.now() - st.recencyDays * 86400000;
       const before = list.length;
-      list = list.filter(p => !_isRead(p.source_id || p.id));
-      unreadFilteredCount = before - list.length;
+      list = list.filter(p => {
+        const ts = p.scrape_session_at || p.scraped_at || p.published_at;
+        if (!ts) return false;
+        const t = new Date(ts).getTime();
+        return !isNaN(t) && t >= cutoff;
+      });
+      recencyFilteredCount = before - list.length;
     }
 
     const cnt = document.getElementById('v2-result-count');
     if (cnt) {
       let extras = [];
       if (noCoordCount > 0) extras.push(`${noCoordCount} 筆無座標未標`);
-      if (unreadFilteredCount > 0) extras.push(`已隱藏 ${unreadFilteredCount} 筆已瀏覽`);
+      if (recencyFilteredCount > 0) extras.push(`已隱藏 ${recencyFilteredCount} 筆超過 ${st.recencyDays} 天`);
       const extra = extras.length ? ` <span class="v2-d-hint">（${extras.join('、')}）</span>` : '';
       cnt.innerHTML = `共 <strong>${list.length}</strong> 筆${extra}`;
     }
