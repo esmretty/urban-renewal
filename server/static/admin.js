@@ -279,6 +279,23 @@ window.cleanupOrphanOcr = async function () {
   }
 };
 
+window.cleanupArchivedRoadwidth = async function () {
+  if (!confirm("清掉 _roadwidth.png 中「對應物件已 archived 或不存在」的截圖？\n\n活著物件的 roadwidth 會保留（detail 按鈕還會用）。")) return;
+  try {
+    const r = await authedFetch("/admin/system_usage/cleanup_archived_roadwidth", { method: "POST" });
+    const d = await r.json();
+    if (r.ok) {
+      const br = d.by_reason || {};
+      alert(`✓ 清掉 ${d.deleted} 檔，釋放 ${d.freed_mb} MB\n  archived: ${br.archived || 0}\n  no_doc: ${br.no_doc || 0}\n活著保留: ${d.kept_active}`);
+      loadSystemUsage();
+    } else {
+      alert("清理失敗：" + (d.detail || r.status));
+    }
+  } catch (e) {
+    alert("清理失敗：" + e.message);
+  }
+};
+
 async function _resumeVerifyAlivePollIfRunning() {
   try {
     const r = await authedFetch("/admin/verify_alive/progress");

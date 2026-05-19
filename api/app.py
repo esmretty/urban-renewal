@@ -1570,6 +1570,82 @@ def _get_cpu_percent():
         return None
 
 
+@app.post("/admin/system_usage/cleanup_archived_roadwidth")
+async def admin_cleanup_archived_roadwidth(admin: dict = Depends(require_admin)):
+    """清掉「對應 doc 已 archived 或不存在」的 _roadwidth.png 截圖。
+
+    cleanup_orphan_ocr 不碰 roadwidth（前端 detail 按鈕仍在用活著的物件），
+    但 archived 物件的 roadwidth 不會再被開、占空間，可安全清。
+
+    判定：
+      - 從所有 central doc 的 source_keys 建 {file_src_id: archived_bool} map
+        file_src_id 格式 = "{name}_{site_id}" 對應檔名 `{name}_{site_id}_roadwidth.png`
+      - 掃 screenshots/*_roadwidth.png 逐檔比對：
+        * doc archived → 刪
+        * doc 不存在（reanalyze 換 doc_id 殘留 / 已 hard delete）→ 刪
+        * doc 活著 → 保留
+    """
+    from config import SCREENSHOTS_DIR
+    sdir = SCREENSHOTS_DIR
+    if not sdir.exists():
+        return {"deleted": 0, "freed_mb": 0, "by_reason": {}, "kept_active": 0}
+    # 1. 建 src_id → archived map（一次拉全 central doc）
+    col = get_col()
+    src_to_archived: dict = {}   # "591_20151338" → bool (True=archived)
+    for d in col.stream():
+        dd = d.to_dict() or {}
+        archived = bool(dd.get("archived"))
+        for key in dd.get("source_keys") or []:
+            if ":" not in key:
+                continue
+            name, site_id = key.split(":", 1)
+            file_src_id = f"{name}_{site_id}"
+            # 同 src_id 多 doc 命中時保守取「至少一個活著就算活著」
+            if file_src_id in src_to_archived:
+                src_to_archived[file_src_id] = src_to_archived[file_src_id] and archived
+            else:
+                src_to_archived[file_src_id] = archived
+    deleted = 0
+    freed = 0
+    by_reason = {"archived": 0, "no_doc": 0}
+    kept_active = 0
+    errs: list[str] = []
+    suffix = "_roadwidth.png"
+    for p in sdir.iterdir():
+        if not p.is_file():
+            continue
+        if not p.name.endswith(suffix):
+            continue
+        file_src_id = p.name[:-len(suffix)]
+        status = src_to_archived.get(file_src_id)
+        if status is None:
+            reason = "no_doc"
+        elif status:
+            reason = "archived"
+        else:
+            kept_active += 1
+            continue
+        try:
+            size = p.stat().st_size
+            p.unlink()
+            deleted += 1
+            freed += size
+            by_reason[reason] += 1
+        except Exception as e:
+            errs.append(f"{p.name}: {e}")
+    logger.warning(
+        f"[admin] {admin.get('email')} 清 archived roadwidth：刪 {deleted} 檔 / "
+        f"{round(freed/1024**2,1)} MB；archived={by_reason['archived']} no_doc={by_reason['no_doc']}；活著保留 {kept_active}"
+    )
+    return {
+        "deleted": deleted,
+        "freed_mb": round(freed / 1024**2, 1),
+        "by_reason": by_reason,
+        "kept_active": kept_active,
+        "errors": errs[:20],
+    }
+
+
 @app.post("/admin/system_usage/cleanup_orphan_ocr")
 async def admin_cleanup_orphan_ocr(admin: dict = Depends(require_admin)):
     """清掉 screenshots 裡的孤兒 OCR 截圖（_detail / _addr / _house / *_tile_*）。
