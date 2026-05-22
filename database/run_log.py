@@ -247,6 +247,20 @@ def list_sessions(limit: int = 50) -> list[dict]:
         return []
 
 
+# 60 秒 in-memory cache — admin 連續按重新整理時秒回（Firestore 拉 10K+ log 約 5-6 秒太慢）
+# 只 cache 預設參數命中的 case，caller 改參數時 bypass cache。prod 3 worker 各自有自己
+# 的 cache 不跨 worker 共享，但同 worker 連按命中即可（admin 通常連續 refresh）。
+_SESSIONS_BY_TYPE_CACHE = {"data": None, "ts": 0.0}
+_SESSIONS_BY_TYPE_TTL = 60
+
+
+def invalidate_sessions_by_type_cache() -> None:
+    """新 log 寫入後可主動 invalidate（目前不接 — 60s TTL 自然過期；
+    admin 需即時看新進 session 時手動再按重新整理，命中已過期 → 重新 fetch）。"""
+    _SESSIONS_BY_TYPE_CACHE["data"] = None
+    _SESSIONS_BY_TYPE_CACHE["ts"] = 0.0
+
+
 def list_sessions_by_type(per_type_limit: int = 100, fetch_logs: int = 30000) -> dict:
     """每種類型各取最近 per_type_limit 個 session。
 
@@ -263,7 +277,21 @@ def list_sessions_by_type(per_type_limit: int = 100, fetch_logs: int = 30000) ->
 
     fetch_logs 預設 30000：一週左右的 batch 紀錄，足以覆蓋每類 100 個 session
     各自的最早 start_log + 內部 actions。Firestore 平台沒有實際 cap，只受
-    free tier 讀取 quota（一天 50K read）影響 — admin 偶爾開後台讀一次無感。"""
+    free tier 讀取 quota（一天 50K read）影響 — admin 偶爾開後台讀一次無感。
+
+    60 秒 in-memory cache：預設參數命中時 cache hit < 5ms；過期或非預設參數
+    走完整 fetch（~5-6 秒 prod）。回傳 dict 多帶 `_cache_hit` / `_cache_age_sec`
+    給前端顯示。"""
+    import time as _t
+    now = _t.time()
+    is_default = (per_type_limit == 100 and fetch_logs == 30000)
+    if (is_default
+            and _SESSIONS_BY_TYPE_CACHE["data"] is not None
+            and (now - _SESSIONS_BY_TYPE_CACHE["ts"]) < _SESSIONS_BY_TYPE_TTL):
+        cached = dict(_SESSIONS_BY_TYPE_CACHE["data"])
+        cached["_cache_hit"] = True
+        cached["_cache_age_sec"] = round(now - _SESSIONS_BY_TYPE_CACHE["ts"], 1)
+        return cached
     try:
         all_logs = _fetch_logs(int(fetch_logs))
         sessions = _group_logs_to_sessions(all_logs)   # 已按 started_at desc
@@ -282,15 +310,20 @@ def list_sessions_by_type(per_type_limit: int = 100, fetch_logs: int = 30000) ->
             merged.extend(sess_list)
         merged.sort(key=lambda s: s.get("started_at") or "", reverse=True)
 
-        return {
+        result = {
             "sessions": merged,
             "counts_by_type": {name: len(lst) for name, lst in buckets.items()},
             "total": len(merged),
             "logs_fetched": len(all_logs),
+            "_cache_hit": False,
         }
+        if is_default:
+            _SESSIONS_BY_TYPE_CACHE["data"] = result
+            _SESSIONS_BY_TYPE_CACHE["ts"] = now
+        return result
     except Exception as e:
         logger.warning("[run_log] list_sessions_by_type failed: %s", e)
-        return {"sessions": [], "counts_by_type": {}, "total": 0, "logs_fetched": 0}
+        return {"sessions": [], "counts_by_type": {}, "total": 0, "logs_fetched": 0, "_cache_hit": False}
 
 
 def prune_old(keep_max: int = _FS_MAX_KEEP) -> int:

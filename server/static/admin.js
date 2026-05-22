@@ -956,12 +956,14 @@ const _RUNSESSION_TYPE_ZH = {
   _other: "其他",
 };
 let _runSessionsCountsByType = null;   // {batch: N, verify_alive: N, ...}
+let _runSessionsCacheAgeSec = null;    // 後端 cache 年齡（秒）；null = 沒命中 cache（剛 fetch）
 
 window.loadRunSessions = async function () {
   const box = document.getElementById("runsession-box");
   if (!box) return;
+  // 載入提示（後端首次 fetch 約 5-6 秒拉 10K+ Firestore log；60 秒內 cache hit < 50ms）
+  box.innerHTML = `<div style="color:#888; padding:8px;">載入中…（首次 ~5 秒，60 秒內再按秒回）</div>`;
   try {
-    // per_type=100：每類各取最近 100 個 session
     const r = await authedFetch("/admin/run-sessions?per_type=100");
     if (!r.ok) {
       box.innerHTML = `<div style="color:#c0392b;">載入失敗 HTTP ${r.status}</div>`;
@@ -970,6 +972,8 @@ window.loadRunSessions = async function () {
     const data = await r.json();
     _runSessionsCache = data.items || [];
     _runSessionsCountsByType = data.counts_by_type || null;
+    // 把 cache age 顯示在計數列（debug 用，命中時看得到資料新鮮度）
+    _runSessionsCacheAgeSec = data._cache_hit ? data._cache_age_sec : null;
     renderRunSessions();
   } catch (e) {
     box.innerHTML = `<div style="color:#c0392b;">載入失敗：${esc(e.message)}</div>`;
@@ -1001,7 +1005,8 @@ window.renderRunSessions = function () {
       for (const [k, n] of Object.entries(_runSessionsCountsByType)) {
         if (n > 0) parts.push(`${_RUNSESSION_TYPE_ZH[k] || k} ${n}`);
       }
-      countEl.textContent = `共 ${_runSessionsCache.length} 次｜${parts.join(" ｜ ")}`;
+      const cacheHint = _runSessionsCacheAgeSec != null ? ` ｜ ${_runSessionsCacheAgeSec}s 前的 cache` : "";
+      countEl.textContent = `共 ${_runSessionsCache.length} 次｜${parts.join(" ｜ ")}${cacheHint}`;
     } else {
       countEl.textContent = `共 ${_runSessionsCache.length} 次執行`;
     }
