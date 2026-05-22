@@ -247,83 +247,88 @@ def list_sessions(limit: int = 50) -> list[dict]:
         return []
 
 
-# 60 秒 in-memory cache — admin 連續按重新整理時秒回（Firestore 拉 10K+ log 約 5-6 秒太慢）
-# 只 cache 預設參數命中的 case，caller 改參數時 bypass cache。prod 3 worker 各自有自己
-# 的 cache 不跨 worker 共享，但同 worker 連按命中即可（admin 通常連續 refresh）。
-_SESSIONS_BY_TYPE_CACHE = {"data": None, "ts": 0.0}
-_SESSIONS_BY_TYPE_TTL = 60
+def _load_logs_from_jsonl(days_back: int = 14) -> list[dict]:
+    """從本機 data/logs/actions.YYYY-MM-DD.jsonl 讀最近 N 天 raw log。
+
+    Firestore 仍是 log 的 source of truth（log_action 雙寫 jsonl + Firestore），
+    但讀走本機檔案避掉 Firestore 拉 10K+ doc 5-6 秒的延遲（jsonl 純檔案 IO < 500ms）。
+    日跨度 14 天足以涵蓋每類 100 session（冷門類型如 update_prices 一週 1-2 次也夠）。
+    """
+    from datetime import timedelta
+    from database.time_utils import now_tw
+    out: list[dict] = []
+    today = now_tw().date()
+    for i in range(days_back):
+        d = today - timedelta(days=i)
+        f = _LOG_DIR / f"actions.{d.strftime('%Y-%m-%d')}.jsonl"
+        if not f.exists():
+            continue
+        try:
+            with f.open(encoding="utf-8") as fp:
+                for line in fp:
+                    line = line.rstrip()
+                    if not line:
+                        continue
+                    try:
+                        out.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue   # 跳過半寫入的行（極罕見：scheduler write race）
+        except Exception as e:
+            logger.warning(f"[run_log] read {f.name} failed: {e}")
+    return out
 
 
-def invalidate_sessions_by_type_cache() -> None:
-    """新 log 寫入後可主動 invalidate（目前不接 — 60s TTL 自然過期；
-    admin 需即時看新進 session 時手動再按重新整理，命中已過期 → 重新 fetch）。"""
-    _SESSIONS_BY_TYPE_CACHE["data"] = None
-    _SESSIONS_BY_TYPE_CACHE["ts"] = 0.0
-
-
-def list_sessions_by_type(per_type_limit: int = 100, fetch_logs: int = 30000) -> dict:
+def list_sessions_by_type(per_type_limit: int = 100, days_back: int = 14,
+                          force_firestore: bool = False) -> dict:
     """每種類型各取最近 per_type_limit 個 session。
 
-    解 list_sessions(limit=50) 的問題：總量 cap 會把冷門類型（update_prices /
-    gis_overlay_refresh / retry_queue 等一週才幾次的）擠出 cache。
+    **優先讀本機 JSONL**（data/logs/actions.YYYY-MM-DD.jsonl）— 比 Firestore 快
+    50-100 倍。JSONL 行數 0 或讀檔失敗 → fallback Firestore。
+    force_firestore=True 強制走 Firestore（debug 用）。
 
     回傳 dict:
-      {
-        "sessions": [flat list 按 started_at desc，各桶合併後排序],
-        "counts_by_type": {"batch": N, "verify_alive": N, ..., "_other": N},
-        "total": int,
-        "logs_fetched": int,   # 實際從 Firestore 拉了幾筆 raw log
-      }
-
-    fetch_logs 預設 30000：一週左右的 batch 紀錄，足以覆蓋每類 100 個 session
-    各自的最早 start_log + 內部 actions。Firestore 平台沒有實際 cap，只受
-    free tier 讀取 quota（一天 50K read）影響 — admin 偶爾開後台讀一次無感。
-
-    60 秒 in-memory cache：預設參數命中時 cache hit < 5ms；過期或非預設參數
-    走完整 fetch（~5-6 秒 prod）。回傳 dict 多帶 `_cache_hit` / `_cache_age_sec`
-    給前端顯示。"""
+      sessions: flat list 按 started_at desc
+      counts_by_type: {batch, verify_alive, update_prices, gis_overlay_refresh, retry_queue, _other}
+      total / logs_loaded / _source: 'jsonl' or 'firestore'
+    """
     import time as _t
-    now = _t.time()
-    is_default = (per_type_limit == 100 and fetch_logs == 30000)
-    if (is_default
-            and _SESSIONS_BY_TYPE_CACHE["data"] is not None
-            and (now - _SESSIONS_BY_TYPE_CACHE["ts"]) < _SESSIONS_BY_TYPE_TTL):
-        cached = dict(_SESSIONS_BY_TYPE_CACHE["data"])
-        cached["_cache_hit"] = True
-        cached["_cache_age_sec"] = round(now - _SESSIONS_BY_TYPE_CACHE["ts"], 1)
-        return cached
-    try:
-        all_logs = _fetch_logs(int(fetch_logs))
-        sessions = _group_logs_to_sessions(all_logs)   # 已按 started_at desc
-
-        # 分桶（順序保留按時間 desc，因為輸入已排好）
-        buckets: dict = {name: [] for name, _ in _TYPE_BUCKETS}
-        buckets["_other"] = []
-        for sess in sessions:
-            bucket = _bucket_for(sess.get("trigger") or "")
-            if len(buckets[bucket]) < per_type_limit:
-                buckets[bucket].append(sess)
-
-        # 合併 + 再按 started_at desc 排（合併後順序會亂，要重排）
-        merged: list = []
-        for sess_list in buckets.values():
-            merged.extend(sess_list)
-        merged.sort(key=lambda s: s.get("started_at") or "", reverse=True)
-
-        result = {
-            "sessions": merged,
-            "counts_by_type": {name: len(lst) for name, lst in buckets.items()},
-            "total": len(merged),
-            "logs_fetched": len(all_logs),
-            "_cache_hit": False,
-        }
-        if is_default:
-            _SESSIONS_BY_TYPE_CACHE["data"] = result
-            _SESSIONS_BY_TYPE_CACHE["ts"] = now
-        return result
-    except Exception as e:
-        logger.warning("[run_log] list_sessions_by_type failed: %s", e)
-        return {"sessions": [], "counts_by_type": {}, "total": 0, "logs_fetched": 0, "_cache_hit": False}
+    t0 = _t.time()
+    all_logs: list[dict] = []
+    source = "firestore"
+    if not force_firestore:
+        try:
+            all_logs = _load_logs_from_jsonl(days_back=days_back)
+            if all_logs:
+                source = "jsonl"
+        except Exception as e:
+            logger.warning(f"[run_log] jsonl path failed, fallback Firestore: {e}")
+    if not all_logs:
+        # fallback：本機沒 jsonl（dev 機 / 新 deploy 前 N 天無檔）→ 拉 Firestore
+        try:
+            all_logs = _fetch_logs(30000)
+        except Exception as e:
+            logger.warning(f"[run_log] firestore fallback failed: {e}")
+            return {"sessions": [], "counts_by_type": {}, "total": 0, "logs_loaded": 0,
+                    "_source": "error", "_load_ms": 0}
+    sessions = _group_logs_to_sessions(all_logs)
+    buckets: dict = {name: [] for name, _ in _TYPE_BUCKETS}
+    buckets["_other"] = []
+    for sess in sessions:
+        bucket = _bucket_for(sess.get("trigger") or "")
+        if len(buckets[bucket]) < per_type_limit:
+            buckets[bucket].append(sess)
+    merged: list = []
+    for sess_list in buckets.values():
+        merged.extend(sess_list)
+    merged.sort(key=lambda s: s.get("started_at") or "", reverse=True)
+    return {
+        "sessions": merged,
+        "counts_by_type": {name: len(lst) for name, lst in buckets.items()},
+        "total": len(merged),
+        "logs_loaded": len(all_logs),
+        "_source": source,
+        "_load_ms": round((_t.time() - t0) * 1000),
+    }
 
 
 def prune_old(keep_max: int = _FS_MAX_KEEP) -> int:

@@ -34,7 +34,12 @@ async def admin_properties(
     省略 source     → 全部
     """
     col = get_col()
-    docs = list(col.get())
+    # 用 central_search 同一份 LIST_KEEP_FIELDS projection — admin 物件列表跟前台
+    # 列表用的欄位接近（額外的 analysis_error / submitted_by_uid / source_origin
+    # 都已在那 list 內）。projection 省 protobuf decode + Python dict 化大欄位
+    # (ai_analysis / lvr_records / details / 截圖 path 等不用 render 的 ~30 欄位)。
+    from api.app import LIST_KEEP_FIELDS as _ADMIN_PROP_FIELDS
+    docs = list(col.select(_ADMIN_PROP_FIELDS).get())
     items = []
     for d in docs:
         data = d.to_dict() or {}

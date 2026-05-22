@@ -271,7 +271,9 @@ async def admin_run_sessions(limit: int = 50, per_type: Optional[int] = None,
             "count": result["total"],
             "items": result["sessions"],
             "counts_by_type": result["counts_by_type"],
-            "logs_fetched": result["logs_fetched"],
+            "logs_loaded": result.get("logs_loaded", 0),
+            "_source": result.get("_source"),
+            "_load_ms": result.get("_load_ms"),
             "per_type_limit": n,
         }
     sessions = list_sessions(limit=min(int(limit), 200))

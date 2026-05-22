@@ -1298,7 +1298,13 @@ async def admin_stats(admin: dict = Depends(require_admin)):
         "新店區", "永和區", "中和區", "板橋區",
     }
     col = get_col()
-    docs = list(col.get())
+    # 只拉統計需要的 ~10 個欄位（projection 省 protobuf decode；不影響邏輯）
+    _STATS_FIELDS = [
+        "analysis_status", "analysis_error", "archived", "is_foreclosure",
+        "deleted", "analysis_in_progress", "source_origin",
+        "city", "district", "sources",
+    ]
+    docs = list(col.select(_STATS_FIELDS).get())
     total = 0   # 前台可見的 (跟 applyFilters 一致)
     total_raw = len(docs)   # raw DB count (給 admin 除錯參考)
     done = err = archived = fc = 0
