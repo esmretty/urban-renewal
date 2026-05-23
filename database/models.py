@@ -537,6 +537,10 @@ def detect_foreclosure(item: dict, detail_text: str = "") -> tuple[bool, list]:
     title = item.get("title") or ""
     raw = item.get("_raw_text") or detail_text or ""
     community_raw = item.get("_community_raw") or ""
+    # 591 mobile API path 沒 raw text，改靠 structured field `poster_identity` / `poster_linkman`
+    # 判定「代理人匿名刊登」(scraper_591_mobile.py 已 map)。Desktop OCR path 仍走 raw 比對。
+    poster_identity = (item.get("poster_identity") or "").strip()
+    poster_linkman = (item.get("poster_linkman") or "").strip()
     if "法拍" in title:
         return True, [f"標題含「法拍」：{title[:50]}"]
     if "法拍" in community_raw:
@@ -544,6 +548,8 @@ def detect_foreclosure(item: dict, detail_text: str = "") -> tuple[bool, list]:
     has_hash = "#" in title or "＃" in title
     if has_hash and "代理人" in raw:
         return True, ["標題含 # 或 ＃ + 代理人"]
+    if has_hash and (poster_identity == "代理人" or poster_linkman == "代理人"):
+        return True, [f"標題含 # 或 ＃ + 刊登者身分標「代理人」（匿名）"]
     if "【" in community_raw:
         return True, [f"591「社區」欄位含「【」廣告詞：{community_raw[:50]}"]
     # rule 4: body phrase 偵測 (放最後是因為前 4 條更便宜 — title/community 比較短)

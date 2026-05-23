@@ -305,6 +305,16 @@ def fetch_mobile_detail(houseid: str, *, timeout: float = 20.0) -> Optional[dict
     if d.get("remark"):
         out["remark"] = d["remark"]
 
+    # 刊登者身分（給 detect_foreclosure rule 3 用）
+    # mobile API 對「代理人匿名刊登」這種法拍仲介模式會在 identity / linkman 直接寫「代理人」
+    # 三個字（不寫真名），跟 desktop HTML embedded JSON 一致。Desktop OCR path 拿 raw HTML
+    # 能在 text 內找到「代理人」字串，mobile path 沒 raw 故過去 rule 3 永遠 miss；現直接 map
+    # 這兩欄到 item，detect_foreclosure 改吃 item.identity 判定。
+    if d.get("identity"):
+        out["poster_identity"] = d["identity"]
+    if d.get("linkman"):
+        out["poster_linkman"] = d["linkman"]
+
     # 上架時間（unix timestamp）→ ISO 字串
     pt = d.get("posttime")
     if pt:
