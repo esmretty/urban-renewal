@@ -776,6 +776,9 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
                     _fc_text_591 = (m591.get("title") or "") + "\n" + (m591.get("remark") or "")
                     if _fc_text_591.strip():
                         item["_raw_text"] = _fc_text_591
+                    # 刊登者身分（rule 3 mobile path 判定法拍仲介匿名 pattern）
+                    item["poster_identity"] = m591.get("poster_identity")
+                    item["poster_linkman"] = m591.get("poster_linkman")
                     # 上架/更新時間
                     if m591.get("updated_at_591"):
                         item["_updated_text"] = m591["updated_at_591"]

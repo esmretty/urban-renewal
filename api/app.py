@@ -3342,6 +3342,10 @@ def _scrape_single_url_591_inner(url: str, src_id: str, is_reanalyze: bool = Fal
                 or getattr(detail_ret, "community_raw", "")
                 or ""
             ),
+            # 刊登者身分（給 detect_foreclosure rule 3 mobile path 判定 — title 含 ＃ + identity
+            # 「代理人」= 法拍仲介匿名 pattern）。Desktop OCR path 沒這欄位、走原 raw 比對。
+            "poster_identity": (_mobile_data_url.get("poster_identity") if _mobile_data_url else None),
+            "poster_linkman": (_mobile_data_url.get("poster_linkman") if _mobile_data_url else None),
         }
 
         # 必要欄位至少要有 city/district/price/bld 才能入庫
