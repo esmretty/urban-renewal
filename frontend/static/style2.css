@@ -12,7 +12,14 @@
 
 /* === 0. Reset + Base ====================================================== */
 *, *::before, *::after { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; height: 100%; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  /* iOS Safari 預設 text-size-adjust: auto 會在 orientation 轉橫時自動把字 inflate
+   * 讓橫向「更好讀」，轉回直立 sticky 不會 reset → 用戶感覺字越來越大。
+   * 鎖 100% 維持原 font-size，不影響 accessibility 大字（用戶仍可手指縮放）。*/
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 body.v2 {
   font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 15px;
