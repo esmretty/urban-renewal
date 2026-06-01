@@ -69,6 +69,25 @@ def _normalize_floor(f) -> Optional[str]:
     return s if s else None
 
 
+_MAX_SAME_PROPERTY_DISTANCE_M = 300.0
+
+
+def _haversine_m(la1, ln1, la2, ln2) -> float:
+    """兩 (lat,lng) 距離（公尺）— 標準 haversine 公式。
+    任一輸入 None / 非 number → return inf (caller 用 inf 判定為「無法距離防線」)。"""
+    import math
+    try:
+        la1, ln1, la2, ln2 = float(la1), float(ln1), float(la2), float(ln2)
+    except (TypeError, ValueError):
+        return float("inf")
+    R = 6371000.0
+    p1, p2 = math.radians(la1), math.radians(la2)
+    dlat = math.radians(la2 - la1)
+    dlon = math.radians(ln2 - ln1)
+    aa = math.sin(dlat / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlon / 2) ** 2
+    return 2 * R * math.atan2(math.sqrt(aa), math.sqrt(1 - aa))
+
+
 def is_same_property(a: dict, b: dict) -> bool:
     """兩個物件 (a, b dicts with 標準欄位) 是否視為同一個物理單位？
 
@@ -76,7 +95,12 @@ def is_same_property(a: dict, b: dict) -> bool:
     比對在 analysis/lvr_index.py，不比 price)。
 
     任一條件不通過 → 返 False (寧可漏 dup 也不誤 merge)。
-    """
+
+    rule 6 (距離防線)：兩 doc 都有 lat/lng 且 haversine 距離 > 300m → False。
+    解 lane optional 規則 (rule 4 「lane 一邊空略過」) 對「路門牌號 vs 同路巷內地址」
+    的盲點，例：松江路100巷15號 vs 松江路221號 兩座標差 837m 但 5 條規則全過。
+    300m 上限是保守值：同棟 cross-source 座標差通常 < 30m (591 偏移 100-300m vs
+    永慶/信義 精準座標)，300m 仍能 catch 不同棟。任一邊無座標 → 規則跳過。"""
     # 1. district 必比 (任一邊空 → 不同)
     da, db = a.get("district"), b.get("district")
     if not da or not db or da != db:
@@ -120,6 +144,16 @@ def is_same_property(a: dict, b: dict) -> bool:
         return False
     if fa != fb:
         return False
+
+    # 6. 距離防線：兩邊都有座標時 > 300m → 不同物理單位（rule 4 lane optional 的補強）
+    #   任一邊缺座標 → 跳過此條，仍信任 1-5 結果
+    la1 = a.get("latitude") or a.get("source_latitude")
+    ln1 = a.get("longitude") or a.get("source_longitude")
+    la2 = b.get("latitude") or b.get("source_latitude")
+    ln2 = b.get("longitude") or b.get("source_longitude")
+    if la1 and ln1 and la2 and ln2:
+        if _haversine_m(la1, ln1, la2, ln2) > _MAX_SAME_PROPERTY_DISTANCE_M:
+            return False
 
     return True
 

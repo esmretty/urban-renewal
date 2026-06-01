@@ -1,156 +1,489 @@
 [
   {
     "name": "完全相同 — 真 dup",
-    "a": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "信義路二段100巷", "floor": 3},
-    "b": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "信義路二段100巷", "floor": 3},
+    "a": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段100巷",
+      "floor": 3
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段100巷",
+      "floor": 3
+    },
     "expected": true,
     "why": "完全相同的物件"
   },
   {
     "name": "同棟不同樓層 (2F vs 3F)",
-    "a": {"district": "信義區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "虎林街100巷", "floor": 2},
-    "b": {"district": "信義區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "虎林街100巷", "floor": 3},
+    "a": {
+      "district": "信義區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "虎林街100巷",
+      "floor": 2
+    },
+    "b": {
+      "district": "信義區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "虎林街100巷",
+      "floor": 3
+    },
     "expected": false,
     "why": "CLAUDE.md policy 7 虎林街那條雷 — floor 不同就是不同戶"
   },
   {
     "name": "不同 district 同其他",
-    "a": {"district": "永和區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "中山路", "floor": 3},
-    "b": {"district": "新店區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "中山路", "floor": 3},
+    "a": {
+      "district": "永和區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "中山路",
+      "floor": 3
+    },
+    "b": {
+      "district": "新店區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "中山路",
+      "floor": 3
+    },
     "expected": false,
     "why": "district 必比，跨區同名路不算同"
   },
   {
     "name": "price 差 1 元",
-    "a": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "信義路二段", "floor": 3},
-    "b": {"district": "大安區", "price_ntd": 15000001, "building_area_ping": 30.0, "address": "信義路二段", "floor": 3},
+    "a": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段",
+      "floor": 3
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 15000001,
+      "building_area_ping": 30.0,
+      "address": "信義路二段",
+      "floor": 3
+    },
     "expected": false,
     "why": "price exact == 才算同，1 元差也不行"
   },
   {
     "name": "建坪差 0.01 — boundary 內",
-    "a": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.00, "address": "信義路二段", "floor": 3},
-    "b": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.01, "address": "信義路二段", "floor": 3},
+    "a": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段",
+      "floor": 3
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.01,
+      "address": "信義路二段",
+      "floor": 3
+    },
     "expected": true,
     "why": "建坪差恰好 0.01 (<=) 算同"
   },
   {
     "name": "建坪差 0.02 — 超出 tolerance",
-    "a": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.00, "address": "信義路二段", "floor": 3},
-    "b": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.02, "address": "信義路二段", "floor": 3},
+    "a": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段",
+      "floor": 3
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.02,
+      "address": "信義路二段",
+      "floor": 3
+    },
     "expected": false,
     "why": "建坪差 0.02 > 0.01 算不同戶"
   },
   {
     "name": "路名 base 不同 (信義路 vs 仁愛路)",
-    "a": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "信義路二段", "floor": 3},
-    "b": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "仁愛路二段", "floor": 3},
+    "a": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段",
+      "floor": 3
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "仁愛路二段",
+      "floor": 3
+    },
     "expected": false,
     "why": "路名不同就是不同物件"
   },
   {
     "name": "同路不同段",
-    "a": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "忠孝東路一段", "floor": 3},
-    "b": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "忠孝東路五段", "floor": 3},
+    "a": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "忠孝東路一段",
+      "floor": 3
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "忠孝東路五段",
+      "floor": 3
+    },
     "expected": false,
     "why": "一段跟五段不同地段、不同物件"
   },
   {
     "name": "同路一邊有巷一邊沒 (永慶 + 591 cross-source)",
-    "a": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "潮州街", "floor": 3},
-    "b": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "潮州街130巷", "floor": 3},
+    "a": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "潮州街",
+      "floor": 3
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "潮州街130巷",
+      "floor": 3
+    },
     "expected": true,
     "why": "lane 一邊空 → 略過此條 (信任其他欄位)、視為同 — 解決永慶/信義不寫巷問題"
   },
   {
     "name": "同路兩邊不同巷",
-    "a": {"district": "文山區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "興隆路2巷", "floor": 3},
-    "b": {"district": "文山區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "興隆路45巷", "floor": 3},
+    "a": {
+      "district": "文山區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "興隆路2巷",
+      "floor": 3
+    },
+    "b": {
+      "district": "文山區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "興隆路45巷",
+      "floor": 3
+    },
     "expected": false,
     "why": "兩邊都有 lane 但 2巷 ≠ 45巷 → 不同物件 (修舊 find_duplicate 沒含巷的雷)"
   },
   {
     "name": "同路兩邊相同巷",
-    "a": {"district": "中山區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "大直街124巷", "floor": 3},
-    "b": {"district": "中山區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "大直街124巷", "floor": 3},
+    "a": {
+      "district": "中山區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "大直街124巷",
+      "floor": 3
+    },
+    "b": {
+      "district": "中山區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "大直街124巷",
+      "floor": 3
+    },
     "expected": true,
     "why": "同巷 + 其他都同 = 同"
   },
   {
     "name": "floor 一邊有值一邊空",
-    "a": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "信義路二段", "floor": 3},
-    "b": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "信義路二段", "floor": null},
+    "a": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段",
+      "floor": 3
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段",
+      "floor": null
+    },
     "expected": false,
     "why": "嚴格版：floor 任一邊空 → 不同戶"
   },
   {
     "name": "floor 兩邊都空",
-    "a": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "信義路二段", "floor": null},
-    "b": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "信義路二段", "floor": null},
+    "a": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段",
+      "floor": null
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段",
+      "floor": null
+    },
     "expected": false,
     "why": "嚴格版：floor 兩邊空也不能算同"
   },
   {
     "name": "floor 一邊整數一邊字串 (3 vs '3')",
-    "a": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "信義路二段", "floor": 3},
-    "b": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "信義路二段", "floor": "3"},
+    "a": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段",
+      "floor": 3
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段",
+      "floor": "3"
+    },
     "expected": true,
     "why": "floor 比對是 normalized str，3 == '3' 視為同"
   },
   {
     "name": "address 帶市區前綴 (591 vs 永慶/信義 經過 strip)",
-    "a": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "台北市大安區信義路二段", "floor": 3},
-    "b": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "信義路二段", "floor": 3},
+    "a": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "台北市大安區信義路二段",
+      "floor": 3
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段",
+      "floor": 3
+    },
     "expected": true,
     "why": "_strip_addr_prefixes 把市區剝掉後 road_base 都一樣"
   },
   {
     "name": "address 為 None (missing)",
-    "a": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": null, "floor": 3},
-    "b": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "信義路二段", "floor": 3},
+    "a": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": null,
+      "floor": 3
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段",
+      "floor": 3
+    },
     "expected": false,
     "why": "address 抽不出 road_base → 不同"
   },
   {
     "name": "address 只有區名沒路名",
-    "a": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "大安區", "floor": 3},
-    "b": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "信義路二段", "floor": 3},
+    "a": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "大安區",
+      "floor": 3
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段",
+      "floor": 3
+    },
     "expected": false,
     "why": "a 抽不出 road_base → 不同 (保守)"
   },
   {
     "name": "建坪 None vs 30",
-    "a": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": null, "address": "信義路二段", "floor": 3},
-    "b": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "信義路二段", "floor": 3},
+    "a": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": null,
+      "address": "信義路二段",
+      "floor": 3
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "信義路二段",
+      "floor": 3
+    },
     "expected": false,
     "why": "建坪空 → 不能比 → 不同 (保守)"
   },
   {
     "name": "信義商三 50坪 高總價",
-    "a": {"district": "信義區", "price_ntd": 80000000, "building_area_ping": 50.0, "address": "信義路五段100巷", "floor": 5},
-    "b": {"district": "信義區", "price_ntd": 80000000, "building_area_ping": 50.0, "address": "信義路五段100巷", "floor": 5},
+    "a": {
+      "district": "信義區",
+      "price_ntd": 80000000,
+      "building_area_ping": 50.0,
+      "address": "信義路五段100巷",
+      "floor": 5
+    },
+    "b": {
+      "district": "信義區",
+      "price_ntd": 80000000,
+      "building_area_ping": 50.0,
+      "address": "信義路五段100巷",
+      "floor": 5
+    },
     "expected": true,
     "why": "高總價也適用同規則"
   },
   {
     "name": "新北板橋 (FAR 460 特例) 相同",
-    "a": {"district": "板橋區", "price_ntd": 20000000, "building_area_ping": 35.0, "address": "新北市板橋區文化路一段150巷", "floor": 3},
-    "b": {"district": "板橋區", "price_ntd": 20000000, "building_area_ping": 35.0, "address": "文化路一段150巷", "floor": 3},
+    "a": {
+      "district": "板橋區",
+      "price_ntd": 20000000,
+      "building_area_ping": 35.0,
+      "address": "新北市板橋區文化路一段150巷",
+      "floor": 3
+    },
+    "b": {
+      "district": "板橋區",
+      "price_ntd": 20000000,
+      "building_area_ping": 35.0,
+      "address": "文化路一段150巷",
+      "floor": 3
+    },
     "expected": true,
     "why": "新北也適用同規則、市區前綴 strip 後一致"
   },
   {
     "name": "通化街 vs 通化南街 — road_base 前綴 substring",
-    "a": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "通化街", "floor": 3},
-    "b": {"district": "大安區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "通化南街", "floor": 3},
+    "a": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "通化街",
+      "floor": 3
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "通化南街",
+      "floor": 3
+    },
     "expected": false,
     "why": "road_base 嚴格 == 比對，通化街 ≠ 通化南街 (避免 substring 寬鬆比對的舊雷)"
   },
   {
     "name": "中山路 vs 中山北路 — 不同道路",
-    "a": {"district": "中山區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "中山路", "floor": 3},
-    "b": {"district": "中山區", "price_ntd": 15000000, "building_area_ping": 30.0, "address": "中山北路二段", "floor": 3},
+    "a": {
+      "district": "中山區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "中山路",
+      "floor": 3
+    },
+    "b": {
+      "district": "中山區",
+      "price_ntd": 15000000,
+      "building_area_ping": 30.0,
+      "address": "中山北路二段",
+      "floor": 3
+    },
     "expected": false,
     "why": "road_base 嚴格 == 比對"
+  },
+  {
+    "name": "rule 6: 5 條全過 + 座標 837m 外 — 應 not dup（松江路 100 巷 15 號 vs 松江路 221 號實例）",
+    "a": {
+      "district": "中山區",
+      "price_ntd": 31200000,
+      "building_area_ping": 31.31,
+      "address": "松江路100巷",
+      "floor": 3,
+      "latitude": 25.0511111,
+      "longitude": 121.5310005
+    },
+    "b": {
+      "district": "中山區",
+      "price_ntd": 31200000,
+      "building_area_ping": 31.31,
+      "address": "松江路",
+      "floor": 3,
+      "latitude": 25.0583675,
+      "longitude": 121.5332101
+    },
+    "expected": false,
+    "why": "rule 4 lane optional 對「路門牌 vs 同路巷內地址」會誤合；rule 6 用座標 > 300m 距離防線擋下"
+  },
+  {
+    "name": "rule 6: 同棟跨來源座標差 < 30m + lane optional — 仍 dup",
+    "a": {
+      "district": "大安區",
+      "price_ntd": 20000000,
+      "building_area_ping": 25.0,
+      "address": "信義路三段100巷",
+      "floor": 2,
+      "latitude": 25.033,
+      "longitude": 121.55
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 20000000,
+      "building_area_ping": 25.0,
+      "address": "信義路三段",
+      "floor": 2,
+      "latitude": 25.033002,
+      "longitude": 121.550003
+    },
+    "expected": true,
+    "why": "同棟跨來源座標差 < 30m，rule 6 不該誤殺合法 cross-source merge"
+  },
+  {
+    "name": "rule 6: 任一邊無座標 — 跳過距離防線，rule 1-5 判定",
+    "a": {
+      "district": "大安區",
+      "price_ntd": 20000000,
+      "building_area_ping": 25.0,
+      "address": "復興南路一段100巷",
+      "floor": 4,
+      "latitude": null,
+      "longitude": null
+    },
+    "b": {
+      "district": "大安區",
+      "price_ntd": 20000000,
+      "building_area_ping": 25.0,
+      "address": "復興南路一段",
+      "floor": 4,
+      "latitude": 25.044,
+      "longitude": 121.544
+    },
+    "expected": true,
+    "why": "manual 物件常缺座標；rule 6 設計成「任一邊空跳過」維持原 1-5 邏輯"
   }
 ]
