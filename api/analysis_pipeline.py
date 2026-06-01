@@ -565,20 +565,16 @@ def analyze_single_property(
         src_lat = item.get("source_latitude") or item.get("latitude")
         src_lng = item.get("source_longitude") or item.get("longitude")
         had_real_source_coord = bool(src_lat and src_lng)
-        # 永慶 Playwright 偶會 timeout 拿不到 page 座標 → 此時 src_lat 都是 None
-        # fallback：用 geocode_address(街級地址) 拿一個近似源點，再用此源點 reverse_geocode
-        # 比「整個 reverse_geocode 不跑、address_inferred=None」好（街級 reverse 有 confidence 標）
-        if not had_real_source_coord and addr_for_geo:
-            try:
-                _c = geocode_address(addr_for_geo)
-                if _c:
-                    src_lat, src_lng = _c
-                    logger.info(
-                        f"[{src_id}] {src_name} 無 page 座標 → 街級 geocode 當源點: {_c}"
-                    )
-            except Exception as _ce:
-                logger.warning(f"[{src_id}] 街級 geocode fallback 失敗: {_ce}")
-        if src_lat and src_lng and road_seg:
+        # 永慶 Playwright 偶會 timeout 拿不到 page 座標。
+        # **拿掉舊「街級 geocode fallback」邏輯** — 用 geocode_address("台北市中山區松江路") 拿到
+        # 街中段隨便一點當源點，reverse_geocode 會誤推到不相干門牌。
+        # 實例：松江路100巷15號物件 timeout → 街級 geocode 取某點 → reverse 推到「松江路221號」
+        # (距實際物件 841m，zoning 也被查到隔壁地塊)。寧缺勿錯：沒原生座標就不推 inferred address。
+        if not had_real_source_coord:
+            logger.info(
+                f"[{src_id}] {src_name} 無 page 座標 → 不推測 address_inferred，保留 raw address"
+            )
+        if had_real_source_coord and src_lat and src_lng and road_seg:
             rev_addr = None
             try:
                 from analysis.lvr_index import _reverse_geocode_lane, _reverse_geocode_loose

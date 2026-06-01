@@ -776,7 +776,7 @@ def scrape_yongqing(
 
             # Stage 2：通過樓高 filter 的才開 Playwright 拿座標（~7-10 秒/筆）
             progress_callback(f"  → 永慶 Playwright 拿座標: {item.get('address','')[:20]}")
-            got_coords = _enrich_coords_via_playwright(item, headless=headless, timeout_sec=20)
+            got_coords = _enrich_coords_via_playwright(item, headless=headless, timeout_sec=40)
             if not got_coords:
                 # 座標拿不到不算整體失敗（pipeline 會自己 fallback geocoding）
                 logger.info(f"yongqing {item.get('_yongqing_house_id')} 座標拿不到，繼續 ingest（pipeline 會 fallback）")

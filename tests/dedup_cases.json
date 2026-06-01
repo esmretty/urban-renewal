@@ -485,5 +485,32 @@
     },
     "expected": true,
     "why": "manual 物件常缺座標；rule 6 設計成「任一邊空跳過」維持原 1-5 邏輯"
+  },
+  {
+    "name": "rule 6: source_latitude 同棟 (~10m)，latitude pipeline 算錯 (800m+) — 仍 dup",
+    "a": {
+      "district": "中山區",
+      "price_ntd": 31200000,
+      "building_area_ping": 31.31,
+      "address": "松江路100巷",
+      "floor": 3,
+      "source_latitude": 25.0510845892,
+      "source_longitude": 121.530947334,
+      "latitude": 25.0511111,
+      "longitude": 121.5310005
+    },
+    "b": {
+      "district": "中山區",
+      "price_ntd": 31200000,
+      "building_area_ping": 31.31,
+      "address": "松江路",
+      "floor": 3,
+      "source_latitude": 25.0511,
+      "source_longitude": 121.531,
+      "latitude": 25.0583675,
+      "longitude": 121.5332101
+    },
+    "expected": true,
+    "why": "rule 6 應優先信 source_latitude (來源原生座標) 而非 latitude (pipeline 算過、可能推錯地址 geocode 的)"
   }
 ]

@@ -146,11 +146,13 @@ def is_same_property(a: dict, b: dict) -> bool:
         return False
 
     # 6. 距離防線：兩邊都有座標時 > 300m → 不同物理單位（rule 4 lane optional 的補強）
+    #   優先用 source_latitude (來源原生精準座標)；fallback 才用 latitude
+    #   (pipeline 算過的 latitude 可能是 LVR triangulate 推錯地址再 geocode 的錯位置)
     #   任一邊缺座標 → 跳過此條，仍信任 1-5 結果
-    la1 = a.get("latitude") or a.get("source_latitude")
-    ln1 = a.get("longitude") or a.get("source_longitude")
-    la2 = b.get("latitude") or b.get("source_latitude")
-    ln2 = b.get("longitude") or b.get("source_longitude")
+    la1 = a.get("source_latitude") or a.get("latitude")
+    ln1 = a.get("source_longitude") or a.get("longitude")
+    la2 = b.get("source_latitude") or b.get("latitude")
+    ln2 = b.get("source_longitude") or b.get("longitude")
     if la1 and ln1 and la2 and ln2:
         if _haversine_m(la1, ln1, la2, ln2) > _MAX_SAME_PROPERTY_DISTANCE_M:
             return False
