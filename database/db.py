@@ -185,6 +185,18 @@ def recheck_and_archive_if_cross_dup(new_doc_id: str, trigger_label: str = "post
                     "source": first_new_name or "?",
                     "at": now_tw_iso(),
                 }
+                # 永慶/信義 raw zoning 為主 — 用戶要求若 new doc 是永慶/信義 且 zoning 來源
+                # 是 detail_raw (仲介後台寫的具體第X種分區)，蓋掉既有 GeoServer 結果
+                new_zoning = new_doc.get("zoning")
+                new_zoning_src = (new_doc.get("zoning_source") or "")
+                if new_zoning and new_zoning_src.endswith("_detail_raw") and new_zoning != dd.get("zoning"):
+                    updates["zoning"] = new_zoning
+                    updates["zoning_original"] = new_doc.get("zoning_original") or new_zoning
+                    updates["zoning_source"] = new_zoning_src
+                    updates["zoning_source_url"] = new_doc.get("zoning_source_url")
+                    # 清掉 stale multi-zone 狀態 (避免既有 zoning_list 跟新 raw zoning 衝突)
+                    updates["zoning_list"] = None
+                    updates["zoning_ratios"] = None
                 col.document(existing_id).update(updates)
                 col.document(new_doc_id).update({
                     "archived": True,

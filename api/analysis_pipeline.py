@@ -1129,6 +1129,19 @@ def analyze_single_property(
                 "zoning_list": zone_list,
                 "address_probable": z["address_probable"],
             })
+            # 永慶/信義 raw zoning 為主 (用戶要求 2026-06-17):
+            # 仲介後台寫的 zoning (含「第X種」具體分區) 比 GeoServer 點查更貼近實際地塊登記
+            # 條件：raw 含「第一/二/三/四/五種」字樣 (排除粗分類「住宅區」/「商業區」 — 那種 FAR 算不出來)
+            # 多分區 case (含「、」/「,」/「，」) 仍走下面 yc_multi 處理
+            raw_zoning = (item.get("_zoning_raw_text") or "").strip()
+            if (src_name in ("永慶", "信義") and raw_zoning
+                    and re.search(r"第[一二三四五]種", raw_zoning)
+                    and not any(sep in raw_zoning for sep in ("、", ",", ","))):
+                doc_data["zoning"] = raw_zoning
+                doc_data["zoning_original"] = raw_zoning
+                doc_data["zoning_source"] = f"{src_name}_detail_raw"
+                logger.info(f"[{src_id}] {src_name} raw zoning「{raw_zoning}」覆蓋 GeoServer 「{z.get('zoning')}」")
+
             # 永慶詳情頁若標多分區（如「住宅區、商業區」表示基地跨分區）→ 取代 NTPC 點查單一分區
             # NTPC 點查只能拿到中心點所在 1 塊，但實際物件跨分區時用永慶版才精確
             yc_multi = item.get("_yongqing_zoning_multi")

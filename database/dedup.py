@@ -137,12 +137,16 @@ def is_same_property(a: dict, b: dict) -> bool:
     if lane_a and lane_b and lane_a != lane_b:
         return False
 
-    # 5. floor 兩邊都要有值 + 相等 (任一邊空 → 不同 — 嚴格版)
+    # 5. floor 比對：
+    #   - 兩邊都有 → 嚴格相等（虎林街教訓：3F vs 2F 不誤合）
+    #   - 一邊有一邊空 → 不同（避免「3F」vs「整棟」誤認）
+    #   - 兩邊都空 → 過（591 整棟透天「1~4F」物件沒推單一 floor，但同棟物件其他欄位已嚴格比對）
     fa = _normalize_floor(a.get("floor"))
     fb = _normalize_floor(b.get("floor"))
-    if not fa or not fb:
-        return False
-    if fa != fb:
+    if fa and fb:
+        if fa != fb:
+            return False
+    elif fa or fb:
         return False
 
     # 6. 距離防線：兩邊都有座標時 > 300m → 不同物理單位（rule 4 lane optional 的補強）

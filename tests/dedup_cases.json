@@ -243,8 +243,8 @@
       "address": "信義路二段",
       "floor": null
     },
-    "expected": false,
-    "why": "嚴格版：floor 兩邊空也不能算同"
+    "expected": true,
+    "why": "寬鬆後：兩邊都缺 floor 表示無法 floor 比對，其他 1-4 條同 = 認 dup (591 整棟透天 case)"
   },
   {
     "name": "floor 一邊整數一邊字串 (3 vs '3')",
@@ -512,5 +512,50 @@
     },
     "expected": true,
     "why": "rule 6 應優先信 source_latitude (來源原生座標) 而非 latitude (pipeline 算過、可能推錯地址 geocode 的)"
+  },
+  {
+    "name": "rule 5 寬鬆: 兩邊都缺 floor (591 整棟透天) + 其他全同 → dup",
+    "a": {
+      "district": "板橋區",
+      "price_ntd": 39880000,
+      "building_area_ping": 68.95,
+      "address": "文昌街",
+      "total_floors": 4,
+      "latitude": 25.0106843,
+      "longitude": 121.4559565,
+      "source_latitude": 25.0106843,
+      "source_longitude": 121.4559565
+    },
+    "b": {
+      "district": "板橋區",
+      "price_ntd": 39880000,
+      "building_area_ping": 68.95,
+      "address": "文昌街",
+      "total_floors": 4,
+      "latitude": 25.0106843,
+      "longitude": 121.4559565,
+      "source_latitude": 25.0106843,
+      "source_longitude": 121.4559565
+    },
+    "expected": true,
+    "why": "591 同棟透天物件 floor 為「1~4F」沒推單一 int，兩筆都缺 floor 應認 dup（座標 0m + 其他全等）"
+  },
+  {
+    "name": "rule 5 嚴格: 一邊 floor=3 一邊空 → 不認 dup",
+    "a": {
+      "district": "信義區",
+      "price_ntd": 20000000,
+      "building_area_ping": 25.0,
+      "address": "信義路三段100巷",
+      "floor": 3
+    },
+    "b": {
+      "district": "信義區",
+      "price_ntd": 20000000,
+      "building_area_ping": 25.0,
+      "address": "信義路三段100巷"
+    },
+    "expected": false,
+    "why": "一邊指定 3F、一邊整棟 → 不同物件"
   }
 ]
