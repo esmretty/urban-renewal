@@ -279,6 +279,22 @@ window.cleanupOrphanOcr = async function () {
   }
 };
 
+window.refetchZoningBatch = async function () {
+  if (!confirm("對台北市缺 zoning 的物件批次重 query GeoServer？\n\n用途：政府 GeoServer 曾暫時掛掉時，那段時間入庫的物件 zoning=null 不會自動修。此按鈕批次補查。\n\n上限 500 筆／次，跑完可再按拉剩下的。")) return;
+  try {
+    const r = await authedFetch("/admin/system_usage/refetch_zoning_batch?city=%E5%8F%B0%E5%8C%97%E5%B8%82", { method: "POST" });
+    const d = await r.json();
+    if (r.ok) {
+      alert(`✓ 掃 ${d.total_candidates} 筆缺 zoning 物件\n  zoning 補到: ${d.zoning_updated}\n  road_width 補到: ${d.road_updated}\n  仍 fail: ${d.still_fail}`);
+      loadSystemUsage();
+    } else {
+      alert("失敗：" + (d.detail || r.status));
+    }
+  } catch (e) {
+    alert("失敗：" + e.message);
+  }
+};
+
 window.cleanupArchivedRoadwidth = async function () {
   if (!confirm("清掉 _roadwidth.png 中「對應物件已 archived 或不存在」的截圖？\n\n活著物件的 roadwidth 會保留（detail 按鈕還會用）。")) return;
   try {

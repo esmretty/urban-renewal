@@ -73,6 +73,7 @@
               <button onclick="loadSystemUsage()" style="padding:4px 10px; background:#3a3a4a; color:#fff; border:none; border-radius:4px; cursor:pointer; margin-right:6px; font-size:12px;">🔄 重新整理</button>
               <button onclick="cleanupOrphanOcr()" style="padding:4px 10px; background:#c78a00; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;" title="清掉 _detail / _addr / _house / *_tile_* 等 OCR 中途遺留檔（不刪 _roadwidth）">🧹 清孤兒 OCR</button>
               <button onclick="cleanupArchivedRoadwidth()" style="padding:4px 10px; background:#8e5d20; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;" title="清掉已 archived / 不存在的物件 _roadwidth.png 截圖（活著物件保留）">🗑 清 archived 路寬圖</button>
+              <button onclick="refetchZoningBatch()" style="padding:4px 10px; background:#2980b9; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;" title="對缺 zoning 的台北市物件批次重 query GeoServer（用於 GeoServer 曾暫時掛掉時補救）">🔄 重 query 缺分區物件</button>
             </div>
           </div>
         </div>

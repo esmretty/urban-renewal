@@ -1576,6 +1576,91 @@ def _get_cpu_percent():
         return None
 
 
+@app.post("/admin/system_usage/refetch_zoning_batch")
+async def admin_refetch_zoning_batch(city: Optional[str] = None,
+                                       limit: int = 500,
+                                       admin: dict = Depends(require_admin)):
+    """對「當前缺 zoning 的物件」批次重跑 GeoServer 查詢。
+
+    用途：政府 GeoServer (zonegeo.udd.gov.taipei) 偶爾服務異常（SSL timeout），
+    那段時間入庫的物件 zoning_source='not_found' 且不會自動修。等 GeoServer 恢復後
+    admin 按此按鈕批次補查。
+
+    篩選：zoning IS NULL AND city==指定 (預設全部台北市，新北市 GeoServer 沒覆蓋不重跑)。
+    對每筆 lookup_zoning + query_road_width_taipei，成功 update doc。回統計 dict。
+    limit 上限 500 避免超時；跑完前端可再按一次拉剩下的。
+    """
+    from analysis.gov_gis import lookup_zoning_by_coord, query_road_width_taipei
+    city = city or "台北市"
+    col = get_col()
+    candidates = []
+    for d in col.where(filter=FieldFilter("city", "==", city)).stream():
+        x = d.to_dict() or {}
+        if x.get("archived") or x.get("deleted"):
+            continue
+        if x.get("zoning"):
+            continue
+        if x.get("zoning_source") not in (None, "", "not_found", "geoserver_unreachable"):
+            continue   # 多分區 case (zoning_source=yongqing_detail_multi 等) 有 zoning_list 不需 refetch
+        if not (x.get("latitude") and x.get("longitude")):
+            continue
+        candidates.append((d.id, x))
+        if len(candidates) >= int(limit):
+            break
+
+    total = len(candidates)
+    updated_z = 0; updated_r = 0; still_fail = 0
+    errs = []
+    for doc_id, x in candidates:
+        lat, lng = x["latitude"], x["longitude"]
+        updates = {}
+        # zoning
+        try:
+            z = lookup_zoning_by_coord(lat, lng, city)
+            if z.get("zoning") or (z.get("zone_list") and len(z["zone_list"]) > 0):
+                zone_list = z.get("zone_list")
+                if zone_list and len(zone_list) > 1:
+                    updates["zoning"] = None   # 多分區 by design
+                else:
+                    updates["zoning"] = z.get("zoning")
+                updates["zoning_original"] = z.get("original_zone")
+                updates["zoning_source"] = z.get("zoning_source")
+                updates["zoning_source_url"] = z.get("zoning_source_url")
+                updates["zoning_list"] = zone_list
+                updates["zoning_error"] = None
+                updates["zoning_lookup_at"] = now_tw_iso()
+                updated_z += 1
+            else:
+                still_fail += 1
+        except Exception as e:
+            errs.append(f"{doc_id}: zoning {e}")
+        # road_width (同 GeoServer server；zoning 通就 road_width 通)
+        if updated_z and updates.get("zoning") and city == "台北市":
+            try:
+                rw = query_road_width_taipei(lat, lng)
+                if rw and rw.get("road_width_m"):
+                    updates["road_width_m"] = rw["road_width_m"]
+                    updates["road_width_name"] = rw.get("road_width_name")
+                    updates["road_width_all"] = rw.get("road_width_all")
+                    updated_r += 1
+            except Exception as e:
+                errs.append(f"{doc_id}: road {e}")
+        if updates:
+            col.document(doc_id).update(updates)
+    logger.warning(
+        f"[admin] {admin.get('email')} refetch_zoning_batch city={city}: "
+        f"total={total} zoning_updated={updated_z} road_updated={updated_r} "
+        f"still_fail={still_fail}"
+    )
+    return {
+        "total_candidates": total,
+        "zoning_updated": updated_z,
+        "road_updated": updated_r,
+        "still_fail": still_fail,
+        "errors": errs[:10],
+    }
+
+
 @app.post("/admin/system_usage/cleanup_archived_roadwidth")
 async def admin_cleanup_archived_roadwidth(admin: dict = Depends(require_admin)):
     """清掉「對應 doc 已 archived 或不存在」的 _roadwidth.png 截圖。
