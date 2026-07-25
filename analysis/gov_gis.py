@@ -118,6 +118,14 @@ TAIPEI_TYPENAME = "Taipei:ublock97-TWD97"
 TAIPEI_SRS = "EPSG:3826"
 TAIPEI_PORTAL_URL = "https://zonemap.udd.gov.taipei/ZoneMapOP/"
 
+# 2026-07-25: zonegeo.udd.gov.taipei 加了 nginx anti-bot User-Agent 檢查，
+# httpx default UA "python-httpx/x.y" 被直接 403。加 browser UA 就 200。
+# 沒改 UA 前所有 zoning + road width query 都 fail、log 誤標「WFS 查詢無結果（座標可能在邊界）」
+_TAIPEI_WFS_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Referer": "https://zonemap.udd.gov.taipei/ZoneMapOP/indexZoneMap_op.aspx",
+}
+
 
 def _wfs_query_taipei(x: float, y: float, half_size: float) -> list:
     """以 (x, y) 為中心、邊長 2*half_size 的 BBOX 查詢台北分區 layer。"""
@@ -130,6 +138,7 @@ def _wfs_query_taipei(x: float, y: float, half_size: float) -> list:
                 "outputFormat": "json", "typename": TAIPEI_TYPENAME,
                 "bbox": bbox, "maxFeatures": 20,
             },
+            headers=_TAIPEI_WFS_HEADERS,
             timeout=15, verify=False,   # 政府站 SSL 不規範
         )
         return (r.json() or {}).get("features", [])
@@ -236,6 +245,7 @@ def query_road_width_taipei(lat: float, lng: float, address_hint: str = "") -> O
                     "outputFormat": "json", "typename": TAIPEI_ROADSIZE_TYPENAME,
                     "bbox": bbox, "maxFeatures": 20,
                 },
+                headers=_TAIPEI_WFS_HEADERS,
                 timeout=15, verify=False,
             )
             feats = (r.json() or {}).get("features", [])
@@ -328,6 +338,7 @@ def query_road_width_taipei(lat: float, lng: float, address_hint: str = "") -> O
                                         "CQL_FILTER": f"road_name1='{target_road}'",
                                         "maxFeatures": 5,
                                     },
+                                    headers=_TAIPEI_WFS_HEADERS,
                                     timeout=15, verify=False,
                                 )
                                 for f2 in (fr.json() or {}).get("features", []):
