@@ -44,11 +44,47 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/120.0.0.0 Safari/537.36"
 )
+# B fix (2026-07-25): prod GCE IP 被永慶 rate limit 403 封了。加完整 browser header
+# + session cookie（連續 request 保留 cookie），fingerprint 貼近真人瀏覽降低被封機率。
+# 不換 IP 條件下的最佳解 — 治本仍需降頻或換 IP。
 DEFAULT_HEADERS = {
     "User-Agent": USER_AGENT,
-    "Accept-Language": "zh-TW,zh;q=0.9",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Pragma": "no-cache",
+    "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
 }
+
+# Module-level session：保留 cookie 跨 request，仿真人連續瀏覽。
+# session lazy 初始化 + warm-up (先 GET 首頁拿 cookie) 只做一次。
+_session: Optional[requests.Session] = None
+_session_warmed = False
+
+
+def _get_session() -> requests.Session:
+    """回一個 warm-up 過的 requests.Session（含首頁 cookie），仿真人瀏覽。"""
+    global _session, _session_warmed
+    if _session is None:
+        _session = requests.Session()
+        _session.headers.update(DEFAULT_HEADERS)
+    if not _session_warmed:
+        try:
+            _session.get("https://buy.yungching.com.tw/", timeout=15, verify=False)
+            _session_warmed = True
+            logger.info("永慶 session warm-up 成功（首頁 cookie 已拿到）")
+        except Exception as e:
+            logger.warning(f"永慶 session warm-up 失敗: {e}")
+    return _session
 
 # 永慶屋型 → 我們系統用的 building_type
 TYPE_MAP = {
@@ -62,9 +98,16 @@ TYPE_MAP = {
 LAST_FETCH_ERROR: Optional[str] = None
 
 
+# D fix (2026-07-25): request 間隔從 config default (1.5-3.5s) 拉到 5-10s + jitter，
+# 降低同 IP 短時間 request 密度 (永慶 anti-bot 判別依據之一)。永慶 batch 一次 30 筆 →
+# 原 ~1 分 → 修後 ~2.5-5 分，可接受。
+_YC_DELAY_MIN = 5.0
+_YC_DELAY_MAX = 10.0
+
+
 def _human_sleep():
     import random
-    time.sleep(random.uniform(SCRAPE_DELAY_MIN, SCRAPE_DELAY_MAX))
+    time.sleep(random.uniform(_YC_DELAY_MIN, _YC_DELAY_MAX))
 
 
 # ── 列表頁 ──────────────────────────────────────────────────────────────────
@@ -98,9 +141,14 @@ def _fetch(url: str, retries: int = 3) -> Optional[str]:
         logger.info(f"永慶 cooldown {wait:.1f}s（剛被 403，先休息再打）")
         time.sleep(wait)
     last_status = None   # 記 loop 最後一次 status，全 fail 完好標明確 error
+    sess = _get_session()
+    # 加動態 Referer (仿真人從列表頁點進 detail 頁)
+    referer = "https://buy.yungching.com.tw/"
+    if "/house/" in url:
+        referer = "https://buy.yungching.com.tw/list/"
     for attempt in range(retries):
         try:
-            r = requests.get(url, headers=DEFAULT_HEADERS, timeout=20, verify=False)
+            r = sess.get(url, headers={"Referer": referer}, timeout=20, verify=False)
             if r.status_code == 200:
                 return r.text
             last_status = r.status_code
