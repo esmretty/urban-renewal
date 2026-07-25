@@ -97,11 +97,13 @@ def _fetch(url: str, retries: int = 3) -> Optional[str]:
         wait = 30 - since_403
         logger.info(f"永慶 cooldown {wait:.1f}s（剛被 403，先休息再打）")
         time.sleep(wait)
+    last_status = None   # 記 loop 最後一次 status，全 fail 完好標明確 error
     for attempt in range(retries):
         try:
             r = requests.get(url, headers=DEFAULT_HEADERS, timeout=20, verify=False)
             if r.status_code == 200:
                 return r.text
+            last_status = r.status_code
             if r.status_code in (403, 429):
                 _LAST_403_AT = time.time()
                 wait = 15 + attempt * 15   # 15s, 30s, 45s
@@ -115,6 +117,9 @@ def _fetch(url: str, retries: int = 3) -> Optional[str]:
             LAST_FETCH_ERROR = str(e)[:200]
             logger.warning(f"永慶 fetch exception {e} attempt={attempt+1}/{retries}")
             time.sleep(3)
+    # 3 次 retry 全失敗 — 若是 403/429 rate limit 明確標，讓 admin log 看得出來
+    if last_status in (403, 429):
+        LAST_FETCH_ERROR = f"rate_limit_{last_status} (retry 全 fail — IP 被永慶封了)"
     return None
 
 
