@@ -357,16 +357,21 @@ def _scrape_and_analyze(headless: bool, progress_callback, districts: list = Non
             _reason = _s.LAST_FETCH_ERROR
         except Exception:
             _reason = None
-        msg = f"⚠ {source_label} 爬取 0 筆"
-        if _reason:
-            msg += f"（{_reason}）"
+        # 依 fetch_error 分類 message — 讓 admin log 一眼看得出真實原因
+        r_lower = (_reason or "").lower()
+        if _reason and ("rate_limit" in r_lower or "403" in _reason or "429" in _reason):
+            classified = f"{source_label} 抓到 0 筆（被 rate limit：{_reason}）"
+        elif _reason and ("timeout" in r_lower or "connect" in r_lower or "ssl" in r_lower):
+            classified = f"{source_label} 抓到 0 筆（連線異常：{_reason}）"
+        elif _reason:
+            classified = f"{source_label} 抓到 0 筆（fetch 錯誤：{_reason}）"
         else:
-            msg += "（listing 無新物件；若同樣 region+section 多次都 0 筆，可能已被限流）"
-        progress_callback(msg + "，請稍後重試", 100)
+            classified = f"{source_label} 抓到 0 筆（無新物件；若持續請檢查 rate limit）"
+        progress_callback("⚠ " + classified + "，請稍後重試", 100)
         # ★ 修補 bug：0 筆早 return 也要寫 batch_end，否則 admin 執行紀錄 session
         # 永遠停在「進行中」（4/28 00:01 那筆 stuck session 就是這樣來的）
         log_action(trigger_label, "batch_end",
-                   message=f"{source_label} 抓到 0 筆（無新物件 / 限流 / 連線異常）",
+                   message=classified,
                    details={"new_count": 0, "enrich_count": 0, "skip_dup_count": 0,
                             "price_update_count": 0, "fetch_error": _reason or None})
         return {"new_count": 0, "enrich_count": 0, "skip_dup_count": 0, "price_update_count": 0}
